@@ -1,0 +1,40 @@
+{
+  "extraKnownMarketplaces": {
+    "order-group": {
+      "source": {
+        "source": "github",
+        "repo": "ordergroup/og-claude"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "og@order-group": true
+  },
+  "permissions": {
+    "defaultMode": "plan",
+    "deny": [
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Write(./.env)"
+    ],
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(git switch:*)",
+      "Bash(git worktree:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(og-status:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr checks:*)"
+    ]
+  }
+}
