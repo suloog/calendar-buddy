@@ -35,10 +35,10 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
 | `MOD-03` Views and navigation | 24 / 5 | 9 | 0 | sliced |
 | `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
-| `MOD-05` Creating and editing events | 29 / 4 | 0 | 0 | not sliced |
+| `MOD-05` Creating and editing events | 29 / 4 | 10 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 0 | 0 | not sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 0 | 0 | not sliced |
-| **Total** | **136 / 28** | **23** | **0** | 4 / 7 modules sliced |
+| **Total** | **136 / 28** | **33** | **0** | 5 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -92,3 +92,20 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-04-01` | As a User, I can use the app in a light or dark theme that follows my system, so that it fits my desktop day and night | F01, F02, F03 | must | draft | — | — |
 | `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | draft | `US-04-01`, `US-03-01` | — |
 | `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05 | must | draft | `US-04-01`, `US-03-01` | — |
+
+## [MOD-05] Creating and editing events
+
+`docs/specs/modules/05-events/REQUIREMENTS.md` · `docs/specs/modules/05-events/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-05-01` | As a User, I can create an event by clicking or selecting a time and typing a title, so that adding a meeting takes seconds | F01, F02, F09, F10, F16, U03 | must | draft | `US-03-01`, `US-02-01` | — |
+| `US-05-02` | As a User, I can set all the details of an event in a full editor, so that the event says everything it needs to | F03, F04, F05, F06, F07, F08, F11, F15 | must | draft | `US-05-01` | — |
+| `US-05-03` | As a User, I can drag an event to another time and stretch it to change its length, so that rescheduling is one gesture | F13, F14, U02 | must | draft | `US-05-01` | — |
+| `US-05-04` | As a User, I can delete an event and undo my last change, so that mistakes cost nothing | F12, F27, F28, U04 | must | draft | `US-05-01` | — |
+| `US-05-05` | As a User, I am stopped from changing what I may not change and told why when Google refuses, so that I never break someone else's event | F17, F22 | must | draft | `US-05-03` | — |
+| `US-05-06` | As a User, I can make an event repeat daily, on weekdays, weekly, monthly or yearly, so that regular meetings are set once | F18, F19 | must | draft | `US-05-02` | — |
+| `US-05-07` | As a User, I can change or delete one occurrence, the following ones or the whole series, so that I handle exceptions the way Google does | F20, F21, F29 | must | draft | `US-05-06`, `US-05-03` | — |
+| `US-05-08` | As a User, I can see out-of-office, focus-time and similar events at a glance and create out-of-office and focus time, so that my availability is clear | F23, F24, U01 | must | draft | `US-05-02` | — |
+| `US-05-09` | As a User, I can see and change an event's own colour, so that it matches how I colour events in Google | F25 | must | draft | `US-05-02` | — |
+| `US-05-10` | As a User, I can open an event's attachments, so that the documents for a meeting are one click away | F26 | must | draft | `US-05-02` | — |
