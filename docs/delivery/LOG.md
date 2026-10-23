@@ -217,3 +217,14 @@
   - One squash commit: one logical change.
 - Manual checks: US-05-08#1, TC-05-09 (US-05-08#2 against real Google), US-05-08#3
 - Commits on main: 2fbf2ce feat(events): show and create special event types [US-05-08]
+
+## US-05-09 — review — 2026-10-23 21:28
+- What: an event's own Google colour (`colorId` 1–11) is read, cached (cache schema VERSION 4, `events.color`) and shown over its calendar's colour in every view; the editor's **Colour** row picks one of Google Calendar's eleven or "Calendar colour", sent as a patch (`null` takes it away), also on create, undo and "this and following".
+- Decisions: DEC-118
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - Code review found nothing blocking. Fixed anyway: keyboard focus ring and accessible names on the colour swatches, a direct colour table instead of a name lookup, and the module's Integrations line (built-in palette, DEC-118).
+  - Spec review compliant. The SQLite cache schema changed (`color` column, VERSION 4: the cache refetches in full); `About.color` and `Patch.color` now travel through the calendar-provider calls (trait signatures unchanged).
+  - The owner should ratify DEC-118 (built-in palette, not the API's `colors` endpoint; an event's own colour shown over a local calendar colour).
+  - One squash commit: one logical change.
+- Manual checks: US-05-09#1, TC-05-10 (US-05-09#2 against real Google)
+- Commits on main: 172fa69 feat(events): show and change an event's own colour [US-05-09]
