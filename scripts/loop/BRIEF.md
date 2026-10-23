@@ -20,12 +20,12 @@ spend carefully.
 
 ## 2. Stop conditions
 Stop at once with `RESULT: failed <ID> <reason>` and change nothing if:
-- the story's status is not `ready`;
+- the story's status is not `ready`, unless its branch `story/<ID>` exists (a resumed story is `in-progress` there);
 - a `depends_on` story is not `review` or `done`. Both mean its code is on `main`;
 - the story names an open question.
 
 ## 3. Work
-1. Run `git switch main && git switch -c story/<ID>`. Check `git branch --show-current` before every phase.
+1. If the branch `story/<ID>` already exists, an earlier session was interrupted, so **resume** it. Run `git switch story/<ID>` (uncommitted changes come along), then take stock with `git log main..HEAD`, `git status` and the story's criteria. Continue from where it stopped, and don't redo finished work. Otherwise run `git switch main && git switch -c story/<ID>`. Check `git branch --show-current` before every phase.
 2. Load the `og:principles` skill and follow it.
 3. Set the story to `in-progress`, both in its frontmatter and in its `docs/specs/BACKLOG.md` row.
 4. Implement. Keep to the constitution, and write tests first where it says so (recurrence, time zones, sync, Google mapping). The `auto` test cases become automated tests in `cargo test`, and each test's name carries the test case's ID (`tc_02_04_…`).

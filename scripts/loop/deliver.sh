@@ -46,6 +46,14 @@ story, so its Δ is not meaningful. Cost is Claude Code's own figure (notional o
 EOF
 fi
 
+PENDING="$RUNS/USAGE.pending"
+flush_usage() {  # label for the commit
+  [ -s "$PENDING" ] || return 0
+  [ "$(git branch --show-current)" = "main" ] || return 0
+  cat "$PENDING" >> "$USAGE_MD" && : > "$PENDING"
+  git add "$USAGE_MD" && git commit -q -m "docs(delivery): usage of $1" -- "$USAGE_MD" || true
+}
+
 story_file() { ls "$ROOT"/docs/specs/modules/*/stories/"$1"-*.md 2>/dev/null | head -1; }
 field() { sed -n "s/^$2:[[:space:]]*\([^#]*\).*/\1/p" "$1" | head -1 | tr -d '[] ' ; }
 
@@ -55,6 +63,8 @@ startable() {
   f="$(story_file "$1")"
   [ -n "$f" ] || { echo "no story file"; return 1; }
   s="$(field "$f" status)"
+  # A story interrupted earlier (limits, timeout) is resumed from its branch.
+  if git rev-parse -q --verify "refs/heads/story/$1" >/dev/null; then s="ready"; fi
   [ "$s" = "ready" ] || { echo "status is $s"; return 1; }
   for dep in $(field "$f" depends_on | tr ',' ' '); do
     df="$(story_file "$dep")"; ds="$(field "$df" status)"
@@ -112,11 +122,14 @@ for STORY in "$@"; do
     if awk -v a="$a" -v b="$b" 'BEGIN{exit !(a < b)}'; then echo "${b}% → ${a}% (~)"; return; fi
     echo "${b}% → ${a}% (+$(awk -v a="$a" -v b="$b" 'BEGIN{printf "%.0f", a-b}')pp)"
   }
-  printf '| %s | %s | %s | %s min | %s | %s | %s | %s | %s |\n' \
-    "$STORY" "$RESULT" "$STARTED" "$MIN" "$TURNS" "$TOK" "$COST" "$(delta five_hour)" "$(delta seven_day)" >> "$USAGE_MD"
+  ROW="$(printf '| %s | %s | %s | %s min | %s | %s | %s | %s | %s |' \
+    "$STORY" "$RESULT" "$STARTED" "$MIN" "$TURNS" "$TOK" "$COST" "$(delta five_hour)" "$(delta seven_day)")"
   echo "  $RESULT_LINE — ${MIN} min, 5h $(delta five_hour), 7d $(delta seven_day)"
 
-  git add "$USAGE_MD" && git commit -q -m "docs(delivery): usage of $STORY" -- "$USAGE_MD" || true
+  # Usage rows are committed on main only; a session that stopped on its story branch leaves
+  # its row pending until the next commit on main.
+  echo "$ROW" >> "$PENDING"
+  flush_usage "$STORY"
 
   case "$RESULT" in
     done|review|parked) ;;
