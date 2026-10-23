@@ -47,10 +47,10 @@ that module. Numbers are never reused or renumbered.
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
 | `MOD-03` Views and navigation | 31 | 22 | 10 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
-| `MOD-05` Creating and editing events | 34 | 0 | 0 / 0 | not written |
+| `MOD-05` Creating and editing events | 34 | 18 | 10 / 2 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
 | `MOD-07` Reminders and notifications | 24 | 0 | 0 / 0 | not written |
-| **Total** | **177** | **52** | **24 / 6** | 4 / 7 modules written |
+| **Total** | **177** | **70** | **34 / 8** | 5 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -120,3 +120,22 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-04-03` | At 100% scale in a 1080-pixel-high window the week view shows 8:00–18:00 without scrolling | `US-04-02` | desktop | happy-path | auto | draft |
 | `TC-04-04` | Event text on very light and very dark calendar colours reaches 4.5:1 contrast in both themes | `US-04-02` | desktop | nfr | auto | draft |
 | `TC-04-05` | Apart from calendar colours the interface uses neutral tones and one accent, and changing views has no transition animation | `US-04-03` | desktop | happy-path | manual-only | draft |
+
+## [MOD-05] Creating and editing events
+
+`docs/specs/modules/05-events/REQUIREMENTS.md` · `docs/specs/modules/05-events/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-05-01` | Selecting 10:00–11:30 and typing a title creates the event in the default calendar | `US-05-01` | desktop | happy-path | auto | draft |
+| `TC-05-02` | The full editor saves title, description, times, location, busy/free and visibility to Google | `US-05-02` | desktop | happy-path | auto | draft |
+| `TC-05-03` | Dragging an event moves it in 15-minute steps, keeps its length and saves the new time | `US-05-03` | desktop | happy-path | auto | draft |
+| `TC-05-04` | Deleting a single event without guests needs no question and Undo restores it | `US-05-04` | desktop | happy-path | auto | draft |
+| `TC-05-05` | Ctrl+Z after a drag restores the previous time, also in Google | `US-05-04` | desktop | happy-path | auto | draft |
+| `TC-05-06` | An event of a read-only calendar cannot be dragged or edited and the app says why | `US-05-05` | desktop | negative | auto | draft |
+| `TC-05-07` | A weekly series on Monday and Wednesday ending after 10 occurrences is created with the right rule | `US-05-06` | desktop | happy-path | auto | draft |
+| `TC-05-08` | "This and following" from the 5th of 10 occurrences leaves 1–4 unchanged and moves 5–10 | `US-05-07` | desktop | happy-path | auto | draft |
+| `TC-05-09` | Out-of-office can be created on a Workspace primary calendar and is not offered on a personal account | `US-05-08` | desktop | happy-path | auto | draft |
+| `TC-05-10` | Changing an event's colour in the editor sends the new colour to Google | `US-05-09` | desktop | happy-path | auto | draft |
+| `TC-05-11` | An event's attachments are listed and open in the browser | `US-05-10` | desktop | happy-path | manual-only | draft |
+| `TC-05-12` | A series created in the app shows the same occurrences in Google Calendar in the browser | `US-05-06` | desktop | happy-path | manual-only | draft |

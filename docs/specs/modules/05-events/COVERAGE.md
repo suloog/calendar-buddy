@@ -69,30 +69,54 @@
 
 ### User story acceptance criteria
 
-<One row per criterion of every story in the module, in story order. `#n` is the criterion's
-position in the story file — counted from 1, with a Given/When/Then scenario counting as one.>
+`#n` is the criterion's position in the story file, counted from 1, with a Given/When/Then scenario counting as one.
 
 | Criterion | Text (short) | Covered by | Automation | Note |
 | --------- | ------------ | ---------- | ---------- | ---- |
-| `US-NN-01#1` | … | `TC-NN-01` | auto | — |
-| `US-NN-01#2` | … | `TC-NN-02`, `TC-NN-03` | auto | — |
-| `US-NN-02#1` | … | — | manual-only | email delivery — out of the executor's reach |
+| `US-05-01#1` | Selecting 10:00–11:30 in the week view opens a quick-entry box with… | `TC-05-01` | auto | — |
+| `US-05-01#2` | Typing a title and pressing Enter creates the event, and it appears… | `TC-05-01` | auto | — |
+| `US-05-01#3` | A single click on a time, or the `c` key, starts an event of the de… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-01#4` | The default calendar is chosen in the settings; until the user choo… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-01#5` | A new event is marked "saving" until Google confirms it. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#1` | "More options" in the quick-entry box opens the full editor with wh… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#2` | In the editor the user sets the title, description, start, end, tim… | `TC-05-02` | auto | — |
+| `US-05-02#3` | An event can be made all-day, and can span several days. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#4` | The user can set the location, whether the event shows them as busy… | `TC-05-02` | auto | — |
+| `US-05-02#5` | Any field of an event the user may edit can be changed later in the… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#6` | Choosing another calendar of the same account moves the event there. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-03#1` | Dragging an event moves it in 15-minute steps, shows the new time w… | `TC-05-03` | auto | — |
+| `US-05-03#2` | An event can be dragged to another day in the 3-day and week views. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-03#3` | Dragging the end of an event changes its length, in 15-minute steps. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-03#4` | After dropping, the new time appears in Google Calendar in the brow… | `TC-05-03` | auto | — |
+| `US-05-04#1` | The user can delete an event they are allowed to delete, from its d… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-04#2` | An event without guests that is not part of a series is deleted wit… | `TC-05-04` | auto | — |
+| `US-05-04#3` | After moving, resizing or editing an event, Ctrl+Z — or Undo in the… | `TC-05-05` | auto | — |
+| `US-05-05#1` | Events of read-only calendars, and events the user is not allowed t… | `TC-05-06` | auto | — |
+| `US-05-05#2` | When Google or the organizer refuses a change, a clear message is s… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-06#1` | In the editor the user makes an event repeat daily, every weekday,… | `TC-05-07` | auto | — |
+| `US-05-06#2` | The series ends on a chosen date, after a chosen number of occurren… | `TC-05-07` | auto | — |
+| `US-05-06#3` | A series created in the app shows the same occurrences in Google Ca… | `TC-05-12` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-05-07#1` | changing from the fifth occurrence on | `TC-05-08` | auto | — |
+| `US-05-07#2` | Changing an occurrence — in the editor, by dragging or by resizing… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-07#3` | Deleting an occurrence asks the same three-way question, and the re… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-07#4` | A series created in Google with a rule the presets cannot express k… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-08#1` | Out-of-office events are hatched, focus-time events carry an icon,… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-08#2` | On the primary calendar of a Workspace account, the editor offers o… | `TC-05-09` | auto | — |
+| `US-05-08#3` | On personal accounts and other calendars, these types are not offered. | `TC-05-09` | auto | — |
+| `US-05-09#1` | An event that has its own colour in Google is shown in that colour. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-09#2` | Changing the event's colour in the editor shows in Google Calendar… | `TC-05-10` | auto | — |
+| `US-05-10#1` | An event with attachments lists them in its details by name. | `TC-05-11` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-05-10#2` | Choosing an attachment opens it in the browser. | `TC-05-11` | manual-only | manual — checked by the product owner (`DEC-65`) |
 
 ### Module constraints and edge cases
 
-<Items from the "Constraints and edge cases" section of REQUIREMENTS.md. This is where `type: edge`
-and `type: negative` tests come from — the module states them once, the tests prove them one by one.>
-
 | Constraint | Covered by | Note |
 | ---------- | ---------- | ---- |
-| … | `TC-NN-04` | — |
-
-### Non-functional requirements under test
-
-<Only the `NFR-nn` and `MOD-NN-NFR-nn` that can be checked against this module. The "How" column
-says what the evidence is measured with — response time from the network log, query count,
-contrast, touch target size. An NFR with no measurable evidence is `manual-only`, not green.>
-
-| Requirement | Covered by | How | Note |
-| ----------- | ---------- | --- | ---- |
-| `NFR-03` | `TC-NN-05` | response time from the network log | — |
+| The end is set before the start in the editor → the event cannot be… | — | smoke depth — not tested yet (`DEC-65`) |
+| An all-day event is dragged into the hours → it becomes a timed eve… | — | smoke depth — not tested yet (`DEC-65`) |
+| The event was changed elsewhere since it was opened → the app reloa… | — | smoke depth — not tested yet (`DEC-65`) |
+| Undo after the event was changed elsewhere → the undo is refused wi… | — | smoke depth — not tested yet (`DEC-65`) |
+| "This and following" on the first occurrence → treated as "all even… | — | smoke depth — not tested yet (`DEC-65`) |
+| Moving an event to a calendar of another account → not offered (Goo… | — | smoke depth — not tested yet (`DEC-65`) |
+| No network → creating and changing are unavailable (`MOD-02-F15`). | — | smoke depth — not tested yet (`DEC-65`) |
+| An event stored in another time zone → edited in its own time zone,… | — | smoke depth — not tested yet (`DEC-65`) |
