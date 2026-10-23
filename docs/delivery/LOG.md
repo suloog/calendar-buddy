@@ -47,3 +47,10 @@
 
 ## Manual checks — 2026-10-23 (2)
 - The owner checked US-03-05 and US-03-08: all passed. Both set to done.
+
+## US-01-01 — review — 2026-10-23 15:37
+- What: welcome screen with one action, "Connect Google account" (`crates/app/src/welcome.rs`); new `calendar-google` crate with the OAuth installed-app sign-in (PKCE S256, loopback redirect on 127.0.0.1, 5-min wait with Cancel), checks before the browser (client file per DEC-77, secret store, network), the "unverified app" heads-up, the refresh token saved to the Secret Service behind `calendar_core::platform`; first-run failures explained with "Try again". Tests run against a fake Google, fake browser and fake store.
+- Decisions: DEC-78, DEC-79, DEC-80
+- Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking: a different account picked on the Workspace directory screen was mixed in, the offline check ignored proxies (now HTTPS through ureq), Cancel during the token exchange still connected, check-order test. Not fixed: closing the directory-only tab leaves a Workspace user waiting up to 5 min (Cancel drops the whole connection); the loopback read has a per-read, not total, deadline; the offline test re-binds a freed port (rare flake). The account isn't remembered across restarts (US-01-03, DEC-80). Spec review flags edge case "admin block / user cap" as at risk if Google never redirects back.
+- Manual checks: TC-01-01, US-01-01#4, US-01-01#5, US-01-01#6, edge cases (cancel, client file, admin block)
+- Commits on main: one squash commit — ad9bcc4 feat(accounts): connect a first Google account from the welcome screen
