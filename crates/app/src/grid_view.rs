@@ -1,21 +1,23 @@
 //! Draws a `GridViewModel` (the day, 3-day or week view) with egui. Only drawing and input live
 //! here; what goes where is decided in `calendar_core::view_model`.
 
-use calendar_core::create::{SAVING, snapped};
-use calendar_core::model::{Event, Rgb, Timing};
+use calendar_core::create::{SAVING, STEP, snapped};
+use calendar_core::drag::{self, Target};
+use calendar_core::model::Rgb;
 use calendar_core::regional::Regional;
 use calendar_core::view_model::GridViewModel;
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, PointerButton, Pos2, Rect, ScrollArea, Sense,
-    Stroke, StrokeKind, Vec2,
+    self, Align2, Color32, CornerRadius, CursorIcon, FontId, LayerId, Order, PointerButton, Pos2,
+    Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2,
 };
 
-const HOUR_HEIGHT: f32 = 44.0;
+pub const HOUR_HEIGHT: f32 = 44.0;
 const GUTTER: f32 = 52.0;
 const HEADER_HEIGHT: f32 = 28.0;
 const LANE_HEIGHT: f32 = 20.0;
-const SNAP_MINUTES: f32 = 15.0;
+/// How far up from a block's bottom edge its end can be grabbed.
+const END_HANDLE: f32 = 5.0;
 /// Narrowest a column of overlapping events may get, so the start of its title stays visible.
 const MIN_BLOCK_WIDTH: f32 = 18.0;
 
@@ -93,28 +95,35 @@ pub struct State {
     selecting: Option<(usize, u32)>,
 }
 
+impl State {
+    /// The events shown changed: a drag under way would point to another event, so it ends.
+    pub fn events_changed(&mut self) {
+        self.drag = None;
+    }
+}
+
 struct Drag {
-    block: usize,
+    grabbed: Grabbed,
+    /// From where the press started.
     delta: Vec2,
 }
 
-/// A dragged event dropped somewhere else: shift by whole days and snapped minutes.
-#[derive(Clone, Copy, Debug)]
-pub struct Change {
-    pub event: usize,
-    pub days: i64,
-    pub minutes: i64,
+/// What is dragged, by its place in the view's blocks or bars.
+#[derive(Clone, Copy, PartialEq)]
+enum Grabbed {
+    Block(usize),
+    /// The end of a block.
+    End(usize),
+    Bar(usize),
 }
 
 /// What the user did in the hours.
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
-    Moved(Change),
+    /// An event dragged and dropped (`MOD-05-F13`, `MOD-05-F14`).
+    Dropped { event: usize, drop: Target },
     /// A click on a time where there is no event: the day's index and the minute of the day.
-    Clicked {
-        day: usize,
-        minute: u32,
-    },
+    Clicked { day: usize, minute: u32 },
     /// A range selected in one day, from the minute pressed to the minute released.
     Selected {
         day: usize,
@@ -135,16 +144,24 @@ fn slot(at: Vec2, day_width: f32, days: usize) -> Option<(usize, u32)> {
     Some((day as usize, minute as u32))
 }
 
-/// Moves an event in memory. Saving to Google is `MOD-05`; this exists for the feasibility check.
-pub fn apply(events: &mut [Event], change: Change) {
-    let shift = Duration::days(change.days) + Duration::minutes(change.minutes);
-    if let Timing::Timed { start, end, zone } = events[change.event].timing {
-        events[change.event].timing = Timing::Timed {
-            start: start + shift,
-            end: end + shift,
-            zone,
-        };
+/// The minutes on the clock `dy` points of the hours stand for, in whole steps (`MOD-05-U02`).
+pub fn minutes(dy: f32) -> i64 {
+    drag::snap(dy / HOUR_HEIGHT * 60.0)
+}
+
+/// Where an event shown on `day` of `days` lands when dragged by `delta`: whole days, kept among
+/// those shown, and minutes in whole steps.
+pub fn moved(delta: Vec2, day_width: f32, day: usize, days: usize) -> Target {
+    let shift = (delta.x / day_width).round() as i64;
+    Target::Moved {
+        days: shift.clamp(-(day as i64), (days - 1 - day) as i64),
+        minutes: minutes(delta.y),
     }
+}
+
+/// Whether the widget is being dragged, or was released this frame.
+fn held(response: &egui::Response) -> bool {
+    response.dragged() || response.drag_stopped()
 }
 
 pub fn show(
@@ -161,6 +178,20 @@ pub fn show(
     let visuals = ui.visuals().clone();
     let grid_line = visuals.widgets.noninteractive.bg_stroke;
     let weak_text = visuals.weak_text_color();
+    // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way; one whose event
+    // left the view is dropped.
+    let grabbed = state.drag.as_ref().map(|drag| drag.grabbed);
+    let gone = match grabbed {
+        Some(Grabbed::Block(i) | Grabbed::End(i)) => i >= view.blocks.len(),
+        Some(Grabbed::Bar(i)) => i >= view.bars.len(),
+        None => false,
+    };
+    if !movable || gone {
+        state.drag = None;
+    }
+    let pointer = ui.input(|i| i.pointer.latest_pos());
+    let day_at = |x: f32, left: f32| slot(Vec2::new(x - left, 0.0), day_width, columns);
+    let mut action = None;
 
     // Day header.
     let (header, _) = ui.allocate_exact_size(Vec2::new(width, HEADER_HEIGHT), Sense::hover());
@@ -190,26 +221,92 @@ pub fn show(
     // All-day and multi-day strip.
     let strip_height = view.lanes as f32 * LANE_HEIGHT + 4.0;
     let (strip, _) = ui.allocate_exact_size(Vec2::new(width, strip_height), Sense::hover());
+    // Above the hours, a dragged event is over the strip.
+    let over_strip = pointer.is_some_and(|p| p.y < strip.bottom());
     let painter = ui.painter_at(strip);
-    for bar in &view.bars {
+    let mut bar_into_hours = None;
+    for (index, bar) in view.bars.iter().enumerate() {
         let x0 = strip.left() + GUTTER + bar.bar.first_day as f32 * day_width + 2.0;
         let x1 = strip.left() + GUTTER + (bar.bar.last_day + 1) as f32 * day_width - 2.0;
         let y = strip.top() + 2.0 + bar.bar.lane as f32 * LANE_HEIGHT;
-        let rect = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + LANE_HEIGHT - 2.0));
+        let mut rect = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + LANE_HEIGHT - 2.0));
         let response = ui.interact(
             rect,
             ui.scope_id().with(("bar", bar.bar.event)),
-            Sense::click(),
+            Sense::click_and_drag(),
         );
+        if response.drag_started_by(PointerButton::Primary) && movable && bar.movable {
+            state.drag = Some(Drag {
+                grabbed: Grabbed::Bar(index),
+                delta: Vec2::ZERO,
+            });
+        }
+        if state.drag.as_ref().map(|d| d.grabbed) == Some(Grabbed::Bar(index)) && !held(&response) {
+            state.drag = None;
+        }
+        if let Some(drag) = state
+            .drag
+            .as_mut()
+            .filter(|d| d.grabbed == Grabbed::Bar(index))
+        {
+            if let Some(total) = response.total_drag_delta() {
+                drag.delta = total;
+            }
+            // An all-day event goes into the hours where it is dropped there; otherwise it moves
+            // by whole days in the strip.
+            if bar.all_day && !over_strip {
+                if response.drag_stopped() {
+                    bar_into_hours = Some(index);
+                }
+            } else {
+                // Kept in sight by a day at least, also when it starts before the first day.
+                let shift = (drag.delta.x / day_width).round() as i64;
+                let last = bar.bar.last_day as i64;
+                let days = shift.clamp(-last, (columns - 1 - bar.bar.first_day) as i64);
+                rect = rect.translate(Vec2::new(days as f32 * day_width, 0.0));
+                let drop = Target::Moved { days, minutes: 0 };
+                if response.drag_stopped() {
+                    action = Some(Action::Dropped {
+                        event: bar.bar.event,
+                        drop,
+                    });
+                }
+            }
+        }
         painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
         painter.with_clip_rect(rect).text(
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
-            event_label(bar.title.as_deref(), bar.read_only, false),
+            event_label(bar.title.as_deref(), bar.read_only, bar.saving),
             FontId::proportional(12.0),
             text_on(bar.color),
         );
         openable(ui, &response, rect, bar.bar.event, opened);
+    }
+    // An event of the hours dragged over the strip, in the day under the pointer: drawn over the
+    // strip's last lane, so the layout under the pointer does not move.
+    if let (Some(Grabbed::Block(index)), true, Some(p)) = (grabbed, over_strip, pointer)
+        && let Some((day, _)) = day_at(p.x, strip.left())
+        && let Some(block) = view.blocks.get(index)
+    {
+        let x = strip.left() + GUTTER + day as f32 * day_width;
+        let y = strip.bottom() - LANE_HEIGHT;
+        let rect = Rect::from_min_max(
+            Pos2::new(x + 2.0, y),
+            Pos2::new(x + day_width - 2.0, y + LANE_HEIGHT - 2.0),
+        );
+        let painter = ui.ctx().layer_painter(LayerId::new(
+            Order::Foreground,
+            ui.scope_id().with("drop-lane"),
+        ));
+        painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
+        painter.with_clip_rect(rect).text(
+            rect.left_center() + Vec2::new(4.0, 0.0),
+            Align2::LEFT_CENTER,
+            event_label(block.title.as_deref(), false, false),
+            FontId::proportional(12.0),
+            text_on(block.color),
+        );
     }
     ui.painter()
         .hline(strip.x_range(), strip.bottom(), grid_line);
@@ -226,7 +323,6 @@ pub fn show(
         state.scrolled_to_now = true;
     }
 
-    let mut action = None;
     scroll.show(ui, |ui| {
         // Clicking or selecting where there is no event starts one (`MOD-05-F01`); the events,
         // drawn over it, take their own clicks. Not a Tab stop: `c` starts one from the keyboard.
@@ -305,35 +401,120 @@ pub fn show(
                 ui.scope_id().with(("block", p.event, p.day)),
                 Sense::click_and_drag(),
             );
-            if response.drag_started() && movable {
+            // The end is grabbed where the event ends, not where it goes on past midnight.
+            let next_day = view.days[p.day]
+                .date
+                .succ_opt()
+                .unwrap_or(view.days[p.day].date);
+            let ends_here = block.end.with_timezone(&view.zone).naive_local()
+                <= next_day.and_time(chrono::NaiveTime::MIN);
+            let end = (movable && block.movable && ends_here).then(|| {
+                let handle = Rect::from_min_max(
+                    Pos2::new(rect.left(), rect.bottom() - END_HANDLE),
+                    rect.right_bottom(),
+                );
+                ui.interact(
+                    handle,
+                    ui.scope_id().with(("end", p.event, p.day)),
+                    Sense::drag(),
+                )
+                .on_hover_cursor(CursorIcon::ResizeVertical)
+            });
+            if response.drag_started_by(PointerButton::Primary) && movable && block.movable {
                 state.drag = Some(Drag {
-                    block: index,
+                    grabbed: Grabbed::Block(index),
                     delta: Vec2::ZERO,
                 });
             }
-            if let Some(drag) = state.drag.as_mut().filter(|d| d.block == index) {
-                // From where the press started: a click-and-drag starts only after a few points.
-                if let Some(total) = response.total_drag_delta() {
-                    drag.delta = total;
+            if let Some(end) = &end
+                && end.drag_started_by(PointerButton::Primary)
+            {
+                state.drag = Some(Drag {
+                    grabbed: Grabbed::End(index),
+                    delta: Vec2::ZERO,
+                });
+            }
+            // A drag goes with the widget it started on, not with a block that took its place
+            // when the view was rebuilt.
+            let lost = match state.drag.as_ref().map(|d| d.grabbed) {
+                Some(Grabbed::Block(i)) if i == index => !held(&response),
+                Some(Grabbed::End(i)) if i == index => !end.as_ref().is_some_and(held),
+                _ => false,
+            };
+            if lost {
+                state.drag = None;
+            }
+            // The times it would have if dropped now, shown while it is dragged (`MOD-05-U02`).
+            let mut times = None;
+            match state.drag.as_mut() {
+                Some(drag) if drag.grabbed == Grabbed::Block(index) => {
+                    // From where the press started: a click-and-drag starts only after a few points.
+                    if let Some(total) = response.total_drag_delta() {
+                        drag.delta = total;
+                    }
+                    if over_strip {
+                        if response.drag_stopped()
+                            && let Some((day, _)) = pointer.and_then(|p| day_at(p.x, grid.left()))
+                        {
+                            let date = view.days[day].date;
+                            let drop = Target::AllDay { date };
+                            action = Some(Action::Dropped {
+                                event: p.event,
+                                drop,
+                            });
+                        }
+                    } else if let drop @ Target::Moved { days, minutes } =
+                        moved(drag.delta, day_width, p.day, columns)
+                    {
+                        let shift =
+                            Vec2::new(days as f32 * day_width, minutes as f32 / 60.0 * HOUR_HEIGHT);
+                        rect = rect.translate(shift);
+                        let (start, end) =
+                            drag::moved((block.start, block.end), days, minutes, view.zone);
+                        times = Some((start, end));
+                        if response.drag_stopped() {
+                            action = Some(Action::Dropped {
+                                event: p.event,
+                                drop,
+                            });
+                        }
+                    }
                 }
-                let days = (drag.delta.x / day_width).round();
-                let minutes =
-                    (drag.delta.y / HOUR_HEIGHT * 60.0 / SNAP_MINUTES).round() * SNAP_MINUTES;
-                rect = rect.translate(Vec2::new(days * day_width, minutes / 60.0 * HOUR_HEIGHT));
-                if response.drag_stopped() {
-                    action = Some(Action::Moved(Change {
-                        event: p.event,
-                        days: days as i64,
-                        minutes: minutes as i64,
-                    }));
-                    state.drag = None;
+                Some(drag) if drag.grabbed == Grabbed::End(index) => {
+                    let Some(end) = &end else {
+                        unreachable!("a drag of an end that is not there is lost")
+                    };
+                    if let Some(total) = end.total_drag_delta() {
+                        drag.delta = total;
+                    }
+                    // A step long at least, and ending by midnight.
+                    let step = i64::from(STEP);
+                    let shortest = (p.start_min as i64 + step - p.end_min as i64).min(0);
+                    let by = minutes(drag.delta.y).clamp(shortest, 24 * 60 - p.end_min as i64);
+                    rect.max.y += by as f32 / 60.0 * HOUR_HEIGHT;
+                    let until = drag::stretched((block.start, block.end), by, view.zone);
+                    times = Some((block.start, until));
+                    if end.drag_stopped() {
+                        action = Some(Action::Dropped {
+                            event: p.event,
+                            drop: Target::Resized { minutes: by },
+                        });
+                    }
                 }
+                _ => {}
             }
             painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
             let ink = text_on(block.color);
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
-            let time = regional.time(block.start.with_timezone(&view.zone).time());
             let name = event_label(block.title.as_deref(), block.read_only, block.saving);
+            let time = match times {
+                Some((start, end)) => {
+                    let time =
+                        |at: DateTime<Utc>| regional.time(at.with_timezone(&view.zone).time());
+                    format!("{} – {}", time(start), time(end))
+                }
+                None => regional.time(block.start.with_timezone(&view.zone).time()),
+            };
             let label = match &block.title {
                 Some(_) => format!("{name}\n{time}"),
                 None => name,
@@ -348,6 +529,35 @@ pub fn show(
             openable(ui, &response, rect, p.event, opened);
         }
 
+        // An all-day event dragged into the hours, from the step under the pointer.
+        if let (Some(Grabbed::Bar(index)), false) = (grabbed, over_strip)
+            && let Some(bar) = view.bars.get(index).filter(|bar| bar.all_day)
+            && let Some((day, minute)) = at(pointer)
+        {
+            let from = (minute / STEP * STEP).min(24 * 60 - STEP);
+            let x = grid.left() + GUTTER + day as f32 * day_width;
+            let rect = Rect::from_min_max(
+                Pos2::new(x + 2.0, minute_y(from as f32) + 1.0),
+                Pos2::new(x + day_width - 2.0, minute_y((from + STEP) as f32) - 1.0),
+            );
+            painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
+            let time = regional.time(chrono::NaiveTime::MIN + Duration::minutes(from.into()));
+            painter.with_clip_rect(rect).text(
+                rect.left_center() + Vec2::new(4.0, 0.0),
+                Align2::LEFT_CENTER,
+                format!("{} {time}", event_label(bar.title.as_deref(), false, false)),
+                FontId::proportional(12.0),
+                text_on(bar.color),
+            );
+            if bar_into_hours == Some(index) {
+                let date = view.days[day].date;
+                action = Some(Action::Dropped {
+                    event: bar.bar.event,
+                    drop: Target::Timed { date, minute: from },
+                });
+            }
+        }
+
         if let Some(now) = view.now {
             let x = grid.left() + GUTTER + now.day as f32 * day_width;
             let y = minute_y(now.minute as f32);
@@ -359,6 +569,10 @@ pub fn show(
             painter.circle_filled(Pos2::new(x, y), 4.0, Color32::from_rgb(0xEA, 0x43, 0x35));
         }
     });
+    // A drag ends with the button released, wherever that was.
+    if !ui.input(|i| i.pointer.primary_down()) {
+        state.drag = None;
+    }
     action
 }
 
@@ -396,6 +610,43 @@ mod tests {
         );
         assert_eq!(slot(Vec2::new(GUTTER - 1.0, 0.0), day_width, 7), None);
         assert_eq!(slot(at(7.0, 600.0), day_width, 7), None);
+    }
+
+    #[test]
+    fn a_dragged_event_moves_by_whole_days_kept_in_view_and_15_minute_steps() {
+        let day_width = 100.0;
+        let hour = HOUR_HEIGHT;
+        let to = |dx: f32, dy: f32, day| moved(Vec2::new(dx, dy), day_width, day, 7);
+        assert_eq!(
+            to(140.0, hour * 40.0 / 60.0, 2),
+            Target::Moved {
+                days: 1,
+                minutes: 45
+            }
+        );
+        assert_eq!(
+            to(-40.0, -hour * 20.0 / 60.0, 2),
+            Target::Moved {
+                days: 0,
+                minutes: -15
+            }
+        );
+        // Not past the first or the last day shown.
+        assert_eq!(
+            to(-500.0, 0.0, 2),
+            Target::Moved {
+                days: -2,
+                minutes: 0
+            }
+        );
+        assert_eq!(
+            to(900.0, 0.0, 2),
+            Target::Moved {
+                days: 4,
+                minutes: 0
+            }
+        );
+        assert_eq!(minutes(hour * 1.5), 90);
     }
 
     #[test]
