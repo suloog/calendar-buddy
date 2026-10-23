@@ -69,6 +69,8 @@ struct State {
     states_expired: bool,
     /// Calendars whose events Google refuses to send.
     failing: Vec<String>,
+    /// Google refuses to send the calendar lists.
+    list_failing: bool,
 }
 
 /// How many items the fake sends per page; Google may send fewer than asked for.
@@ -158,6 +160,15 @@ impl FakeGoogle {
         self.state.lock().unwrap().calendars.push((account, entry));
     }
 
+    /// The calendar leaves the account's calendar list: deleted, or no longer shared with it.
+    pub fn remove_calendar(&self, account: &'static str, calendar: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .calendars
+            .retain(|(owner, entry)| !(*owner == account && entry["id"] == calendar));
+    }
+
     /// An event of one of the account's calendars, as Google's `events` resource; it replaces
     /// the event with its ID, as a change made elsewhere.
     pub fn add_event(&self, account: &'static str, calendar: &str, event: Value) {
@@ -198,6 +209,11 @@ impl FakeGoogle {
                 entry["accessRole"] = role.into();
             }
         }
+    }
+
+    /// Google refuses to send the calendar lists.
+    pub fn fail_calendar_list(&self) {
+        self.state.lock().unwrap().list_failing = true;
     }
 
     /// Google refuses to send the calendar's events.
@@ -425,15 +441,23 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
         })
         .collect();
     let (items, per_page): (Vec<&Value>, usize) = match segments.as_slice() {
-        [_, _, users, me, list] if users == "users" && me == "me" && list == "calendarList" => (
-            state
-                .calendars
-                .iter()
-                .filter(|(owner, _)| *owner == account)
-                .map(|(_, entry)| entry)
-                .collect(),
-            CALENDARS_PER_PAGE,
-        ),
+        [_, _, users, me, list] if users == "users" && me == "me" && list == "calendarList" => {
+            if state.list_failing {
+                return (
+                    "500 Internal Server Error",
+                    r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
+                );
+            }
+            (
+                state
+                    .calendars
+                    .iter()
+                    .filter(|(owner, _)| *owner == account)
+                    .map(|(_, entry)| entry)
+                    .collect(),
+                CALENDARS_PER_PAGE,
+            )
+        }
         [_, _, calendars, id, events] if calendars == "calendars" && events == "events" => {
             let listed = state
                 .calendars

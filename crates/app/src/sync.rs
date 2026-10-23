@@ -2,11 +2,13 @@
 //! the cache and shows what it holds at start. Each connected account's first synchronization of
 //! the run starts once Google has confirmed the account's sign-in; from then on its calendars are
 //! polled as the `Schedule` says, and synchronized at once on "Refresh", when the window is
-//! activated, when an event is opened, after waking from sleep and when the network returns. A
-//! removed account's data is deleted. Whenever what the cache holds may have changed, the views
-//! get the events to show.
+//! activated, when an event is opened, after waking from sleep and when the network returns. Each
+//! round first brings the accounts' calendar lists up to date (`US-02-04`): new calendars are
+//! synchronized, and those gone go with their events, the user being told once. Calendars disabled
+//! in the settings stay listed but are never synchronized. A removed account's data is deleted.
+//! Whenever what the cache holds may have changed, the views get the events to show.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
@@ -16,7 +18,9 @@ use calendar_core::cache::{self, Cache};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
-use calendar_core::sync::{Provider, SyncError, Window, shown_events, sync_calendars};
+use calendar_core::sync::{
+    Provider, SyncError, Window, shown_events, sync_calendar_list, sync_calendars,
+};
 use calendar_google::{Endpoints, Session};
 use eframe::egui;
 
@@ -34,13 +38,20 @@ enum Job {
     Shown(bool),
     /// The days the cache holds moved, as days pass or the time zone changes.
     Window(Window),
+    /// The calendars disabled in the settings changed.
+    Disabled(Disabled),
 }
 
 enum Update {
     Events(Vec<Event>),
     /// The account's synchronization did not start; it is tried again after its next check.
     Failed(String),
+    /// The names of calendars gone from their accounts' lists (`MOD-02-F21`).
+    Gone(Vec<String>),
 }
+
+/// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
+type Disabled = BTreeSet<(String, String)>;
 
 /// Signs in to an account at Google.
 type SignIn = Box<dyn Fn(&str) -> Result<Box<dyn Provider + Send>, SyncError> + Send>;
@@ -54,12 +65,19 @@ pub struct Synchronization {
     shown: bool,
     /// The days the cache holds, as last told to the worker.
     window: Window,
+    /// The names of calendars gone from their accounts' lists, not yet taken.
+    gone: Vec<String>,
 }
 
 impl Synchronization {
     /// Starts the worker on the cache file; without a home directory the cache lives in memory.
-    /// Data of accounts not in `account_ids` is deleted.
-    pub fn start(ctx: &egui::Context, account_ids: Vec<String>, window: Window) -> Self {
+    /// Data of accounts not in `account_ids` is deleted, and the disabled calendars' events.
+    pub fn start(
+        ctx: &egui::Context,
+        account_ids: Vec<String>,
+        window: Window,
+        disabled: Disabled,
+    ) -> Self {
         let store: Arc<dyn SecretStore> = Arc::new(SystemSecretStore);
         let endpoints = Endpoints::google();
         let client_file = calendar_google::client_file_path();
@@ -72,7 +90,7 @@ impl Synchronization {
                 .and_then(|path| Cache::open(&path).ok())
                 .unwrap_or_else(Cache::in_memory)
         };
-        let sync = Synchronization::with(ctx, open, sign_in, account_ids, window);
+        let sync = Synchronization::with(ctx, open, sign_in, account_ids, window, disabled);
         sync.wake_on(&SystemWakeups);
         sync
     }
@@ -83,6 +101,7 @@ impl Synchronization {
         sign_in: SignIn,
         account_ids: Vec<String>,
         window: Window,
+        disabled: Disabled,
     ) -> Self {
         let (jobs, received) = mpsc::channel();
         let (sender, updates) = mpsc::channel();
@@ -92,8 +111,9 @@ impl Synchronization {
                 let _ = sender.send(update);
                 ctx.request_repaint();
             };
-            let mut engine = Engine::new(open(), sign_in, window);
+            let mut engine = Engine::new(open(), sign_in, window, disabled);
             let _ = engine.cache.retain_accounts(&account_ids);
+            engine.clear_disabled();
             send(engine.shown());
             loop {
                 let job = match engine.schedule.next() {
@@ -121,6 +141,7 @@ impl Synchronization {
             synced: HashSet::new(),
             shown: true,
             window,
+            gone: Vec::new(),
         }
     }
 
@@ -188,6 +209,12 @@ impl Synchronization {
         }
     }
 
+    /// The calendars disabled in the settings changed: a newly disabled calendar's events are
+    /// deleted, and a newly enabled one is synchronized at once (`MOD-02-F06`).
+    pub fn set_disabled(&self, disabled: Disabled) {
+        let _ = self.jobs.send(Job::Disabled(disabled));
+    }
+
     /// The events to show, when they changed. Called every frame.
     pub fn poll(&mut self) -> Option<Vec<Event>> {
         let mut events = None;
@@ -197,9 +224,16 @@ impl Synchronization {
                 Update::Failed(id) => {
                     self.synced.remove(&id);
                 }
+                Update::Gone(names) => self.gone.extend(names),
             }
         }
         events
+    }
+
+    /// The names of calendars gone from their accounts' lists since last asked; each is given
+    /// once (`MOD-02-F21`).
+    pub fn take_gone(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.gone)
     }
 }
 
@@ -214,10 +248,11 @@ struct Engine {
     pending: HashSet<String>,
     /// The days the cache holds, as the views last gave them.
     window: Window,
+    disabled: Disabled,
 }
 
 impl Engine {
-    fn new(cache: Cache, sign_in: SignIn, window: Window) -> Self {
+    fn new(cache: Cache, sign_in: SignIn, window: Window, disabled: Disabled) -> Self {
         Engine {
             cache,
             schedule: Schedule::new(),
@@ -225,6 +260,7 @@ impl Engine {
             sessions: HashMap::new(),
             pending: HashSet::new(),
             window,
+            disabled,
         }
     }
 
@@ -254,9 +290,7 @@ impl Engine {
                     updates.extend(self.first(&id, now));
                 }
                 let all = self.schedule.all();
-                if self.round(&all, now) {
-                    updates.push(self.shown());
-                }
+                updates.extend(self.round(&all, now));
                 return updates;
             }
             Some(Job::Activated) => self.schedule.stale(now),
@@ -269,26 +303,30 @@ impl Engine {
                 self.window = window;
                 return vec![self.shown()];
             }
+            Some(Job::Disabled(disabled)) => {
+                self.disabled = disabled;
+                self.clear_disabled();
+                self.enable(now);
+                return vec![self.shown()];
+            }
         };
-        if self.round(&calendars, now) {
-            vec![self.shown()]
-        } else {
-            Vec::new()
-        }
+        self.round(&calendars, now)
     }
 
     /// The account's first synchronization of this run: it signs in, fetches the calendar list
-    /// and synchronizes every calendar; from then on they are polled.
+    /// and synchronizes every enabled calendar; from then on they are polled. Calendars gone
+    /// since the last run, e.g. deleted while the app was offline, are told of.
     fn first(&mut self, id: &str, now: Instant) -> Vec<Update> {
         self.pending.remove(id);
         let listed = (self.sign_in)(id).and_then(|session| {
-            let calendars = session.calendars()?;
-            self.cache.set_calendars(id, &calendars)?;
-            Ok((session, calendars))
+            let list = sync_calendar_list(session.as_ref(), id, &mut self.cache)?;
+            Ok((session, list))
         });
         let mut updates = Vec::new();
         match listed {
-            Ok((session, calendars)) => {
+            Ok((session, list)) => {
+                updates.extend(gone(list.gone));
+                let calendars = enabled(&self.disabled, &list.calendars);
                 // A calendar that fails is tried again at its next turn.
                 let _ = sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
                 self.schedule.set_account(id, &calendars, now);
@@ -303,25 +341,70 @@ impl Engine {
         updates
     }
 
-    /// Synchronizes the calendars, each with its account's session; says whether what the cache
-    /// holds may have changed. A calendar that fails is tried again at its next turn.
-    fn round(&mut self, calendars: &[Calendar], now: Instant) -> bool {
+    /// Synchronizes the calendars, each with its account's session, after bringing those
+    /// accounts' calendar lists up to date (`MOD-02-F05`): calendars new on a list are
+    /// synchronized too, and those gone from it are told of (`MOD-02-F21`). The views get the
+    /// events when what the cache holds may have changed. A calendar that fails is tried again
+    /// at its next turn; a list that cannot be fetched stays as it was.
+    fn round(&mut self, calendars: &[Calendar], now: Instant) -> Vec<Update> {
         self.schedule.synced(calendars, now);
         let mut changed = false;
+        let mut updates = Vec::new();
         for (account, session) in &self.sessions {
-            let of_account: Vec<Calendar> = calendars
+            let mut of_account: Vec<Calendar> = calendars
                 .iter()
                 .filter(|calendar| calendar.account_id == *account)
                 .cloned()
                 .collect();
-            if !of_account.is_empty() {
-                // A failure can come after other calendars changed.
-                changed |=
-                    sync_calendars(session.as_ref(), &of_account, self.window, &mut self.cache)
-                        .unwrap_or(true);
+            if of_account.is_empty() {
+                continue;
             }
+            if let Ok(list) = sync_calendar_list(session.as_ref(), account, &mut self.cache) {
+                changed |= list.changed;
+                updates.extend(gone(list.gone));
+                let listed = enabled(&self.disabled, &list.calendars);
+                let added = self.schedule.update_account(account, &listed, now);
+                // Those still listed, as listed now (their access may have changed).
+                of_account = listed
+                    .into_iter()
+                    .filter(|calendar| of_account.iter().any(|due| due.id == calendar.id))
+                    .chain(added)
+                    .collect();
+            }
+            // A failure can come after other calendars changed.
+            changed |= sync_calendars(session.as_ref(), &of_account, self.window, &mut self.cache)
+                .unwrap_or(true);
         }
-        changed
+        if changed {
+            updates.push(self.shown());
+        }
+        updates
+    }
+
+    /// Deletes the disabled calendars' events; they stay listed (`MOD-02-F06`).
+    fn clear_disabled(&mut self) {
+        for (account, calendar) in &self.disabled {
+            let _ = self.cache.clear_calendar(account, calendar);
+        }
+    }
+
+    /// Polls the enabled calendars of every signed-in account; those newly enabled are
+    /// synchronized at once, in full, and those disabled are no longer polled (`MOD-02-F06`).
+    fn enable(&mut self, now: Instant) {
+        // An unreadable cache leaves the calendars polled as they were.
+        let Ok(known) = self.cache.calendar_list() else {
+            return;
+        };
+        for (account, session) in &self.sessions {
+            let of_account: Vec<Calendar> = known
+                .iter()
+                .filter(|calendar| calendar.account_id == *account)
+                .cloned()
+                .collect();
+            let calendars = enabled(&self.disabled, &of_account);
+            let added = self.schedule.update_account(account, &calendars, now);
+            let _ = sync_calendars(session.as_ref(), &added, self.window, &mut self.cache);
+        }
     }
 
     fn stop(&mut self, id: &str) {
@@ -339,6 +422,27 @@ impl Engine {
                 .unwrap_or_default(),
         )
     }
+}
+
+/// The calendars not disabled in the settings.
+fn enabled(disabled: &Disabled, calendars: &[Calendar]) -> Vec<Calendar> {
+    calendars
+        .iter()
+        .filter(|calendar| !disabled.contains(&(calendar.account_id.clone(), calendar.id.clone())))
+        .cloned()
+        .collect()
+}
+
+/// The notice of calendars gone from a list, if any.
+fn gone(calendars: Vec<Calendar>) -> Option<Update> {
+    (!calendars.is_empty()).then(|| {
+        Update::Gone(
+            calendars
+                .into_iter()
+                .map(|calendar| calendar.name)
+                .collect(),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -419,7 +523,14 @@ mod tests {
         let open = cache_of(&["1", "2", "gone"]);
         let ids = vec!["1".to_string(), "2".to_string()];
 
-        let mut sync = Synchronization::with(&ctx, open, unreachable_google(), ids, window());
+        let mut sync = Synchronization::with(
+            &ctx,
+            open,
+            unreachable_google(),
+            ids,
+            window(),
+            Disabled::new(),
+        );
 
         let mut shown = next_events(&mut sync);
         shown.sort();
@@ -436,6 +547,7 @@ mod tests {
             unreachable_google(),
             ids,
             window(),
+            Disabled::new(),
         );
         next_events(&mut sync);
 
@@ -448,8 +560,14 @@ mod tests {
     fn an_account_is_synchronized_once_per_run_and_again_after_a_failure() {
         let ctx = egui::Context::default();
         let ids = vec!["1".to_string()];
-        let mut sync =
-            Synchronization::with(&ctx, cache_of(&["1"]), unreachable_google(), ids, window());
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            unreachable_google(),
+            ids,
+            window(),
+            Disabled::new(),
+        );
         next_events(&mut sync);
         let works = [("1".to_string(), Check::Works)];
 
@@ -567,10 +685,242 @@ mod tests {
 
     /// The account's first synchronization of the run, done at `start`.
     fn first_sync(google: &Google, start: Instant) -> Engine {
-        let mut engine = Engine::new(Cache::in_memory(), google.sign_in(), window());
+        first_sync_with(google, Cache::in_memory(), Disabled::new(), start)
+    }
+
+    /// The account's first synchronization of the run, done at `start` on the cache, with the
+    /// calendars disabled in the settings.
+    fn first_sync_with(
+        google: &Google,
+        cache: Cache,
+        disabled: Disabled,
+        start: Instant,
+    ) -> Engine {
+        let mut engine = Engine::new(cache, google.sign_in(), window(), disabled);
+        engine.clear_disabled();
         let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
         assert!(told(updates).is_some());
         engine
+    }
+
+    /// The names of the calendars the user is told are gone; empty when none.
+    fn gone_told(updates: &[Update]) -> Vec<String> {
+        updates
+            .iter()
+            .flat_map(|update| match update {
+                Update::Gone(names) => names.clone(),
+                _ => Vec::new(),
+            })
+            .collect()
+    }
+
+    /// The account's calendars in the cache, by ID.
+    fn listed(engine: &Engine) -> Vec<String> {
+        engine
+            .cache
+            .calendar_list()
+            .unwrap()
+            .into_iter()
+            .map(|calendar| calendar.id)
+            .collect()
+    }
+
+    /// Whether the app asked Google for the calendar's events.
+    fn fetched(google: &Google, calendar: &str) -> bool {
+        google
+            .fake
+            .requests()
+            .iter()
+            .any(|request| request.contains(&format!("/calendars/{calendar}/events")))
+    }
+
+    #[test]
+    fn tc_02_06_an_unshared_calendar_goes_with_its_events_and_the_user_is_told_once() {
+        let google = Google::start("tc-02-06");
+        google.calendar("work", "owner");
+        google.calendar("Colleague", "reader");
+        google.event("Colleague", "review", "Review");
+        google.event("Colleague", "lunch", "Lunch");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Lunch", "Review"]);
+
+        // 1. The colleague stops sharing it; the next round lists the account's calendars.
+        google.fake.remove_calendar(ACCOUNT_ID, "Colleague");
+        let updates = engine.handle(None, start + secs(60));
+
+        assert_eq!(gone_told(&updates), ["Colleague"]);
+        assert_eq!(told(updates).unwrap(), Vec::<String>::new());
+        assert_eq!(listed(&engine), ["work"]);
+        assert!(engine.cache.calendars().unwrap()[0].events.is_empty());
+
+        // 2. One more round: no second notice.
+        let updates = engine.handle(None, start + secs(120));
+        assert_eq!(gone_told(&updates), Vec::<String>::new());
+        let updates = engine.handle(Some(Job::Refresh), start + secs(120));
+        assert_eq!(gone_told(&updates), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_calendar_created_in_google_appears_at_the_next_round_and_one_deleted_disappears() {
+        let google = Google::start("created");
+        google.calendar("work", "owner");
+        google.event("work", "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        google.calendar("team", "writer");
+        google.event("team", "offsite", "Offsite");
+        assert_eq!(
+            told(engine.handle(None, start + secs(60))).unwrap(),
+            ["Offsite", "Standup"]
+        );
+        assert_eq!(listed(&engine), ["work", "team"]);
+        // From then on it is polled as an editable calendar.
+        google.event("team", "offsite", "Offsite 2");
+        assert_eq!(
+            told(engine.handle(None, start + secs(120))).unwrap(),
+            ["Offsite 2", "Standup"]
+        );
+
+        google.fake.remove_calendar(ACCOUNT_ID, "team");
+        let updates = engine.handle(None, start + secs(180));
+
+        assert_eq!(gone_told(&updates), ["team"]);
+        assert_eq!(told(updates).unwrap(), ["Standup"]);
+        assert_eq!(listed(&engine), ["work"]);
+        assert_eq!(engine.schedule.all().len(), 1);
+    }
+
+    #[test]
+    fn a_calendar_list_google_does_not_send_leaves_the_calendars_as_they_were() {
+        let google = Google::start("list-failing");
+        google.calendar("work", "owner");
+        google.calendar("team", "writer");
+        google.event("work", "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        google.fake.fail_calendar_list();
+        google.event("work", "standup", "Standup 2");
+        let updates = engine.handle(None, start + secs(60));
+
+        assert_eq!(gone_told(&updates), Vec::<String>::new());
+        assert_eq!(told(updates).unwrap(), ["Standup 2"]);
+        assert_eq!(listed(&engine), ["work", "team"]);
+        assert_eq!(engine.schedule.all().len(), 2);
+    }
+
+    #[test]
+    fn a_calendar_deleted_while_the_app_was_closed_goes_with_a_notice_at_the_next_run() {
+        let google = Google::start("offline");
+        google.calendar("work", "owner");
+        google.calendar("trips", "owner");
+        google.event("trips", "rome", "Rome");
+        let engine = first_sync(&google, Instant::now());
+        let cache = engine.cache;
+
+        google.fake.remove_calendar(ACCOUNT_ID, "trips");
+        let mut engine = Engine::new(cache, google.sign_in(), window(), Disabled::new());
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Rome"]);
+        let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), Instant::now());
+
+        assert_eq!(gone_told(&updates), ["trips"]);
+        assert_eq!(told(updates).unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_disabled_calendar_stays_listed_but_its_events_are_neither_fetched_nor_cached() {
+        let google = Google::start("disabled");
+        google.calendar("work", "owner");
+        google.calendar("holidays", "reader");
+        google.event("work", "standup", "Standup");
+        google.event("holidays", "day-off", "Day off");
+        let start = Instant::now();
+        let disabled = Disabled::from([(ACCOUNT_ID.to_string(), "holidays".to_string())]);
+
+        let mut engine = first_sync_with(&google, Cache::in_memory(), disabled, start);
+        engine.handle(Some(Job::Refresh), start + secs(60));
+        engine.handle(None, start + secs(30 * 60));
+
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Standup"]);
+        assert_eq!(listed(&engine), ["work", "holidays"]);
+        assert!(!fetched(&google, "holidays"));
+        assert_eq!(engine.schedule.all().len(), 1);
+    }
+
+    #[test]
+    fn enabling_a_disabled_calendar_synchronizes_it_at_once_and_disabling_drops_its_events() {
+        let google = Google::start("enabled");
+        google.calendar("work", "owner");
+        google.calendar("holidays", "reader");
+        google.event("work", "standup", "Standup");
+        google.event("holidays", "day-off", "Day off");
+        let start = Instant::now();
+        let holidays = (ACCOUNT_ID.to_string(), "holidays".to_string());
+        let mut engine = first_sync_with(
+            &google,
+            Cache::in_memory(),
+            Disabled::from([holidays.clone()]),
+            start,
+        );
+
+        let updates = engine.handle(Some(Job::Disabled(Disabled::new())), start + secs(5));
+
+        assert_eq!(told(updates).unwrap(), ["Day off", "Standup"]);
+        assert!(fetched(&google, "holidays"));
+        assert_eq!(engine.schedule.all().len(), 2);
+        assert_eq!(engine.schedule.next(), Some(start + secs(60)));
+
+        let updates = engine.handle(
+            Some(Job::Disabled(Disabled::from([holidays]))),
+            start + secs(10),
+        );
+
+        assert_eq!(told(updates).unwrap(), ["Standup"]);
+        assert_eq!(listed(&engine), ["work", "holidays"]);
+        assert!(engine.cache.calendars().unwrap()[1].events.is_empty());
+        assert_eq!(engine.schedule.all().len(), 1);
+    }
+
+    #[test]
+    fn events_cached_for_a_calendar_disabled_since_are_deleted_at_start() {
+        let ctx = egui::Context::default();
+        let disabled = Disabled::from([("1".to_string(), "1@example.com".to_string())]);
+        let ids = vec!["1".to_string(), "2".to_string()];
+
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1", "2"]),
+            unreachable_google(),
+            ids,
+            window(),
+            disabled,
+        );
+
+        assert_eq!(next_events(&mut sync), ["2"]);
+    }
+
+    #[test]
+    fn the_app_takes_each_gone_calendar_once() {
+        let google = Google::start("take-gone");
+        google.calendar("work", "owner");
+        google.calendar("trips", "owner");
+        let engine = first_sync(&google, Instant::now());
+        let cache = std::sync::Mutex::new(Some(engine.cache));
+        google.fake.remove_calendar(ACCOUNT_ID, "trips");
+        let ctx = egui::Context::default();
+        let ids = vec![ACCOUNT_ID.to_string()];
+        let open = move || cache.lock().unwrap().take().unwrap();
+        let mut sync =
+            Synchronization::with(&ctx, open, google.sign_in(), ids, window(), Disabled::new());
+        next_events(&mut sync);
+
+        sync.checked(&[(ACCOUNT_ID.to_string(), Check::Works)], window());
+        next_events(&mut sync);
+
+        assert_eq!(sync.take_gone(), ["trips"]);
+        assert_eq!(sync.take_gone(), Vec::<String>::new());
     }
 
     fn secs(n: u64) -> Duration {
@@ -675,7 +1025,12 @@ mod tests {
         google.event("work", "standup", "Standup");
         let token = google.store.saved.lock().unwrap().remove(0);
         let start = Instant::now();
-        let mut engine = Engine::new(Cache::in_memory(), google.sign_in(), window());
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            google.sign_in(),
+            window(),
+            Disabled::new(),
+        );
         let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
         assert!(matches!(updates[0], Update::Failed(_)));
 
@@ -736,7 +1091,8 @@ mod tests {
         let ctx = egui::Context::default();
         let ids = vec![ACCOUNT_ID.to_string()];
         let open = || Cache::in_memory();
-        let mut sync = Synchronization::with(&ctx, open, google.sign_in(), ids, window());
+        let mut sync =
+            Synchronization::with(&ctx, open, google.sign_in(), ids, window(), Disabled::new());
         let woke = Woke::default();
         sync.wake_on(&woke);
         assert_eq!(next_events(&mut sync), Vec::<String>::new());
