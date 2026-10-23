@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use calendar_core::accounts::Account;
-use calendar_core::platform::{Browser, SecretStore, SecretStoreError, Wakeups};
+use calendar_core::platform::{Browser, Network, SecretStore, SecretStoreError, Wakeups};
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
@@ -148,5 +148,53 @@ impl Wakeups for SystemWakeups {
                 Ok(())
             });
         }
+    }
+}
+
+/// The network's state, from NetworkManager on the system bus. Without it there is nothing to
+/// ask, and the app counts as online.
+pub struct SystemNetwork;
+
+/// Whether NetworkManager's state (`NMState`) means the computer reaches the internet: full
+/// connectivity, or a state NetworkManager cannot tell (`NM_STATE_UNKNOWN`).
+fn online(state: u32) -> bool {
+    state == 0 || state >= CONNECTED_GLOBAL
+}
+
+impl Network for SystemNetwork {
+    fn watch(&self, changed: Box<dyn Fn(bool) + Send + Sync>) {
+        std::thread::spawn(move || -> zbus::Result<()> {
+            let bus = zbus::blocking::Connection::system()?;
+            let proxy = zbus::blocking::Proxy::new(
+                &bus,
+                "org.freedesktop.NetworkManager",
+                "/org/freedesktop/NetworkManager",
+                "org.freedesktop.NetworkManager",
+            )?;
+            // Listening first, so no change is missed between the answer and the signals.
+            let signals = proxy.receive_signal("StateChanged")?;
+            changed(online(proxy.get_property::<u32>("State")?));
+            for message in signals {
+                if let Ok(state) = message.body().deserialize::<u32>() {
+                    changed(online(state));
+                }
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_full_connectivity_or_an_unknown_state_counts_as_online() {
+        // Asleep, disconnected, disconnecting, connecting, local only, site only.
+        for state in [10, 20, 30, 40, 50, 60] {
+            assert!(!online(state), "{state}");
+        }
+        assert!(online(CONNECTED_GLOBAL));
+        assert!(online(0));
     }
 }

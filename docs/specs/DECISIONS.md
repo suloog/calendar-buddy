@@ -1152,3 +1152,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-95] Offline: how the app knows, what it says, and days outside the cache
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-05
+- **Affects:** `US-02-05`, `MOD-02-F12`, `MOD-02-F13`, `MOD-02-F14`, `MOD-02-F15`, `MOD-02-U02`, `DEC-19`, `DEC-23`, `DEC-25`, `DEC-54`
+- **Decision:** The app is offline when NetworkManager's state on the system bus is below full connectivity (`NM_STATE_CONNECTED_GLOBAL`), behind the `Network` platform interface; an unknown state, no system bus and the moments before NetworkManager answers count as online. Offline, a band under the top bar says "Offline — your calendars are shown as last synchronized." and "Creating, editing and deleting events and answering invitations are not available offline."; the new-event dialog and the details of an editable event give the same reason, and events cannot be dragged. Requests to Google go on as before and fail quietly. The days on screen (the grid's days, the month's whole weeks, the agenda's days from today) that the cache window does not hold are, online, fetched from the enabled calendars of the signed-in accounts as one span when browsed (asking Google for a month more on each side, so an occurrence moved out of the span does not show at its old time; of the spans browsed while the worker was busy only the last is fetched), again after "Refresh" and after an account's first synchronization, shown with the cached events (an event crossing the window edge once) and dropped when browsing away; nothing of them is written to the cache. Offline, those days are empty with the note "Days more than a year back or two years ahead are not available offline." above the view.
+- **Why:** NetworkManager is how KDE Plasma on Ubuntu knows the network, and its connectivity check tells a captive portal from the internet; a quiet failure of the background requests is what Google Calendar does offline (`DEC-62`). One span per screen is the simplest reading of "fetched as needed" in `MOD-02-F12`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

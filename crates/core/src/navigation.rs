@@ -123,6 +123,19 @@ impl Navigation {
             View::Agenda => None,
         }
     }
+
+    /// The first and last day on screen: the grid's days, the month's whole weeks, or the
+    /// agenda's days from today.
+    pub fn on_screen(&self, today: NaiveDate, agenda_days: i64) -> (NaiveDate, NaiveDate) {
+        match (self.view, self.period()) {
+            (View::Month, Some((month, _))) => {
+                let (first, weeks) = weeks_covering(month, self.week_start);
+                (first, first + Duration::days(7 * weeks as i64 - 1))
+            }
+            (_, Some(period)) => period,
+            (_, None) => (today, today + Duration::days(agenda_days - 1)),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,6 +227,25 @@ mod tests {
         let restarted = Navigation::start(Some(nav.view), d(2026, 11, 11), Weekday::Mon);
         assert_eq!(restarted.view, View::Grid(GridView::ThreeDays));
         assert_eq!(restarted.period(), Some((d(2026, 11, 11), d(2026, 11, 13))));
+    }
+
+    #[test]
+    fn every_day_on_screen_is_the_grid_the_months_whole_weeks_or_the_agenda_from_today() {
+        let mut nav = tc_03_08_start();
+        assert_eq!(
+            nav.on_screen(d(2026, 11, 11), 30),
+            (d(2026, 11, 9), d(2026, 11, 15))
+        );
+        nav.switch(View::Month);
+        assert_eq!(
+            nav.on_screen(d(2026, 11, 11), 30),
+            (d(2026, 10, 26), d(2026, 12, 6))
+        );
+        nav.switch(View::Agenda);
+        assert_eq!(
+            nav.on_screen(d(2026, 11, 11), 30),
+            (d(2026, 11, 11), d(2026, 12, 10))
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! their events within the cache window, written to the cache. The provider (Google) sits behind
 //! `Provider`, so nothing here knows about it (`NFR-14`).
 
-use chrono::{DateTime, Months, NaiveDate, Utc};
+use chrono::{DateTime, Days, Months, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::cache::{Cache, CachedCalendar};
@@ -65,6 +65,24 @@ impl Window {
                 start,
                 end_exclusive,
             } => start < self.until && end_exclusive > self.from,
+        }
+    }
+
+    /// The days from `first` to `last` that the window does not hold, as one span: those before
+    /// it, or else those after it; `None` when it holds them all (`MOD-02-F12`).
+    pub fn outside(&self, first: NaiveDate, last: NaiveDate) -> Option<Window> {
+        let until = last + Days::new(1);
+        let span = |from, until| Window {
+            from,
+            until,
+            zone: self.zone,
+        };
+        if first < self.from {
+            Some(span(first, until.min(self.from)))
+        } else if until > self.until {
+            Some(span(first.max(self.until), until))
+        } else {
+            None
         }
     }
 
@@ -205,6 +223,27 @@ pub fn sync_calendar(
     cache.set_events(calendar, &fetched.events)?;
     cache.set_sync_token(calendar, fetched.sync_token.as_deref(), window)?;
     Ok(true)
+}
+
+/// The events and occurrences of the calendars in a span of days the cache does not hold, as the
+/// views show them; they are fetched from the provider and not kept (`MOD-02-F12`). A calendar
+/// that fails shows nothing.
+pub fn fetch_events(provider: &dyn Provider, calendars: &[Calendar], span: Window) -> Vec<Event> {
+    // A series' changed occurrences come where they are now: one moved out of the span by up to
+    // a month is asked for too, so it does not show at its old time.
+    let asked = Window {
+        from: span.from - Months::new(1),
+        until: span.until + Months::new(1),
+        zone: span.zone,
+    };
+    calendars
+        .iter()
+        .filter_map(|calendar| {
+            let fetched = provider.events(calendar, asked).ok()?;
+            Some(expand(calendar, &fetched.events, span))
+        })
+        .flatten()
+        .collect()
 }
 
 /// What the views show: the events and occurrences of every cached calendar, of all accounts
@@ -488,6 +527,50 @@ mod tests {
             window.start(),
             Warsaw.with_ymd_and_hms(2025, 11, 11, 0, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn the_days_on_screen_the_window_does_not_hold_are_one_span() {
+        let window = Window::around(d(2026, 11, 11), Warsaw);
+        let span = |from, until| Window {
+            from,
+            until,
+            zone: Warsaw,
+        };
+
+        assert_eq!(window.outside(d(2026, 11, 9), d(2026, 11, 15)), None);
+        assert_eq!(
+            window.outside(d(2028, 11, 6), d(2028, 11, 12)),
+            Some(span(d(2028, 11, 11), d(2028, 11, 13)))
+        );
+        assert_eq!(
+            window.outside(d(2025, 11, 10), d(2025, 11, 16)),
+            Some(span(d(2025, 11, 10), d(2025, 11, 11)))
+        );
+        assert_eq!(
+            window.outside(d(2030, 3, 1), d(2030, 3, 31)),
+            Some(span(d(2030, 3, 1), d(2030, 4, 1)))
+        );
+    }
+
+    #[test]
+    fn a_period_outside_the_window_is_fetched_and_not_kept() {
+        let fake = Fake::default();
+        let cache = first_sync(&fake);
+        fake.put(event("trip", "Trip", d(2030, 3, 10)));
+        fake.put(event("later", "Later", d(2030, 4, 10)));
+        let march = Window {
+            from: d(2030, 3, 1),
+            until: d(2030, 4, 1),
+            zone: Warsaw,
+        };
+
+        let fetched = fetch_events(&fake, &[calendar()], march);
+
+        let shown: Vec<&str> = fetched.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(shown, ["Trip"]);
+        assert_eq!(fetched[0].calendar_id, "work");
+        assert_eq!(titles(&cache), ["Review", "Standup"]);
     }
 
     #[test]

@@ -119,6 +119,7 @@ pub fn show(
     view: &GridViewModel,
     regional: &Regional,
     state: &mut State,
+    movable: bool,
     opened: &mut Option<usize>,
 ) -> Option<Change> {
     let width = ui.available_width();
@@ -230,7 +231,7 @@ pub fn show(
                 ui.scope_id().with(("block", p.event, p.day)),
                 Sense::click_and_drag(),
             );
-            if response.drag_started() {
+            if response.drag_started() && movable {
                 state.drag = Some(Drag {
                     block: index,
                     delta: Vec2::ZERO,

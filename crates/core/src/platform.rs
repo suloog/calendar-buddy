@@ -35,3 +35,10 @@ pub trait Wakeups {
     /// Calls `woke` after every wake from sleep and every return of the network, from then on.
     fn watch(&self, woke: Box<dyn Fn() + Send + Sync>);
 }
+
+/// Whether the computer has a network connection, as the system says (`MOD-02-F14`).
+pub trait Network {
+    /// Calls `changed` with whether the computer is online, once the system answers and after
+    /// every change from then on.
+    fn watch(&self, changed: Box<dyn Fn(bool) + Send + Sync>);
+}

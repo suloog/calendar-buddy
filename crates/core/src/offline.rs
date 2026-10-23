@@ -1,0 +1,102 @@
+//! Working from the cache without network (`US-02-05`): everything cached can be browsed, the
+//! main window says the app is offline (`MOD-02-U02`), and changes, which need Google, are refused
+//! with the reason (`MOD-02-F15`, `DEC-25`). Days the cache does not hold are fetched while online
+//! and shown empty with a note while offline (`MOD-02-F12`).
+
+use chrono::NaiveDate;
+
+use crate::sync::Window;
+
+/// The offline indicator in the main window.
+pub const OFFLINE: &str = "Offline — your calendars are shown as last synchronized.";
+
+/// Why a change cannot be made offline.
+pub const NO_CHANGES: &str = "Creating, editing and deleting events and answering invitations \
+                              are not available offline.";
+
+/// The note over days the cache does not hold, while offline.
+pub const NOT_CACHED: &str =
+    "Days more than a year back or two years ahead are not available offline.";
+
+/// The offline indicator, while offline (`MOD-02-U02`).
+pub fn indicator(online: bool) -> Option<&'static str> {
+    (!online).then_some(OFFLINE)
+}
+
+/// Why creating, editing or deleting an event or answering an invitation is refused now; `None`
+/// while online.
+pub fn refused(online: bool) -> Option<&'static str> {
+    (!online).then_some(NO_CHANGES)
+}
+
+/// What becomes of the days on screen, from `first` to `last`, that the cache window does not
+/// hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Browsed {
+    /// The span to fetch from Google, online.
+    pub fetch: Option<Window>,
+    /// The note shown over them, offline.
+    pub note: Option<&'static str>,
+}
+
+pub fn browsed(window: Window, first: NaiveDate, last: NaiveDate, online: bool) -> Browsed {
+    let outside = window.outside(first, last);
+    Browsed {
+        fetch: outside.filter(|_| online),
+        note: (outside.is_some() && !online).then_some(NOT_CACHED),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::d;
+    use chrono_tz::Europe::Warsaw;
+
+    fn window() -> Window {
+        Window::around(d(2026, 11, 11), Warsaw)
+    }
+
+    #[test]
+    fn offline_every_change_is_refused_with_the_reason_and_online_none_is() {
+        assert_eq!(indicator(false), Some(OFFLINE));
+        assert_eq!(indicator(true), None);
+        assert_eq!(refused(false), Some(NO_CHANGES));
+        assert!(NO_CHANGES.contains("not available offline"));
+        assert_eq!(refused(true), None);
+    }
+
+    #[test]
+    fn online_days_outside_the_cache_window_are_fetched_without_a_note() {
+        let browsed = browsed(window(), d(2030, 3, 1), d(2030, 3, 31), true);
+
+        assert_eq!(
+            browsed.fetch,
+            window().outside(d(2030, 3, 1), d(2030, 3, 31))
+        );
+        assert!(browsed.fetch.is_some());
+        assert_eq!(browsed.note, None);
+    }
+
+    #[test]
+    fn offline_days_outside_the_cache_window_are_not_fetched_and_get_the_note() {
+        let browsed = browsed(window(), d(2030, 3, 1), d(2030, 3, 31), false);
+
+        assert_eq!(browsed.fetch, None);
+        assert_eq!(browsed.note, Some(NOT_CACHED));
+    }
+
+    #[test]
+    fn days_the_cache_holds_need_neither_a_fetch_nor_a_note() {
+        for online in [true, false] {
+            let browsed = browsed(window(), d(2026, 11, 9), d(2026, 11, 15), online);
+            assert_eq!(
+                browsed,
+                Browsed {
+                    fetch: None,
+                    note: None
+                }
+            );
+        }
+    }
+}
