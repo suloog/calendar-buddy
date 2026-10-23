@@ -119,6 +119,8 @@ struct CalendarApp {
     sync: Synchronization,
     /// What the views show, from the cache; empty until it is read.
     events: Vec<Event>,
+    /// Whether the window had the keyboard at the last frame.
+    focused: bool,
     /// The system's regional settings, read at start (`DEC-29`).
     regional: Regional,
     /// The system's time zone; followed when it changes.
@@ -194,6 +196,7 @@ impl CalendarApp {
             removal: Removal::new(),
             sync,
             events,
+            focused: false,
             regional,
             zone,
             zone_changes,
@@ -483,6 +486,17 @@ impl eframe::App for CalendarApp {
             self.events = events;
             self.rebuild();
         }
+        // Looking at the app brings it up to date; a minimized window is polled less often.
+        let (focused, minimized) = ui
+            .ctx()
+            .input(|i| (i.focused, i.viewport().minimized == Some(true)));
+        if focused && !self.focused {
+            self.sync.activated();
+        }
+        self.focused = focused;
+        self.sync.set_shown(!minimized);
+        let window = self.window();
+        self.sync.set_window(window);
         // With no account connected there is only the welcome screen (`MOD-01-F12`).
         if self.accounts.is_empty() {
             connect::welcome(ui, &mut self.connect);
@@ -526,6 +540,9 @@ impl eframe::App for CalendarApp {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Settings").clicked() {
                         self.dialog = Some(Dialog::Settings);
+                    }
+                    if ui.button("Refresh").clicked() {
+                        self.sync.refresh();
                     }
                     for view in View::ALL.into_iter().rev() {
                         if ui
@@ -640,6 +657,8 @@ impl eframe::App for CalendarApp {
             }
         });
         if let Some(event) = opened {
+            // The editor opens from here in `MOD-05`; the event is brought up to date first.
+            self.sync.opening(&self.events[event].calendar_id);
             let focused = ui.ctx().memory(|m| m.focused());
             self.dialog = Some(Dialog::Event(self.events[event].clone(), focused));
         }

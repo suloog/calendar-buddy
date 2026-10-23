@@ -1092,3 +1092,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-90] Ongoing synchronization: cadence, triggers and sessions
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-03
+- **Affects:** `US-02-03`, `MOD-02-F07`, `MOD-02-F08`, `MOD-02-F09`, `MOD-02-F23`, `MOD-02-NFR-01`, `DEC-53`, `DEC-54`, `DEC-87`
+- **Decision:** After an account's first synchronization of the run (`DEC-87`), each of its calendars is polled on its own: `owner`/`writer` every minute, `reader`/`freeBusyReader` every 15 minutes; while the window is hidden, every 5 and every 30 minutes. Until the tray exists (`US-07-05`), a minimized window counts as hidden. "Refresh" (a button in the top bar), waking from sleep and the network's return synchronize every calendar at once; activating the window synchronizes every calendar not synchronized in the last 10 seconds; opening an event synchronizes its calendar alone — until the editor of `MOD-05` exists, opening an event's details counts as opening it for editing. A calendar that fails is tried again at its next turn; an account whose sign-in Google turns away is no longer polled until a check finds it working. Each account signs in once per run (the secret store is read once) and renews its access token after 45 minutes or when Google refuses it. The views are rebuilt only when a round changed something.
+- **Why:** The cadences are those of `DEC-53`/`DEC-54`; 30 minutes for hidden read-only calendars is the "less often while hidden" of `DEC-53` applied to them too. The 10-second gap keeps window switching from spending requests: even with the window activated every second, 50 editable calendars on one account stay under half of Google's 600 requests per minute per user (`MOD-02-NFR-01`). Syncing only the opened event's calendar gives the editor fresh data without a whole round per click.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-91] Incremental synchronization and wake-up signals
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-03
+- **Affects:** `US-02-03`, `MOD-02-F08`, `MOD-02-F10`, `MOD-02-NFR-01`, MOD-02 *Technical notes*
+- **Decision:** Each calendar's `nextSyncToken` from its full synchronization is kept in the cache (a new `sync_tokens` table, dropped with its calendar or account). Later synchronizations, including the first of each run, ask Google only for changes (`syncToken`, no time range); changed events inside the window, series and changed or cancelled occurrences are kept, events deleted or moved out of the window are removed (a deleted series with its occurrences). When Google answers 410 Gone, that calendar is fetched in full again within the window and its new token kept. Each calendar is asked for in its own request rather than in one HTTP batch per round: Google counts every request inside a batch against the same quotas, so a batch would not help `MOD-02-NFR-01`, and incremental answers are small. Waking and the network's return come from systemd-logind (`PrepareForSleep(false)`) and NetworkManager (`StateChanged` to connected-global) on the system bus, behind the `Wakeups` platform interface; without a system bus nothing is watched.
+- **Why:** `MOD-02-F10` and the module's technical notes; one request per calendar is the simplest form that keeps within Google's limits.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-92] A sync token holds only for the window it was taken in
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-03
+- **Affects:** `US-02-03`, `MOD-02-F10`, `MOD-02-F11`, `DEC-90`, `DEC-91`
+- **Decision:** Refines `DEC-91`: a calendar's `syncToken` is kept together with the window its events were fetched in, and is used only while the window is the same. Once the window moves (the day changes, or the time zone), the calendar's next synchronization is a full one within the new window, which also brings events that entered the window unchanged and drops those that left it. The worker follows the window the views compute, so polling rounds use today's. Refines `DEC-90`: "Refresh", waking and the network's return also try again the first synchronization of an account that did not get through (no network, a locked store), and an access token Google refuses is renewed and the request repeated once, so the first round after sleep does not fail.
+- **Why:** Changes alone never bring an unchanged event that the moving window reaches; one full fetch per calendar per day keeps the cache as `MOD-02-F11` describes at little cost to `MOD-02-NFR-01`. Found in code review.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

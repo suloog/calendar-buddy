@@ -12,6 +12,7 @@ pub mod navigation;
 pub mod platform;
 pub mod recurrence;
 pub mod regional;
+pub mod schedule;
 pub mod settings;
 pub mod shortcuts;
 pub mod sync;

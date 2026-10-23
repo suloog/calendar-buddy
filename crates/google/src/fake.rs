@@ -60,8 +60,13 @@ struct State {
     requests: Vec<String>,
     /// Each account's calendar list entries, as Google sends them.
     calendars: Vec<(&'static str, Value)>,
-    /// The events of each account's calendars, as Google sends them: account, calendar ID, event.
-    events: Vec<(&'static str, String, Value)>,
+    /// The events of each account's calendars, as Google sends them: account, calendar ID, event
+    /// and the change that last touched it. A deleted event stays as Google sends it then.
+    events: Vec<(&'static str, String, Value, u64)>,
+    /// Changes so far; a synchronization state is the number of changes it has seen.
+    changes: u64,
+    /// Google no longer accepts the synchronization states it gave out.
+    states_expired: bool,
     /// Calendars whose events Google refuses to send.
     failing: Vec<String>,
 }
@@ -153,13 +158,37 @@ impl FakeGoogle {
         self.state.lock().unwrap().calendars.push((account, entry));
     }
 
-    /// An event of one of the account's calendars, as Google's `events` resource.
+    /// An event of one of the account's calendars, as Google's `events` resource; it replaces
+    /// the event with its ID, as a change made elsewhere.
     pub fn add_event(&self, account: &'static str, calendar: &str, event: Value) {
-        self.state
-            .lock()
-            .unwrap()
+        let mut state = self.state.lock().unwrap();
+        state.changes += 1;
+        let change = state.changes;
+        state.events.retain(|(owner, c, e, _)| {
+            !(*owner == account && c == calendar && e["id"] == event["id"])
+        });
+        state
             .events
-            .push((account, calendar.to_string(), event));
+            .push((account, calendar.to_string(), event, change));
+    }
+
+    /// The event is deleted elsewhere.
+    pub fn delete_event(&self, account: &'static str, calendar: &str, id: &str) {
+        self.add_event(
+            account,
+            calendar,
+            json!({"kind": "calendar#event", "id": id, "status": "cancelled"}),
+        );
+    }
+
+    /// The access tokens given out expire.
+    pub fn expire_access_tokens(&self) {
+        self.state.lock().unwrap().access.clear();
+    }
+
+    /// Google no longer accepts the synchronization states it gave out, and answers 410 Gone.
+    pub fn expire_sync_tokens(&self) {
+        self.state.lock().unwrap().states_expired = true;
     }
 
     /// The account's access to the calendar changes, as its owner shares it differently.
@@ -422,22 +451,47 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
                     r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
                 );
             }
-            let instant = |name: &str| {
-                DateTime::parse_from_rfc3339(&param(&url, name).unwrap())
-                    .unwrap()
-                    .with_timezone(&Utc)
+            let of_calendar = state
+                .events
+                .iter()
+                .filter(|(owner, calendar, ..)| *owner == account && calendar == id);
+            let events = match param(&url, "syncToken") {
+                // What changed since the state, deleted events included; no time range.
+                Some(_) if param(&url, "timeMin").is_some() || param(&url, "timeMax").is_some() => {
+                    return (
+                        "400 Bad Request",
+                        r#"{"error": {"code": 400, "message": "Invalid sync token value."}}"#
+                            .to_string(),
+                    );
+                }
+                Some(_) if state.states_expired => {
+                    return (
+                        "410 Gone",
+                        r#"{"error": {"code": 410, "message": "Sync token is no longer valid, a full sync is required."}}"#
+                            .to_string(),
+                    );
+                }
+                Some(since) => {
+                    let since: u64 = since.strip_prefix("state-").unwrap().parse().unwrap();
+                    of_calendar
+                        .filter(|(.., change)| *change > since)
+                        .map(|(_, _, event, _)| event)
+                        .collect()
+                }
+                None => {
+                    let instant = |name: &str| {
+                        DateTime::parse_from_rfc3339(&param(&url, name).unwrap())
+                            .unwrap()
+                            .with_timezone(&Utc)
+                    };
+                    let (from, until) = (instant("timeMin"), instant("timeMax"));
+                    of_calendar
+                        .map(|(_, _, event, _)| event)
+                        .filter(|event| !deleted(event) && in_window(event, from, until))
+                        .collect()
+                }
             };
-            let (from, until) = (instant("timeMin"), instant("timeMax"));
-            (
-                state
-                    .events
-                    .iter()
-                    .filter(|(owner, calendar, _)| *owner == account && calendar == id)
-                    .map(|(_, _, event)| event)
-                    .filter(|event| in_window(event, from, until))
-                    .collect(),
-                EVENTS_PER_PAGE,
-            )
+            (events, EVENTS_PER_PAGE)
         }
         _ => {
             return (
@@ -450,8 +504,15 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
     let mut answer = json!({ "items": page });
     if offset + per_page < items.len() {
         answer["nextPageToken"] = json!((offset + per_page).to_string());
+    } else if target.contains("/events") {
+        answer["nextSyncToken"] = json!(format!("state-{}", state.changes));
     }
     ("200 OK", answer.to_string())
+}
+
+/// An event deleted as a whole, which Google leaves out of a full list.
+fn deleted(event: &Value) -> bool {
+    event["status"] == "cancelled" && event.get("recurringEventId").is_none()
 }
 
 /// Google's `timeMin` and `timeMax`: an event ending after the one and starting before the other;

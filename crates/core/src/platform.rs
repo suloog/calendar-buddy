@@ -29,3 +29,9 @@ pub trait SecretStore: Send + Sync {
 pub trait Browser: Send + Sync {
     fn open(&self, url: &str) -> std::io::Result<()>;
 }
+
+/// The system's word that the computer woke from sleep or the network came back (`MOD-02-F08`).
+pub trait Wakeups {
+    /// Calls `woke` after every wake from sleep and every return of the network, from then on.
+    fn watch(&self, woke: Box<dyn Fn() + Send + Sync>);
+}

@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDate, Utc};
-use rusqlite::{Connection, ErrorCode, params};
+use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
 use crate::model::{Access, Calendar, Rgb, Timing};
-use crate::sync::{Start, SyncError, SyncedEvent};
+use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -34,6 +34,13 @@ const SCHEMA: &str = "
         series_id TEXT,
         original_start TEXT,
         PRIMARY KEY (account_id, calendar_id, id)
+    );
+    CREATE TABLE IF NOT EXISTS sync_tokens (
+        account_id TEXT NOT NULL,
+        calendar_id TEXT NOT NULL,
+        token TEXT NOT NULL,
+        window TEXT NOT NULL,
+        PRIMARY KEY (account_id, calendar_id)
     );
 ";
 
@@ -118,13 +125,17 @@ impl Cache {
                 )
                 .map_err(failed)?;
         }
-        transaction
-            .execute(
-                "DELETE FROM events WHERE account_id = ?1 AND calendar_id NOT IN \
-                 (SELECT id FROM calendars WHERE account_id = ?1)",
-                params![account_id],
-            )
-            .map_err(failed)?;
+        for table in ["events", "sync_tokens"] {
+            transaction
+                .execute(
+                    &format!(
+                        "DELETE FROM {table} WHERE account_id = ?1 AND calendar_id NOT IN \
+                         (SELECT id FROM calendars WHERE account_id = ?1)"
+                    ),
+                    params![account_id],
+                )
+                .map_err(failed)?;
+        }
         transaction.commit().map_err(failed)
     }
 
@@ -141,58 +152,77 @@ impl Cache {
                 params![calendar.account_id, calendar.id],
             )
             .map_err(failed)?;
-        {
-            let mut insert = transaction
-                .prepare(
-                    "INSERT OR REPLACE INTO events VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        insert(&transaction, calendar, events)?;
+        transaction.commit().map_err(failed)
+    }
+
+    /// Applies what changed in the calendar: changed and new events replace those with their IDs,
+    /// and removed ones go, a removed series with its changed and cancelled occurrences.
+    pub fn change_events(
+        &mut self,
+        calendar: &Calendar,
+        changed: &[SyncedEvent],
+        removed: &[String],
+    ) -> Result<(), SyncError> {
+        let transaction = self.connection.transaction().map_err(failed)?;
+        for id in removed {
+            transaction
+                .execute(
+                    "DELETE FROM events WHERE account_id = ?1 AND calendar_id = ?2 \
+                     AND (id = ?3 OR series_id = ?3)",
+                    params![calendar.account_id, calendar.id, id],
                 )
                 .map_err(failed)?;
-            for event in events {
-                let (start, end, zone) = match event.timing {
-                    None => (None, None, None),
-                    Some(Timing::Timed { start, end, zone }) => (
-                        Some(start_text(Start::At(start))),
-                        Some(start_text(Start::At(end))),
-                        Some(zone.name()),
-                    ),
-                    Some(Timing::AllDay {
-                        start,
-                        end_exclusive,
-                    }) => (
-                        Some(start_text(Start::On(start))),
-                        Some(start_text(Start::On(end_exclusive))),
-                        None,
-                    ),
-                };
-                let (series_id, original_start) = match &event.instance_of {
-                    Some((series, original)) => {
-                        (Some(series.as_str()), Some(start_text(*original)))
-                    }
-                    None => (None, None),
-                };
-                insert
-                    .execute(params![
-                        calendar.account_id,
-                        calendar.id,
-                        event.id,
-                        event.title,
-                        start,
-                        end,
-                        zone,
-                        event.recurrence.join("\n"),
-                        series_id,
-                        original_start,
-                    ])
-                    .map_err(failed)?;
-            }
         }
+        insert(&transaction, calendar, changed)?;
         transaction.commit().map_err(failed)
+    }
+
+    /// The state Google gave for asking what changed in the calendar since its last full
+    /// synchronization within this window; `None` before it, or once the window has moved, as
+    /// changes do not bring the events that entered the window unchanged.
+    pub fn sync_token(
+        &self,
+        calendar: &Calendar,
+        window: Window,
+    ) -> Result<Option<String>, SyncError> {
+        self.connection
+            .query_row(
+                "SELECT token FROM sync_tokens WHERE account_id = ?1 AND calendar_id = ?2 \
+                 AND window = ?3",
+                params![calendar.account_id, calendar.id, window_key(window)],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failed)
+    }
+
+    /// Keeps the calendar's synchronization state, for the window its events were fetched in;
+    /// `None` forgets it.
+    pub fn set_sync_token(
+        &mut self,
+        calendar: &Calendar,
+        token: Option<&str>,
+        window: Window,
+    ) -> Result<(), SyncError> {
+        match token {
+            Some(token) => self.connection.execute(
+                "INSERT OR REPLACE INTO sync_tokens VALUES (?1, ?2, ?3, ?4)",
+                params![calendar.account_id, calendar.id, token, window_key(window)],
+            ),
+            None => self.connection.execute(
+                "DELETE FROM sync_tokens WHERE account_id = ?1 AND calendar_id = ?2",
+                params![calendar.account_id, calendar.id],
+            ),
+        }
+        .map(|_| ())
+        .map_err(failed)
     }
 
     /// Deletes everything kept for an account (`MOD-01-F08`, `DEC-85`).
     pub fn forget_account(&mut self, account_id: &str) -> Result<(), SyncError> {
         let transaction = self.connection.transaction().map_err(failed)?;
-        for table in ["calendars", "events"] {
+        for table in ["calendars", "events", "sync_tokens"] {
             transaction
                 .execute(
                     &format!("DELETE FROM {table} WHERE account_id = ?1"),
@@ -326,6 +356,54 @@ impl Cache {
     }
 }
 
+/// Writes the calendar's events, replacing those with the same IDs.
+fn insert(
+    transaction: &Transaction,
+    calendar: &Calendar,
+    events: &[SyncedEvent],
+) -> Result<(), SyncError> {
+    let mut insert = transaction
+        .prepare("INSERT OR REPLACE INTO events VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")
+        .map_err(failed)?;
+    for event in events {
+        let (start, end, zone) = match event.timing {
+            None => (None, None, None),
+            Some(Timing::Timed { start, end, zone }) => (
+                Some(start_text(Start::At(start))),
+                Some(start_text(Start::At(end))),
+                Some(zone.name()),
+            ),
+            Some(Timing::AllDay {
+                start,
+                end_exclusive,
+            }) => (
+                Some(start_text(Start::On(start))),
+                Some(start_text(Start::On(end_exclusive))),
+                None,
+            ),
+        };
+        let (series_id, original_start) = match &event.instance_of {
+            Some((series, original)) => (Some(series.as_str()), Some(start_text(*original))),
+            None => (None, None),
+        };
+        insert
+            .execute(params![
+                calendar.account_id,
+                calendar.id,
+                event.id,
+                event.title,
+                start,
+                end,
+                zone,
+                event.recurrence.join("\n"),
+                series_id,
+                original_start,
+            ])
+            .map_err(failed)?;
+    }
+    Ok(())
+}
+
 fn timing(start: &str, end: &str, zone: Option<&str>) -> Option<Timing> {
     Some(match (parse_start(start)?, parse_start(end)?, zone) {
         (Start::At(start), Start::At(end), Some(zone)) => Timing::Timed {
@@ -348,6 +426,10 @@ pub fn default_path() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
     Some(cache.join("calendar-buddy").join("cache.sqlite3"))
+}
+
+fn window_key(window: Window) -> String {
+    format!("{}/{}/{}", window.from, window.until, window.zone.name())
 }
 
 fn color_text(Rgb(r, g, b): Rgb) -> String {
@@ -404,6 +486,10 @@ mod tests {
     use crate::fixtures::d;
     use chrono::TimeZone;
     use chrono_tz::Europe::{London, Warsaw};
+
+    fn window() -> Window {
+        Window::around(d(2026, 11, 11), Warsaw)
+    }
 
     fn calendar(account_id: &str, id: &str) -> Calendar {
         Calendar {
@@ -565,6 +651,90 @@ mod tests {
 
         assert_eq!(Cache::open(&path).unwrap().calendars().unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn changes_replace_add_and_remove_events_a_removed_series_with_its_occurrences() {
+        let mut cache = Cache::in_memory();
+        let work = calendar("1", "work");
+        cache
+            .set_calendars("1", std::slice::from_ref(&work))
+            .unwrap();
+        cache.set_events(&work, &events()).unwrap();
+        let mut trip = events()[2].clone();
+        trip.title = "Trip to Kraków".into();
+        let mut dinner = events()[2].clone();
+        dinner.id = "dinner".into();
+        dinner.title = "Dinner".into();
+
+        cache
+            .change_events(&work, &[trip.clone(), dinner.clone()], &["series".into()])
+            .unwrap();
+
+        let mut left = cache.calendars().unwrap().remove(0).events;
+        left.sort_by(|a, b| a.id.cmp(&b.id));
+        assert_eq!(left, [dinner, trip]);
+    }
+
+    #[test]
+    fn a_calendars_sync_token_is_kept_until_it_or_its_account_goes() {
+        let mut cache = Cache::in_memory();
+        let (work, home) = (calendar("1", "work"), calendar("1", "home"));
+        cache
+            .set_calendars("1", &[work.clone(), home.clone()])
+            .unwrap();
+        assert_eq!(cache.sync_token(&work, window()).unwrap(), None);
+
+        cache
+            .set_sync_token(&work, Some("token-1"), window())
+            .unwrap();
+        cache
+            .set_sync_token(&home, Some("token-2"), window())
+            .unwrap();
+        cache
+            .set_sync_token(&work, Some("token-3"), window())
+            .unwrap();
+        assert_eq!(
+            cache.sync_token(&work, window()).unwrap().as_deref(),
+            Some("token-3")
+        );
+        assert_eq!(
+            cache.sync_token(&calendar("2", "work"), window()).unwrap(),
+            None
+        );
+
+        // A calendar gone from the list loses its state, as does a forgotten account.
+        cache
+            .set_calendars("1", std::slice::from_ref(&work))
+            .unwrap();
+        assert_eq!(cache.sync_token(&home, window()).unwrap(), None);
+        cache.set_sync_token(&work, None, window()).unwrap();
+        assert_eq!(cache.sync_token(&work, window()).unwrap(), None);
+        cache
+            .set_sync_token(&work, Some("token-4"), window())
+            .unwrap();
+        cache.forget_account("1").unwrap();
+        assert_eq!(cache.sync_token(&work, window()).unwrap(), None);
+    }
+
+    #[test]
+    fn a_sync_token_is_given_only_for_the_window_it_was_kept_for() {
+        let mut cache = Cache::in_memory();
+        let work = calendar("1", "work");
+        cache
+            .set_calendars("1", std::slice::from_ref(&work))
+            .unwrap();
+        cache
+            .set_sync_token(&work, Some("token"), window())
+            .unwrap();
+
+        let next_day = Window::around(d(2026, 11, 12), Warsaw);
+
+        assert_eq!(cache.sync_token(&work, next_day).unwrap(), None);
+        assert_eq!(
+            cache.sync_token(&work, window()).unwrap().as_deref(),
+            Some("token")
+        );
     }
 
     #[test]

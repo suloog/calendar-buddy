@@ -709,3 +709,128 @@ fn the_first_full_synchronization_of_the_profile_runs_in_the_background() {
         started.elapsed()
     );
 }
+
+/// The titles shown in the week of `today()`, in order.
+fn shown_titles(cache: &Cache) -> Vec<String> {
+    week_of(
+        &shown_events(&cache.calendars().unwrap(), window()),
+        today(),
+    )
+    .into_iter()
+    .map(|(title, ..)| title)
+    .collect()
+}
+
+/// The query of each request for the calendar's events.
+fn event_queries(google: &FakeGoogle) -> Vec<Url> {
+    google
+        .requests()
+        .into_iter()
+        .filter(|r| r.contains("/events"))
+        .map(|r| Url::parse(&format!("http://127.0.0.1{}", &r["GET ".len()..])).unwrap())
+        .collect()
+}
+
+/// An editable calendar with "Standup" on Tuesday and "Review" on Wednesday, synchronized once.
+fn synchronized_once(name: &str) -> (FakeGoogle, FakeStore, PathBuf, PathBuf, Cache) {
+    let google = FakeGoogle::start(None, &[]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file(name);
+    google.add_calendar(ACCOUNT_ID, entry("work", "Work", "#9fe1e7", "owner"));
+    for (id, title, day) in [("standup", "Standup", 10), ("review", "Review", 11)] {
+        google.add_event(
+            ACCOUNT_ID,
+            "work",
+            timed(
+                id,
+                title,
+                &format!("2026-11-{day}T09:00:00+01:00"),
+                &format!("2026-11-{day}T10:00:00+01:00"),
+            ),
+        );
+    }
+    signed_in(&google, &store, ACCOUNT_ID);
+    let mut cache = Cache::in_memory();
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    assert_eq!(shown_titles(&cache), ["Standup", "Review"]);
+    (google, store, dir, client_file, cache)
+}
+
+#[test]
+fn after_the_first_full_synchronization_only_changes_are_asked_for() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("incremental");
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        timed(
+            "standup",
+            "Standup moved",
+            "2026-11-12T09:00:00+01:00",
+            "2026-11-12T10:00:00+01:00",
+        ),
+    );
+    google.delete_event(ACCOUNT_ID, "work", "review");
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        timed(
+            "retro",
+            "Retro",
+            "2026-11-13T09:00:00+01:00",
+            "2026-11-13T10:00:00+01:00",
+        ),
+    );
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(shown_titles(&cache), ["Standup moved", "Retro"]);
+    let asked = event_queries(&google);
+    assert_eq!(asked.len(), 2);
+    let param = |name: &str| crate::fake::param(&asked[1], name);
+    assert_eq!(param("syncToken").as_deref(), Some("state-2"));
+    assert_eq!((param("timeMin"), param("timeMax")), (None, None));
+}
+
+#[test]
+fn a_calendar_whose_sync_token_google_rejects_is_synchronized_in_full_again() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("gone");
+    google.delete_event(ACCOUNT_ID, "work", "review");
+    google.expire_sync_tokens();
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(shown_titles(&cache), ["Standup"]);
+    let asked = event_queries(&google);
+    let param = |n: usize, name: &str| crate::fake::param(&asked[n], name);
+    assert_eq!(asked.len(), 3);
+    assert_eq!(param(1, "syncToken").as_deref(), Some("state-2"));
+    assert_eq!(param(2, "syncToken"), None);
+    assert!(param(2, "timeMin").is_some());
+}
+
+#[test]
+fn an_access_token_google_no_longer_takes_is_renewed_without_failing() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("expired-access");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    google.delete_event(ACCOUNT_ID, "work", "review");
+    google.expire_access_tokens();
+    let calendars: Vec<Calendar> = cache
+        .calendars()
+        .unwrap()
+        .into_iter()
+        .map(|c| c.calendar)
+        .collect();
+
+    let synced = calendar_core::sync::sync_calendars(&session, &calendars, window(), &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(true));
+    assert_eq!(shown_titles(&cache), ["Standup"]);
+}
