@@ -180,3 +180,28 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings, spec review compliant. Fixed after code review: a weekly series' single day follows the start, Weekly can no longer end up with no days, the `UNTIL` conversion reuses `recurrence::until_in_utc`, and the series row is labelled "Series ends". The owner should ratify DEC-111 (repeat for new events only). One squash commit: one logical change.
 - Manual checks: TC-05-12, US-05-06#1 (real window), US-05-06#2 (real Google)
 - Commits on main: 57f8914 feat(events): make a new event repeat with Google's presets [US-05-06]
+
+## US-05-07 — review — 2026-10-23 21:01
+- What: Occurrences of a series can now be dragged, resized, edited and deleted. Each asks "Edit/Delete recurring event": **This event**, **This and following events**, **All events** or **Cancel** (`calendar_core::series`, `Dialog::Scope`).
+  - **This event** changes or deletes the occurrence by Google's instance ID. An unchanged one has no version, so it is sent without `If-Match`.
+  - **All events** patches or deletes the master. New times keep the series' first day.
+  - **This and following** puts `UNTIL` on the master the second before the occurrence, against its version. A change then copies the series whole at Google (guests, reminders, colour, conference) with the new fields. The rule's `COUNT` loses the occurrences before; deleted occurrences stay excluded (`EXDATE`). Changed occurrences from there on are deleted. On the first occurrence it is all events.
+  - Following/all cannot move to another day (a rule change, `DEC-111`); only all events can change calendar.
+  - The editor of an occurrence offers **Open in Google Calendar** (`eventedit/<eid>?authuser=`) for the repetition, and a complex rule is never rewritten but for a split's end.
+  - **Calendar-provider interface change:** `Patch::recurrence`, `Provider::copy`, an empty version sends none. **Model change:** `Event::series`, and unchanged occurrences have an empty `etag`. No SQLite schema change. The fake Google now handles occurrence IDs, `events.get`, and deleting a series' occurrences with it.
+- Decisions: DEC-113, DEC-114
+- Reviews: code 2 round(s), spec 1 round(s).
+  - Fixed after round 1: the split's new series dropped guests, reminders and colour (now `Provider::copy`); an occurrence changed on its own survived a following-delete or change (now deleted with the split); Cancel lost the editor's edits; a misleading message for invitations to one occurrence; two fake deviations.
+  - Fixed after round 2: changed occurrences are deleted without a version and all are tried; Esc and close also return to the editor.
+  - Spec review compliant.
+  - Not fixed:
+    - a drop replaces another open dialog;
+    - deleted occurrences beyond the cache window (24 months) reappear after a split of a never-ending series;
+    - the `eid` uses the full calendar ID (manual check);
+    - an unparseable `EXDATE` is dropped from the new series;
+    - changed occurrences after a split lose their own changes;
+    - series changes cannot be undone (`DEC-114`).
+  - The owner should ratify DEC-113 (no day change for following/all) and DEC-114.
+  - One squash commit: one logical change.
+- Manual checks: TC-05-08, US-05-07#2, US-05-07#3, US-05-07#4, edge case (copy keeps guests, no e-mail)
+- Commits on main: e7b3aa4 feat(events): change or delete occurrences by scope [US-05-07]
