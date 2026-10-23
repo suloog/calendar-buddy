@@ -1,5 +1,4 @@
-//! Deterministic test data: small scenarios for tests and a performance profile of 50 calendars
-//! and 20,000 events (`DEC-14`), used until synchronization exists. Accounts come with `MOD-01`.
+//! Deterministic test data: small scenarios for tests.
 
 use chrono::{Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use chrono_tz::{Europe::Warsaw, Tz};
@@ -82,52 +81,4 @@ pub fn tc_03_01_week() -> Vec<Event> {
         all_day("Offsite", d(2026, 11, 12), 3),
         busy,
     ]
-}
-
-/// About 20,000 events over 50 calendars, from a year before `today` to two years after,
-/// generated from a fixed seed so every run sees the same data.
-pub fn profile(today: NaiveDate) -> Vec<Event> {
-    const CALENDARS: u64 = 50;
-    const DAYS: i64 = 365 * 3;
-    let mut seed: u64 = 0x5EED_CA1E_DA75;
-    let mut next = move |bound: u64| {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        (seed >> 33) % bound
-    };
-    let first = today - Duration::days(365);
-    let mut events = Vec::with_capacity(20_000);
-    for n in 0..20_000u64 {
-        let calendar = next(CALENDARS);
-        let date = first + Duration::days(next(DAYS as u64) as i64);
-        let start_quarter = 28 + next(48) as u32; // 07:00 to 18:45
-        let length_quarters = 1 + next(8) as u32;
-        let start = (start_quarter / 4, (start_quarter % 4) * 15);
-        let end_q = start_quarter + length_quarters;
-        let end = (end_q / 4, (end_q % 4) * 15);
-        let mut e = if next(40) == 0 {
-            all_day(&format!("All-day {n}"), date, 1 + next(3) as i64)
-        } else {
-            timed(&format!("Event {n}"), date, start, end)
-        };
-        e.calendar_id = format!("calendar-{calendar}");
-        e.color = PALETTE[(calendar % PALETTE.len() as u64) as usize];
-        e.busy_only = calendar == CALENDARS - 1;
-        events.push(e);
-    }
-    events
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn profile_is_deterministic_and_sized() {
-        let a = profile(d(2026, 11, 11));
-        let b = profile(d(2026, 11, 11));
-        assert_eq!(a.len(), 20_000);
-        assert_eq!(a, b);
-    }
 }

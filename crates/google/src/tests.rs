@@ -223,6 +223,7 @@ fn offline_signing_in_is_refused_and_works_again_once_the_network_is_back() {
         token: format!("http://127.0.0.1:{port}/token"),
         userinfo: format!("http://127.0.0.1:{port}/userinfo"),
         revoke: format!("http://127.0.0.1:{port}/revoke"),
+        calendar: format!("http://127.0.0.1:{port}/calendar/v3"),
     };
     let store = FakeStore::default();
     let offline = prepare(&path, &store, &endpoints);

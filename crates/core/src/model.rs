@@ -29,3 +29,27 @@ pub struct Event {
     /// Event of a calendar shared as free/busy only: no details may be shown.
     pub busy_only: bool,
 }
+
+/// What the account may do with a calendar, as Google says it (`accessRole`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Access {
+    Owner,
+    Writer,
+    Reader,
+    /// Only busy blocks, without event details.
+    FreeBusyReader,
+}
+
+/// A calendar an account can access: its own, shared with it or subscribed (`MOD-02-F01`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Calendar {
+    /// The calendar's ID; the same calendar can be on the list of two accounts.
+    pub id: String,
+    pub account_id: String,
+    pub name: String,
+    /// The colour Google shows the calendar in (`MOD-02-F03`).
+    pub color: Rgb,
+    pub access: Access,
+    /// The calendar's own time zone, for events stored without one.
+    pub zone: Tz,
+}

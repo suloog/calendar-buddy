@@ -5,13 +5,13 @@ A calendar application. The repo is at the specification stage — no applicatio
 ## Repo map
 
 - `docs/specs/` — specification (sources, discovery, modules, stories, tests); see `docs/specs/README.md`
-- `crates/core` (`calendar-core`) — domain model, week layout and view models; no UI toolkit, no Google
-- `crates/google` (`calendar-google`) — the Google adapter: sign-in (OAuth with PKCE, loopback redirect); tests use a fake Google
+- `crates/core` (`calendar-core`) — domain model, SQLite cache, recurrence, full sync, week layout and view models; no UI toolkit, no Google
+- `crates/google` (`calendar-google`) — the Google adapter: sign-in (OAuth with PKCE, loopback redirect), calendars and events; tests use a fake Google
 - `crates/app` (`calendar-buddy`) — the egui/eframe desktop app; only draws view models and handles input
 
 ## Commands
 
-- Run the app: `cargo run -p calendar-buddy` (the welcome screen first — connecting needs `~/.config/calendar-buddy/google-oauth-client.json`, `DEC-77`; then test data: ~20,000 generated events until sync exists)
+- Run the app: `cargo run -p calendar-buddy` (the welcome screen first — connecting needs `~/.config/calendar-buddy/google-oauth-client.json`, `DEC-77`; then the calendars of the connected accounts, synchronized into `~/.cache/calendar-buddy/cache.sqlite3`, `DEC-87`)
 - Tests: `cargo test --workspace`
 - Gates (also run by the commit/push hook, `.claude/og-gates.json`): `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`
 
