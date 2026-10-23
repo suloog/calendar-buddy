@@ -13,7 +13,7 @@ status: read-only
 
 ## Summary
 
-What the product owner said during the discovery session on 2026-10-23, continuing from `SRC-02`. Covers DSC-08 (guests, invitations, RSVP and Google Meet) and DSC-09 (reminders and notifications).
+What the product owner said during the discovery session on 2026-10-23, continuing from `SRC-02`. Covers DSC-08 (guests, invitations, RSVP and Google Meet), DSC-09 (reminders and notifications) and the discovery close.
 
 ## Items
 
@@ -34,7 +34,11 @@ What the product owner said during the discovery session on 2026-10-23, continui
 - [SRC-03-10] Notifications have Dismiss and Snooze (5 / 10 min); notifications are switched globally and can be muted per calendar. — *session 2026-10-23, answer to Q21*
 - [SRC-03-11] Single instance: yes. `webcal:` links: fine. `mailto:` links: probably not. No update checking was asked for. — *session 2026-10-23, answer to Q27*
 
-## Noted but not scope
+### Discovery close
+
+- [SRC-03-12] Tokens are stored through the platform's standard secret store — on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC), Keychain and Credential Manager on other systems; when no secret store runs, sign-in stops with a message explaining what to install or start; no fallback store in the MVP. — *session 2026-10-23, close*
+- [SRC-03-13] Accepted at the close: the actor is called "User"; the glossary, scope areas, non-goals, overview, goals G1–G4 (G1 measured over two consecutive working weeks), milestone, risks, stack and integrations as proposed. — *session 2026-10-23, close*
+
 
 - The client is internal: the analyst is also the product owner and rules on client questions directly.
 

@@ -576,3 +576,27 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q27`
 - **Status:** accepted
+
+## [DEC-47] Tokens in the platform's standard secret store
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** discovery close 2026-10-23 (`SRC-03-12`, `SRC-03`)
+- **Affects:** `SRC-01-21`, `DSC-02-05`, `DEC-15`, TQ01, constitution.md
+- **Decision:** Tokens are stored through the platform's standard secret store behind one interface: on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC, the Flatpak secret portal), Keychain on macOS and Credential Manager on Windows when those come. When no secret store is running, sign-in stops with a message explaining what to install or start; there is no fallback store in the MVP (an encrypted file can be added when the app is shared with the team).
+- **Why:** The standard interface keeps other distributions, desktop environments and platforms open; plaintext storage is ruled out by `SRC-01-21`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-48] Discovery close: actor, glossary and goals fixed
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** discovery close 2026-10-23 (`SRC-03-13`, `SRC-03`)
+- **Affects:** PROJECT.md (Actors, Glossary, Scope, Goals, Milestones, Risks, Stack & integrations)
+- **Decision:** The single actor is named "User"; organizer and guest are roles on an event, not actors. The glossary terms are fixed as written in PROJECT.md (among them hidden vs. disabled vs. muted calendar, and Maybe meaning Google's "tentative"). Goal G1 is measured over two consecutive working weeks of using only the app for upcoming meetings, invitations and meetings with Meet.
+- **Why:** Names and terms are frozen at the close so modules and stories use them verbatim; the PRD names no actor and no measurable goal.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

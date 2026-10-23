@@ -30,6 +30,7 @@
 | 2026-10-22 | analyst + agent | `DSC-07` | 14 findings, 4 questions resolved, 4 decisions (`DEC-34`…`DEC-37`) |
 | 2026-10-23 | analyst + agent | `DSC-08` | 14 findings, 4 questions resolved, 5 decisions (`DEC-38`…`DEC-42`), new source `SRC-03` |
 | 2026-10-23 | analyst + agent | `DSC-09` | 14 findings, 3 questions resolved, 4 decisions (`DEC-43`…`DEC-46`) |
+| 2026-10-23 | analyst + agent | close | actor, glossary, scope, goals, risks, stack settled; `PROJECT.md` and draft `constitution.md` written; 2 decisions (`DEC-47`, `DEC-48`) |
 
 ## Topics
 
@@ -58,5 +59,4 @@ None — all 129 items of `SRC-01` are assigned to a topic.
 <Filled by `/og:discovery` in close mode. Condition: every business topic discussed, every `[W]`
 question answered or deferred by an explicit decision, the list of items with no topic empty.>
 
-- Closed: YYYY-MM-DD, approved by: <analyst> · `PROJECT.md` `status: approved` ·
-  `constitution.md` `status: draft` → next step `/og:modules`
+- Closed: 2026-10-23, by: Maciej (analyst and product owner) · `PROJECT.md` written, `status: draft` (becomes `approved` with `/og:discovery-report accepted`) · `constitution.md` `status: draft` · 9 of 9 topics settled, 0 open questions, technical checklist 24/24, anchors fixed in `DEC-47`, `DEC-48` → next step `/og:discovery-report`
