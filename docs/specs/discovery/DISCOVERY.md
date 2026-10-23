@@ -60,3 +60,5 @@ None — all 129 items of `SRC-01` are assigned to a topic.
 question answered or deferred by an explicit decision, the list of items with no topic empty.>
 
 - Closed: 2026-10-23, by: Maciej (analyst and product owner) · `PROJECT.md` written, `status: draft` (becomes `approved` with `/og:discovery-report accepted`) · `constitution.md` `status: draft` · 9 of 9 topics settled, 0 open questions, technical checklist 24/24, anchors fixed in `DEC-47`, `DEC-48` → next step `/og:discovery-report`
+- Accepted by the client: 2026-10-23 · document version: `c7213fa` · 113 findings across 9 topics are binding from now on · decisions confirmed: 0
+

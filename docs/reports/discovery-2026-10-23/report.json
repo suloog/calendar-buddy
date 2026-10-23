@@ -1,0 +1,3394 @@
+{
+  "schema": "og-discovery-report/1",
+  "generated": "2026-10-23",
+  "draft": false,
+  "mode": "acceptance",
+  "accepted": "2026-10-23",
+  "language": "en",
+  "meta": {
+    "project": "calendar-buddy",
+    "client": "internal",
+    "analyst": "Maciej",
+    "created": "2026-10-22",
+    "status": "approved",
+    "version": {
+      "commit": "c7213fa",
+      "dirty": true
+    }
+  },
+  "project": {
+    "title": "calendar-buddy",
+    "overview": [
+      "calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache."
+    ],
+    "goals": [
+      {
+        "text": "For two consecutive working weeks, the product owner checks upcoming meetings, responds to invitations and creates meetings with Google Meet only in the app, without opening Google Calendar in the browser.",
+        "raw": "- G1: For two consecutive working weeks, the product owner checks upcoming meetings, responds to invitations and creates meetings with Google Meet only in the app, without opening Google Calendar in the browser. (`SRC-01-04`, `SRC-01-129`, `DEC-05`, `DEC-48`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            211,
+            259
+          ]
+        ],
+        "id": "G1"
+      },
+      {
+        "text": "All ten acceptance criteria of the PRD (§14) hold in daily use.",
+        "raw": "- G2: All ten acceptance criteria of the PRD (§14) hold in daily use. (`SRC-01-120`…`SRC-01-129`, `DEC-07`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            69,
+            107
+          ]
+        ],
+        "id": "G2"
+      },
+      {
+        "text": "Start-up, switching period or view, and scrolling the week view stay within the thresholds set after the first measurements, on a profile of 5 accounts, 50 calendars and about 20,000 cached events.",
+        "raw": "- G3: Start-up, switching period or view, and scrolling the week view stay within the thresholds set after the first measurements, on a profile of 5 accounts, 50 calendars and about 20,000 cached events. (`SRC-01-96`, `DEC-14`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            203,
+            227
+          ]
+        ],
+        "id": "G3"
+      },
+      {
+        "text": "The app installs from a .deb package and works on Ubuntu 26.10 with KDE Plasma, on Wayland and on X11.",
+        "raw": "- G4: The app installs from a .deb package and works on Ubuntu 26.10 with KDE Plasma, on Wayland and on X11. (`SRC-01-108`, `DEC-12`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            108,
+            133
+          ]
+        ],
+        "id": "G4"
+      }
+    ],
+    "actors": {
+      "head": [
+        "Actor",
+        "Who they are",
+        "How they sign in",
+        "Access, in short"
+      ],
+      "rows": [
+        [
+          "User",
+          "A person using the app on their own Linux computer with one or more of their own Google accounts (personal or Workspace) — for now the product owner, later possibly colleagues",
+          "Google account through the system browser (OAuth); no password in the app",
+          "Their own calendars and those shared with their accounts, within Google's permissions; on each event they act as organizer or guest"
+        ]
+      ]
+    },
+    "glossary": {
+      "head": [
+        "Term",
+        "Means exactly"
+      ],
+      "rows": [
+        [
+          "Account",
+          "A Google account (personal or Workspace) connected to the app."
+        ],
+        [
+          "Calendar",
+          "A Google calendar accessible to a connected account, including read-only and subscribed ones."
+        ],
+        [
+          "Primary calendar",
+          "An account's main calendar; invitations land there, and on a Workspace account only there can special event types be created."
+        ],
+        [
+          "Default calendar",
+          "The calendar, chosen by the user, that new events go to."
+        ],
+        [
+          "Hidden calendar",
+          "A calendar whose events are temporarily hidden by the quick toggle; it stays listed and keeps synchronizing."
+        ],
+        [
+          "Disabled calendar",
+          "A calendar turned off in the settings; it is not listed, not synchronized and gives no reminders."
+        ],
+        [
+          "Muted calendar",
+          "A calendar whose notifications are off; its events stay visible."
+        ],
+        [
+          "Event",
+          "A single entry in a Google calendar."
+        ],
+        [
+          "Series / occurrence",
+          "A recurring event / one of its instances."
+        ],
+        [
+          "Edit scope",
+          "The reach of a change to a series: *this event*, *this and following*, or *all*."
+        ],
+        [
+          "Special event type",
+          "*Out of office*, *focus time*, *working location* or *birthday*."
+        ],
+        [
+          "Organizer / Guest",
+          "The person who invites to an event / an invited person, required or optional."
+        ],
+        [
+          "Invitation",
+          "An event in which the user is a guest."
+        ],
+        [
+          "Response",
+          "A guest's answer: *Accept*, *Decline* or *Maybe* (Google's \"tentative\")."
+        ],
+        [
+          "Reminder",
+          "A per-user Google reminder on an event, as a notification or an e-mail, synchronized with Google."
+        ],
+        [
+          "Notification",
+          "The desktop notification the app shows for a notification-type reminder."
+        ],
+        [
+          "Cache",
+          "The local copy of calendar data, from one year back to two years ahead."
+        ],
+        [
+          "Offline",
+          "No network; only what is in the cache can be browsed."
+        ],
+        [
+          "Free/busy preview",
+          "Guests' busy blocks for the chosen day, shown in the event editor."
+        ],
+        [
+          "Join",
+          "Opening the Google Meet meeting of an event from the event, the agenda or a notification."
+        ]
+      ]
+    },
+    "in_scope": [
+      {
+        "text": "Google accounts and sign-in — several personal and Workspace accounts through the browser, refresh and revoked access, account removal with its data, first run",
+        "raw": "- Google accounts and sign-in — several personal and Workspace accounts through the browser, refresh and revoked access, account removal with its data, first run (`discovery/03-accounts.md` · `SRC-01-17`…`SRC-01-23`, `SRC-01-97`, `SRC-01-120`; `SRC-02-24`…`SRC-02-27`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            161,
+            268
+          ]
+        ]
+      },
+      {
+        "text": "Calendars, synchronisation and offline cache — all accessible calendars in one view, local colours, background sync (about a minute) and on demand, cache from one year back to two years ahead, offline browsing, read-only calendars",
+        "raw": "- Calendars, synchronisation and offline cache — all accessible calendars in one view, local colours, background sync (about a minute) and on demand, cache from one year back to two years ahead, offline browsing, read-only calendars (`discovery/04-calendars-sync.md` · `SRC-01-11`, `SRC-01-25`…`SRC-01-35`, `SRC-01-98`, `SRC-01-106`, `SRC-01-121`, `SRC-01-128`; `SRC-02-22`, `SRC-02-28`…`SRC-02-33`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            232,
+            399
+          ]
+        ]
+      },
+      {
+        "text": "Views and navigation — day, 3 days, week, month, agenda; side panel grouped by account; hiding and disabling calendars; keyboard; regional formats and time zone from the system",
+        "raw": "- Views and navigation — day, 3 days, week, month, agenda; side panel grouped by account; hiding and disabling calendars; keyboard; regional formats and time zone from the system (`discovery/05-views-navigation.md` · `SRC-01-36`…`SRC-01-48`, `SRC-01-99`; `SRC-02-34`…`SRC-02-40`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            178,
+            279
+          ]
+        ]
+      },
+      {
+        "text": "Visual direction and themes — Morgen and Apple Calendar as references, light and dark themes, English interface",
+        "raw": "- Visual direction and themes — Morgen and Apple Calendar as references, light and dark themes, English interface (`discovery/06-visual-themes.md` · `SRC-01-02`, `SRC-01-49`…`SRC-01-53`, `SRC-01-107`; `SRC-02-41`, `SRC-02-42`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            113,
+            226
+          ]
+        ]
+      },
+      {
+        "text": "Creating and editing events — quick entry and full editor, dragging, recurrence presets with three edit scopes, special event types, event colours, attachments as links",
+        "raw": "- Creating and editing events — quick entry and full editor, dragging, recurrence presets with three edit scopes, special event types, event colours, attachments as links (`discovery/07-events.md` · `SRC-01-54`…`SRC-01-66`, `SRC-01-100`, `SRC-01-101`, `SRC-01-124`, `SRC-01-125`; `SRC-02-23`, `SRC-02-44`…`SRC-02-49`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            170,
+            317
+          ]
+        ]
+      },
+      {
+        "text": "Guests, invitations, RSVP and Google Meet — guest suggestions (contacts, Workspace directory, recent), responses, asking before notifying guests, free/busy preview, Meet with Join",
+        "raw": "- Guests, invitations, RSVP and Google Meet — guest suggestions (contacts, Workspace directory, recent), responses, asking before notifying guests, free/busy preview, Meet with Join (`discovery/08-guests-rsvp-meet.md` · `SRC-01-60`, `SRC-01-67`…`SRC-01-79`, `SRC-01-102`…`SRC-01-104`, `SRC-01-112`, `SRC-01-122`, `SRC-01-123`, `SRC-01-126`; `SRC-03-01`…`SRC-03-06`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            181,
+            365
+          ]
+        ]
+      },
+      {
+        "text": "Reminders and notifications — notifications from Google reminders, editing reminders, snooze, muting calendars, tray and autostart, single instance, `webcal:` links",
+        "raw": "- Reminders and notifications — notifications from Google reminders, editing reminders, snooze, muting calendars, tray and autostart, single instance, `webcal:` links (`discovery/09-notifications.md` · `SRC-01-80`…`SRC-01-85`, `SRC-01-105`, `SRC-01-127`; `SRC-03-07`…`SRC-03-11`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            166,
+            279
+          ]
+        ]
+      }
+    ],
+    "out_scope": [
+      {
+        "text": "Providers other than Google — CalDAV, Microsoft 365 / Outlook.",
+        "raw": "- Providers other than Google — CalDAV, Microsoft 365 / Outlook. (`SRC-01-109`, `SRC-01-110`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            64,
+            93
+          ]
+        ]
+      },
+      {
+        "text": "macOS and Windows releases; public distribution, Google verification and choosing a licence.",
+        "raw": "- macOS and Windows releases; public distribution, Google verification and choosing a licence. (`DEC-02`, `DEC-08`, `DEC-10`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            94,
+            125
+          ]
+        ]
+      },
+      {
+        "text": "Offline editing with a change queue and conflict resolution.",
+        "raw": "- Offline editing with a change queue and conflict resolution. (`SRC-01-111`, `DEC-25`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            62,
+            87
+          ]
+        ]
+      },
+      {
+        "text": "Calendar management — creating, renaming, deleting, sharing, administration.",
+        "raw": "- Calendar management — creating, renaming, deleting, sharing, administration. (`SRC-01-118`, `DEC-21`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            78,
+            103
+          ]
+        ]
+      },
+      {
+        "text": "Event search, basic or advanced.",
+        "raw": "- Event search, basic or advanced. (`SRC-01-113`, `DEC-30`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            34,
+            59
+          ]
+        ]
+      },
+      {
+        "text": "A workweek view; a second time zone or choosing the display time zone by hand.",
+        "raw": "- A workweek view; a second time zone or choosing the display time zone by hand. (`DEC-27`, `DEC-29`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            80,
+            101
+          ]
+        ]
+      },
+      {
+        "text": "Advanced theming and layout customization, interface translations, mock-ups.",
+        "raw": "- Advanced theming and layout customization, interface translations, mock-ups. (`SRC-01-117`, `DEC-31`, `DEC-32`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            78,
+            113
+          ]
+        ]
+      },
+      {
+        "text": "Natural-language event creation, task management, an AI scheduling assistant.",
+        "raw": "- Natural-language event creation, task management, an AI scheduling assistant. (`SRC-01-115`, `SRC-01-116`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            79,
+            108
+          ]
+        ]
+      },
+      {
+        "text": "Adding Google Drive attachments; ICS import and export.",
+        "raw": "- Adding Google Drive attachments; ICS import and export. (`SRC-01-114`, `DEC-37`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            57,
+            82
+          ]
+        ]
+      },
+      {
+        "text": "A full recurrence-rule editor; creating working-location events.",
+        "raw": "- A full recurrence-rule editor; creating working-location events. (`DEC-36`, `DEC-34`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            66,
+            87
+          ]
+        ]
+      },
+      {
+        "text": "Advanced scheduling with guests (multi-day grid, free-slot suggestions); responding with a comment or proposing another time.",
+        "raw": "- Advanced scheduling with guests (multi-day grid, free-slot suggestions); responding with a comment or proposing another time. (`SRC-01-112`, `DEC-42`, `SRC-03-01`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            127,
+            165
+          ]
+        ]
+      },
+      {
+        "text": "App-level default reminders and local-only reminders.",
+        "raw": "- App-level default reminders and local-only reminders. (`DEC-43`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            55,
+            66
+          ]
+        ]
+      },
+      {
+        "text": "Handling `mailto:` links; update checking and automatic updates.",
+        "raw": "- Handling `mailto:` links; update checking and automatic updates. (`DEC-46`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            66,
+            77
+          ]
+        ]
+      },
+      {
+        "text": "Telemetry and remote crash reports; screen-reader support; package formats other than .deb; a fallback token store when no secret store runs.",
+        "raw": "- Telemetry and remote crash reports; screen-reader support; package formats other than .deb; a fallback token store when no secret store runs. (`DEC-11`, `DEC-12`, `DEC-13`, `DEC-47`)",
+        "removals": [
+          [
+            0,
+            2
+          ],
+          [
+            143,
+            184
+          ]
+        ]
+      }
+    ]
+  },
+  "topics": [
+    {
+      "id": "DSC-01",
+      "title": "Product, roles, platform and integrations",
+      "kind": "cross-cutting",
+      "scope": "What the product is and for whom (the single end user, product framing, the \"replace the browser\" goal), the Google integration strategy (Calendar API, People API, OAuth verification), the provider abstraction and future providers, the target platforms, and the preliminary stack (see SRC-01 *Noted*: §10.1, §10.2, §15, §16). Ends where a business topic describes behaviour. Project-level questions with no other home (acceptance, milestones, support) live here.",
+      "findings": [
+        {
+          "text": "A lightweight, fast desktop calendar application, built primarily for Linux.",
+          "raw": "- [DSC-01-01] A lightweight, fast desktop calendar application, built primarily for Linux. (`SRC-01-01`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              90,
+              104
+            ]
+          ],
+          "id": "DSC-01-01",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "9dae996b185caa28"
+        },
+        {
+          "text": "Google Calendar is the first and only fully supported provider, integrated through the Google Calendar API rather than CalDAV.",
+          "raw": "- [DSC-01-02] Google Calendar is the first and only fully supported provider, integrated through the Google Calendar API rather than CalDAV. (`SRC-01-03`, `SRC-01-08`, `SRC-01-14`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              140,
+              180
+            ]
+          ],
+          "id": "DSC-01-02",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "b3a21898e0892920"
+        },
+        {
+          "text": "Contact suggestions come from the Google People API; Workspace directory suggestions depend on extra permissions and are not available for every account.",
+          "raw": "- [DSC-01-03] Contact suggestions come from the Google People API; Workspace directory suggestions depend on extra permissions and are not available for every account. (`SRC-01-15`, `SRC-01-16`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              167,
+              194
+            ]
+          ],
+          "id": "DSC-01-03",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "05328f693bbb6dc1"
+        },
+        {
+          "text": "The app talks to Google directly from the user's computer; there is no sync backend of our own.",
+          "raw": "- [DSC-01-04] The app talks to Google directly from the user's computer; there is no sync backend of our own. (`SRC-01-12`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              109,
+              123
+            ]
+          ],
+          "id": "DSC-01-04",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "494484008d9984b3"
+        },
+        {
+          "text": "Calendar providers are kept separate from the app's own model of calendars and events, and provider-specific features are optional, so CalDAV or Microsoft 365 can be added later without reshaping the app.",
+          "raw": "- [DSC-01-05] Calendar providers are kept separate from the app's own model of calendars and events, and provider-specific features are optional, so CalDAV or Microsoft 365 can be added later without reshaping the app. (`SRC-01-13`, `SRC-01-86`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              218,
+              245
+            ]
+          ],
+          "id": "DSC-01-05",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "1d275f08c40e5101"
+        },
+        {
+          "text": "Platform-specific behaviour sits behind interfaces, so macOS and Windows can come later from the same codebase.",
+          "raw": "- [DSC-01-06] Platform-specific behaviour sits behind interfaces, so macOS and Windows can come later from the same codebase. (`SRC-01-05`, `SRC-01-07`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              125,
+              152
+            ]
+          ],
+          "id": "DSC-01-06",
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "db9f443cc7df32be"
+        },
+        {
+          "text": "Google's OAuth verification is needed only before a public distribution of the app.",
+          "raw": "- [DSC-01-07] Google's OAuth verification is needed only before a public distribution of the app. (`SRC-01-24`) — *source: `DEC-10`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              111,
+              132
+            ],
+            [
+              97,
+              111
+            ]
+          ],
+          "id": "DSC-01-07",
+          "decisions": [
+            "DEC-10"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "08890ff9a08f0bdc"
+        },
+        {
+          "text": "For now the app is for the product owner's own use; it may be shared with teammates in the same Google Workspace organization, and no public release is planned.",
+          "raw": "- [DSC-01-08] For now the app is for the product owner's own use; it may be shared with teammates in the same Google Workspace organization, and no public release is planned. — *source: `DEC-01`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              174,
+              195
+            ]
+          ],
+          "id": "DSC-01-08",
+          "decisions": [
+            "DEC-01"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "e27d1ff5b401eb97"
+        },
+        {
+          "text": "There is one kind of user: a person signed in with their own Google account, acting as organizer or attendee; the app has no admin role.",
+          "raw": "- [DSC-01-09] There is one kind of user: a person signed in with their own Google account, acting as organizer or attendee; the app has no admin role. — *source: `DEC-01`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              150,
+              171
+            ]
+          ],
+          "id": "DSC-01-09",
+          "decisions": [
+            "DEC-01"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "7ec7d9e1352353f0"
+        },
+        {
+          "text": "The MVP is built and tested on Linux only; the architecture keeps macOS and Windows possible, but nothing is built or tested for them.",
+          "raw": "- [DSC-01-10] The MVP is built and tested on Linux only; the architecture keeps macOS and Windows possible, but nothing is built or tested for them. — *source: `DEC-02`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              148,
+              169
+            ]
+          ],
+          "id": "DSC-01-10",
+          "decisions": [
+            "DEC-02"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "16374eae3dc62f1c"
+        },
+        {
+          "text": "\"Everyday\" calendar work — the work the app must take over from the browser — is checking upcoming meetings, accepting invitations and creating meetings with Google Meet; opening the browser for advanced operations is acceptable.",
+          "raw": "- [DSC-01-13] \"Everyday\" calendar work — the work the app must take over from the browser — is checking upcoming meetings, accepting invitations and creating meetings with Google Meet; opening the browser for advanced operations is acceptable. (`SRC-01-04`, `SRC-01-129`) — *source: `DEC-05`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              271,
+              292
+            ],
+            [
+              243,
+              271
+            ]
+          ],
+          "id": "DSC-01-13",
+          "decisions": [
+            "DEC-05"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "22818b56f0db2e41"
+        },
+        {
+          "text": "Delivery goes straight to the MVP, with no separate prototype milestone and no fixed dates.",
+          "raw": "- [DSC-01-14] Delivery goes straight to the MVP, with no separate prototype milestone and no fixed dates. — *source: `DEC-06`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              105,
+              126
+            ]
+          ],
+          "id": "DSC-01-14",
+          "decisions": [
+            "DEC-06"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "ee80ecb8394305fd"
+        },
+        {
+          "text": "The product owner accepts the MVP against the PRD's acceptance criteria through daily use; support and maintenance are not in scope.",
+          "raw": "- [DSC-01-15] The product owner accepts the MVP against the PRD's acceptance criteria through daily use; support and maintenance are not in scope. — *source: `DEC-07`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              146,
+              167
+            ]
+          ],
+          "id": "DSC-01-15",
+          "decisions": [
+            "DEC-07"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "0331f4770afdf325"
+        },
+        {
+          "text": "There is no server infrastructure: the only environment is the GCP project in the organization's Google Workspace, owned and paid for by the organization and administered by the product owner.",
+          "raw": "- [DSC-01-16] There is no server infrastructure: the only environment is the GCP project in the organization's Google Workspace, owned and paid for by the organization and administered by the product owner. (`SRC-02-10`, `SRC-02-11`) — *source: `DEC-09`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              233,
+              254
+            ],
+            [
+              206,
+              233
+            ]
+          ],
+          "id": "DSC-01-16",
+          "decisions": [
+            "DEC-09"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "2970f13dc235545c"
+        },
+        {
+          "text": "Google access goes through an External OAuth app in production status, without Google verification: any Google account — personal or organization, several at once — can sign in; users see Google's \"unverified app\" warning once, and the app is capped at 100 users until it is verified before a public release.",
+          "raw": "- [DSC-01-17] Google access goes through an External OAuth app in production status, without Google verification: any Google account — personal or organization, several at once — can sign in; users see Google's \"unverified app\" warning once, and the app is capped at 100 users until it is verified before a public release. (`SRC-01-18`, `SRC-02-12`, `SRC-02-13`) — *source: `DEC-10`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              362,
+              383
+            ],
+            [
+              322,
+              362
+            ]
+          ],
+          "id": "DSC-01-17",
+          "decisions": [
+            "DEC-10"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "aa459cc154f21511"
+        },
+        {
+          "text": "The UI toolkit is chosen by a feasibility check in the first stories, starting with egui; Iced is the fallback.",
+          "raw": "- [DSC-01-18] The UI toolkit is chosen by a feasibility check in the first stories, starting with egui; Iced is the fallback. (`SRC-02-43`) — *source: `DEC-33`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              139,
+              160
+            ],
+            [
+              125,
+              139
+            ]
+          ],
+          "id": "DSC-01-18",
+          "decisions": [
+            "DEC-33"
+          ],
+          "source": "discovery/01-product-roles-platform.md:DSC-01",
+          "sha": "93e54c8db6c39478"
+        }
+      ],
+      "withdrawn": 2,
+      "file": "01-product-roles-platform.md"
+    },
+    {
+      "id": "DSC-02",
+      "title": "Non-functional requirements",
+      "kind": "cross-cutting",
+      "scope": "Performance, robustness, security of tokens and logs, test automation, Linux compatibility (Wayland/X11, DEs, packaging), accessibility and the desktop-native qualities. Works through the technical checklist (TQ01–TQ24) into `TECH-CHECKLIST.md`.",
+      "findings": [
+        {
+          "text": "The app keeps responding while it synchronizes with Google or waits for the network.",
+          "raw": "- [DSC-02-01] The app keeps responding while it synchronizes with Google or waits for the network. (`SRC-01-87`, `SRC-01-10`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              98,
+              125
+            ]
+          ],
+          "id": "DSC-02-01",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "e69c0c81e57a3fe5"
+        },
+        {
+          "text": "It uses little CPU when idle and modest memory, starts fast and switches views fast, also with many events.",
+          "raw": "- [DSC-02-02] It uses little CPU when idle and modest memory, starts fast and switches views fast, also with many events. (`SRC-01-10`, `SRC-01-88`, `SRC-01-89`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              121,
+              161
+            ]
+          ],
+          "id": "DSC-02-02",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "2cbde8a79ab0457a"
+        },
+        {
+          "text": "Concrete performance thresholds come from early measurements, not assumptions.",
+          "raw": "- [DSC-02-03] Concrete performance thresholds come from early measurements, not assumptions. (`SRC-01-96`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              92,
+              106
+            ]
+          ],
+          "id": "DSC-02-03",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "f8ca501cc84857fc"
+        },
+        {
+          "text": "The app copes with network failures, Google API limits, and expired or revoked account access.",
+          "raw": "- [DSC-02-04] The app copes with network failures, Google API limits, and expired or revoked account access. (`SRC-01-90`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              108,
+              122
+            ]
+          ],
+          "id": "DSC-02-04",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "2a64de94c58151ca"
+        },
+        {
+          "text": "Tokens are kept in the system credential store, and the app asks Google only for the minimum permissions.",
+          "raw": "- [DSC-02-05] Tokens are kept in the system credential store, and the app asks Google only for the minimum permissions. (`SRC-01-92`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              119,
+              133
+            ]
+          ],
+          "id": "DSC-02-05",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "98c38c8190452439"
+        },
+        {
+          "text": "Errors are reported clearly, and logs contain no sensitive user data.",
+          "raw": "- [DSC-02-06] Errors are reported clearly, and logs contain no sensitive user data. (`SRC-01-93`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              83,
+              97
+            ]
+          ],
+          "id": "DSC-02-06",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "8f654fd16b6e9783"
+        },
+        {
+          "text": "Recurring events behave correctly across time zones and daylight-saving changes.",
+          "raw": "- [DSC-02-07] Recurring events behave correctly across time zones and daylight-saving changes. (`SRC-01-91`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              94,
+              108
+            ]
+          ],
+          "id": "DSC-02-07",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "44e0f199711c993f"
+        },
+        {
+          "text": "The app behaves like a native Linux application — system notifications, keyboard operation, HiDPI, window resizing, the system theme — on Wayland and X11 in mainstream desktop environments.",
+          "raw": "- [DSC-02-08] The app behaves like a native Linux application — system notifications, keyboard operation, HiDPI, window resizing, the system theme — on Wayland and X11 in mainstream desktop environments. (`SRC-01-06`, `SRC-01-09`, `SRC-01-95`, `SRC-01-108`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              203,
+              257
+            ]
+          ],
+          "id": "DSC-02-08",
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "fa2963c5908bf722"
+        },
+        {
+          "text": "The MVP's accessibility target is full keyboard operation, readable contrast in both themes and correct HiDPI scaling; screen-reader support is not an MVP goal.",
+          "raw": "- [DSC-02-09] The MVP's accessibility target is full keyboard operation, readable contrast in both themes and correct HiDPI scaling; screen-reader support is not an MVP goal. — *source: `DEC-11`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              174,
+              195
+            ]
+          ],
+          "id": "DSC-02-09",
+          "decisions": [
+            "DEC-11"
+          ],
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "03f3a3035af6f1c5"
+        },
+        {
+          "text": "The MVP is tested on Ubuntu 26.10 with KDE Plasma, mainly on Wayland with an X11 check, and ships as a .deb package; other package formats come after the MVP.",
+          "raw": "- [DSC-02-10] The MVP is tested on Ubuntu 26.10 with KDE Plasma, mainly on Wayland with an X11 check, and ships as a .deb package; other package formats come after the MVP. — *source: `DEC-12`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              172,
+              193
+            ]
+          ],
+          "id": "DSC-02-10",
+          "decisions": [
+            "DEC-12"
+          ],
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "eafa441bcb6590d2"
+        },
+        {
+          "text": "There is no telemetry and no remote crash reporting; logs are local, in the user's directory, with a user-set level, and never contain event contents or tokens.",
+          "raw": "- [DSC-02-11] There is no telemetry and no remote crash reporting; logs are local, in the user's directory, with a user-set level, and never contain event contents or tokens. — *source: `DEC-13`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              174,
+              195
+            ]
+          ],
+          "id": "DSC-02-11",
+          "decisions": [
+            "DEC-13"
+          ],
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "4d00780d1a0458e8"
+        },
+        {
+          "text": "Performance is measured on a profile of up to 5 accounts, 50 calendars and about 20,000 cached events, for start-up, switching period or view, and scrolling the week view; the product owner sets the thresholds after the first measurements.",
+          "raw": "- [DSC-02-12] Performance is measured on a profile of up to 5 accounts, 50 calendars and about 20,000 cached events, for start-up, switching period or view, and scrolling the week view; the product owner sets the thresholds after the first measurements. — *source: `DEC-14`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              253,
+              274
+            ]
+          ],
+          "id": "DSC-02-12",
+          "decisions": [
+            "DEC-14"
+          ],
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "f42e0a9737c4e058"
+        },
+        {
+          "text": "The app's only network traffic is HTTPS to Google's APIs.",
+          "raw": "- [DSC-02-13] The app's only network traffic is HTTPS to Google's APIs. (`SRC-01-12`, `SRC-02-19`) — *source: `DEC-16`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              98,
+              119
+            ],
+            [
+              71,
+              98
+            ]
+          ],
+          "id": "DSC-02-13",
+          "decisions": [
+            "DEC-16"
+          ],
+          "source": "discovery/02-nfr.md:DSC-02",
+          "sha": "8ebae58e8a349bff"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "02-nfr.md"
+    },
+    {
+      "id": "DSC-03",
+      "title": "Google accounts and sign-in",
+      "kind": "business",
+      "scope": "Connecting Google accounts (several at once, personal and Workspace), signing in through the browser, keeping credentials safe, refreshing and re-authenticating, removing an account, and telling account problems apart from sync problems. Ends where calendars are fetched (DSC-04).",
+      "findings": [
+        {
+          "text": "The user connects a Google account by signing in through their own browser; nothing — no server, no password — is typed into the app.",
+          "raw": "- [DSC-03-01] The user connects a Google account by signing in through their own browser; nothing — no server, no password — is typed into the app. (`SRC-01-17`, `SRC-01-120`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              147,
+              175
+            ]
+          ],
+          "id": "DSC-03-01",
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "46734e78ee907d72"
+        },
+        {
+          "text": "Several Google accounts, personal and organization, can be connected at once.",
+          "raw": "- [DSC-03-02] Several Google accounts, personal and organization, can be connected at once. (`SRC-01-18`, `SRC-01-97`, `SRC-02-12`) — *source: `DEC-10`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              131,
+              152
+            ],
+            [
+              91,
+              131
+            ]
+          ],
+          "id": "DSC-03-02",
+          "decisions": [
+            "DEC-10"
+          ],
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "d21a14a7da830027"
+        },
+        {
+          "text": "Once signed in, the user stays signed in — the app refreshes access on its own; if Google revokes it, the app says so plainly and offers to sign in again instead of silently stopping.",
+          "raw": "- [DSC-03-03] Once signed in, the user stays signed in — the app refreshes access on its own; if Google revokes it, the app says so plainly and offers to sign in again instead of silently stopping. (`SRC-01-20`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              197,
+              211
+            ]
+          ],
+          "id": "DSC-03-03",
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "e6295222c06053f3"
+        },
+        {
+          "text": "The user can add an account, remove it, and sign in again to an existing one.",
+          "raw": "- [DSC-03-04] The user can add an account, remove it, and sign in again to an existing one. (`SRC-01-22`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              91,
+              105
+            ]
+          ],
+          "id": "DSC-03-04",
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "28acef18221a759c"
+        },
+        {
+          "text": "A problem with an account (signed out, access revoked) is shown separately from a problem synchronizing a single calendar.",
+          "raw": "- [DSC-03-05] A problem with an account (signed out, access revoked) is shown separately from a problem synchronizing a single calendar. (`SRC-01-23`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              136,
+              150
+            ]
+          ],
+          "id": "DSC-03-05",
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "8c7215223400b1d5"
+        },
+        {
+          "text": "On first run with no account the user sees a welcome screen with one action — connect a Google account; the calendar appears after the first sync.",
+          "raw": "- [DSC-03-06] On first run with no account the user sees a welcome screen with one action — connect a Google account; the calendar appears after the first sync. (`SRC-02-24`) — *source: `DEC-19`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              174,
+              195
+            ],
+            [
+              160,
+              174
+            ]
+          ],
+          "id": "DSC-03-06",
+          "decisions": [
+            "DEC-19"
+          ],
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "650f9129c49e27f9"
+        },
+        {
+          "text": "With no network on first run, signing in is impossible; the app says so and lets the user retry once the network is back.",
+          "raw": "- [DSC-03-07] With no network on first run, signing in is impossible; the app says so and lets the user retry once the network is back. (`SRC-02-25`) — *source: `DEC-19`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              149,
+              170
+            ],
+            [
+              135,
+              149
+            ]
+          ],
+          "id": "DSC-03-07",
+          "decisions": [
+            "DEC-19"
+          ],
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "0941088bd8d8814b"
+        },
+        {
+          "text": "Removing an account immediately deletes its tokens, its cached calendars and events, and its local settings from the device; the Google account itself is untouched.",
+          "raw": "- [DSC-03-08] Removing an account immediately deletes its tokens, its cached calendars and events, and its local settings from the device; the Google account itself is untouched. (`SRC-02-26`) — *source: `DEC-20`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              192,
+              213
+            ],
+            [
+              178,
+              192
+            ]
+          ],
+          "id": "DSC-03-08",
+          "decisions": [
+            "DEC-20"
+          ],
+          "source": "discovery/03-accounts.md:DSC-03",
+          "sha": "17dd6c3d81febca5"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "03-accounts.md"
+    },
+    {
+      "id": "DSC-04",
+      "title": "Calendars, synchronisation and offline cache",
+      "kind": "business",
+      "scope": "Which calendars appear and how (all accessible calendars, unified across accounts, visibility and colours), keeping them in sync automatically and on demand, the local cache, offline browsing and recovery from errors, and the sync state shown to the user. Ends where events are drawn (DSC-05) or changed (DSC-07).",
+      "findings": [
+        {
+          "text": "The app fetches every calendar the connected accounts can access.",
+          "raw": "- [DSC-04-01] The app fetches every calendar the connected accounts can access. (`SRC-01-25`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              79,
+              93
+            ]
+          ],
+          "id": "DSC-04-01",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "d7cdf183d1afecc5"
+        },
+        {
+          "text": "Calendars from all accounts are shown together, in one view.",
+          "raw": "- [DSC-04-02] Calendars from all accounts are shown together, in one view. (`SRC-01-26`, `SRC-01-98`, `SRC-01-121`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              74,
+              115
+            ]
+          ],
+          "id": "DSC-04-02",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "95a796de89b12136"
+        },
+        {
+          "text": "Each calendar can be shown or hidden; it takes its colour from Google by default, and the user can change it locally without changing it in Google.",
+          "raw": "- [DSC-04-03] Each calendar can be shown or hidden; it takes its colour from Google by default, and the user can change it locally without changing it in Google. (`SRC-01-27`, `SRC-02-22`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              161,
+              188
+            ]
+          ],
+          "id": "DSC-04-03",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "238a35605f5a7c8b"
+        },
+        {
+          "text": "Changes synchronize on their own in the background, and the user can also refresh by hand; each time, only what changed is fetched where Google allows it.",
+          "raw": "- [DSC-04-04] Changes synchronize on their own in the background, and the user can also refresh by hand; each time, only what changed is fetched where Google allows it. (`SRC-01-28`, `SRC-01-29`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              168,
+              195
+            ]
+          ],
+          "id": "DSC-04-04",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "51bfab0f4dd1d5e4"
+        },
+        {
+          "text": "Calendar data is kept locally, so the app opens fast and previously synchronized events can be browsed without network.",
+          "raw": "- [DSC-04-05] Calendar data is kept locally, so the app opens fast and previously synchronized events can be browsed without network. (`SRC-01-11`, `SRC-01-30`, `SRC-01-31`, `SRC-01-106`, `SRC-01-128`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              133,
+              201
+            ]
+          ],
+          "id": "DSC-04-05",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "82eb90ead63006ce"
+        },
+        {
+          "text": "Synchronization recovers on its own from lost network, expired sync state, Google's limits and transient errors.",
+          "raw": "- [DSC-04-06] Synchronization recovers on its own from lost network, expired sync state, Google's limits and transient errors. (`SRC-01-32`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              126,
+              140
+            ]
+          ],
+          "id": "DSC-04-06",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "f76a1fa1dcf4eb33"
+        },
+        {
+          "text": "The synchronization state is visible and never blocks work; after a start without network the app shows the calendar from the cache with a clear \"offline\" status.",
+          "raw": "- [DSC-04-07] The synchronization state is visible and never blocks work; after a start without network the app shows the calendar from the cache with a clear \"offline\" status. (`SRC-01-33`, `SRC-02-25`) — *source: `DEC-19`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              203,
+              224
+            ],
+            [
+              176,
+              203
+            ]
+          ],
+          "id": "DSC-04-07",
+          "decisions": [
+            "DEC-19"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "76bc8c94f582b6f2"
+        },
+        {
+          "text": "Events show at the right local time across time zones and daylight-saving changes, including moved or cancelled occurrences of a series.",
+          "raw": "- [DSC-04-08] Events show at the right local time across time zones and daylight-saving changes, including moved or cancelled occurrences of a series. (`SRC-01-34`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              150,
+              164
+            ]
+          ],
+          "id": "DSC-04-08",
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "6b1b9e7532c381d7"
+        },
+        {
+          "text": "The app works with calendars that already exist in Google; creating, renaming and deleting calendars happens in the browser.",
+          "raw": "- [DSC-04-09] The app works with calendars that already exist in Google; creating, renaming and deleting calendars happens in the browser. (`SRC-02-28`) — *source: `DEC-21`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              152,
+              173
+            ],
+            [
+              138,
+              152
+            ]
+          ],
+          "id": "DSC-04-09",
+          "decisions": [
+            "DEC-21"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "ceab433eb46e22a9"
+        },
+        {
+          "text": "Read-only and subscribed calendars (holidays, birthdays, colleagues') are shown like the others; their events cannot be edited, and that is clearly visible; free/busy-only calendars show busy blocks without details.",
+          "raw": "- [DSC-04-10] Read-only and subscribed calendars (holidays, birthdays, colleagues') are shown like the others; their events cannot be edited, and that is clearly visible; free/busy-only calendars show busy blocks without details. (`SRC-02-29`) — *source: `DEC-22`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              243,
+              264
+            ],
+            [
+              229,
+              243
+            ]
+          ],
+          "id": "DSC-04-10",
+          "decisions": [
+            "DEC-22"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "79d32c38e97fc8d4"
+        },
+        {
+          "text": "The cache holds events from one year back to two years ahead; older or later periods browsed online are fetched from Google as needed.",
+          "raw": "- [DSC-04-11] The cache holds events from one year back to two years ahead; older or later periods browsed online are fetched from Google as needed. (`SRC-02-30`) — *source: `DEC-23`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              162,
+              183
+            ],
+            [
+              148,
+              162
+            ]
+          ],
+          "id": "DSC-04-11",
+          "decisions": [
+            "DEC-23"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "819569fe06fe19dc"
+        },
+        {
+          "text": "When a calendar stops being accessible while its account still works, it disappears from the app with its cached events, and the user is told once.",
+          "raw": "- [DSC-04-12] When a calendar stops being accessible while its account still works, it disappears from the app with its cached events, and the user is told once. (`SRC-02-31`) — *source: `DEC-24`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              175,
+              196
+            ],
+            [
+              161,
+              175
+            ]
+          ],
+          "id": "DSC-04-12",
+          "decisions": [
+            "DEC-24"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "e94a1f0ab669bdca"
+        },
+        {
+          "text": "Without network the user can only browse; creating, editing and responding to invitations are unavailable, and the app says why.",
+          "raw": "- [DSC-04-13] Without network the user can only browse; creating, editing and responding to invitations are unavailable, and the app says why. (`SRC-01-35`, `SRC-02-32`) — *source: `DEC-25`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              169,
+              190
+            ],
+            [
+              142,
+              169
+            ]
+          ],
+          "id": "DSC-04-13",
+          "decisions": [
+            "DEC-25"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "86f8ee76258fc797"
+        },
+        {
+          "text": "While the app is open, changes made elsewhere appear within about a minute, and right after the computer wakes or the network returns.",
+          "raw": "- [DSC-04-14] While the app is open, changes made elsewhere appear within about a minute, and right after the computer wakes or the network returns. (`SRC-02-33`) — *source: `DEC-26`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              162,
+              183
+            ],
+            [
+              148,
+              162
+            ]
+          ],
+          "id": "DSC-04-14",
+          "decisions": [
+            "DEC-26"
+          ],
+          "source": "discovery/04-calendars-sync.md:DSC-04",
+          "sha": "e0652e37eec0f69f"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "04-calendars-sync.md"
+    },
+    {
+      "id": "DSC-05",
+      "title": "Views and navigation",
+      "kind": "business",
+      "scope": "The calendar views (day, workweek, full week, month, agenda), moving between periods, Today, the mini calendar and sidebar, the current-time indicator, keyboard-first navigation, scrolling, overlapping events and resizing. Ends at how it looks (DSC-06) and what can be done to an event (DSC-07).",
+      "findings": [
+        {
+          "text": "The core views are day, full week and month.",
+          "raw": "- [DSC-05-01] The core views are day, full week and month. (`SRC-01-36`, `SRC-01-38`, `SRC-01-39`, `SRC-01-99`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              58,
+              111
+            ]
+          ],
+          "id": "DSC-05-01",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "cf610a5965510804"
+        },
+        {
+          "text": "Moving between days, weeks and months is quick, and one action goes back to today.",
+          "raw": "- [DSC-05-02] Moving between days, weeks and months is quick, and one action goes back to today. (`SRC-01-41`, `SRC-01-42`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              96,
+              123
+            ]
+          ],
+          "id": "DSC-05-02",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "e1cac66683f5ab76"
+        },
+        {
+          "text": "Next to the calendar there is a mini calendar and a side panel with the accounts and their calendars; the panel can be collapsed.",
+          "raw": "- [DSC-05-03] Next to the calendar there is a mini calendar and a side panel with the accounts and their calendars; the panel can be collapsed. (`SRC-01-43`, `SRC-01-44`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              143,
+              170
+            ]
+          ],
+          "id": "DSC-05-03",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "3500b0392786e5cc"
+        },
+        {
+          "text": "Today and the current time are highlighted.",
+          "raw": "- [DSC-05-04] Today and the current time are highlighted. (`SRC-01-45`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              57,
+              71
+            ]
+          ],
+          "id": "DSC-05-04",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "14ea767cd5a4543f"
+        },
+        {
+          "text": "The app is operated mainly from the keyboard, with shortcuts for common actions.",
+          "raw": "- [DSC-05-05] The app is operated mainly from the keyboard, with shortcuts for common actions. (`SRC-01-46`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              94,
+              108
+            ]
+          ],
+          "id": "DSC-05-05",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "50aec98f46c6be5a"
+        },
+        {
+          "text": "Scrolling is smooth, and overlapping events stay readable.",
+          "raw": "- [DSC-05-06] Scrolling is smooth, and overlapping events stay readable. (`SRC-01-47`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              72,
+              86
+            ]
+          ],
+          "id": "DSC-05-06",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "c8bdef8236bbea1f"
+        },
+        {
+          "text": "The layout adapts to the window size and the DPI scale.",
+          "raw": "- [DSC-05-07] The layout adapts to the window size and the DPI scale. (`SRC-01-48`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              69,
+              83
+            ]
+          ],
+          "id": "DSC-05-07",
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "89a73965f359dc87"
+        },
+        {
+          "text": "There is a 3-day view, chosen by hand like any other, for smaller screens.",
+          "raw": "- [DSC-05-08] There is a 3-day view, chosen by hand like any other, for smaller screens. (`SRC-02-34`, `SRC-02-37`) — *source: `DEC-27`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              115,
+              136
+            ],
+            [
+              88,
+              115
+            ]
+          ],
+          "id": "DSC-05-08",
+          "decisions": [
+            "DEC-27"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "350a4f128f4bcca1"
+        },
+        {
+          "text": "There is an agenda view listing upcoming events.",
+          "raw": "- [DSC-05-09] There is an agenda view listing upcoming events. (`SRC-01-40`, `SRC-02-37`) — *source: `DEC-27`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              89,
+              110
+            ],
+            [
+              62,
+              89
+            ]
+          ],
+          "id": "DSC-05-09",
+          "decisions": [
+            "DEC-27"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "bc7b59e725cfae96"
+        },
+        {
+          "text": "Calendars are always grouped by account — in the side panel and when choosing a calendar for a new event.",
+          "raw": "- [DSC-05-10] Calendars are always grouped by account — in the side panel and when choosing a calendar for a new event. (`SRC-02-35`) — *source: `DEC-28`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              133,
+              154
+            ],
+            [
+              119,
+              133
+            ]
+          ],
+          "id": "DSC-05-10",
+          "decisions": [
+            "DEC-28"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "96a69aeb8cf1df49"
+        },
+        {
+          "text": "A calendar can be hidden in two ways: a quick toggle in the side panel hides its events but keeps it listed; disabling it in the settings removes it from the side panel, the calendar picker and the views, and it is re-enabled in the settings.",
+          "raw": "- [DSC-05-11] A calendar can be hidden in two ways: a quick toggle in the side panel hides its events but keeps it listed; disabling it in the settings removes it from the side panel, the calendar picker and the views, and it is re-enabled in the settings. (`SRC-01-27`, `SRC-02-36`, `SRC-02-38`) — *source: `DEC-28`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              296,
+              317
+            ],
+            [
+              256,
+              296
+            ]
+          ],
+          "id": "DSC-05-11",
+          "decisions": [
+            "DEC-28"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "ee30d1146775b546"
+        },
+        {
+          "text": "A disabled calendar is not synchronized or cached and gives no reminders; when re-enabled it goes through a first synchronization.",
+          "raw": "- [DSC-05-12] A disabled calendar is not synchronized or cached and gives no reminders; when re-enabled it goes through a first synchronization. (`SRC-02-38`) — *source: `DEC-28`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              158,
+              179
+            ],
+            [
+              144,
+              158
+            ]
+          ],
+          "id": "DSC-05-12",
+          "decisions": [
+            "DEC-28"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "52b3db5a2fabe3bb"
+        },
+        {
+          "text": "Week start and date and time formats follow the system's regional settings.",
+          "raw": "- [DSC-05-13] Week start and date and time formats follow the system's regional settings. (`SRC-02-40`) — *source: `DEC-29`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              103,
+              124
+            ],
+            [
+              89,
+              103
+            ]
+          ],
+          "id": "DSC-05-13",
+          "decisions": [
+            "DEC-29"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "bcdcc12fc1de0b71"
+        },
+        {
+          "text": "The calendar is shown in the system time zone; an event stored in another time zone also shows its own time in its details.",
+          "raw": "- [DSC-05-14] The calendar is shown in the system time zone; an event stored in another time zone also shows its own time in its details. (`SRC-01-34`, `SRC-02-40`) — *source: `DEC-29`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              164,
+              185
+            ],
+            [
+              137,
+              164
+            ]
+          ],
+          "id": "DSC-05-14",
+          "decisions": [
+            "DEC-29"
+          ],
+          "source": "discovery/05-views-navigation.md:DSC-05",
+          "sha": "9594e789e4ab0913"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "05-views-navigation.md"
+    },
+    {
+      "id": "DSC-06",
+      "title": "Visual direction and themes",
+      "kind": "business",
+      "scope": "The look and feel: the Morgen and Apple Calendar references, light and dark themes following the system, restrained use of calendar colours, no unnecessary animation, and keyboard shortcuts as listed with themes in the MVP scope. Advanced theming is out. May merge into DSC-05 at /og:modules.",
+      "findings": [
+        {
+          "text": "The look combines the clarity and simplicity of Apple Calendar with the density and clear grid of Morgen.",
+          "raw": "- [DSC-06-01] The look combines the clarity and simplicity of Apple Calendar with the density and clear grid of Morgen. (`SRC-01-02`, `SRC-01-49`, `SRC-01-50`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              119,
+              159
+            ]
+          ],
+          "id": "DSC-06-01",
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "08c8a3225fb82131"
+        },
+        {
+          "text": "The app has a light and a dark theme and can follow the system setting.",
+          "raw": "- [DSC-06-02] The app has a light and a dark theme and can follow the system setting. (`SRC-01-51`, `SRC-01-107`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              85,
+              113
+            ]
+          ],
+          "id": "DSC-06-02",
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "47aa4479681400e7"
+        },
+        {
+          "text": "Calendar colours help tell calendars apart, while the rest of the interface stays restrained.",
+          "raw": "- [DSC-06-03] Calendar colours help tell calendars apart, while the rest of the interface stays restrained. (`SRC-01-52`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              107,
+              121
+            ]
+          ],
+          "id": "DSC-06-03",
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "b666d35719195b88"
+        },
+        {
+          "text": "There are no unnecessary animations and no features unrelated to the calendar.",
+          "raw": "- [DSC-06-04] There are no unnecessary animations and no features unrelated to the calendar. (`SRC-01-53`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              92,
+              106
+            ]
+          ],
+          "id": "DSC-06-04",
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "1e2ec4a40ab3d7a1"
+        },
+        {
+          "text": "The interface is in English only; adding translations later stays possible.",
+          "raw": "- [DSC-06-05] The interface is in English only; adding translations later stays possible. (`SRC-02-41`) — *source: `DEC-31`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              103,
+              124
+            ],
+            [
+              89,
+              103
+            ]
+          ],
+          "id": "DSC-06-05",
+          "decisions": [
+            "DEC-31"
+          ],
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "737912b14a2bb7e2"
+        },
+        {
+          "text": "There are no mock-ups; the look is refined on the working app, with the product owner reviewing it as it grows.",
+          "raw": "- [DSC-06-06] There are no mock-ups; the look is refined on the working app, with the product owner reviewing it as it grows. (`SRC-02-42`) — *source: `DEC-32`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              139,
+              160
+            ],
+            [
+              125,
+              139
+            ]
+          ],
+          "id": "DSC-06-06",
+          "decisions": [
+            "DEC-32"
+          ],
+          "source": "discovery/06-visual-themes.md:DSC-06",
+          "sha": "9c6eb1e39fe20bce"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "06-visual-themes.md"
+    },
+    {
+      "id": "DSC-07",
+      "title": "Creating and editing events",
+      "kind": "business",
+      "scope": "Creating events (click/select, quick entry, full editor, fields, all-day and multi-day, recurrence), editing, deleting, dragging and resizing, moving between calendars, recurring instances and series, warnings and permission failures. Guests, RSVP and Meet are DSC-08; reminders are DSC-09.",
+      "findings": [
+        {
+          "text": "An event is created by clicking in the calendar or selecting a time range.",
+          "raw": "- [DSC-07-01] An event is created by clicking in the calendar or selecting a time range. (`SRC-01-54`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              88,
+              102
+            ]
+          ],
+          "id": "DSC-07-01",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "b6a09a8ad8d091a0"
+        },
+        {
+          "text": "There is a quick way to add the essentials and a full event editor.",
+          "raw": "- [DSC-07-02] There is a quick way to add the essentials and a full event editor. (`SRC-01-55`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              81,
+              95
+            ]
+          ],
+          "id": "DSC-07-02",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "698c19ba0da2b437"
+        },
+        {
+          "text": "An event has a title, description, start and end, time zone and calendar; it can be all-day or span several days.",
+          "raw": "- [DSC-07-03] An event has a title, description, start and end, time zone and calendar; it can be all-day or span several days. (`SRC-01-56`, `SRC-01-57`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              127,
+              154
+            ]
+          ],
+          "id": "DSC-07-03",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "acdd4f1ef4f6b4ed"
+        },
+        {
+          "text": "Where Google allows it, the location, reminders, busy/free status and visibility can be set.",
+          "raw": "- [DSC-07-04] Where Google allows it, the location, reminders, busy/free status and visibility can be set. (`SRC-01-58`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              106,
+              120
+            ]
+          ],
+          "id": "DSC-07-04",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "49b1e3f4650186ee"
+        },
+        {
+          "text": "A new event goes to the calendar the user chose as the default; for a given event another calendar can be picked from a list grouped by account.",
+          "raw": "- [DSC-07-05] A new event goes to the calendar the user chose as the default; for a given event another calendar can be picked from a list grouped by account. (`SRC-02-23`, `SRC-02-35`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              158,
+              185
+            ]
+          ],
+          "id": "DSC-07-05",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "d950e9b799c988f6"
+        },
+        {
+          "text": "Events can be edited and deleted within the user's permissions; the time is changed by dragging and the length by resizing.",
+          "raw": "- [DSC-07-06] Events can be edited and deleted within the user's permissions; the time is changed by dragging and the length by resizing. (`SRC-01-61`, `SRC-01-62`, `SRC-01-100`, `SRC-01-124`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              137,
+              192
+            ]
+          ],
+          "id": "DSC-07-06",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "d1d6d4f42c9f6301"
+        },
+        {
+          "text": "An event can be moved to another calendar where Google allows it.",
+          "raw": "- [DSC-07-07] An event can be moved to another calendar where Google allows it. (`SRC-01-63`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              79,
+              93
+            ]
+          ],
+          "id": "DSC-07-07",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "1e87621a9b2d0db7"
+        },
+        {
+          "text": "The app warns when a change affects invited people or a whole series, and shows a clear message when Google or the organizer does not allow an operation.",
+          "raw": "- [DSC-07-08] The app warns when a change affects invited people or a whole series, and shows a clear message when Google or the organizer does not allow an operation. (`SRC-01-65`, `SRC-01-66`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              167,
+              194
+            ]
+          ],
+          "id": "DSC-07-08",
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "cc9121400af07f1e"
+        },
+        {
+          "text": "Google's special event types — out of office, focus time, working location, birthdays — stand out in the views.",
+          "raw": "- [DSC-07-09] Google's special event types — out of office, focus time, working location, birthdays — stand out in the views. (`SRC-02-44`) — *source: `DEC-34`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              139,
+              160
+            ],
+            [
+              125,
+              139
+            ]
+          ],
+          "id": "DSC-07-09",
+          "decisions": [
+            "DEC-34"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "a7f7ff02b037fdbc"
+        },
+        {
+          "text": "The user can create out-of-office and focus-time events where the account allows it (the primary calendar of a Workspace account); working location is shown only.",
+          "raw": "- [DSC-07-10] The user can create out-of-office and focus-time events where the account allows it (the primary calendar of a Workspace account); working location is shown only. (`SRC-02-46`) — *source: `DEC-34`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              190,
+              211
+            ],
+            [
+              176,
+              190
+            ]
+          ],
+          "id": "DSC-07-10",
+          "decisions": [
+            "DEC-34"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "d633d929d79bf791"
+        },
+        {
+          "text": "An event's Google colour is shown and can be changed in the editor; the change is saved to Google.",
+          "raw": "- [DSC-07-11] An event's Google colour is shown and can be changed in the editor; the change is saved to Google. (`SRC-02-47`) — *source: `DEC-35`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              126,
+              147
+            ],
+            [
+              112,
+              126
+            ]
+          ],
+          "id": "DSC-07-11",
+          "decisions": [
+            "DEC-35"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "d101fd4b8ac1279a"
+        },
+        {
+          "text": "Recurring events are created from presets — daily, weekdays, weekly on chosen days, monthly, yearly — ending on a date, after a number of occurrences, or never.",
+          "raw": "- [DSC-07-12] Recurring events are created from presets — daily, weekdays, weekly on chosen days, monthly, yearly — ending on a date, after a number of occurrences, or never. (`SRC-01-59`, `SRC-01-101`, `SRC-02-48`) — *source: `DEC-36`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              215,
+              236
+            ],
+            [
+              174,
+              215
+            ]
+          ],
+          "id": "DSC-07-12",
+          "decisions": [
+            "DEC-36"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "9b1b92926300f64f"
+        },
+        {
+          "text": "Changing or deleting an occurrence of a series offers three scopes: this event, this and following, all; series with more complex rules created in Google are shown correctly, and their rule is changed in the browser.",
+          "raw": "- [DSC-07-13] Changing or deleting an occurrence of a series offers three scopes: this event, this and following, all; series with more complex rules created in Google are shown correctly, and their rule is changed in the browser. (`SRC-01-64`, `SRC-01-125`, `SRC-02-48`) — *source: `DEC-36`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              271,
+              292
+            ],
+            [
+              230,
+              271
+            ]
+          ],
+          "id": "DSC-07-13",
+          "decisions": [
+            "DEC-36"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "ece7e6f62d3750fa"
+        },
+        {
+          "text": "An event's existing attachments are shown in its details as links that open in the browser; adding attachments is not possible.",
+          "raw": "- [DSC-07-14] An event's existing attachments are shown in its details as links that open in the browser; adding attachments is not possible. (`SRC-01-114`, `SRC-02-49`) — *source: `DEC-37`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              169,
+              190
+            ],
+            [
+              141,
+              169
+            ]
+          ],
+          "id": "DSC-07-14",
+          "decisions": [
+            "DEC-37"
+          ],
+          "source": "discovery/07-events.md:DSC-07",
+          "sha": "c771fdd4d4365208"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "07-events.md"
+    },
+    {
+      "id": "DSC-08",
+      "title": "Guests, invitations, RSVP and Google Meet",
+      "kind": "business",
+      "scope": "Inviting attendees (by e-mail, from contacts, directory and recent addresses), showing their status, required/optional guests, sending updates, responding to invitations (Accept/Decline/Maybe), organizer vs. attendee permissions, and adding or opening a Google Meet link.",
+      "findings": [
+        {
+          "text": "Guests are added by e-mail address.",
+          "raw": "- [DSC-08-01] Guests are added by e-mail address. (`SRC-01-67`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              49,
+              63
+            ]
+          ],
+          "id": "DSC-08-01",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "788a104e325e7189"
+        },
+        {
+          "text": "While typing, the app suggests people from Google Contacts and recently used addresses.",
+          "raw": "- [DSC-08-02] While typing, the app suggests people from Google Contacts and recently used addresses. (`SRC-01-68`, `SRC-01-70`, `SRC-01-102`, `SRC-01-122`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              101,
+              156
+            ]
+          ],
+          "id": "DSC-08-02",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "cdc74d38db3551be"
+        },
+        {
+          "text": "An event shows each guest's name, address and response.",
+          "raw": "- [DSC-08-03] An event shows each guest's name, address and response. (`SRC-01-71`, `SRC-01-77`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              69,
+              96
+            ]
+          ],
+          "id": "DSC-08-03",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "549c1ed44d52c51b"
+        },
+        {
+          "text": "Guests can be required or optional, as far as Google allows.",
+          "raw": "- [DSC-08-04] Guests can be required or optional, as far as Google allows. (`SRC-01-72`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              74,
+              88
+            ]
+          ],
+          "id": "DSC-08-04",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "a4cf05cbbbbe6c9b"
+        },
+        {
+          "text": "Guests can be added and removed when editing an event.",
+          "raw": "- [DSC-08-05] Guests can be added and removed when editing an event. (`SRC-01-73`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              68,
+              82
+            ]
+          ],
+          "id": "DSC-08-05",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "9a9bb220265b46e8"
+        },
+        {
+          "text": "Invitations waiting for a response are easy to find.",
+          "raw": "- [DSC-08-06] Invitations waiting for a response are easy to find. (`SRC-01-75`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              66,
+              80
+            ]
+          ],
+          "id": "DSC-08-06",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "8593907545ebfc08"
+        },
+        {
+          "text": "An invitation is answered with Accept, Decline or Maybe, and the answer goes to Google.",
+          "raw": "- [DSC-08-07] An invitation is answered with Accept, Decline or Maybe, and the answer goes to Google. (`SRC-01-76`, `SRC-01-78`, `SRC-01-103`, `SRC-01-123`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              101,
+              156
+            ]
+          ],
+          "id": "DSC-08-07",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "c6ec1b53f005f848"
+        },
+        {
+          "text": "What the user can do with an event depends on whether they are its organizer or a guest, and on the permissions in Google.",
+          "raw": "- [DSC-08-08] What the user can do with an event depends on whether they are its organizer or a guest, and on the permissions in Google. (`SRC-01-79`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              136,
+              150
+            ]
+          ],
+          "id": "DSC-08-08",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "8fecf9262c1457c7"
+        },
+        {
+          "text": "A Google Meet link can be added to an event where Google allows it.",
+          "raw": "- [DSC-08-09] A Google Meet link can be added to an event where Google allows it. (`SRC-01-60`, `SRC-01-104`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              81,
+              109
+            ]
+          ],
+          "id": "DSC-08-09",
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "b76c6449fb2a85d6"
+        },
+        {
+          "text": "An event with Meet has a clear Join button that opens the meeting in the browser; the same button is in the agenda view and in the notification before the meeting.",
+          "raw": "- [DSC-08-10] An event with Meet has a clear Join button that opens the meeting in the browser; the same button is in the agenda view and in the notification before the meeting. (`SRC-01-126`, `SRC-03-04`) — *source: `DEC-38`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              205,
+              226
+            ],
+            [
+              177,
+              205
+            ]
+          ],
+          "id": "DSC-08-10",
+          "decisions": [
+            "DEC-38"
+          ],
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "647528c7855b2394"
+        },
+        {
+          "text": "On Workspace accounts, guest suggestions also include the organization's directory.",
+          "raw": "- [DSC-08-11] On Workspace accounts, guest suggestions also include the organization's directory. (`SRC-01-16`, `SRC-01-69`, `SRC-03-03`) — *source: `DEC-39`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              137,
+              158
+            ],
+            [
+              97,
+              137
+            ]
+          ],
+          "id": "DSC-08-11",
+          "decisions": [
+            "DEC-39"
+          ],
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "8c47655da9d85f50"
+        },
+        {
+          "text": "When a change to an event with guests is saved — also after dragging — the app asks once whether to send the guests an update.",
+          "raw": "- [DSC-08-12] When a change to an event with guests is saved — also after dragging — the app asks once whether to send the guests an update. (`SRC-01-65`, `SRC-01-74`, `SRC-03-02`) — *source: `DEC-40`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              180,
+              201
+            ],
+            [
+              140,
+              180
+            ]
+          ],
+          "id": "DSC-08-12",
+          "decisions": [
+            "DEC-40"
+          ],
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "ebd69529a51a3623"
+        },
+        {
+          "text": "Invitations in a calendar disabled in the settings are not visible; that is the user's choice, and invitations normally land in the account's primary calendar.",
+          "raw": "- [DSC-08-13] Invitations in a calendar disabled in the settings are not visible; that is the user's choice, and invitations normally land in the account's primary calendar. (`SRC-03-05`) — *source: `DEC-41`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              187,
+              208
+            ],
+            [
+              173,
+              187
+            ]
+          ],
+          "id": "DSC-08-13",
+          "decisions": [
+            "DEC-41"
+          ],
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "c5aadd128cf481ef"
+        },
+        {
+          "text": "The event editor shows, under the chosen time, each guest's busy blocks for that day, with a conflict with the proposed time marked; guests who do not share availability show \"no data\"; there is no preview offline.",
+          "raw": "- [DSC-08-14] The event editor shows, under the chosen time, each guest's busy blocks for that day, with a conflict with the proposed time marked; guests who do not share availability show \"no data\"; there is no preview offline. (`SRC-01-112`, `SRC-03-06`) — *source: `DEC-42`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              256,
+              277
+            ],
+            [
+              228,
+              256
+            ]
+          ],
+          "id": "DSC-08-14",
+          "decisions": [
+            "DEC-42"
+          ],
+          "source": "discovery/08-guests-rsvp-meet.md:DSC-08",
+          "sha": "de62c9df42f2cc7e"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "08-guests-rsvp-meet.md"
+    },
+    {
+      "id": "DSC-09",
+      "title": "Reminders and notifications",
+      "kind": "business",
+      "scope": "Desktop notifications for upcoming events: honouring event reminders, turning notifications on and off, no duplicates, opening the event from a notification, and what happens when the app is closed.",
+      "findings": [
+        {
+          "text": "Upcoming events are shown as system notifications.",
+          "raw": "- [DSC-09-01] Upcoming events are shown as system notifications. (`SRC-01-80`, `SRC-01-105`, `SRC-01-127`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              64,
+              106
+            ]
+          ],
+          "id": "DSC-09-01",
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "5c5ca57d46764cf1"
+        },
+        {
+          "text": "Notifications follow the reminders set on the event in Google.",
+          "raw": "- [DSC-09-02] Notifications follow the reminders set on the event in Google. (`SRC-01-81`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              76,
+              90
+            ]
+          ],
+          "id": "DSC-09-02",
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "fa40bf39d4c6459b"
+        },
+        {
+          "text": "Each reminder gives one notification; synchronization never repeats it.",
+          "raw": "- [DSC-09-03] Each reminder gives one notification; synchronization never repeats it. (`SRC-01-83`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              85,
+              99
+            ]
+          ],
+          "id": "DSC-09-03",
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "61048776d8488775"
+        },
+        {
+          "text": "Clicking a notification opens that event in the app.",
+          "raw": "- [DSC-09-04] Clicking a notification opens that event in the app. (`SRC-01-84`)",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              66,
+              80
+            ]
+          ],
+          "id": "DSC-09-04",
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "c92995d7f714f6d6"
+        },
+        {
+          "text": "A notification about a Google Meet meeting has a Join button.",
+          "raw": "- [DSC-09-05] A notification about a Google Meet meeting has a Join button. (`SRC-03-04`) — *source: `DEC-38`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              89,
+              110
+            ],
+            [
+              75,
+              89
+            ]
+          ],
+          "id": "DSC-09-05",
+          "decisions": [
+            "DEC-38"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "ae096245302dc694"
+        },
+        {
+          "text": "Calendars disabled in the settings give no reminders.",
+          "raw": "- [DSC-09-06] Calendars disabled in the settings give no reminders. (`SRC-02-38`) — *source: `DEC-28`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              81,
+              102
+            ],
+            [
+              67,
+              81
+            ]
+          ],
+          "id": "DSC-09-06",
+          "decisions": [
+            "DEC-28"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "3dd8487d4500752c"
+        },
+        {
+          "text": "New events get their calendar's default reminders from Google; those defaults are changed in Google, in the browser.",
+          "raw": "- [DSC-09-07] New events get their calendar's default reminders from Google; those defaults are changed in Google, in the browser. (`SRC-03-07`) — *source: `DEC-43`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              144,
+              165
+            ],
+            [
+              130,
+              144
+            ]
+          ],
+          "id": "DSC-09-07",
+          "decisions": [
+            "DEC-43"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "ca3dc043c7240856"
+        },
+        {
+          "text": "An event's reminders — notifications and e-mails — can be changed in the app; the change is saved to Google, so the phone reminds the same way; an event can go back to its calendar's defaults.",
+          "raw": "- [DSC-09-08] An event's reminders — notifications and e-mails — can be changed in the app; the change is saved to Google, so the phone reminds the same way; an event can go back to its calendar's defaults. (`SRC-01-58`, `SRC-01-81`, `SRC-03-08`) — *source: `DEC-43`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              246,
+              267
+            ],
+            [
+              206,
+              246
+            ]
+          ],
+          "id": "DSC-09-08",
+          "decisions": [
+            "DEC-43"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "cba05e5e2da59bdb"
+        },
+        {
+          "text": "The app shows notifications for notification-type reminders; e-mail reminders are sent by Google itself.",
+          "raw": "- [DSC-09-09] The app shows notifications for notification-type reminders; e-mail reminders are sent by Google itself. (`SRC-03-08`) — *source: `DEC-43`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              132,
+              153
+            ],
+            [
+              118,
+              132
+            ]
+          ],
+          "id": "DSC-09-09",
+          "decisions": [
+            "DEC-43"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "70758e8410f13380"
+        },
+        {
+          "text": "Closing the window hides the app to the system tray, where it keeps synchronizing and reminding; autostart at login can be turned on; the app is fully closed from the tray menu.",
+          "raw": "- [DSC-09-10] Closing the window hides the app to the system tray, where it keeps synchronizing and reminding; autostart at login can be turned on; the app is fully closed from the tray menu. (`SRC-01-85`, `SRC-03-09`) — *source: `DEC-44`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              218,
+              239
+            ],
+            [
+              191,
+              218
+            ]
+          ],
+          "id": "DSC-09-10",
+          "decisions": [
+            "DEC-44"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "d61185c4c2644773"
+        },
+        {
+          "text": "A notification has Dismiss and Snooze (5 or 10 minutes), and Join for Meet meetings; snooze is local and does not go to Google.",
+          "raw": "- [DSC-09-11] A notification has Dismiss and Snooze (5 or 10 minutes), and Join for Meet meetings; snooze is local and does not go to Google. (`SRC-03-10`) — *source: `DEC-45`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              155,
+              176
+            ],
+            [
+              141,
+              155
+            ]
+          ],
+          "id": "DSC-09-11",
+          "decisions": [
+            "DEC-45"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "355fda802b4ea74e"
+        },
+        {
+          "text": "Notifications are switched on and off globally, and a chosen calendar can be muted without hiding it.",
+          "raw": "- [DSC-09-12] Notifications are switched on and off globally, and a chosen calendar can be muted without hiding it. (`SRC-01-82`, `SRC-03-10`) — *source: `DEC-45`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              142,
+              163
+            ],
+            [
+              115,
+              142
+            ]
+          ],
+          "id": "DSC-09-12",
+          "decisions": [
+            "DEC-45"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "ebc9d89a12763bd0"
+        },
+        {
+          "text": "Only one instance of the app runs; launching it again brings back the existing window.",
+          "raw": "- [DSC-09-13] Only one instance of the app runs; launching it again brings back the existing window. (`SRC-03-11`) — *source: `DEC-46`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              114,
+              135
+            ],
+            [
+              100,
+              114
+            ]
+          ],
+          "id": "DSC-09-13",
+          "decisions": [
+            "DEC-46"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "aba3994b46a5b725"
+        },
+        {
+          "text": "`webcal:` links opened in the system go to the app, which opens Google Calendar in the browser to add the subscription.",
+          "raw": "- [DSC-09-14] `webcal:` links opened in the system go to the app, which opens Google Calendar in the browser to add the subscription. (`SRC-03-11`) — *source: `DEC-46`*",
+          "removals": [
+            [
+              0,
+              2
+            ],
+            [
+              2,
+              14
+            ],
+            [
+              147,
+              168
+            ],
+            [
+              133,
+              147
+            ]
+          ],
+          "id": "DSC-09-14",
+          "decisions": [
+            "DEC-46"
+          ],
+          "source": "discovery/09-notifications.md:DSC-09",
+          "sha": "1e8ccacd26dfc176"
+        }
+      ],
+      "withdrawn": 0,
+      "file": "09-notifications.md"
+    }
+  ],
+  "questions": {
+    "assumed": [],
+    "open": []
+  },
+  "counts": {
+    "topics": 9,
+    "findings": 113,
+    "withdrawn": 2,
+    "assumed": 0,
+    "open": 0,
+    "sources": 1
+  },
+  "warnings": [
+    "DSC-01 topic scope: 1 sentence(s) dropped from the lead because they name internal material — Feeds PROJECT.md (actors, glossary, goals, stack and integrations) and",
+    "DSC-02 topic scope: 1 sentence(s) dropped from the lead because they name internal material — Feeds NFR.md and the constitution; never a module."
+  ],
+  "project_refs": [],
+  "decisions": [
+    "DEC-01",
+    "DEC-02",
+    "DEC-05",
+    "DEC-06",
+    "DEC-07",
+    "DEC-09",
+    "DEC-10",
+    "DEC-11",
+    "DEC-12",
+    "DEC-13",
+    "DEC-14",
+    "DEC-16",
+    "DEC-19",
+    "DEC-20",
+    "DEC-21",
+    "DEC-22",
+    "DEC-23",
+    "DEC-24",
+    "DEC-25",
+    "DEC-26",
+    "DEC-27",
+    "DEC-28",
+    "DEC-29",
+    "DEC-31",
+    "DEC-32",
+    "DEC-33",
+    "DEC-34",
+    "DEC-35",
+    "DEC-36",
+    "DEC-37",
+    "DEC-38",
+    "DEC-39",
+    "DEC-40",
+    "DEC-41",
+    "DEC-42",
+    "DEC-43",
+    "DEC-44",
+    "DEC-45",
+    "DEC-46"
+  ],
+  "sources": [
+    {
+      "id": "SRC-01",
+      "title": "Desktop Calendar — Product Requirements Document, version 0.1",
+      "date": "2026-10-22",
+      "kind": "informal",
+      "items": {}
+    }
+  ],
+  "dangling": []
+}
