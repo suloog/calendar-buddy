@@ -2,7 +2,7 @@
 id: MOD-08
 title: Deferred scope
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | done
+status: ready # draft | ready | in-progress | done
 depends_on: [] # other module IDs
 sources: [SRC-01, SRC-02, SRC-03] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
@@ -18,84 +18,31 @@ What came up and is deliberately not planned for delivery: the items parked duri
 
 ## Scope coverage
 
-<Every source item this module answers for → the requirements that deliver it. Nothing from a
-formal source may be silently dropped — a dropped or changed item points at the DEC-nn that
-decided it. When the project has no sources register, list PROJECT.md "In scope" lines instead.>
-
 | Source item | Kind | Delivered by |
 | ----------- | ---- | ------------ |
-| `SRC-01-37` Workweek view. | informal | |
-| `SRC-01-109` CalDAV integration. | informal | |
-| `SRC-01-110` Microsoft 365 / Outlook integration. | informal | |
-| `SRC-01-111` Full offline editing with conflict resolution and queued writes. | informal | |
-| `SRC-01-113` Advanced calendar search. | informal | |
-| `SRC-01-115` Natural-language event creation. | informal | |
-| `SRC-01-116` Task management or AI scheduling assistant. | informal | |
-| `SRC-01-117` Advanced theming and layout customization. | informal | |
-| `SRC-01-118` Calendar sharing and administrative management. | informal | |
-| `SRC-01-119` Production-quality macOS and Windows releases if Linux is prioritized first. | informal | |
-| `SRC-02-27` Out of the MVP for accounts: providers other than Google; the user choosing permission… | informal | |
-| `SRC-02-39` No search in the MVP. | informal | |
-| `SRC-03-01` Responding to an invitation with a comment and proposing another time are not needed —… | informal | |
-
-## Functional requirements
-
-Every requirement in this module is priority **must** unless marked otherwise.
-
-<One requirement = one checkable capability of the system. Business language only — no file
-paths, no class or module names, no endpoints; those belong in Technical notes. If a requirement
-needs an "and…, and…, and…" to describe it, split it.
-
-Provenance: a requirement that answers a source item needs nothing more — the table above is its
-proof. A requirement with no source item carries a trailing marker: `— *source: DEC-02*` for a
-recorded decision, `— *assumption: Q04*` for a default awaiting the client. Never bake an
-unrecorded assumption into a requirement.>
-
-- [MOD-08-F01] …
-- [MOD-08-F02] … — **priority: should**
-- [MOD-08-F03] … — *source: `DEC-02`*
-- [MOD-08-F04] … — **priority: nice-to-have** — *assumption: `Q04`*
-
-## UI/UX requirements
-
-<Visual or interaction requirements, same rules as above.>
-
-- [MOD-08-U01] …
-
-## Non-functional requirements
-
-<Only ones specific to this module. Project-wide ones live in NFR.md as NFR-nn.>
-
-- [MOD-08-NFR-01] …
-
-## Constraints and edge cases
-
-<Condition → expected behaviour: no data from the API, limits, boundary and failure cases.>
-
-- …
-
-## Integrations
-
-<External systems this module depends on, which endpoints, and the direction of data flow.>
-
-- …
-
-## Technical notes
-
-<Implementation assumptions and technical detail, kept out of the requirement text so the
-requirements stay readable by the client.>
-
-- …
+| `SRC-01-37` Workweek view. | informal | not delivered — workweek view (`DEC-27`) |
+| `SRC-01-109` CalDAV integration. | informal | not delivered — CalDAV, a later provider (PRD §13) |
+| `SRC-01-110` Microsoft 365 / Outlook integration. | informal | not delivered — Microsoft 365 / Outlook, a later provider (PRD §13) |
+| `SRC-01-111` Full offline editing with conflict resolution and queued writes. | informal | not delivered — offline editing with a change queue (`DEC-25`) |
+| `SRC-01-113` Advanced calendar search. | informal | not delivered — event search (`DEC-30`) |
+| `SRC-01-115` Natural-language event creation. | informal | not delivered — natural-language creation (PRD §13) |
+| `SRC-01-116` Task management or AI scheduling assistant. | informal | not delivered — tasks, AI scheduling assistant (PRD §13) |
+| `SRC-01-117` Advanced theming and layout customization. | informal | not delivered — advanced theming and layout (PRD §13, `DEC-57`) |
+| `SRC-01-118` Calendar sharing and administrative management. | informal | not delivered — calendar management and sharing (`DEC-21`) |
+| `SRC-01-119` Production-quality macOS and Windows releases if Linux is prioritized first. | informal | not delivered — macOS and Windows releases (`DEC-02`) |
+| `SRC-02-27` Out of the MVP for accounts: providers other than Google; the user choosing permission… | informal | not delivered — non-Google sign-in, scopes chosen by hand |
+| `SRC-02-39` No search in the MVP. | informal | not delivered — event search (`DEC-30`) |
+| `SRC-03-01` Responding to an invitation with a comment and proposing another time are not needed —… | informal | not delivered — RSVP with a comment, proposing another time |
 
 ## Out of scope / what not to worry about
 
-<Explicit exclusions that pre-empt the team's questions: what deliberately does NOT belong here
-and why — another module, handled globally by an NFR, computed upstream, dropped by a DEC.>
+This module holds no requirements and nothing in it is planned for delivery. Each item above stays recorded here so it is not lost; it enters delivery only through a new `DEC-nn` that moves it into a delivery module (or a new module appended after `MOD-08`), followed by `/og:requirements` for that module.
 
-- …
+Also deferred, recorded in the delivery modules' *Out of scope* sections rather than here because no source item asks for them on its own:
 
-## Acceptance criteria
-
-<Module-level and verifiable. Each maps down to story-level criteria.>
-
-- [ ] …
+- Adding Google Drive attachments, ICS import and export — `DEC-37` (`MOD-05`).
+- A full recurrence-rule editor, creating working-location events — `DEC-36`, `DEC-34` (`MOD-05`).
+- Advanced scheduling with guests (multi-day grid, free-slot suggestions) — `DEC-42` (`MOD-06`).
+- A second time zone, choosing the display time zone by hand — `DEC-29` (`MOD-03`).
+- Interface translations — `DEC-31` (`MOD-04`).
+- `mailto:` links, update checking and automatic updates — `DEC-46` (`MOD-07`).
