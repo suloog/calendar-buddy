@@ -63,10 +63,11 @@ fn shown_title(event: &Event) -> Option<String> {
     (!event.busy_only).then(|| event.title.clone())
 }
 
-/// Whether an event can be dragged: the user may change it (`MOD-05-F17`), Google has confirmed
-/// its last change, and it is not an occurrence of a series, whose scope `US-05-07` asks for.
+/// Whether an event can be dragged: the user may change it (`MOD-05-F17`) and Google has
+/// confirmed its last change. A series' occurrence can, the scope asked once dropped
+/// (`MOD-05-F20`).
 fn movable(event: &Event) -> bool {
-    event.protected().is_none() && !event.saving && !event.recurring
+    event.protected().is_none() && !event.saving
 }
 
 /// The hour grid over `dates`: one day, three days or a week.
@@ -235,8 +236,9 @@ mod tests {
                 .unwrap()
                 .1
         };
-        // A series' occurrence, an event being saved and one of a read-only calendar stay put.
-        assert!(!movable("Standup"));
+        // An event being saved and one of a read-only calendar stay put; a series' occurrence
+        // moves.
+        assert!(movable("Standup"));
         assert!(!movable("Offsite"));
         assert!(!movable("Busy"));
         assert!(movable("Conference day"));

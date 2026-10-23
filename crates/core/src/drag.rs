@@ -131,13 +131,13 @@ pub fn edit(event: &Event, calendar: Calendar, timing: Timing) -> Edit {
     }
 }
 
-fn local(at: DateTime<Utc>, zone: Tz) -> NaiveDateTime {
+pub(crate) fn local(at: DateTime<Utc>, zone: Tz) -> NaiveDateTime {
     at.with_timezone(&zone).naive_local()
 }
 
 /// The instant of a time on the clock of `zone`, to the second; one the zone skips moves to the
 /// first that exists after it.
-fn at(local: NaiveDateTime, zone: Tz) -> DateTime<Utc> {
+pub(crate) fn at(local: NaiveDateTime, zone: Tz) -> DateTime<Utc> {
     let minute = local.time().num_seconds_from_midnight() / 60;
     wall(local.date(), minute, zone) + Duration::seconds(local.second().into())
 }

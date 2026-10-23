@@ -84,6 +84,8 @@ pub struct Patch {
     pub timing: Option<Timing>,
     pub show: Option<Show>,
     pub visibility: Option<Visibility>,
+    /// A series' rule lines, replaced whole (`MOD-05-F20`).
+    pub recurrence: Option<Vec<String>>,
 }
 
 impl Patch {
@@ -404,6 +406,7 @@ impl Editor {
             timing: timing.and_then(|timing| changed(event.timing, timing)),
             show: changed(event.about.show, about.show),
             visibility: changed(event.about.visibility, about.visibility),
+            recurrence: None,
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {

@@ -25,13 +25,15 @@ use std::time::Instant;
 use calendar_core::accounts::Check;
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
-use calendar_core::editor::Edit;
+use calendar_core::editor::{Edit, Patch};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
+use calendar_core::series::{self, Plan, Scope, Split};
 use calendar_core::status::{Problem, Status};
 use calendar_core::sync::{
-    Provider, SyncError, Window, fetch_events, shown_events, sync_calendar_list, sync_calendars,
+    Provider, SyncError, SyncedEvent, Window, fetch_events, shown_events, sync_calendar_list,
+    sync_calendars,
 };
 use calendar_google::{Endpoints, Session};
 use chrono::{DateTime, Utc};
@@ -66,6 +68,12 @@ enum Job {
     /// An event deleted just now to bring back to the calendar, by the number the views know it
     /// by.
     Restore(u64, Calendar, Event),
+    /// A change to an occurrence of a series and the following or all events, by the number the
+    /// views know it by (`MOD-05-F20`).
+    ChangeSeries(u64, Box<Edit>, Scope),
+    /// An occurrence of a series to delete from the calendar with the following or all events,
+    /// by the number the views know it by (`MOD-05-F21`).
+    DeleteSeries(u64, Calendar, Event, Scope),
 }
 
 enum Update {
@@ -336,6 +344,20 @@ impl Synchronization {
         let _ = self.jobs.send(Job::Restore(local, calendar, event));
     }
 
+    /// Changes the occurrence of a series and the following or all events at Google, by the
+    /// number the views know it by, then synchronizes its calendar.
+    pub fn change_series(&self, local: u64, edit: Box<Edit>, scope: Scope) {
+        let _ = self.jobs.send(Job::ChangeSeries(local, edit, scope));
+    }
+
+    /// Deletes the occurrence of a series and the following or all events at Google, by the
+    /// number the views know it by, then synchronizes its calendar.
+    pub fn delete_series(&self, local: u64, calendar: Calendar, event: Event, scope: Scope) {
+        let _ = self
+            .jobs
+            .send(Job::DeleteSeries(local, calendar, event, scope));
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
@@ -520,6 +542,12 @@ impl Engine {
             Some(Job::Restore(local, calendar, event)) => {
                 return self.restore(local, calendar, &event, now);
             }
+            Some(Job::ChangeSeries(local, edit, scope)) => {
+                return self.change_series(local, &edit, scope, now);
+            }
+            Some(Job::DeleteSeries(local, calendar, event, scope)) => {
+                return self.delete_series(local, calendar, &event, scope, now);
+            }
         };
         self.round(&calendars, now)
     }
@@ -703,6 +731,123 @@ impl Engine {
         updates
     }
 
+    /// Changes the occurrence of a series and the following or all events at Google, as its
+    /// cached series says (`calendar_core::series`), then synchronizes its calendars.
+    fn change_series(
+        &mut self,
+        local: u64,
+        edit: &Edit,
+        scope: Scope,
+        now: Instant,
+    ) -> Vec<Update> {
+        let plan = self
+            .series(&edit.calendar, &edit.event)
+            .and_then(|(master, exceptions)| series::change(edit, scope, &master, &exceptions));
+        match plan {
+            Some(Plan::Change(edit)) => self.change(local, &edit, now),
+            Some(Plan::Split(split)) => {
+                let mut updates = vec![match self.split(&split) {
+                    Ok(etag) => Update::Changed(local, etag),
+                    Err(why) => Update::NotChanged(local, why),
+                }];
+                updates.extend(self.synchronize(&[split.calendar], now));
+                updates
+            }
+            _ => vec![Update::NotChanged(local, NO_SERIES.to_string())],
+        }
+    }
+
+    /// Deletes the occurrence of a series and the following or all events at Google, as its
+    /// cached series says, then synchronizes its calendar.
+    fn delete_series(
+        &mut self,
+        local: u64,
+        calendar: Calendar,
+        event: &Event,
+        scope: Scope,
+        now: Instant,
+    ) -> Vec<Update> {
+        let plan = self
+            .series(&calendar, event)
+            .and_then(|(master, exceptions)| {
+                series::delete(&calendar, event, scope, &master, &exceptions)
+            });
+        match plan {
+            Some(Plan::Delete(deleted)) => {
+                let (calendar, event) = *deleted;
+                self.delete(local, calendar, &event, now)
+            }
+            Some(Plan::Split(split)) => {
+                let mut updates = vec![match self.split(&split) {
+                    Ok(_) => Update::Deleted(local),
+                    Err(why) => Update::NotDeleted(local, why),
+                }];
+                updates.extend(self.synchronize(&[split.calendar], now));
+                updates
+            }
+            _ => vec![Update::NotDeleted(local, NO_SERIES.to_string())],
+        }
+    }
+
+    /// The cached master of the series the occurrence `event` of the calendar belongs to, and its
+    /// occurrences changed or deleted on their own.
+    fn series(
+        &self,
+        calendar: &Calendar,
+        event: &Event,
+    ) -> Option<(SyncedEvent, Vec<SyncedEvent>)> {
+        let (id, _) = event.series.as_ref()?;
+        let events = (self.cache.calendars().ok()?.into_iter())
+            .find(|cached| {
+                cached.calendar.account_id == calendar.account_id
+                    && cached.calendar.id == calendar.id
+            })?
+            .events;
+        let (exceptions, others): (Vec<_>, Vec<_>) = (events.into_iter())
+            .partition(|event| event.instance_of.as_ref().is_some_and(|(of, _)| of == id));
+        let master = others.into_iter().find(|event| event.id == *id)?;
+        Some((master, exceptions))
+    }
+
+    /// Ends the series before the occurrence at Google, against its version, then starts the new
+    /// series from the occurrence as a copy of it, if any, and deletes the occurrences from there
+    /// on changed on their own; the series' new version, or why not.
+    fn split(&self, split: &Split) -> Result<String, String> {
+        let Some(session) = self.sessions.get(&split.calendar.account_id) else {
+            return Err(NOT_SIGNED_IN.to_string());
+        };
+        let ended = Patch {
+            recurrence: Some(split.recurrence.clone()),
+            ..Patch::default()
+        };
+        let etag = session
+            .update(&split.calendar, &split.id, &split.etag, &ended)
+            .map_err(refusal)?;
+        if let Some(new) = &split.new {
+            session
+                .copy(&split.calendar, &split.id, new)
+                .map_err(|error| {
+                    format!(
+                        "the series now ends before this event, but the following events could \
+                         not be made a series of their own ({})",
+                        error.0
+                    )
+                })?;
+        }
+        // The series' end won against its version; Google may have changed these with it.
+        let failed = (split.changed.iter())
+            .filter_map(|(id, _)| session.delete(&split.calendar, id, "").err())
+            .last();
+        if let Some(error) = failed {
+            return Err(format!(
+                "the series now ends before this event, but an event of it changed on its own \
+                 could not be deleted ({})",
+                error.0
+            ));
+        }
+        Ok(etag)
+    }
+
     /// Synchronizes the calendars after a change to one of their events; an event on browsed
     /// days outside the cache comes back from there.
     fn synchronize(&mut self, calendars: &[Calendar], now: Instant) -> Vec<Update> {
@@ -864,6 +1009,11 @@ impl Engine {
     }
 }
 
+/// Why a change to a series was not sent: its series is not in the cache, as for an invitation to
+/// one occurrence of someone else's series, or not synchronized yet.
+const NO_SERIES: &str =
+    "its series is not in the calendar (yet); only this event can be changed or deleted";
+
 /// Why a change was not sent: the event's account has not signed in in this run yet.
 const NOT_SIGNED_IN: &str = "its account is not signed in yet; try again in a moment";
 
@@ -948,6 +1098,7 @@ mod tests {
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
+    use calendar_core::series::{Question, Scope};
     use calendar_core::settings::Settings;
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
@@ -3458,6 +3609,349 @@ mod tests {
         assert!(saving.shown(&shown)[0].protected().is_some());
         let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
         assert_eq!(kept["start"]["dateTime"], "2026-11-12T10:00:00+01:00");
+    }
+
+    /// `TC-05-08`'s calendar: "Personal", the default, with "Standup" weekly on Monday
+    /// 09:00–09:15, 10 occurrences from 16 November.
+    fn standup_series(name: &str) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "standup",
+                "status": "confirmed",
+                "summary": "Standup",
+                "start": {"dateTime": "2026-11-16T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-16T09:15:00+01:00", "timeZone": "Europe/Warsaw"},
+                "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10"],
+            }),
+        );
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    /// The local starts of the occurrences of "Standup" among the events, in order.
+    fn standups(events: &[Event]) -> Vec<String> {
+        let mut starts: Vec<DateTime<Utc>> = events
+            .iter()
+            .filter(|e| e.title == "Standup")
+            .map(|e| match e.timing {
+                Timing::Timed { start, .. } => start,
+                Timing::AllDay { .. } => panic!("a timed occurrence"),
+            })
+            .collect();
+        starts.sort();
+        starts.into_iter().map(local).collect()
+    }
+
+    /// The occurrence of "Standup" starting on the day, as the engine shows it now.
+    fn standup_on(engine: &Engine, date: chrono::NaiveDate) -> Event {
+        now_shown(engine)
+            .into_iter()
+            .find(|e| {
+                e.title == "Standup"
+                    && matches!(e.timing, Timing::Timed { start, .. }
+                        if start.with_timezone(&Warsaw).date_naive() == date)
+            })
+            .unwrap()
+    }
+
+    /// The occurrences of "Standup" as Google keeps them, fetched afresh from the fake Google.
+    fn standups_in_google(google: &Google, engine: &Engine) -> Vec<String> {
+        let session = (google.sign_in())(ACCOUNT_ID).unwrap();
+        let calendars = engine.cache.calendar_list().unwrap();
+        let span = Window {
+            from: d(2026, 11, 1),
+            until: d(2027, 2, 1),
+            zone: Warsaw,
+        };
+        standups(&calendar_core::sync::fetch_events(
+            session.as_ref(),
+            &calendars,
+            span,
+        ))
+    }
+
+    #[test]
+    fn tc_05_08_this_and_following_from_the_fifth_of_ten_leaves_one_to_four_and_moves_five_to_ten()
+    {
+        let (google, mut engine, start) = standup_series("tc-05-08");
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+
+        // 1. The 5th occurrence (14 December) opened, its start changed to 11:00: the app asks
+        //    for the scope before saving, and "this and following events" is chosen.
+        let fifth = standup_on(&engine, d(2026, 12, 14));
+        let mut editor = Editor::of(&fifth, calendar, &regional);
+        editor.start_time = "11:00".to_string();
+        editor.follow_start(&regional);
+        let Err(question) = Question::changing(*edit(&editor, &regional)) else {
+            panic!("the scope is asked first");
+        };
+        assert_eq!(
+            question.scopes(),
+            [
+                (Scope::This, None),
+                (Scope::Following, None),
+                (Scope::All, None)
+            ]
+        );
+        let Question::Change(change) = question else {
+            panic!("a change");
+        };
+        let mut saving = Saving::default();
+        let local = saving.change_series(&change.event, change.changed());
+        let updates = engine.handle(
+            Some(Job::ChangeSeries(local, change, Scope::Following)),
+            start,
+        );
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(1, _)]
+        ));
+
+        // 2. Occurrences 1–4 are at 09:00 and 5–10 at 11:00, in the app and in the fake Google.
+        let at_nine = ["2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07"];
+        let at_eleven = [
+            "2026-12-14",
+            "2026-12-21",
+            "2026-12-28",
+            "2027-01-04",
+            "2027-01-11",
+            "2027-01-18",
+        ];
+        let expected: Vec<String> = (at_nine.iter().map(|day| format!("{day} 09:00")))
+            .chain(at_eleven.iter().map(|day| format!("{day} 11:00")))
+            .collect();
+        let events = shown(&updates).unwrap();
+        saving.changed(local, "");
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert_eq!(standups(&events), expected);
+        assert_eq!(standups_in_google(&google, &engine), expected);
+    }
+
+    #[test]
+    fn all_events_move_the_series_times_and_this_event_only_the_occurrence_also_in_google() {
+        let (google, mut engine, start) = standup_series("series-all");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let fifth = standup_on(&engine, d(2026, 12, 14));
+        let to = |(h, m): (u32, u32)| {
+            let at = |m| {
+                Warsaw
+                    .with_ymd_and_hms(2026, 12, 14, h, m, 0)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            };
+            Timing::Timed {
+                start: at(m),
+                end: at(m + 15),
+                zone: Warsaw,
+            }
+        };
+
+        let all = drag::edit(&fifth, calendar.clone(), to((10, 0)));
+        let updates = engine.handle(Some(Job::ChangeSeries(1, Box::new(all), Scope::All)), start);
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(1, _)]
+        ));
+        let moved = standup_on(&engine, d(2026, 12, 14));
+        let this = drag::edit(&moved, calendar, to((12, 0)));
+        let updates = engine.handle(Some(Job::Change(2, Box::new(this))), start);
+
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(2, _)]
+        ));
+        let mut expected: Vec<String> = (0..10)
+            .map(|week| {
+                let day = d(2026, 11, 16) + chrono::Duration::weeks(week);
+                let hour = if week == 4 { 12 } else { 10 };
+                format!("{day} {hour}:00")
+            })
+            .collect();
+        expected.sort();
+        assert_eq!(standups(&now_shown(&engine)), expected);
+        assert_eq!(standups_in_google(&google, &engine), expected);
+    }
+
+    #[test]
+    fn deleting_this_following_or_all_events_matches_in_google() {
+        let (google, mut engine, start) = standup_series("series-delete");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let deleting = |engine: &Engine, date| {
+            let Err(Question::Delete(deleted)) =
+                Question::deleting(calendar.clone(), standup_on(engine, date))
+            else {
+                panic!("the scope is asked first");
+            };
+            let (calendar, event) = *deleted;
+            (calendar, event)
+        };
+
+        // This event: the 2nd occurrence alone, without a version of its own.
+        let (calendar, second) = deleting(&engine, d(2026, 11, 23));
+        let updates = engine.handle(Some(Job::Delete(1, calendar, second)), start);
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(1)]);
+        // This and following: from the 8th on.
+        let (calendar, eighth) = deleting(&engine, d(2027, 1, 4));
+        let updates = engine.handle(
+            Some(Job::DeleteSeries(2, calendar, eighth, Scope::Following)),
+            start,
+        );
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(2)]);
+        let left = [
+            "2026-11-16 09:00",
+            "2026-11-30 09:00",
+            "2026-12-07 09:00",
+            "2026-12-14 09:00",
+            "2026-12-21 09:00",
+            "2026-12-28 09:00",
+        ];
+        assert_eq!(standups(&now_shown(&engine)), left);
+        assert_eq!(standups_in_google(&google, &engine), left);
+
+        // All events: the whole series.
+        let (calendar, third) = deleting(&engine, d(2026, 11, 30));
+        let updates = engine.handle(
+            Some(Job::DeleteSeries(3, calendar, third, Scope::All)),
+            start,
+        );
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(3)]);
+        assert!(standups(&now_shown(&engine)).is_empty());
+        assert!(standups_in_google(&google, &engine).is_empty());
+        assert_eq!(
+            google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap()["status"],
+            "cancelled"
+        );
+    }
+
+    /// The 5th occurrence of "Standup" (14 December) moved to 15:00 on its own, in the app and
+    /// in Google.
+    fn fifth_moved_alone(google: &Google, engine: &mut Engine, start: Instant) -> Event {
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let fifth = standup_on(engine, d(2026, 12, 14));
+        let at = |h| Warsaw.with_ymd_and_hms(2026, 12, 14, h, 0, 0).unwrap();
+        let timing = Timing::Timed {
+            start: at(15).with_timezone(&Utc),
+            end: (at(15) + chrono::Duration::minutes(15)).with_timezone(&Utc),
+            zone: Warsaw,
+        };
+        let alone = drag::edit(&fifth, calendar, timing);
+        let updates = engine.handle(Some(Job::Change(1, Box::new(alone))), start);
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(1, _)]
+        ));
+        assert!(standups_in_google(google, engine).contains(&"2026-12-14 15:00".to_string()));
+        standup_on(engine, d(2026, 12, 14))
+    }
+
+    #[test]
+    fn this_and_following_on_an_occurrence_changed_on_its_own_takes_it_along_also_in_google() {
+        let (google, mut engine, start) = standup_series("series-exception-change");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let moved = fifth_moved_alone(&google, &mut engine, start);
+        let at = |h| Warsaw.with_ymd_and_hms(2026, 12, 14, h, 0, 0).unwrap();
+        let timing = Timing::Timed {
+            start: at(11).with_timezone(&Utc),
+            end: (at(11) + chrono::Duration::minutes(15)).with_timezone(&Utc),
+            zone: Warsaw,
+        };
+
+        let following = drag::edit(&moved, calendar, timing);
+        let updates = engine.handle(
+            Some(Job::ChangeSeries(2, Box::new(following), Scope::Following)),
+            start,
+        );
+
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(2, _)]
+        ));
+        let on_the_14th = |starts: Vec<String>| -> Vec<String> {
+            starts
+                .into_iter()
+                .filter(|start| start.starts_with("2026-12-14"))
+                .collect()
+        };
+        assert_eq!(
+            on_the_14th(standups(&now_shown(&engine))),
+            ["2026-12-14 11:00"]
+        );
+        assert_eq!(
+            on_the_14th(standups_in_google(&google, &engine)),
+            ["2026-12-14 11:00"]
+        );
+    }
+
+    #[test]
+    fn deleting_this_and_following_on_an_occurrence_changed_on_its_own_deletes_it_too() {
+        let (google, mut engine, start) = standup_series("series-exception-delete");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let moved = fifth_moved_alone(&google, &mut engine, start);
+
+        let updates = engine.handle(
+            Some(Job::DeleteSeries(2, calendar, moved, Scope::Following)),
+            start,
+        );
+
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(2)]);
+        let left = [
+            "2026-11-16 09:00",
+            "2026-11-23 09:00",
+            "2026-11-30 09:00",
+            "2026-12-07 09:00",
+        ];
+        assert_eq!(standups(&now_shown(&engine)), left);
+        assert_eq!(standups_in_google(&google, &engine), left);
+    }
+
+    /// `MOD-05-F29`: a series of every second Tuesday of the month, made in Google.
+    #[test]
+    fn a_series_with_a_rule_the_presets_cannot_express_keeps_it_when_its_title_changes() {
+        let google = Google::start("series-complex");
+        personal(&google);
+        let rule = "RRULE:FREQ=MONTHLY;BYDAY=2TU";
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "board",
+                "status": "confirmed",
+                "summary": "Board",
+                "start": {"dateTime": "2026-11-10T18:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-10T19:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "recurrence": [rule],
+            }),
+        );
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let regional = polish();
+        let second = now_shown(&engine)
+            .into_iter()
+            .find(|e| e.id == "board_20261208T170000Z")
+            .unwrap();
+        let mut editor = Editor::of(&second, calendar, &regional);
+        editor.title = "Board meeting".to_string();
+
+        let updates = engine.handle(
+            Some(Job::ChangeSeries(1, edit(&editor, &regional), Scope::All)),
+            start,
+        );
+
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "board").unwrap();
+        assert_eq!(kept["summary"], "Board meeting");
+        assert_eq!(kept["recurrence"], json!([rule]));
     }
 
     /// What Google answered about changed events, in order.

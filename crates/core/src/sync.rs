@@ -157,9 +157,14 @@ pub trait Provider {
     /// Creates the event in the calendar and returns its ID there (`MOD-05-F16`); it reaches the
     /// cache through synchronization.
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError>;
+    /// Creates a copy of the calendar's event `id` with everything the provider keeps of it, its
+    /// guests and reminders included, but the fields of `new` in place of its own, and returns
+    /// the copy's ID: the new series of a split (`MOD-05-F20`).
+    fn copy(&self, calendar: &Calendar, id: &str, new: &NewEvent) -> Result<String, SyncError>;
     /// Changes what the patch holds of the calendar's event, unless the event changed at the
     /// provider since the version `etag` (`SyncError::changed_elsewhere`); returns the event's
-    /// new version (`MOD-05-F11`).
+    /// new version (`MOD-05-F11`). An empty `etag`, of an occurrence of a series not changed
+    /// yet, changes it whatever its version (`MOD-05-F20`).
     fn update(
         &self,
         calendar: &Calendar,
@@ -176,7 +181,7 @@ pub trait Provider {
         destination: &Calendar,
     ) -> Result<String, SyncError>;
     /// Deletes the calendar's event, unless it changed at the provider since the version `etag`
-    /// (`SyncError::changed_elsewhere`) (`MOD-05-F12`).
+    /// (`SyncError::changed_elsewhere`) (`MOD-05-F12`); an empty `etag` as `update` says.
     fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError>;
     /// Brings back the calendar's event deleted just now, whole, and returns its new version
     /// (`MOD-05-F27`).
@@ -414,6 +419,10 @@ mod tests {
         }
 
         fn create(&self, _: &Calendar, _: &NewEvent) -> Result<String, SyncError> {
+            unreachable!("synchronization creates nothing")
+        }
+
+        fn copy(&self, _: &Calendar, _: &str, _: &NewEvent) -> Result<String, SyncError> {
             unreachable!("synchronization creates nothing")
         }
 

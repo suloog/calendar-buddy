@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
+use crate::sync::Start;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
@@ -40,6 +42,9 @@ pub struct Event {
     pub saving: bool,
     /// An occurrence of a series, changed or not.
     pub recurring: bool,
+    /// For an occurrence of a series, changed or not: the series' ID and where the occurrence
+    /// starts by the series' rule (`MOD-05-F20`).
+    pub series: Option<(String, Start)>,
     pub about: About,
     /// The version of the event at the provider, which a change is sent against; empty when not
     /// known yet.

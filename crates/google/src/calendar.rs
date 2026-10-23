@@ -7,6 +7,8 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
@@ -28,6 +30,17 @@ const EVENTS_PER_PAGE: &str = "2500";
 
 /// How long an access token is used before a new one is asked for; Google's last an hour.
 const ACCESS_FOR: Duration = Duration::from_secs(45 * 60);
+
+/// The page where Google Calendar in the browser edits the event of the calendar, as the account
+/// signed in there with `email` (`MOD-05-F29`): Google names an event there by its ID and its
+/// calendar's, in base64url.
+pub fn edit_page(calendar_id: &str, event_id: &str, email: &str) -> String {
+    let eid = URL_SAFE_NO_PAD.encode(format!("{event_id} {calendar_id}"));
+    let mut page = Url::parse("https://calendar.google.com/calendar/r/eventedit/").unwrap();
+    page.path_segments_mut().unwrap().pop_if_empty().push(&eid);
+    page.query_pairs_mut().append_pair("authuser", email);
+    page.to_string()
+}
 
 /// Synchronizes one connected account: signs in with its refresh token from the secret store,
 /// then fetches every calendar and its events within the window into the cache, or only what
@@ -233,11 +246,14 @@ impl Session {
                 }
                 .send(change.to_string())
             }
-            Request::Delete(etag) => agent
-                .delete(url.as_str())
-                .header("Authorization", bearer)
-                .header("If-Match", etag)
-                .call(),
+            Request::Delete(etag) => {
+                let request = agent.delete(url.as_str()).header("Authorization", bearer);
+                match etag {
+                    Some(etag) => request.header("If-Match", etag),
+                    None => request,
+                }
+                .call()
+            }
         };
         let mut response = response
             .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
@@ -276,8 +292,41 @@ enum Request<'a> {
     Post(Option<&'a Value>),
     /// The change, made to the version (ETag) if one is given.
     Patch(&'a Value, Option<&'a str>),
-    /// Deleting, the version (ETag).
-    Delete(&'a str),
+    /// Deleting the version (ETag) if one is given.
+    Delete(Option<&'a str>),
+}
+
+/// The version a change is sent against: none for an occurrence of a series not changed yet,
+/// which has no version of its own.
+fn version(etag: &str) -> Option<&str> {
+    (!etag.is_empty()).then_some(etag)
+}
+
+/// The fields of a new event, as Google takes them.
+fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
+    let (start, end) = times(&event.timing, false);
+    let mut fields = json!({
+        "summary": event.title,
+        "description": event.about.description,
+        "location": event.about.location,
+        "transparency": transparency(event.about.show),
+        "visibility": visibility(event.about.visibility),
+        "start": start,
+        "end": end,
+    });
+    if !event.recurrence.is_empty() {
+        fields["recurrence"] = json!(event.recurrence);
+    }
+    let Value::Object(fields) = fields else {
+        unreachable!("an object");
+    };
+    fields
+}
+
+/// A new event's ID, as Google answers its creation.
+#[derive(Deserialize)]
+struct Created {
+    id: String,
 }
 
 /// An event's version, as Google answers a change.
@@ -390,25 +439,39 @@ impl Provider for Session {
     }
 
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
-        #[derive(Deserialize)]
-        struct Created {
-            id: String,
-        }
-        let (start, end) = times(&event.timing, false);
-        let mut change = json!({
-            "summary": event.title,
-            "description": event.about.description,
-            "location": event.about.location,
-            "transparency": transparency(event.about.show),
-            "visibility": visibility(event.about.visibility),
-            "start": start,
-            "end": end,
-        });
-        if !event.recurrence.is_empty() {
-            change["recurrence"] = json!(event.recurrence);
-        }
         let url = self.url(&["calendars", &calendar.id, "events"]);
+        let change = Value::Object(fields(event));
         Ok(self.post::<Created>(url, Some(&change))?.id)
+    }
+
+    /// The event as Google keeps it, but what Google gives an event of its own and what made it
+    /// a series or an occurrence of one; with its conference and attachments, which Google takes
+    /// only when asked to.
+    fn copy(&self, calendar: &Calendar, id: &str, new: &NewEvent) -> Result<String, SyncError> {
+        let url = self.url(&["calendars", &calendar.id, "events", id]);
+        let Some(Value::Object(mut event)) = self.get::<Value>(url)? else {
+            return Err(SyncError("Google refused (gone)".into()));
+        };
+        for own in [
+            "id",
+            "iCalUID",
+            "etag",
+            "htmlLink",
+            "created",
+            "updated",
+            "sequence",
+            "recurrence",
+            "recurringEventId",
+            "originalStartTime",
+        ] {
+            event.remove(own);
+        }
+        event.extend(fields(new));
+        let mut url = self.url(&["calendars", &calendar.id, "events"]);
+        url.query_pairs_mut()
+            .append_pair("conferenceDataVersion", "1")
+            .append_pair("supportsAttachments", "true");
+        Ok(self.post::<Created>(url, Some(&Value::Object(event)))?.id)
     }
 
     fn update(
@@ -434,9 +497,10 @@ impl Provider for Session {
             set("start", Some(start));
             set("end", Some(end));
         }
+        set("recurrence", patch.recurrence.clone().map(Value::from));
         let url = self.url(&["calendars", &calendar.id, "events", id]);
         Ok(self
-            .patch::<Version>(url, &Value::Object(change), Some(etag))?
+            .patch::<Version>(url, &Value::Object(change), version(etag))?
             .etag)
     }
 
@@ -455,7 +519,8 @@ impl Provider for Session {
     /// Google answers a deletion of an event already deleted with 410 Gone: it is deleted.
     fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError> {
         let url = self.url(&["calendars", &calendar.id, "events", id]);
-        self.send::<()>(url, Request::Delete(etag)).map(|_| ())
+        self.send::<()>(url, Request::Delete(version(etag)))
+            .map(|_| ())
     }
 
     /// Google keeps a deleted event, cancelled, for a while: confirming it again brings it back

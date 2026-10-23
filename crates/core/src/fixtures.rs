@@ -51,6 +51,7 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
         organizer_only: false,
         saving: false,
         recurring: false,
+        series: None,
         about: About::default(),
         etag: "\"1\"".to_string(),
     }
@@ -72,6 +73,7 @@ pub fn all_day(id: &str, start: NaiveDate, days: i64) -> Event {
         organizer_only: false,
         saving: false,
         recurring: false,
+        series: None,
         about: About::default(),
         etag: "\"1\"".to_string(),
     }
