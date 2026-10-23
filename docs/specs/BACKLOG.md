@@ -79,7 +79,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-03-04` | As a User, I can see my upcoming events as a list, so that I know what is next without reading a grid | F05, F14, F22 | must | done | `US-03-01` | — |
 | `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15 | must | done | `US-03-01` | — |
 | `US-03-06` | As a User, I can see my calendars grouped by account in a side panel and hide any of them quickly, so that I see only what matters now | F10, F11, F12, U03, MOD-02-U01 | must | review | `US-03-01`, `US-02-01` | — |
-| `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | ready | `US-03-06` | — |
+| `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | review | `US-03-06` | — |
 | `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
 

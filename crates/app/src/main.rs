@@ -87,9 +87,10 @@ enum Dialog {
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
 
-/// The view's model, of the events of calendars not hidden in the side panel (`MOD-03-F12`), each
-/// in its calendar's local colour where it has one; with the places in `events` of the events
-/// the model's indices point to.
+/// The view's model, of the events of calendars neither hidden in the side panel
+/// (`MOD-03-F12`) nor disabled in the settings (`MOD-03-F13`), each in its calendar's local
+/// colour where it has one; with the places in `events` of the events the model's indices point
+/// to.
 fn build(
     events: &[Event],
     settings: &Settings,
@@ -98,7 +99,7 @@ fn build(
     zone: Tz,
     now: DateTime<Utc>,
 ) -> (Built, Vec<usize>) {
-    let places = side_panel::shown(events, &settings.hidden);
+    let places = side_panel::shown(events, settings);
     let events: &Vec<Event> = &colors::apply(events, &settings.colors)
         .into_iter()
         .enumerate()
@@ -355,6 +356,7 @@ impl CalendarApp {
         let mut go_to = None;
         let mut again = None;
         let mut remove = None;
+        let mut toggled = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -450,6 +452,14 @@ impl CalendarApp {
                         ui.add_space(8.0);
                         self.connect.show(ui, "Add account");
                     }
+                    ui.add_space(8.0);
+                    ui.heading("Calendars");
+                    let calendars = side_panel::in_settings(
+                        self.accounts.list(),
+                        self.sync.calendars(),
+                        &self.settings,
+                    );
+                    toggled = calendar_list::in_settings(ui, &calendars);
                 }
             });
         if let Some(email) = again {
@@ -457,6 +467,13 @@ impl CalendarApp {
         }
         if let Some(account) = remove {
             self.removal.ask(account);
+        }
+        if let Some(calendar) = toggled {
+            // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
+            side_panel::toggle(&mut self.settings.disabled, &calendar);
+            self.save_settings();
+            self.sync.set_disabled(self.settings.disabled.clone());
+            self.rebuild();
         }
         if let Some(date) = go_to {
             self.navigation.go_to(date);
