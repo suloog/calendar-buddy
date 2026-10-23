@@ -1,7 +1,7 @@
 ---
 id: US-03-06 # US-NN-MM — NN is the parent module, MM a counter inside it; never reused
 module: MOD-03
-covers: [MOD-03-F10, MOD-03-F11, MOD-03-F12, MOD-03-U03] # every requirement this story delivers
+covers: [MOD-03-F10, MOD-03-F11, MOD-03-F12, MOD-03-U03, MOD-02-U01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
@@ -13,7 +13,7 @@ depends_on: [US-03-01, US-02-01] # story IDs that must be done first
 |  |  |
 | --- | --- |
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
-| **Covers** | `MOD-03-F10`, `F11`, `F12`, `U03` |
+| **Covers** | `MOD-03-F10`, `F11`, `F12`, `U03`, `MOD-02-U01` (the calendars' half, `DEC-89`) |
 | **Priority** | must |
 | **Status** | ready |
 | **Depends on** | blocked by `US-03-01`, blocked by `US-02-01` |
@@ -30,6 +30,7 @@ The side panel with each account and its calendars, the quick toggle that hides 
 - [ ] A quick toggle next to a calendar hides or shows its events; the calendar stays in the list.
 - [ ] The panel can be collapsed and expanded, and the app remembers which after a restart.
 - [ ] When the window becomes too narrow, the panel collapses on its own.
+- [ ] A calendar the account cannot change (read-only, subscribed or free/busy) is visibly marked as not editable in the panel.
 
 ## Edge cases
 
@@ -42,4 +43,4 @@ The side panel with each account and its calendars, the quick toggle that hides 
 
 ## Technical notes
 
-- Decisions: `DEC-28`, `DEC-56`.
+- Decisions: `DEC-28`, `DEC-56`, `DEC-89` (the same lock as on read-only events).

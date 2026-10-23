@@ -31,6 +31,20 @@ pub fn text_on(c: Rgb) -> Color32 {
     }
 }
 
+/// What the details say of an event whose calendar cannot be changed (`MOD-02-U01`).
+pub const READ_ONLY: &str = "🔒 Read-only: this event can't be changed";
+
+/// What an event is called in the views: its title, or "Busy" for an event of a calendar shared
+/// as free/busy only, after a lock when its calendar cannot be changed (`MOD-02-U01`).
+pub fn event_label(title: Option<&str>, read_only: bool) -> String {
+    let title = title.unwrap_or("Busy");
+    if read_only {
+        format!("🔒 {title}")
+    } else {
+        title.to_string()
+    }
+}
+
 /// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
 /// keeps it in sight and rings it; Enter or a click opens it into `opened`.
 pub fn openable(
@@ -157,7 +171,7 @@ pub fn show(
         painter.with_clip_rect(rect).text(
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
-            bar.title.as_deref().unwrap_or("Busy"),
+            event_label(bar.title.as_deref(), bar.read_only),
             FontId::proportional(12.0),
             text_on(bar.color),
         );
@@ -244,9 +258,10 @@ pub fn show(
             let ink = text_on(block.color);
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
             let time = regional.time(block.start.with_timezone(&view.zone).time());
+            let name = event_label(block.title.as_deref(), block.read_only);
             let label = match &block.title {
-                Some(title) => format!("{title}\n{time}"),
-                None => "Busy".to_string(),
+                Some(_) => format!("{name}\n{time}"),
+                None => name,
             };
             clipped.text(
                 rect.left_top() + Vec2::new(4.0, 2.0),
@@ -275,6 +290,13 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn events_of_calendars_that_cannot_be_changed_carry_a_lock() {
+        assert_eq!(event_label(Some("Standup"), false), "Standup");
+        assert_eq!(event_label(Some("1:1"), true), "🔒 1:1");
+        assert_eq!(event_label(None, true), "🔒 Busy");
+    }
 
     #[test]
     fn few_overlapping_events_share_the_day_width() {

@@ -19,6 +19,8 @@ pub struct Block {
     /// `None` for events of calendars shared as free/busy only.
     pub title: Option<String>,
     pub color: Rgb,
+    /// The event's calendar cannot be changed (`MOD-02-U01`).
+    pub read_only: bool,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -28,6 +30,7 @@ pub struct Bar {
     pub bar: AllDayBar,
     pub title: Option<String>,
     pub color: Rgb,
+    pub read_only: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +82,7 @@ pub fn grid_view(
                 placement,
                 title: shown_title(event),
                 color: event.color,
+                read_only: event.read_only,
                 start,
                 end,
             }
@@ -91,6 +95,7 @@ pub fn grid_view(
             bar,
             title: shown_title(&events[bar.event]),
             color: events[bar.event].color,
+            read_only: events[bar.event].read_only,
         })
         .collect();
     let lanes = bars.iter().map(|b| b.bar.lane + 1).max().unwrap_or(0);

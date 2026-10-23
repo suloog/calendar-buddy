@@ -22,6 +22,8 @@ pub enum When {
 pub struct EventDetails {
     /// `None` for events of calendars shared as free/busy only.
     pub title: Option<String>,
+    /// The event's calendar cannot be changed (`MOD-02-U01`).
+    pub read_only: bool,
     /// In the system's time zone.
     pub when: When,
     /// A timed event stored in another time zone, in that zone.
@@ -31,6 +33,7 @@ pub struct EventDetails {
 pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
     EventDetails {
         title: (!event.busy_only).then(|| event.title.clone()),
+        read_only: event.read_only,
         own_zone: match event.timing {
             Timing::Timed {
                 start,

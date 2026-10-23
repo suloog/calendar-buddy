@@ -16,6 +16,8 @@ pub struct AgendaItem {
     /// `None` for events of calendars shared as free/busy only.
     pub title: Option<String>,
     pub color: Rgb,
+    /// The event's calendar cannot be changed (`MOD-02-U01`).
+    pub read_only: bool,
     /// Start and end of a timed event, also one lasting a day or more; `None` for all-day events.
     pub time: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
@@ -101,6 +103,7 @@ pub fn agenda_view(
                             event: i,
                             title: (!event.busy_only).then(|| event.title.clone()),
                             color: event.color,
+                            read_only: event.read_only,
                             time: event_time(event),
                         }
                     })

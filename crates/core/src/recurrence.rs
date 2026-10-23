@@ -32,6 +32,7 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         color: calendar.color,
         timing,
         busy_only: calendar.access == Access::FreeBusyReader,
+        read_only: !calendar.access.can_edit(),
     };
     let mut shown_events = Vec::new();
     for event in events {
@@ -468,6 +469,23 @@ mod tests {
         let shown = expand(&free_busy, &[busy], window());
 
         assert!(shown[0].busy_only);
+    }
+
+    #[test]
+    fn events_of_calendars_the_account_cannot_change_are_read_only() {
+        let event = event("one", timed(Warsaw, d(2026, 11, 3), (10, 0), (11, 0)));
+        let read_only = |access| {
+            let calendar = Calendar {
+                access,
+                ..calendar()
+            };
+            expand(&calendar, std::slice::from_ref(&event), window())[0].read_only
+        };
+
+        assert!(!read_only(Access::Owner));
+        assert!(!read_only(Access::Writer));
+        assert!(read_only(Access::Reader));
+        assert!(read_only(Access::FreeBusyReader));
     }
 
     #[test]
