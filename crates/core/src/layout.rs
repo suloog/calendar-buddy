@@ -1,13 +1,13 @@
-//! Placing a week's events: timed events into day columns (side by side where they overlap),
-//! all-day and multi-day events into lanes of the strip above the hours.
+//! Placing the events of the shown days: timed events into day columns (side by side where they
+//! overlap), all-day and multi-day events into lanes of the strip above the hours.
 
 use chrono::{Duration, NaiveDate};
 use chrono_tz::Tz;
 
 use crate::model::{Event, Timing};
-use crate::week::{Week, day_span, wall_minute};
+use crate::week::{day_span, wall_minute};
 
-/// A timed event's part that falls on one day of the week, in wall-clock minutes of that day
+/// A timed event's part that falls on one of the shown days, in wall-clock minutes of that day
 /// (0 to 1440).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimedPlacement {
@@ -19,7 +19,7 @@ pub struct TimedPlacement {
     pub columns: u32,
 }
 
-/// An all-day or multi-day event in the strip, over days `first_day..=last_day` of the week.
+/// An all-day or multi-day event in the strip, over shown days `first_day..=last_day`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AllDayBar {
     pub event: usize,
@@ -36,8 +36,8 @@ fn is_strip_event(event: &Event) -> bool {
     }
 }
 
-pub fn timed_placements(events: &[Event], week: Week, tz: Tz) -> Vec<TimedPlacement> {
-    let spans = week.days().map(|d| day_span(d, tz));
+pub fn timed_placements(events: &[Event], days: &[NaiveDate], tz: Tz) -> Vec<TimedPlacement> {
+    let spans: Vec<_> = days.iter().map(|&d| day_span(d, tz)).collect();
     let mut out = Vec::new();
     for (i, event) in events.iter().enumerate() {
         let Timing::Timed { start, end, .. } = event.timing else {
@@ -123,18 +123,18 @@ fn strip_dates(event: &Event, tz: Tz) -> (NaiveDate, NaiveDate) {
     }
 }
 
-pub fn all_day_bars(events: &[Event], week: Week, tz: Tz) -> Vec<AllDayBar> {
-    let days = week.days();
+pub fn all_day_bars(events: &[Event], days: &[NaiveDate], tz: Tz) -> Vec<AllDayBar> {
+    let last_index = days.len() as i64 - 1;
     let mut bars: Vec<AllDayBar> = events
         .iter()
         .enumerate()
         .filter(|(_, e)| is_strip_event(e))
         .filter_map(|(i, e)| {
             let (first, last) = strip_dates(e, tz);
-            if last < days[0] || first > days[6] {
+            if last < days[0] || first > days[days.len() - 1] {
                 return None;
             }
-            let index = |d: NaiveDate| (d - days[0]).num_days().clamp(0, 6) as usize;
+            let index = |d: NaiveDate| (d - days[0]).num_days().clamp(0, last_index) as usize;
             Some(AllDayBar {
                 event: i,
                 first_day: index(first),
@@ -163,10 +163,11 @@ pub fn all_day_bars(events: &[Event], week: Week, tz: Tz) -> Vec<AllDayBar> {
 mod tests {
     use super::*;
     use crate::fixtures::{d, timed};
+    use crate::week::Week;
     use chrono_tz::Europe::Warsaw;
 
-    fn week() -> Week {
-        Week::containing(d(2026, 11, 11))
+    fn week() -> [NaiveDate; 7] {
+        Week::containing(d(2026, 11, 11)).days()
     }
 
     #[test]
@@ -176,7 +177,7 @@ mod tests {
             timed("b", d(2026, 11, 11), (10, 30), (11, 30)),
             timed("c", d(2026, 11, 11), (10, 45), (12, 0)),
         ];
-        let p = timed_placements(&events, week(), Warsaw);
+        let p = timed_placements(&events, &week(), Warsaw);
         assert_eq!(p.len(), 3);
         assert!(p.iter().all(|p| p.columns == 3));
         let mut columns: Vec<u32> = p.iter().map(|p| p.column).collect();
@@ -190,14 +191,14 @@ mod tests {
             timed("a", d(2026, 11, 11), (9, 0), (10, 0)),
             timed("b", d(2026, 11, 11), (10, 0), (11, 0)),
         ];
-        let p = timed_placements(&events, week(), Warsaw);
+        let p = timed_placements(&events, &week(), Warsaw);
         assert!(p.iter().all(|p| p.columns == 1 && p.column == 0));
     }
 
     #[test]
     fn an_event_past_midnight_is_shown_on_both_days() {
         let events = [timed("late", d(2026, 11, 11), (23, 0), (25, 0))];
-        let p = timed_placements(&events, week(), Warsaw);
+        let p = timed_placements(&events, &week(), Warsaw);
         assert_eq!(p.len(), 2);
         assert_eq!(
             (p[0].day, p[0].start_min, p[0].end_min),
@@ -209,13 +210,13 @@ mod tests {
     #[test]
     fn events_outside_the_week_are_not_placed() {
         let events = [timed("x", d(2026, 11, 20), (9, 0), (10, 0))];
-        assert!(timed_placements(&events, week(), Warsaw).is_empty());
+        assert!(timed_placements(&events, &week(), Warsaw).is_empty());
     }
 
     #[test]
     fn overlapping_all_day_bars_take_separate_lanes() {
         let events = crate::fixtures::all_day_pair();
-        let bars = all_day_bars(&events, week(), Warsaw);
+        let bars = all_day_bars(&events, &week(), Warsaw);
         assert_eq!(bars.len(), 2);
         assert_ne!(bars[0].lane, bars[1].lane);
     }
