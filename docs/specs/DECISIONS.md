@@ -1200,3 +1200,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-99] Local calendar colours: per account, Google's palette, a list in the side panel until US-03-06
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-07
+- **Affects:** `US-02-07`, `MOD-02-F04`, `MOD-02-U04`, MOD-02 *Technical notes*, `DEC-54`, `DEC-85`, `DEC-94`
+- **Decision:** A local colour is kept in the app's settings file (`~/.config/calendar-buddy/settings`), one `color = <account ID> <calendar ID> #rrggbb` line per calendar, so the same calendar on two accounts has a colour on each, like its Google colour (one per account's calendar list) and like `disabled` (`DEC-94`); the lines go when their account is removed (`DEC-85`). Nothing about it is sent to Google. The side panel gets, under the mini calendar, a list of the connected accounts' calendars (those disabled in the settings left out), each with its colour and a **…** menu (Google's **⋮**, which the default fonts lack) holding Google Calendar's 24 calendar colours (Radicchio … Birch, named on hover, the chosen one ticked) and **Reset**, enabled while the calendar has a local colour; picking or resetting recolours the calendar and its events in every view at once. Google's custom-colour picker ("+") is not offered. Grouping the list by account, hiding calendars and collapsing the panel stay with `US-03-06`.
+- **Why:** The module's technical note keys colours by calendar ID; adding the account follows Google, where a calendar's colour belongs to each account's list entry (`DEC-62`), and lets removing an account forget them. The side panel is `MOD-03`, but `MOD-02-U04` needs a calendar's menu in it, so the smallest list that carries that menu is added now. Google's palette is what its calendar menu offers.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

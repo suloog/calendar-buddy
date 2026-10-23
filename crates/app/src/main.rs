@@ -1,4 +1,5 @@
 mod agenda_view;
+mod calendar_list;
 mod checks;
 mod connect;
 mod grid_view;
@@ -11,6 +12,7 @@ mod sync;
 
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
+use calendar_core::colors::{self, LocalColors};
 use calendar_core::details::event_details;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
@@ -84,13 +86,17 @@ enum Dialog {
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
 
+/// The view's model, each event in its calendar's local colour where it has one; the events keep
+/// their places, so the model's indices still point into `events`.
 fn build(
     events: &[Event],
+    colors: &LocalColors,
     navigation: Navigation,
     agenda_days: i64,
     zone: Tz,
     now: DateTime<Utc>,
 ) -> Built {
+    let events = &colors::apply(events, colors);
     let selected = navigation.selected;
     let week_start = navigation.week_start;
     match navigation.view {
@@ -103,6 +109,16 @@ fn build(
         View::Month => Built::Month(month_view(events, selected, zone, now, week_start)),
         View::Agenda => Built::Agenda(agenda_view(events, zone, now, agenda_days)),
     }
+}
+
+/// Keeps a calendar's local colour picked in its menu, or forgets it on "Reset"; only in the
+/// app's settings, never sent to Google (`MOD-02-F04`).
+fn pick(colors: &mut LocalColors, picked: calendar_list::Picked) {
+    let key = (picked.account_id, picked.calendar_id);
+    match picked.color {
+        Some(color) => colors.insert(key, color),
+        None => colors.remove(&key),
+    };
 }
 
 struct CalendarApp {
@@ -212,7 +228,14 @@ impl CalendarApp {
         let navigation = Navigation::start(settings.last_view, today, regional.week_start);
         let built_at = Utc::now();
         let events = Vec::new();
-        let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
+        let built = build(
+            &events,
+            &settings.colors,
+            navigation,
+            AGENDA_DAYS,
+            zone,
+            built_at,
+        );
         CalendarApp {
             accounts,
             accounts_writer,
@@ -246,6 +269,7 @@ impl CalendarApp {
         self.built_at = Utc::now();
         self.built = build(
             &self.events,
+            &self.settings.colors,
             self.navigation,
             self.agenda_days,
             self.zone,
@@ -454,9 +478,12 @@ impl CalendarApp {
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
+        let disabled = self.settings.disabled.clone();
         if self.settings.forget_account(id) {
             self.save_settings();
-            self.sync.set_disabled(self.settings.disabled.clone());
+            if self.settings.disabled != disabled {
+                self.sync.set_disabled(self.settings.disabled.clone());
+            }
         }
         let window = self.window();
         self.sync.forget(id, window);
@@ -724,6 +751,20 @@ impl eframe::App for CalendarApp {
                         self.mini_month = date;
                     }
                     None => {}
+                }
+                ui.separator();
+                // Disabled calendars are only in the settings (`MOD-03-F13`).
+                let disabled = &self.settings.disabled;
+                let listed: Vec<_> = self
+                    .sync
+                    .calendars()
+                    .iter()
+                    .filter(|c| !disabled.contains(&(c.account_id.clone(), c.id.clone())))
+                    .collect();
+                if let Some(picked) = calendar_list::show(ui, &listed, &self.settings.colors) {
+                    pick(&mut self.settings.colors, picked);
+                    self.save_settings();
+                    self.rebuild();
                 }
             });
         self.dialog(ui.ctx());

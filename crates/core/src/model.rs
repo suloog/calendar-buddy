@@ -22,6 +22,8 @@ pub enum Timing {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Event {
     pub id: String,
+    /// The account whose calendar list the event's calendar is on.
+    pub account_id: String,
     pub calendar_id: String,
     pub title: String,
     pub color: Rgb,
