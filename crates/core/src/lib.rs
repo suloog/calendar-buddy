@@ -1,5 +1,6 @@
 //! Calendar domain model and view models, independent of Google and of the UI toolkit.
 
+pub mod agenda;
 pub mod fixtures;
 pub mod layout;
 pub mod model;
