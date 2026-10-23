@@ -52,6 +52,8 @@ struct State {
     refresh: HashMap<String, &'static str>,
     /// Every refresh token the app asked to refresh.
     refreshed: Vec<String>,
+    /// Every request to the token service, user info and revocation: method and path.
+    requests: Vec<String>,
 }
 
 pub struct FakeGoogle {
@@ -79,6 +81,7 @@ impl FakeGoogle {
                 auth: format!("{base}/auth"),
                 token: format!("{base}/token"),
                 userinfo: format!("{base}/userinfo"),
+                revoke: format!("{base}/revoke"),
             },
             state,
         }
@@ -103,6 +106,20 @@ impl FakeGoogle {
 
     pub fn refreshed(&self) -> Vec<String> {
         self.state.lock().unwrap().refreshed.clone()
+    }
+
+    /// Whether the app still has access to the account, i.e. is listed in its third-party apps.
+    pub fn has_access(&self, account: &str) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .refresh
+            .values()
+            .any(|owner| *owner == account)
+    }
+
+    pub fn requests(&self) -> Vec<String> {
+        self.state.lock().unwrap().requests.clone()
     }
 }
 
@@ -187,6 +204,28 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         }
     };
     let mut state = state.lock().unwrap();
+    let request: Vec<&str> = head.split_whitespace().take(2).collect();
+    state.requests.push(request.join(" "));
+    if head.starts_with("POST /revoke") {
+        let form: HashMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
+            .into_owned()
+            .collect();
+        // Revoking a token withdraws the app's whole grant on that account.
+        let answer = match state.refresh.get(&form["token"]).copied() {
+            Some(account) => {
+                state.refresh.retain(|_, owner| *owner != account);
+                state.access.retain(|_, owner| *owner != account);
+                ("200 OK", "{}".to_string())
+            }
+            None => (
+                "400 Bad Request",
+                r#"{"error": "invalid_token", "error_description": "Token expired or revoked"}"#
+                    .to_string(),
+            ),
+        };
+        respond(&mut stream, answer);
+        return;
+    }
     let (status, json) = if head.starts_with("POST /token") {
         let form: HashMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
             .into_owned()
@@ -314,5 +353,14 @@ impl SecretStore for FakeStore {
             .iter()
             .find(|(id, _)| id == account_id)
             .map(|(_, token)| token.clone()))
+    }
+
+    fn take(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
+        let refresh_token = self.load(account_id)?;
+        self.saved
+            .lock()
+            .unwrap()
+            .retain(|(id, _)| id != account_id);
+        Ok(refresh_token)
     }
 }

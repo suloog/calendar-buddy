@@ -4,6 +4,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::platform::SecretStoreError;
+
 /// A connected Google account and what it allows the app to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Account {
@@ -92,6 +94,13 @@ impl Accounts {
                 true
             }
         }
+    }
+
+    /// Forgets a removed account; says whether it was listed (`MOD-01-F07`).
+    pub fn remove(&mut self, id: &str) -> bool {
+        let before = self.entries.len();
+        self.entries.retain(|e| e.account.id != id);
+        self.entries.len() != before
     }
 
     pub fn is_empty(&self) -> bool {
@@ -279,6 +288,34 @@ pub fn needs_sign_in(email: &str) -> String {
 /// The action that signs in to an account again (`MOD-01-F06`).
 pub const SIGN_IN_AGAIN: &str = "Sign in again";
 
+/// The action that removes an account (`MOD-01-F07`).
+pub const REMOVE: &str = "Remove";
+
+/// What removing an account deletes and what it leaves alone, asked before it happens
+/// (`MOD-01-U02`).
+pub fn confirm_removal(email: &str) -> String {
+    format!(
+        "Remove {email}? Its calendars, events, credentials and local settings will be deleted \
+         from this computer, and Calendar Buddy's access to it will be withdrawn at Google. The \
+         Google account itself stays untouched: its calendars and events stay in Google."
+    )
+}
+
+/// Why an account was not removed: the secret store did not delete its credentials, so it stays
+/// listed for another try.
+pub fn not_removed(email: &str, error: &SecretStoreError) -> String {
+    match error {
+        SecretStoreError::NotRunning => format!(
+            "{email} was not removed: no secret store is running, and its credentials are kept \
+             there. Start the secret store and try again."
+        ),
+        SecretStoreError::Failed(reason) => format!(
+            "{email} was not removed: the secret store did not delete its credentials \
+             ({reason}). Unlock the secret store and try again."
+        ),
+    }
+}
+
 /// Why connecting an account stopped; in every case no account was added.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConnectError {
@@ -405,6 +442,43 @@ mod tests {
                 ("me@work.example.com", AccountState::Connected),
             ]
         );
+    }
+
+    #[test]
+    fn a_removed_account_is_forgotten_and_the_others_stay() {
+        let mut accounts = Accounts::default();
+        accounts.add(signed_in("1", "me@gmail.com"));
+        accounts.add(signed_in("2", "me@work.example.com"));
+
+        assert!(accounts.remove("1"));
+        assert!(!accounts.remove("1"));
+        assert_eq!(
+            listed(&accounts),
+            [("me@work.example.com", AccountState::Connected)]
+        );
+        assert!(!accounts.to_text().contains("me@gmail.com"));
+
+        // With the last one gone, the welcome screen is back (`MOD-01-F14`).
+        assert!(accounts.remove("2"));
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn removing_says_what_is_deleted_and_that_the_google_account_stays() {
+        let asked = confirm_removal("me@gmail.com");
+        for deleted in ["calendars", "events", "credentials", "local settings"] {
+            assert!(asked.contains(deleted), "{deleted}");
+        }
+        assert!(asked.contains("deleted from this computer"));
+        assert!(asked.contains("Google account itself stays untouched"));
+
+        let locked = not_removed(
+            "me@gmail.com",
+            &SecretStoreError::Failed("unlocking it was declined".into()),
+        );
+        assert!(locked.starts_with("me@gmail.com was not removed"));
+        assert!(locked.contains("unlocking it was declined") && locked.contains("try again"));
+        assert!(not_removed("me@gmail.com", &SecretStoreError::NotRunning).contains("Start"));
     }
 
     #[test]
