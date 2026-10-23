@@ -45,12 +45,12 @@ that module. Numbers are never reused or renumbered.
 | ------ | -------------- | ------- | ------------------ | ------- |
 | `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
-| `MOD-03` Views and navigation | 31 | 22 | 10 / 2 | written |
+| `MOD-03` Views and navigation | 34 | 22 | 10 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 34 | 18 | 10 / 2 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 19 | 11 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **177** | **106** | **51 / 13** | 7 / 7 modules written |
+| **Total** | **180** | **106** | **51 / 13** | 7 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 

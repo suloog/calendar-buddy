@@ -1,7 +1,7 @@
 ---
 id: US-03-04 # US-NN-MM — NN is the parent module, MM a counter inside it; never reused
 module: MOD-03
-covers: [MOD-03-F05] # every requirement this story delivers
+covers: [MOD-03-F05, MOD-03-F14, MOD-03-F22] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
@@ -13,7 +13,7 @@ depends_on: [US-03-01] # story IDs that must be done first
 |  |  |
 | --- | --- |
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
-| **Covers** | `MOD-03-F05` |
+| **Covers** | `MOD-03-F05`, `F14`, `F22` |
 | **Priority** | must |
 | **Status** | ready |
 | **Depends on** | blocked by `US-03-01` |
@@ -29,6 +29,7 @@ The agenda view: upcoming events from now on, grouped by day — the view behind
 - [ ] The agenda lists events from now on, grouped by day, without empty days.
 - [ ] More events load as the user scrolls down.
 - [ ] With nothing ahead, the agenda says there are no upcoming events.
+- [ ] Today is highlighted, and calendars shared as free/busy only appear as "busy" blocks without details.
 
 ## Out of scope / what not to worry about
 

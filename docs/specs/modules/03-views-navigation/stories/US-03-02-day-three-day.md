@@ -1,7 +1,7 @@
 ---
 id: US-03-02 # US-NN-MM — NN is the parent module, MM a counter inside it; never reused
 module: MOD-03
-covers: [MOD-03-F01, MOD-03-F04] # every requirement this story delivers
+covers: [MOD-03-F01, MOD-03-F04, MOD-03-F14, MOD-03-F22] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
@@ -13,7 +13,7 @@ depends_on: [US-03-01] # story IDs that must be done first
 |  |  |
 | --- | --- |
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
-| **Covers** | `MOD-03-F01`, `F04` |
+| **Covers** | `MOD-03-F01`, `F04`, `F14`, `F22` |
 | **Priority** | must |
 | **Status** | ready |
 | **Depends on** | blocked by `US-03-01` |
@@ -28,6 +28,7 @@ The day view and the 3-day view, both built on the week grid of `US-03-01`. Swit
 
 - [ ] A day view and a 3-day view are each available as a view the user picks.
 - [ ] Both show the all-day strip, the current-time line and overlapping events the same way as the week view.
+- [ ] Today is highlighted, and calendars shared as free/busy only appear as "busy" blocks without details.
 
 ## Out of scope / what not to worry about
 

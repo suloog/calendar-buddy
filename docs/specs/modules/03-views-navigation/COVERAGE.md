@@ -37,7 +37,7 @@
 | `MOD-03-F11` | `US-03-06` |
 | `MOD-03-F12` | `US-03-06` |
 | `MOD-03-F13` | `US-03-07` |
-| `MOD-03-F14` | `US-03-01` |
+| `MOD-03-F14` | `US-03-01`, `US-03-02`, `US-03-03`, `US-03-04` |
 | `MOD-03-F15` | `US-03-05` |
 | `MOD-03-F16` | `US-03-09` |
 | `MOD-03-F17` | `US-03-09` |
@@ -45,7 +45,7 @@
 | `MOD-03-F19` | `US-03-01` |
 | `MOD-03-F20` | `US-03-03` |
 | `MOD-03-F21` | `US-03-01` |
-| `MOD-03-F22` | `US-03-01` |
+| `MOD-03-F22` | `US-03-01`, `US-03-02`, `US-03-03`, `US-03-04` |
 | `MOD-03-F23` | `US-03-08` |
 | `MOD-03-F24` | `US-03-08` |
 
@@ -85,11 +85,14 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-01#6` | The feasibility check of the interface technology — smooth scrollin… | `TC-03-04` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-03-02#1` | A day view and a 3-day view are each available as a view the user p… | `TC-03-05` | auto | — |
 | `US-03-02#2` | Both show the all-day strip, the current-time line and overlapping… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-02#3` | Today is highlighted, and calendars shared as free/busy only appear… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-03#1` | The month view shows each day of the month with its events. | `TC-03-06` | auto | — |
 | `US-03-03#2` | A day with more events than fit shows how many more there are; choo… | `TC-03-06` | auto | — |
+| `US-03-03#3` | Today is highlighted, and calendars shared as free/busy only appear… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-04#1` | The agenda lists events from now on, grouped by day, without empty… | `TC-03-07` | auto | — |
 | `US-03-04#2` | More events load as the user scrolls down. | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-04#3` | With nothing ahead, the agenda says there are no upcoming events. | `TC-03-07` | auto | — |
+| `US-03-04#4` | Today is highlighted, and calendars shared as free/busy only appear… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-05#1` | Switching between views keeps the selected date in view. | `TC-03-08` | auto | — |
 | `US-03-05#2` | Next and previous move by the period of the current view; "Today" b… | `TC-03-08` | auto | — |
 | `US-03-05#3` | The mini calendar marks the period on screen and jumps to any date… | — | — | smoke depth — not tested yet (`DEC-65`) |
