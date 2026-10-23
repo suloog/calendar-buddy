@@ -112,6 +112,13 @@ for STORY in "$@"; do
   RESULT_LINE="$(jq -r '.result // ""' "$OUT" 2>/dev/null | grep -E '^RESULT:' | tail -1)"
   [ -z "$RESULT_LINE" ] && RESULT_LINE="RESULT: failed $STORY session ended without a result (exit $CODE)"
   RESULT="$(awk '{print $2}' <<<"$RESULT_LINE")"
+  # What main says outranks the last line: a session can end on a stray turn after its merge.
+  if [ "$RESULT" = "failed" ] && ! git rev-parse -q --verify "refs/heads/story/$STORY" >/dev/null; then
+    case "$(field "$(story_file "$STORY")" status)" in
+      review|done) RESULT="$(field "$(story_file "$STORY")" status)"
+                   RESULT_LINE="RESULT: $RESULT $STORY (on main; the session ended with: ${RESULT_LINE#RESULT: })" ;;
+    esac
+  fi
   TURNS="$(jq -r '.num_turns // "?"' "$OUT" 2>/dev/null)"
   COST="$(jq -r '.total_cost_usd // "?" | if type=="number" then (.*100|round/100) else . end' "$OUT" 2>/dev/null)"
   TOK="$(jq -r '.usage | "\(.input_tokens + (.cache_creation_input_tokens // 0)) / \(.output_tokens) (\(.cache_read_input_tokens // 0))"' "$OUT" 2>/dev/null || echo '?')"

@@ -46,6 +46,7 @@ Stop at once with `RESULT: failed <ID> <reason>` and change nothing if:
      - commit what you have on the story branch;
      - switch back to `main`, leaving the branch;
      - end with `RESULT: parked <ID> <question>`.
+   - **Never schedule anything** (`ScheduleWakeup`, `CronCreate`, `/loop`, background waits): this session ends with its answer, and a reminder that fires later lands after the merge. Wait for agents and commands in the foreground.
 6. **Gates.** Use the `og:pre-push` skill: `cargo fmt`, `clippy -D warnings`, `cargo test --workspace`. If the same gate fails after three fix attempts, end with `RESULT: failed`.
 7. **Code review.** Run the `og:code-reviewer` agent (model opus) on `git diff main...story/<ID>`. Fix every BLOCKING finding. Allow at most 2 rounds.
 8. **Spec review.** Run the `og:spec-compliance-reviewer` agent (model opus) against the story and the diff. Fix whatever it reports as unmet. Allow at most 2 rounds.
