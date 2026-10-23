@@ -5,5 +5,7 @@ pub mod fixtures;
 pub mod layout;
 pub mod model;
 pub mod month;
+pub mod navigation;
+pub mod settings;
 pub mod view_model;
 pub mod week;

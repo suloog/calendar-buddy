@@ -876,3 +876,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-72] Navigation: Today and ‹ › in the bar, a mini calendar in the side panel, the last view in a settings file
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-05
+- **Affects:** `US-03-05`, `MOD-03-F06`, `MOD-03-F07`, `MOD-03-F08`, `MOD-03-F09`, `MOD-03-F15`
+- **Decision:** The bar above the view holds "Today", ‹ ›, the period's title and, on the right, the view picker (Day, 3 days, Week, Month, Agenda), as Google Calendar lays it out; it replaces the plain picker of `DEC-69`. Switching views keeps the selected date; ‹ › move by the view's period (1, 3 or 7 days, or a month keeping the day of the month, the last day of a shorter month when it does not exist) and stay disabled in the agenda (`DEC-71`). The mini calendar sits at the top of a left side panel: one month in whole weeks, Monday first until `US-03-09`, today in the accent colour, the days on screen marked (the grid's days; the whole month in the month view; none in the agenda, which has no period). Its own ‹ › browse months without moving the view, and it follows the view again after any navigation. Picking a date shows it in the current view; in the agenda, which always starts now, it opens the day view of that date. The view used last is saved at every view change to `$XDG_CONFIG_HOME/calendar-buddy/settings` (`~/.config/…` when unset) as `key = value` lines; a missing or unreadable file means the week view, and the app always starts on today.
+- **Why:** Follows Google Calendar (`DEC-62`) where the spec is silent; a plain text file is the simplest home for the app's settings until a settings screen exists, and losing it is acceptable (`DEC-15`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
