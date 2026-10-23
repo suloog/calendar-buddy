@@ -21,7 +21,7 @@ pub struct State {
 }
 
 fn label(item: &MonthItem, view: &MonthViewModel, regional: &Regional) -> String {
-    let title = event_label(item.title.as_deref(), item.read_only);
+    let title = event_label(item.title.as_deref(), item.read_only, item.saving);
     match item.start {
         Some(start) => format!(
             "{} {title}",

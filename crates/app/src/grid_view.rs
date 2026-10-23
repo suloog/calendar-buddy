@@ -1,13 +1,14 @@
 //! Draws a `GridViewModel` (the day, 3-day or week view) with egui. Only drawing and input live
 //! here; what goes where is decided in `calendar_core::view_model`.
 
+use calendar_core::create::{SAVING, snapped};
 use calendar_core::model::{Event, Rgb, Timing};
 use calendar_core::regional::Regional;
 use calendar_core::view_model::GridViewModel;
 use chrono::Duration;
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind,
-    Vec2,
+    self, Align2, Color32, CornerRadius, FontId, PointerButton, Pos2, Rect, ScrollArea, Sense,
+    Stroke, StrokeKind, Vec2,
 };
 
 const HOUR_HEIGHT: f32 = 44.0;
@@ -35,13 +36,14 @@ pub fn text_on(c: Rgb) -> Color32 {
 pub const READ_ONLY: &str = "🔒 Read-only: this event can't be changed";
 
 /// What an event is called in the views: its title, or "Busy" for an event of a calendar shared
-/// as free/busy only, after a lock when its calendar cannot be changed (`MOD-02-U01`).
-pub fn event_label(title: Option<&str>, read_only: bool) -> String {
+/// as free/busy only, after a lock when its calendar cannot be changed (`MOD-02-U01`), and marked
+/// while Google has not confirmed a new event (`MOD-05-U03`).
+pub fn event_label(title: Option<&str>, read_only: bool, saving: bool) -> String {
     let title = title.unwrap_or("Busy");
-    if read_only {
-        format!("🔒 {title}")
-    } else {
-        title.to_string()
+    match (read_only, saving) {
+        (true, _) => format!("🔒 {title}"),
+        (false, true) => format!("{title} · {SAVING}"),
+        (false, false) => title.to_string(),
     }
 }
 
@@ -87,6 +89,8 @@ fn column_geometry(column: u32, columns: u32, inner: f32) -> (f32, f32) {
 pub struct State {
     scrolled_to_now: bool,
     drag: Option<Drag>,
+    /// The day and minute where a selection of a time range started.
+    selecting: Option<(usize, u32)>,
 }
 
 struct Drag {
@@ -100,6 +104,35 @@ pub struct Change {
     pub event: usize,
     pub days: i64,
     pub minutes: i64,
+}
+
+/// What the user did in the hours.
+#[derive(Clone, Copy, Debug)]
+pub enum Action {
+    Moved(Change),
+    /// A click on a time where there is no event: the day's index and the minute of the day.
+    Clicked {
+        day: usize,
+        minute: u32,
+    },
+    /// A range selected in one day, from the minute pressed to the minute released.
+    Selected {
+        day: usize,
+        pressed: u32,
+        released: u32,
+    },
+}
+
+/// The day and minute of the day under a point `at` from the hours' top left corner; `None` in
+/// the hour labels or past the last day.
+fn slot(at: Vec2, day_width: f32, days: usize) -> Option<(usize, u32)> {
+    let x = at.x - GUTTER;
+    let day = (x / day_width).floor();
+    if x < 0.0 || day >= days as f32 {
+        return None;
+    }
+    let minute = (at.y / HOUR_HEIGHT * 60.0).clamp(0.0, 24.0 * 60.0);
+    Some((day as usize, minute as u32))
 }
 
 /// Moves an event in memory. Saving to Google is `MOD-05`; this exists for the feasibility check.
@@ -121,7 +154,7 @@ pub fn show(
     state: &mut State,
     movable: bool,
     opened: &mut Option<usize>,
-) -> Option<Change> {
+) -> Option<Action> {
     let width = ui.available_width();
     let columns = view.days.len();
     let day_width = ((width - GUTTER) / columns as f32).max(40.0);
@@ -172,7 +205,7 @@ pub fn show(
         painter.with_clip_rect(rect).text(
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
-            event_label(bar.title.as_deref(), bar.read_only),
+            event_label(bar.title.as_deref(), bar.read_only, false),
             FontId::proportional(12.0),
             text_on(bar.color),
         );
@@ -193,11 +226,30 @@ pub fn show(
         state.scrolled_to_now = true;
     }
 
-    let mut change = None;
+    let mut action = None;
     scroll.show(ui, |ui| {
-        let (grid, _) = ui.allocate_exact_size(Vec2::new(width, grid_height), Sense::hover());
+        // Clicking or selecting where there is no event starts one (`MOD-05-F01`); the events,
+        // drawn over it, take their own clicks. Not a Tab stop: `c` starts one from the keyboard.
+        let (grid, hours) =
+            ui.allocate_exact_size(Vec2::new(width, grid_height), Sense::CLICK | Sense::DRAG);
         let painter = ui.painter_at(grid);
         let minute_y = |m: f32| grid.top() + m / 60.0 * HOUR_HEIGHT;
+        let at = |pos: Option<Pos2>| slot(pos? - grid.left_top(), day_width, columns);
+        if hours.clicked()
+            && let Some((day, minute)) = at(hours.interact_pointer_pos())
+        {
+            action = Some(Action::Clicked { day, minute });
+        }
+        if hours.drag_started_by(PointerButton::Primary) {
+            state.selecting = at(ui.input(|i| i.pointer.press_origin()));
+        }
+        // A selection left by a drag that ended elsewhere, e.g. in another view, is dropped.
+        if !hours.dragged_by(PointerButton::Primary)
+            && !hours.drag_stopped_by(PointerButton::Primary)
+            || state.selecting.is_some_and(|(day, _)| day >= columns)
+        {
+            state.selecting = None;
+        }
 
         for hour in 0..=24 {
             let y = minute_y(hour as f32 * 60.0);
@@ -215,6 +267,28 @@ pub fn show(
         for i in 0..=columns {
             let x = grid.left() + GUTTER + i as f32 * day_width;
             painter.vline(x, grid.y_range(), grid_line);
+        }
+
+        // The range being selected, in the day where the press started, as Google Calendar does.
+        if let Some((day, pressed)) = state.selecting {
+            let pointer = hours.interact_pointer_pos().unwrap_or_default() - grid.left_top();
+            let released = slot(Vec2::new(GUTTER, pointer.y), day_width, columns)
+                .map_or(pressed, |(_, minute)| minute);
+            let (from, until) = snapped(pressed, released);
+            let x = grid.left() + GUTTER + day as f32 * day_width;
+            let rect = Rect::from_min_max(
+                Pos2::new(x + 2.0, minute_y(from as f32) + 1.0),
+                Pos2::new(x + day_width - 2.0, minute_y(until as f32) - 1.0),
+            );
+            painter.rect_filled(rect, CornerRadius::same(3), visuals.selection.bg_fill);
+            if hours.drag_stopped_by(PointerButton::Primary) {
+                action = Some(Action::Selected {
+                    day,
+                    pressed,
+                    released,
+                });
+                state.selecting = None;
+            }
         }
 
         for (index, block) in view.blocks.iter().enumerate() {
@@ -247,11 +321,11 @@ pub fn show(
                     (drag.delta.y / HOUR_HEIGHT * 60.0 / SNAP_MINUTES).round() * SNAP_MINUTES;
                 rect = rect.translate(Vec2::new(days * day_width, minutes / 60.0 * HOUR_HEIGHT));
                 if response.drag_stopped() {
-                    change = Some(Change {
+                    action = Some(Action::Moved(Change {
                         event: p.event,
                         days: days as i64,
                         minutes: minutes as i64,
-                    });
+                    }));
                     state.drag = None;
                 }
             }
@@ -259,7 +333,7 @@ pub fn show(
             let ink = text_on(block.color);
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
             let time = regional.time(block.start.with_timezone(&view.zone).time());
-            let name = event_label(block.title.as_deref(), block.read_only);
+            let name = event_label(block.title.as_deref(), block.read_only, block.saving);
             let label = match &block.title {
                 Some(_) => format!("{name}\n{time}"),
                 None => name,
@@ -285,7 +359,7 @@ pub fn show(
             painter.circle_filled(Pos2::new(x, y), 4.0, Color32::from_rgb(0xEA, 0x43, 0x35));
         }
     });
-    change
+    action
 }
 
 #[cfg(test)]
@@ -294,9 +368,34 @@ mod tests {
 
     #[test]
     fn events_of_calendars_that_cannot_be_changed_carry_a_lock() {
-        assert_eq!(event_label(Some("Standup"), false), "Standup");
-        assert_eq!(event_label(Some("1:1"), true), "🔒 1:1");
-        assert_eq!(event_label(None, true), "🔒 Busy");
+        assert_eq!(event_label(Some("Standup"), false, false), "Standup");
+        assert_eq!(event_label(Some("1:1"), true, false), "🔒 1:1");
+        assert_eq!(event_label(None, true, false), "🔒 Busy");
+    }
+
+    #[test]
+    fn a_new_event_google_has_not_confirmed_is_marked_saving() {
+        assert_eq!(
+            event_label(Some("Planning"), false, true),
+            "Planning · Saving…"
+        );
+    }
+
+    #[test]
+    fn a_point_in_the_hours_is_the_day_and_minute_under_it() {
+        let day_width = 100.0;
+        // Thursday, the fourth day of the week, at 10:00 and at 11:30.
+        let at = |day: f32, minute: f32| {
+            Vec2::new(GUTTER + day * day_width + 10.0, minute / 60.0 * HOUR_HEIGHT)
+        };
+        assert_eq!(slot(at(3.0, 600.0), day_width, 7), Some((3, 600)));
+        assert_eq!(slot(at(3.0, 690.0), day_width, 7), Some((3, 690)));
+        assert_eq!(
+            slot(at(0.0, 24.0 * 60.0 + 30.0), day_width, 7),
+            Some((0, 1440))
+        );
+        assert_eq!(slot(Vec2::new(GUTTER - 1.0, 0.0), day_width, 7), None);
+        assert_eq!(slot(at(7.0, 600.0), day_width, 7), None);
     }
 
     #[test]

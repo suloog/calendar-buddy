@@ -22,6 +22,43 @@ const SETTINGS_LIST_HEIGHT: f32 = 320.0;
 const ENABLED_HINT: &str =
     "A disabled calendar is not shown in the side panel or the views, and is not synchronized";
 
+/// The calendar a new event goes to, picked from `choices`, under their accounts (`MOD-05-F10`);
+/// says whether another one was picked.
+pub fn picker(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    choices: &[(String, Vec<Calendar>)],
+    picked: &mut Option<Calendar>,
+) -> bool {
+    let is_picked = |calendar: &Calendar| {
+        picked
+            .as_ref()
+            .is_some_and(|p| p.account_id == calendar.account_id && p.id == calendar.id)
+    };
+    let mut chosen = None;
+    let name = picked
+        .as_ref()
+        .map_or("", |calendar| calendar.name.as_str());
+    egui::ComboBox::from_id_salt(id_salt)
+        .selected_text(name)
+        .show_ui(ui, |ui| {
+            for (email, calendars) in choices {
+                ui.label(egui::RichText::new(email).strong());
+                for calendar in calendars {
+                    let selected = is_picked(calendar);
+                    if ui.selectable_label(selected, &calendar.name).clicked() && !selected {
+                        chosen = Some(calendar.clone());
+                    }
+                }
+            }
+        });
+    let changed = chosen.is_some();
+    if changed {
+        *picked = chosen;
+    }
+    changed
+}
+
 /// What a calendar's lock says on hover.
 pub const READ_ONLY: &str = "Read-only: this calendar can't be changed";
 

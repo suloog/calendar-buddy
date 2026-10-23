@@ -112,7 +112,7 @@ pub fn show(
                 painter.text(
                     Pos2::new(x + 20.0 + TIME_WIDTH, y),
                     Align2::LEFT_CENTER,
-                    event_label(item.title.as_deref(), item.read_only),
+                    event_label(item.title.as_deref(), item.read_only, item.saving),
                     FontId::proportional(13.0),
                     visuals.text_color(),
                 );

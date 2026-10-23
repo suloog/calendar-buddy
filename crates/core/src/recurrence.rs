@@ -34,6 +34,7 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         timing,
         busy_only: calendar.access == Access::FreeBusyReader,
         read_only: !calendar.access.can_edit(),
+        saving: false,
     };
     let mut shown_events = Vec::new();
     for event in events {

@@ -75,6 +75,8 @@ struct State {
     limited: Vec<(String, &'static str)>,
     /// Google cannot be reached: every connection is closed unanswered.
     unreachable: bool,
+    /// Each account's default event length in minutes, where the user set one in Google.
+    default_lengths: Vec<(&'static str, u32)>,
 }
 
 /// How many items the fake sends per page; Google may send fewer than asked for.
@@ -194,6 +196,23 @@ impl FakeGoogle {
             calendar,
             json!({"kind": "calendar#event", "id": id, "status": "cancelled"}),
         );
+    }
+
+    /// The event as Google keeps it, e.g. one the app created.
+    pub fn event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
+        let state = self.state.lock().unwrap();
+        state
+            .events
+            .iter()
+            .find(|(owner, c, e, _)| *owner == account && c == calendar && e["id"] == id)
+            .map(|(_, _, event, _)| event.clone())
+    }
+
+    /// The user sets the length of new events in the account's Google Calendar settings.
+    pub fn set_default_length(&self, account: &'static str, minutes: u32) {
+        let mut state = self.state.lock().unwrap();
+        state.default_lengths.retain(|(owner, _)| *owner != account);
+        state.default_lengths.push((account, minutes));
     }
 
     /// The access tokens given out expire.
@@ -364,8 +383,10 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         .lines()
         .find_map(|line| line.split_once("Bearer "))
         .and_then(|(_, token)| state.access.get(token.trim()).copied());
-    if head.starts_with("GET /calendar/v3/") {
+    let insert = head.starts_with("POST /calendar/v3/");
+    if head.starts_with("GET /calendar/v3/") || insert {
         let answer = match bearer {
+            Some(account) if insert => insert_event(&mut state, account, request[1], &body),
             Some(account) => calendar_api(&state, account, request[1]),
             None => (
                 "401 Unauthorized",
@@ -461,17 +482,29 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
 fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, String) {
     let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
     let offset: usize = param(&url, "pageToken").map_or(0, |token| token.parse().unwrap());
-    let segments: Vec<String> = url
-        .path_segments()
-        .unwrap()
-        .map(|segment| {
-            percent_encoding::percent_decode_str(segment)
-                .decode_utf8()
-                .unwrap()
-                .into_owned()
-        })
-        .collect();
+    let segments = segments(&url);
     let (items, per_page): (Vec<&Value>, usize) = match segments.as_slice() {
+        [_, _, users, me, settings, name]
+            if users == "users" && me == "me" && settings == "settings" =>
+        {
+            if name != "defaultEventLength" {
+                return (
+                    "404 Not Found",
+                    r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+                );
+            }
+            let minutes = state
+                .default_lengths
+                .iter()
+                .find(|(owner, _)| *owner == account)
+                .map_or(60, |(_, minutes)| *minutes);
+            let setting = json!({
+                "kind": "calendar#setting",
+                "id": name,
+                "value": minutes.to_string(),
+            });
+            return ("200 OK", setting.to_string());
+        }
         [_, _, users, me, list] if users == "users" && me == "me" && list == "calendarList" => {
             if state.list_failing {
                 return (
@@ -572,6 +605,74 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
         answer["nextSyncToken"] = json!(format!("state-{}", state.changes));
     }
     ("200 OK", answer.to_string())
+}
+
+/// The Calendar API's `events.insert`: the event is kept as a change, with an ID Google gives,
+/// in a calendar the account can change.
+fn insert_event(
+    state: &mut State,
+    account: &'static str,
+    target: &str,
+    body: &str,
+) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let segments = segments(&url);
+    let [_, _, calendars, id, events] = segments.as_slice() else {
+        return (
+            "404 Not Found",
+            r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+        );
+    };
+    let entry = state
+        .calendars
+        .iter()
+        .find(|(owner, entry)| *owner == account && entry["id"] == id.as_str());
+    if calendars != "calendars" || events != "events" || entry.is_none() {
+        return (
+            "404 Not Found",
+            r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+        );
+    }
+    if !matches!(
+        entry.unwrap().1["accessRole"].as_str(),
+        Some("owner" | "writer")
+    ) {
+        return (
+            "403 Forbidden",
+            r#"{"error": {"code": 403, "message": "You need to have writer access to this calendar.",
+                "errors": [{"domain": "calendar", "reason": "requiredAccessLevel"}]}}"#
+                .to_string(),
+        );
+    }
+    if state.failing.contains(id) {
+        return (
+            "500 Internal Server Error",
+            r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
+        );
+    }
+    let mut event: Value = serde_json::from_str(body).unwrap();
+    state.changes += 1;
+    let change = state.changes;
+    event["kind"] = json!("calendar#event");
+    event["id"] = json!(format!("created-{change}"));
+    event["status"] = json!("confirmed");
+    state
+        .events
+        .push((account, id.clone(), event.clone(), change));
+    ("200 OK", event.to_string())
+}
+
+/// The URL's path, segment by segment, decoded.
+fn segments(url: &Url) -> Vec<String> {
+    url.path_segments()
+        .unwrap()
+        .map(|segment| {
+            percent_encoding::percent_decode_str(segment)
+                .decode_utf8()
+                .unwrap()
+                .into_owned()
+        })
+        .collect()
 }
 
 /// An event deleted as a whole, which Google leaves out of a full list.

@@ -48,6 +48,7 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
         },
         busy_only: false,
         read_only: false,
+        saving: false,
     }
 }
 
@@ -64,6 +65,7 @@ pub fn all_day(id: &str, start: NaiveDate, days: i64) -> Event {
         },
         busy_only: false,
         read_only: false,
+        saving: false,
     }
 }
 

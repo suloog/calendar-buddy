@@ -10,7 +10,9 @@
 //! without being kept (`US-02-05`). Whenever what the cache holds may have changed, the views get
 //! the events to show. The views are told when synchronization runs, when it last got through,
 //! and which calendars are not up to date and why; a calendar that fails waits longer before each
-//! retry, and the others go on (`US-02-06`).
+//! retry, and the others go on (`US-02-06`). A new event goes to Google first and comes back
+//! through synchronizing its calendar (`US-05-01`); each account's default event length is read
+//! with its first synchronization.
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -21,6 +23,7 @@ use std::time::Instant;
 
 use calendar_core::accounts::Check;
 use calendar_core::cache::{self, Cache};
+use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
@@ -52,6 +55,8 @@ enum Job {
     Disabled(Disabled),
     /// The days on screen that the cache does not hold and are to be fetched, if any.
     Browse(Option<Window>),
+    /// A new event to create in the calendar, by the number the views know it by.
+    Create(u64, Calendar, NewEvent),
 }
 
 enum Update {
@@ -65,6 +70,12 @@ enum Update {
     Synchronizing,
     /// Where synchronization stands, once the worker is done for now.
     Status(Status),
+    /// Google created the new event under this ID.
+    Created(u64, String),
+    /// Google did not create the new event, and why; never holds the event's contents.
+    NotCreated(u64, String),
+    /// The account's default event length, in minutes (`MOD-05-F09`).
+    DefaultLength(String, u32),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -90,6 +101,18 @@ pub struct Synchronization {
     status: Status,
     /// The calendars listed in the cache, as the worker last told.
     calendars: Vec<Calendar>,
+    /// Each account's default event length, in minutes, once Google told it.
+    lengths: HashMap<String, u32>,
+    /// What became of new events at Google, not yet taken.
+    saved: Vec<Saved>,
+}
+
+/// What became of a new event at Google.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Saved {
+    Created(u64, String),
+    /// Why it was not created.
+    NotCreated(u64, String),
 }
 
 impl Synchronization {
@@ -177,6 +200,8 @@ impl Synchronization {
             browsed: None,
             status: Status::default(),
             calendars: Vec::new(),
+            lengths: HashMap::new(),
+            saved: Vec::new(),
         }
     }
 
@@ -263,6 +288,21 @@ impl Synchronization {
         }
     }
 
+    /// Creates the event in the calendar at Google, then synchronizes the calendar
+    /// (`MOD-05-F16`); `poll` tells what became of it by `local`.
+    pub fn create(&self, local: u64, calendar: Calendar, event: NewEvent) {
+        let _ = self.jobs.send(Job::Create(local, calendar, event));
+    }
+
+    /// The length, in minutes, of a new event of the account started without a range: as set in
+    /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
+    pub fn default_length(&self, account_id: &str) -> u32 {
+        self.lengths
+            .get(account_id)
+            .copied()
+            .unwrap_or(DEFAULT_LENGTH)
+    }
+
     /// The events to show, when they changed. Called every frame.
     pub fn poll(&mut self) -> Option<Vec<Event>> {
         let mut events = None;
@@ -278,6 +318,13 @@ impl Synchronization {
                 Update::Gone(names) => self.gone.extend(names),
                 Update::Synchronizing => self.status.synchronizing = true,
                 Update::Status(status) => self.status = status,
+                Update::Created(local, id) => self.saved.push(Saved::Created(local, id)),
+                Update::NotCreated(local, reason) => {
+                    self.saved.push(Saved::NotCreated(local, reason))
+                }
+                Update::DefaultLength(account, minutes) => {
+                    self.lengths.insert(account, minutes);
+                }
             }
         }
         events
@@ -291,6 +338,12 @@ impl Synchronization {
     /// Where synchronization stands, for the indicator (`MOD-02-F17`).
     pub fn status(&self) -> &Status {
         &self.status
+    }
+
+    /// What became of new events at Google since last asked, in the order Google answered; each
+    /// is given once.
+    pub fn take_saved(&mut self) -> Vec<Saved> {
+        std::mem::take(&mut self.saved)
     }
 
     /// The names of calendars gone from their accounts' lists since last asked; each is given
@@ -407,6 +460,9 @@ impl Engine {
                 self.fetch_outside();
                 return vec![self.shown()];
             }
+            Some(Job::Create(local, calendar, event)) => {
+                return self.create(local, calendar, &event, now);
+            }
         };
         self.round(&calendars, now)
     }
@@ -424,6 +480,10 @@ impl Engine {
         let mut updates = Vec::new();
         match listed {
             Ok((session, list)) => {
+                // Without it, new events take Google's default length.
+                if let Ok(minutes) = session.default_length() {
+                    updates.push(Update::DefaultLength(id.to_string(), minutes));
+                }
                 updates.extend(gone(list.gone));
                 let calendars = enabled(&self.disabled, &list.calendars);
                 let synced =
@@ -487,6 +547,34 @@ impl Engine {
             updates.push(self.shown());
         }
         updates
+    }
+
+    /// Creates the event at Google, then synchronizes its calendar, so the event reaches the cache
+    /// the way every change does.
+    fn create(
+        &mut self,
+        local: u64,
+        calendar: Calendar,
+        event: &NewEvent,
+        now: Instant,
+    ) -> Vec<Update> {
+        let Some(session) = self.sessions.get(&calendar.account_id) else {
+            let reason = "its account is not signed in yet; try again in a moment".to_string();
+            return vec![Update::NotCreated(local, reason)];
+        };
+        match session.create(&calendar, event) {
+            Ok(id) => {
+                let mut updates = vec![Update::Created(local, id)];
+                updates.extend(self.round(&[calendar], now));
+                // An event on browsed days outside the cache comes back from there.
+                if self.browsed.is_some() {
+                    self.fetch_outside();
+                    updates.push(self.shown());
+                }
+                updates
+            }
+            Err(error) => vec![Update::NotCreated(local, error.0)],
+        }
     }
 
     /// Deletes the disabled calendars' events; they stay listed (`MOD-02-F06`).
@@ -698,6 +786,7 @@ mod tests {
     use crate::calendar_list::Picked;
     use crate::{Built, build, pick};
     use calendar_core::colors;
+    use calendar_core::create::{self, QuickEntry, Saving};
     use calendar_core::fixtures::d;
     use calendar_core::model::{Access, Calendar, Rgb, Timing};
     use calendar_core::navigation::Navigation;
@@ -708,7 +797,7 @@ mod tests {
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_google::CLIENT_FILE;
-    use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, FakeGoogle, FakeStore};
+    use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore};
     use chrono::{TimeZone, Utc};
     use chrono_tz::Europe::Warsaw;
     use serde_json::{Value, json};
@@ -2006,5 +2095,217 @@ mod tests {
         // 3. Reset.
         pick(&mut settings.colors, picked(None));
         assert_eq!(shown(&settings), [blue, blue]);
+    }
+
+    /// The account's primary calendar, "Personal", which new events go to until the user
+    /// chooses another one.
+    fn personal(google: &Google) {
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": EMAIL,
+                "summary": "Personal",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#9fe1e7",
+                "accessRole": "owner",
+                "primary": true,
+            }),
+        );
+    }
+
+    fn accounts() -> Vec<calendar_core::accounts::Entry> {
+        vec![calendar_core::accounts::Entry {
+            account: calendar_core::accounts::Account {
+                id: ACCOUNT_ID.to_string(),
+                email: EMAIL.to_string(),
+                workspace: false,
+                contacts: true,
+                directory: false,
+            },
+            state: calendar_core::accounts::AccountState::Connected,
+        }]
+    }
+
+    /// What Google answered about new events, in order.
+    fn saved(updates: &[Update]) -> Vec<Saved> {
+        updates
+            .iter()
+            .filter_map(|update| match update {
+                Update::Created(local, id) => Some(Saved::Created(*local, id.clone())),
+                Update::NotCreated(local, reason) => {
+                    Some(Saved::NotCreated(*local, reason.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The events last told to the views.
+    fn shown(updates: &[Update]) -> Option<Vec<Event>> {
+        updates.iter().rev().find_map(|update| match update {
+            Update::Events(_, events) => Some(events.clone()),
+            _ => None,
+        })
+    }
+
+    fn local(at: DateTime<Utc>) -> String {
+        at.with_timezone(&Warsaw).format("%F %R").to_string()
+    }
+
+    #[test]
+    fn tc_05_01_selecting_10_to_11_30_and_typing_a_title_creates_the_event_in_the_default_calendar()
+    {
+        let google = Google::start("tc-05-01");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendars = engine.cache.calendar_list().unwrap();
+
+        // 1. Thursday 12 November 10:00–11:30 is selected in the week view of 9–15 November:
+        //    the quick-entry box has those times and the calendar "Personal".
+        let selected = create::selected(d(2026, 11, 12), 600, 690, Warsaw);
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let mut entry = QuickEntry::new(selected, Warsaw, default);
+        assert_eq!(
+            (local(entry.start), local(entry.end)),
+            (
+                "2026-11-12 10:00".to_string(),
+                "2026-11-12 11:30".to_string()
+            )
+        );
+        assert_eq!(entry.calendar.as_ref().unwrap().name, "Personal");
+
+        // 2. "Planning" is typed and Enter pressed: it is shown at once, marked saving; the fake
+        //    Google receives it in "Personal", and the app shows it as synchronized back.
+        entry.title = "Planning".to_string();
+        let (calendar, event) = entry.new_event().unwrap();
+        let mut saving = Saving::default();
+        let number = saving.add(&calendar, &event);
+        assert_eq!(
+            saving.events().map(|e| e.saving).collect::<Vec<_>>(),
+            [true]
+        );
+        let updates = engine.handle(Some(Job::Create(number, calendar, event)), start);
+
+        let saved = saved(&updates);
+        let [Saved::Created(confirmed, id)] = saved.as_slice() else {
+            panic!("Google did not create the event");
+        };
+        assert_eq!(*confirmed, number);
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(sent["summary"], "Planning");
+        assert_eq!(sent["start"]["dateTime"], "2026-11-12T10:00:00+01:00");
+        assert_eq!(sent["end"]["dateTime"], "2026-11-12T11:30:00+01:00");
+        saving.confirmed(number, id);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        let planning = events.iter().find(|e| e.title == "Planning").unwrap();
+        assert_eq!(planning.calendar_id, EMAIL);
+        assert!(!planning.saving);
+        let Timing::Timed { start, end, .. } = planning.timing else {
+            panic!("a timed event");
+        };
+        assert_eq!(
+            (local(start), local(end)),
+            (
+                "2026-11-12 10:00".to_string(),
+                "2026-11-12 11:30".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn a_new_event_google_refuses_is_not_created_and_the_reason_comes_back() {
+        let google = Google::start("create-refused");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        // Google stops letting the account change it before the app learns of it.
+        google.fake.set_access_role(EMAIL, "reader");
+        let (_, event) = QuickEntry {
+            title: "Planning".to_string(),
+            ..QuickEntry::new(
+                create::selected(d(2026, 11, 12), 600, 690, Warsaw),
+                Warsaw,
+                Some(calendar.clone()),
+            )
+        }
+        .new_event()
+        .unwrap();
+
+        let updates = engine.handle(Some(Job::Create(7, calendar.clone(), event.clone())), start);
+
+        let refused = saved(&updates);
+        let [Saved::NotCreated(7, reason)] = refused.as_slice() else {
+            panic!("the event was not refused");
+        };
+        assert!(reason.starts_with("Google refused"), "{reason}");
+        assert!(!reason.contains("Planning"));
+        assert!(google.fake.event(ACCOUNT_ID, EMAIL, "created-1").is_none());
+
+        // An account not signed in in this run creates nothing either.
+        engine.stop(ACCOUNT_ID);
+        let updates = engine.handle(Some(Job::Create(8, calendar, event)), start);
+        assert!(matches!(
+            saved(&updates).as_slice(),
+            [Saved::NotCreated(8, _)]
+        ));
+    }
+
+    #[test]
+    fn a_new_event_on_browsed_days_outside_the_cache_comes_back_from_google() {
+        let google = Google::start("create-outside");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        engine.handle(Some(Job::Browse(Some(march_2030()))), start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let (_, event) = QuickEntry {
+            title: "Trip".to_string(),
+            ..QuickEntry::new(
+                create::selected(d(2030, 3, 10), 600, 690, Warsaw),
+                Warsaw,
+                Some(calendar.clone()),
+            )
+        }
+        .new_event()
+        .unwrap();
+
+        let updates = engine.handle(Some(Job::Create(1, calendar, event)), start);
+
+        assert!(matches!(saved(&updates).as_slice(), [Saved::Created(1, _)]));
+        let events = shown(&updates).unwrap();
+        assert!(events.iter().any(|e| e.title == "Trip"));
+    }
+
+    #[test]
+    fn the_default_length_of_new_events_is_read_from_google_with_the_first_synchronization() {
+        let google = Google::start("default-length");
+        personal(&google);
+        google.fake.set_default_length(ACCOUNT_ID, 30);
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            Cache::in_memory,
+            google.sign_in(),
+            vec![ACCOUNT_ID.to_string()],
+            window(),
+            Disabled::new(),
+        );
+        // Google's default until the account's own is known.
+        assert_eq!(sync.default_length(ACCOUNT_ID), 60);
+
+        sync.checked(&[(ACCOUNT_ID.to_string(), Check::Works)], window());
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while sync.default_length(ACCOUNT_ID) != 30 {
+            assert!(Instant::now() < deadline, "the default length did not come");
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        let (start, end) = create::clicked(d(2026, 11, 12), 600, 30, Warsaw);
+        assert_eq!(end - start, chrono::Duration::minutes(30));
     }
 }
