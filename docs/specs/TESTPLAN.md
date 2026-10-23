@@ -49,8 +49,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 34 | 18 | 10 / 2 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
-| `MOD-07` Reminders and notifications | 24 | 0 | 0 / 0 | not written |
-| **Total** | **177** | **70** | **34 / 8** | 5 / 7 modules written |
+| `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
+| **Total** | **177** | **87** | **40 / 11** | 6 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -139,3 +139,19 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-05-10` | Changing an event's colour in the editor sends the new colour to Google | `US-05-09` | desktop | happy-path | auto | draft |
 | `TC-05-11` | An event's attachments are listed and open in the browser | `US-05-10` | desktop | happy-path | manual-only | draft |
 | `TC-05-12` | A series created in the app shows the same occurrences in Google Calendar in the browser | `US-05-06` | desktop | happy-path | manual-only | draft |
+
+## [MOD-07] Reminders and notifications
+
+`docs/specs/modules/07-notifications/REQUIREMENTS.md` · `docs/specs/modules/07-notifications/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-07-01` | A 10-minute reminder produces exactly one notification with title, start time and location, even across synchronizations | `US-07-01` | desktop | happy-path | auto | draft |
+| `TC-07-02` | Declined events and e-mail reminders produce no desktop notification | `US-07-01` | desktop | negative | auto | draft |
+| `TC-07-03` | Snoozing for 5 minutes shows the notification again after 5 minutes without changing anything in Google | `US-07-02` | desktop | happy-path | auto | draft |
+| `TC-07-04` | A muted calendar still shows its events but produces no notifications | `US-07-03` | desktop | happy-path | auto | draft |
+| `TC-07-05` | A new event gets its calendar's default reminders, an added reminder reaches Google, and "Use calendar defaults" resets | `US-07-04` | desktop | happy-path | auto | draft |
+| `TC-07-06` | Launching the app a second time brings the running window forward instead of starting another copy | `US-07-05` | desktop | happy-path | auto | draft |
+| `TC-07-07` | On KDE, clicking a notification opens its event and Join opens the Meet meeting | `US-07-01` | desktop | happy-path | manual-only | draft |
+| `TC-07-08` | With the window closed to the tray reminders keep arriving, quitting stops them, and "Start at login" starts the app in the tray | `US-07-05` | desktop | happy-path | manual-only | draft |
+| `TC-07-09` | A `webcal:` link opened in another app opens Google Calendar's "add calendar from URL" page | `US-07-06` | desktop | happy-path | manual-only | draft |
