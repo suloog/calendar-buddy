@@ -44,13 +44,13 @@ that module. Numbers are never reused or renumbered.
 | Module | Story criteria | Covered | TC (auto / manual) | Written |
 | ------ | -------------- | ------- | ------------------ | ------- |
 | `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
-| `MOD-02` Calendars, synchronisation and offline cache | 31 | 0 | 0 / 0 | not written |
+| `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
 | `MOD-03` Views and navigation | 31 | 0 | 0 / 0 | not written |
 | `MOD-04` Appearance and themes | 10 | 0 | 0 / 0 | not written |
 | `MOD-05` Creating and editing events | 34 | 0 | 0 / 0 | not written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
 | `MOD-07` Reminders and notifications | 24 | 0 | 0 / 0 | not written |
-| **Total** | **177** | **8** | **2 / 2** | 1 / 7 modules written |
+| **Total** | **177** | **23** | **10 / 3** | 2 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -73,3 +73,19 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-01-02` | A second account is connected from the settings and both are listed with their state | `US-01-02` | desktop | happy-path | manual-only | draft |
 | `TC-01-03` | Connected accounts stay connected after a restart without opening the browser | `US-01-03` | desktop | happy-path | auto | draft |
 | `TC-01-04` | Removing an account deletes all its local data and withdraws the app's access | `US-01-04` | desktop | happy-path | auto | draft |
+
+## [MOD-02] Calendars, synchronisation and offline cache
+
+`docs/specs/modules/02-calendars-sync/REQUIREMENTS.md` · `docs/specs/modules/02-calendars-sync/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-02-01` | Calendars of two accounts, including a subscribed one, are fetched and shown together in their Google colours | `US-02-01` | desktop | happy-path | auto | draft |
+| `TC-02-02` | Events in another time zone, across a daylight-saving change, and moved or cancelled occurrences show at the right local times | `US-02-01` | desktop | happy-path | auto | draft |
+| `TC-02-03` | Events of a read-only calendar are marked not editable, and a free/busy-only calendar shows busy blocks without details | `US-02-02` | desktop | happy-path | auto | draft |
+| `TC-02-04` | A change made in Google appears after the next background synchronization, and Refresh brings it at once | `US-02-03` | desktop | happy-path | auto | draft |
+| `TC-02-05` | A change made on the phone appears in the open app within about a minute | `US-02-03` | desktop | happy-path | manual-only | draft |
+| `TC-02-06` | A calendar that is no longer shared disappears with its events and a one-time notice | `US-02-04` | desktop | happy-path | auto | draft |
+| `TC-02-07` | Without network the cached calendar is shown with an offline indicator and editing is unavailable | `US-02-05` | desktop | happy-path | auto | draft |
+| `TC-02-08` | A synchronization error on one calendar is shown on it while the others stay up to date, with the last-sync time | `US-02-06` | desktop | happy-path | auto | draft |
+| `TC-02-09` | A calendar gets a local colour that Google does not receive, and Reset restores the Google colour | `US-02-07` | desktop | happy-path | auto | draft |
