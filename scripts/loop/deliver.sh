@@ -88,7 +88,8 @@ for STORY in "$@"; do
     b="$(pct "$1" "$BEFORE")"; a="$(pct "$1" "$AFTER")"
     rb="$(resets "$1" "$BEFORE")"; ra="$(resets "$1" "$AFTER")"
     if [ "$b" = "?" ] || [ "$a" = "?" ]; then echo "?"; return; fi
-    if [ "$rb" != "$ra" ]; then echo "${b}% → ${a}% (~)"; return; fi
+    # resets_at carries sub-second jitter between reads; a real reset moves it by hours.
+    if [ "${rb:0:16}" != "${ra:0:16}" ]; then echo "${b}% → ${a}% (~)"; return; fi
     echo "${b}% → ${a}% (+$(awk -v a="$a" -v b="$b" 'BEGIN{printf "%.0f", a-b}')pp)"
   }
   printf '| %s | %s | %s | %s min | %s | %s | %s | %s | %s |\n' \

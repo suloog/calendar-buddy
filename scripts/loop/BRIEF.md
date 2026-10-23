@@ -59,7 +59,7 @@ Stop at once with `RESULT: failed <ID> <reason>` and change nothing if:
 Append to `docs/delivery/LOG.md` (create it with a heading if missing):
 
 ```
-## <ID> — <done|review|parked|failed> — <YYYY-MM-DD HH:MM>
+## <ID> — <done|review|parked|failed> — <YYYY-MM-DD HH:MM from `date '+%Y-%m-%d %H:%M'`>
 - What: <one or two lines>
 - Decisions: <DEC-nn, … or none>
 - Reviews: code <n> round(s), spec <n> round(s); open notes: <…>
