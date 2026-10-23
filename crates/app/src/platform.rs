@@ -44,6 +44,28 @@ impl SecretStore for SystemSecretStore {
             .map_err(failed)?;
         Ok(())
     }
+
+    fn load(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
+        let service =
+            SecretService::connect(EncryptionType::Dh).map_err(|_| SecretStoreError::NotRunning)?;
+        let collection = service.get_default_collection().map_err(failed)?;
+        if collection.is_locked().map_err(failed)? {
+            collection.unlock().map_err(failed)?;
+        }
+        let items = collection
+            .search_items(HashMap::from([
+                ("application", "calendar-buddy"),
+                ("account", account_id),
+            ]))
+            .map_err(failed)?;
+        let Some(item) = items.first() else {
+            return Ok(None);
+        };
+        let secret = item.get_secret().map_err(failed)?;
+        String::from_utf8(secret)
+            .map(Some)
+            .map_err(|_| SecretStoreError::Failed("the saved sign-in could not be read".into()))
+    }
 }
 
 /// The default browser, through `xdg-open`.

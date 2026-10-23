@@ -1,11 +1,12 @@
 mod agenda_view;
+mod checks;
 mod connect;
 mod grid_view;
 mod mini_calendar;
 mod month_view;
 mod platform;
 
-use calendar_core::accounts::{Account, Accounts};
+use calendar_core::accounts::{self, Account, AccountState, Accounts, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::details::event_details;
 use calendar_core::fixtures;
@@ -16,6 +17,7 @@ use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::view_model::{GridViewModel, grid_view};
+use checks::Checks;
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use connect::Connect;
@@ -95,8 +97,14 @@ fn build(
 }
 
 struct CalendarApp {
-    /// The connected Google accounts; none on a first run.
+    /// The connected Google accounts, remembered across restarts; none on a first run.
     accounts: Accounts,
+    /// Saves the accounts off the UI thread; `None` when there is no home directory.
+    accounts_writer: Option<Sender<Accounts>>,
+    /// Asking Google whether the accounts still work.
+    checks: Checks,
+    /// Why the accounts could not be checked, until a check gets through.
+    problem: Option<CheckError>,
     /// Connecting an account, from the welcome screen or the settings.
     connect: Connect,
     /// The account just connected, until the user closes the notice about it.
@@ -144,11 +152,29 @@ impl CalendarApp {
             });
             sender
         });
+        let accounts_path = accounts::default_path();
+        let accounts = accounts_path
+            .as_deref()
+            .map(Accounts::load)
+            .unwrap_or_default();
+        let accounts_writer = accounts_path.map(|path| {
+            let (sender, receiver) = mpsc::channel::<Accounts>();
+            std::thread::spawn(move || {
+                for accounts in receiver {
+                    // A lost file only means connecting the accounts again.
+                    let _ = accounts.save(&path);
+                }
+            });
+            sender
+        });
         let navigation = Navigation::start(last_view, today, regional.week_start);
         let built_at = Utc::now();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
-            accounts: Accounts::default(),
+            accounts,
+            accounts_writer,
+            checks: Checks::new(),
+            problem: None,
             connect: Connect::new(),
             connected: None,
             events,
@@ -237,6 +263,7 @@ impl CalendarApp {
         };
         let mut open = true;
         let mut go_to = None;
+        let mut again = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -298,12 +325,24 @@ impl CalendarApp {
                     egui::Grid::new("accounts").show(ui, |ui| {
                         for entry in self.accounts.list() {
                             ui.label(&entry.account.email);
+                            // An account's problem is shown on the account (`MOD-01-F11`).
                             ui.label(entry.state.label());
-                            // What these do comes with `US-01-03` and `US-01-04`.
-                            for action in ["Sign in again", "Remove"] {
-                                ui.add_enabled(false, egui::Button::new(action))
-                                    .on_disabled_hover_text("Not available yet.");
+                            if entry.state == AccountState::NeedsSignIn {
+                                if ui
+                                    .add_enabled(
+                                        self.connect.idle(),
+                                        egui::Button::new(accounts::SIGN_IN_AGAIN),
+                                    )
+                                    .clicked()
+                                {
+                                    again = Some(entry.account.email.clone());
+                                }
+                            } else {
+                                ui.label("");
                             }
+                            // What this does comes with `US-01-04`.
+                            ui.add_enabled(false, egui::Button::new("Remove"))
+                                .on_disabled_hover_text("Not available yet.");
                             ui.end_row();
                         }
                     });
@@ -311,6 +350,9 @@ impl CalendarApp {
                     self.connect.show(ui, "Add account");
                 }
             });
+        if let Some(email) = again {
+            self.sign_in_again(ctx, &email);
+        }
         if let Some(date) = go_to {
             self.navigation.go_to(date);
             self.mini_month = date;
@@ -319,6 +361,18 @@ impl CalendarApp {
         if !open {
             self.close_dialog(ctx);
         }
+    }
+
+    fn save_accounts(&self) {
+        if let Some(writer) = &self.accounts_writer {
+            let _ = writer.send(self.accounts.clone());
+        }
+    }
+
+    /// Opens the settings and signs in again to an account that needs it.
+    fn sign_in_again(&mut self, ctx: &egui::Context, email: &str) {
+        self.dialog = Some(Dialog::Settings);
+        self.connect.sign_in_again(ctx, email);
     }
 
     /// Shows what `navigation` now points at: the mini calendar follows it, and a new view is
@@ -346,7 +400,22 @@ impl eframe::App for CalendarApp {
         if let Some(account) = self.connect.poll() {
             self.connected = Some(account.clone());
             self.accounts.add(account);
+            self.checks.signed_in();
+            // The secret store just kept a sign-in; the next check says whether a problem stays.
+            self.problem = None;
+            self.save_accounts();
         }
+        match self.checks.poll() {
+            Some(Ok(checked)) => {
+                self.problem = None;
+                if self.accounts.apply(&checked) {
+                    self.save_accounts();
+                }
+            }
+            Some(Err(problem)) => self.problem = Some(problem),
+            None => {}
+        }
+        self.checks.tick(ui.ctx(), &self.accounts);
         // With no account connected there is only the welcome screen (`MOD-01-F12`).
         if self.accounts.is_empty() {
             connect::welcome(ui, &mut self.connect);
@@ -402,6 +471,46 @@ impl eframe::App for CalendarApp {
                 });
             });
         });
+        // The calendar keeps showing what it has; only the accounts cannot be reached (`DEC-52`).
+        if let Some(problem) = &self.problem {
+            let mut again = false;
+            egui::Panel::top("account-problem").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(ui.visuals().warn_fg_color, problem.message());
+                    again = ui.button("Try again").clicked();
+                });
+            });
+            if again {
+                self.problem = None;
+                self.checks.now();
+            }
+        }
+        // The user is told about every account Google turned away (`MOD-01-F05`).
+        let mut again = None;
+        let turned_away: Vec<&str> = self
+            .accounts
+            .list()
+            .iter()
+            .filter(|entry| entry.state == AccountState::NeedsSignIn)
+            .map(|entry| entry.account.email.as_str())
+            .collect();
+        if !turned_away.is_empty() {
+            egui::Panel::top("needs-sign-in").show(ui, |ui| {
+                for email in turned_away {
+                    ui.horizontal_wrapped(|ui| {
+                        let warn = ui.visuals().warn_fg_color;
+                        ui.colored_label(warn, accounts::needs_sign_in(email));
+                        let button = egui::Button::new(accounts::SIGN_IN_AGAIN);
+                        if ui.add_enabled(self.connect.idle(), button).clicked() {
+                            again = Some(email.to_string());
+                        }
+                    });
+                }
+            });
+        }
+        if let Some(email) = again {
+            self.sign_in_again(ui.ctx(), &email);
+        }
         if let Some(account) = &self.connected {
             let mut close = false;
             egui::Panel::top("connected-account").show(ui, |ui| {

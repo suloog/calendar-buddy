@@ -1008,3 +1008,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-83] Accounts are remembered in a file and checked with Google at start and every 10 minutes
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-03
+- **Affects:** `US-01-03`, `MOD-01-F04`, `MOD-01-F05`, MOD-01 Constraints and edge cases, `DEC-80`
+- **Decision:** The connected accounts — Google's account ID, e-mail address, what was granted and the state ("connected" / "needs sign-in"), nothing secret — are kept in `$XDG_CONFIG_HOME/calendar-buddy/accounts` (default `~/.config/…`), so the app starts on the calendar, not the welcome screen, without the secret store or the network; this ends the session-only accounts of `DEC-80`. Off the UI thread the app reads every connected account's refresh token from the secret store (unlocking it if needed, once for all accounts) and asks Google's token service for an access token: at start, then every 10 minutes, and 1 minute after Google could not be reached. Google's `invalid_grant`, or no sign-in for the account in the secret store, makes the account "needs sign-in"; it is then not asked about again until the user signs in to it again. Any other failure (no network, Google's other errors) leaves the account connected. A missing client file, no running secret store or a store the user did not unlock leaves every account as it was, with a notice above the calendar that nothing synchronizes or changes until it is fixed, and "Try again"; the app does not ask to unlock the store again on its own. The access tokens are not kept until synchronization (`MOD-02`) needs them.
+- **Why:** The account list must be there when the store is locked (`DEC-52`); a token refresh is how Google tells an installed app that its access was revoked, and checking regularly notices it while the app runs before synchronization exists; asking every 10 minutes costs nothing, and not re-prompting avoids a password dialog popping up over and over.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-84] "Needs sign-in" is told above the calendar and on the account; "Sign in again" asks Google for that account
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-03
+- **Affects:** `US-01-03`, `MOD-01-F05`, `MOD-01-F06`, `MOD-01-F11`, `MOD-01-U01`, `DEC-81`
+- **Decision:** While an account needs sign-in, a line above the calendar says "<e-mail> needs sign-in: Google ended Calendar Buddy's access to it. Your other accounts keep working." with **Sign in again**; in the settings the account's row shows "Needs sign-in" and **Sign in again** (only on such rows; **Remove** stays disabled until `US-01-04`). **Sign in again** opens the settings and runs the steps of adding an account — checks, the "unverified app" heads-up, the browser — with Google asked for that account (`login_hint`, `prompt=consent`); offline it says signing in is not possible offline and offers "Try again". The account comes back "Connected" in its place under the same Google account ID, so whatever the app keeps for it stays. If another account is picked in Google's screen, that one is connected as an added account and the first still needs sign-in.
+- **Why:** The account's problem is shown on the account and apart from any calendar's problem (`MOD-01-F11`), and the user is told without opening the settings; Google's own sign-in prompts pre-select the account that needs it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

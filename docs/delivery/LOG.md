@@ -61,3 +61,10 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking: a stale error or heads-up stayed in Settings after closing it, a wrong test comment, a test name that promised the real store's de-duplication. Not fixed: `Accounts::add`'s return value is used only by tests; the real Secret Service replacing a repeat sign-in's token is checked only by hand. No code sets "Needs sign-in" yet (US-01-03).
 - Manual checks: TC-01-02, US-01-02#3, edge case (repeat sign-in, one KWallet item)
 - Commits on main: one squash commit — 1ec28bb feat(accounts): connect more accounts and list them in the settings
+
+## US-01-03 — review — 2026-10-23 15:56
+- What: connected accounts are remembered in `~/.config/calendar-buddy/accounts` (no secrets) and checked off the UI thread by refreshing each one's token from the secret store (at start, every 10 min, 1 min after a failure); `invalid_grant` or a missing token marks only that account "Needs sign-in", told above the calendar and on its Settings row; "Sign in again" re-runs the connect flow with `login_hint` and restores the account in place. A locked/missing store or client file leaves accounts as they were, with a notice and "Try again".
+- Decisions: DEC-83, DEC-84
+- Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking: checks paused by a store problem now resume after a sign-in, the accounts file is written atomically, the check/sign-in race is tested, nits. Not fixed: a periodic check may prompt to unlock a keyring that re-locked itself (KeePassXC, GNOME Keyring on screen lock); Google errors other than `invalid_grant` (e.g. a replaced OAuth client) are retried silently; any store failure is worded as "locked"; access tokens are not kept until MOD-02.
+- Manual checks: TC-01-03, US-01-03#2, US-01-03#3, US-01-03#4, edge cases (locked store, no network)
+- Commits on main: one squash commit — feat(accounts): stay signed in and sign in again
