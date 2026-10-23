@@ -131,3 +131,10 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings. Fixed: a test now proves opening or dragging reaches the right event when a calendar is hidden (the `places` mapping), and `build` copies events only once. Not fixed (nits): with the panel collapsed, a calendar's sync problem is named nowhere, and the top bar only says "Synchronization error". `hidden` lines of calendars deleted in Google stay until their account is removed. Closing the panel by hand in a narrow window saves "collapsed". COVERAGE.md rows US-03-06#3–#5 still say "not tested yet", because there is no test case for them; unit tests cover them.
 - Manual checks: TC-03-09, US-03-06#3, US-03-06#4, US-03-06#5, edge case (no calendar shown), DEC-97 row problem
 - Commits on main: 07d5f70 feat(views): side panel with calendars grouped by account
+
+## US-03-07 — review — 2026-10-23 18:14
+- What: the settings get a **Calendars** section under **Accounts** that lists each account's calendars, each with a checkbox ticked while it is enabled. Unticking saves a `disabled` line, hands the set to the sync worker (`DEC-94`) and drops the calendar's events from every view in the same frame (`side_panel::shown` now filters disabled as well as hidden calendars). `side_panel::pickable` is the future calendar pickers' source (no picker exists yet, `MOD-05`). `groups` now shares `by_account` with the new lists. No SQLite schema or provider-interface change.
+- Decisions: DEC-102
+- Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings. Fixed: `pickable` no longer claims to be the whole picker; edit rights are left to MOD-05 (DEC-102 reworded before merge). `groups` reuses `by_account`, and the click result is named `toggled`. Not fixed (nit): `toggle`'s parameter is still named `hidden` and typed `Hidden`, though it also serves `disabled`. The UI click wiring has no automated test, like the side panel's toggle. Check that MOD-05's pickers really use `pickable`.
+- Manual checks: TC-03-10 (drawing only), US-03-07#2 pickers once MOD-05 exists
+- Commits on main: 51d6ac4 feat(views): disable and enable calendars in the settings
