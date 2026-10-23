@@ -1044,3 +1044,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-86] The calendar list as Google Calendar lists it
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-01
+- **Affects:** `US-02-01`, `MOD-02-F01`, `MOD-02-F02`, `MOD-02-F03`, `MOD-02-F20`
+- **Decision:** Each account's calendars are its Google calendar list (`calendarList.list`, Google's defaults): its own, shared and subscribed calendars, of every access level, free/busy ones included; a calendar the user hid from the list in Google ("Hide from list") stays out, as in Google Calendar. A calendar is named as Google shows it (the user's own name for a shared calendar, `summaryOverride`, before its owner's `summary`) and drawn in the list entry's `backgroundColor`. A calendar on the lists of two accounts (e.g. the same holiday calendar subscribed in both) is kept and shown once per account, each copy under its account. Events of a free/busy calendar are marked busy-only, since Google sends them without details; an event without a title is shown as "(No title)", as Google Calendar shows it.
+- **Why:** Google Calendar is the reference (`DEC-62`); a hidden calendar is one the user chose not to see. Merging copies across accounts would need a rule Google does not have, as each account is a separate Google Calendar there.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-87] First full synchronization: when it runs, the cache file and a removed account's data
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-01
+- **Affects:** `US-02-01`, `MOD-02-F11`, `MOD-02-F13`, `MOD-02-NFR-02`, `NFR-01`, `NFR-08`, `DEC-23`, `DEC-83`, `DEC-85`
+- **Decision:** The cache is an SQLite file, `$XDG_CACHE_HOME/calendar-buddy/cache.sqlite3` (default `~/.cache/…`), holding each account's calendars and their events as Google keeps them (series as master plus changed or cancelled occurrences); a damaged file is deleted and started anew. One worker thread owns it: at start it shows what the cache holds and drops the data of accounts no longer in the accounts file; each account's first full synchronization runs once per app run, as soon as Google has confirmed the account's sign-in in the account check of `DEC-83` (at start, and right after connecting or signing in again), so the secret store is unlocked once. It fetches the calendar list and every calendar's events from one year back to two years ahead of today in the system's time zone (`timeMin`/`timeMax`), one calendar after another, and replaces what the cache held for the account; calendars gone from the list go with their events. A calendar Google refuses keeps its cached events and does not stop the others; an account whose synchronization did not finish keeps its cached data and is synchronized again after its next successful check. Removing an account deletes its cached calendars and events right after its credentials (`DEC-85`). Until `US-02-03`, nothing else refreshes the cache: the window moves, and changes made elsewhere arrive, at the next start.
+- **Why:** The UI never waits on network or disk (`NFR-01`); synchronizing only accounts Google has just accepted avoids a second unlock prompt and requests bound to fail. A cache rebuilt from Google belongs in the XDG cache directory (`NFR-17`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-88] Expanding series into occurrences
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-01
+- **Affects:** `US-02-01`, `MOD-02-F22`
+- **Decision:** A series is expanded by the `rrule` library from the master's start in the master's IANA zone and Google's `RRULE`, `EXDATE` and `RDATE` lines, into the occurrences that overlap the cache window; each lasts as long as the master. An occurrence Google sends on its own (moved or otherwise changed) takes the place of the one with the same original start, and a cancelled one removes it; an occurrence sent without its series (an invitation to one occurrence) is shown on its own. Occurrences get Google's IDs (`<series>_<UTC start>` or `<series>_<date>`). A timed series' end (`UNTIL`) kept by Google as a date or a local time is read in the series' zone (a date as the end of that day) and handed to the library in UTC, which is the only form it takes; an all-day series' end is read as its date alone, whatever time comes with it. A series whose rule the library does still not accept, or whose first start is an ambiguous local time (the repeated hour of a daylight-saving change), shows only its first occurrence. An occurrence moved from inside the window to outside it is not sent by Google, so its original time is shown until it is synchronized in a later story.
+- **Why:** The constitution requires a tested library for recurrence and times kept as UTC plus the IANA zone; Google's IDs keep occurrences addressable for editing in `MOD-05`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

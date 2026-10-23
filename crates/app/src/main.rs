@@ -6,17 +6,18 @@ mod mini_calendar;
 mod month_view;
 mod platform;
 mod remove;
+mod sync;
 
 use calendar_core::accounts::{self, Account, AccountState, Accounts, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::details::event_details;
-use calendar_core::fixtures;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
+use calendar_core::sync::Window;
 use calendar_core::view_model::{GridViewModel, grid_view};
 use checks::Checks;
 use chrono::{DateTime, NaiveDate, Utc};
@@ -25,6 +26,7 @@ use connect::Connect;
 use eframe::egui;
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
+use sync::Synchronization;
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -68,8 +70,8 @@ enum Dialog {
     GoToDate(String, bool),
     /// The event editor is `MOD-05`; until then this only says where the event would go.
     NewEvent,
-    /// The index of the event whose details are open, and what had the keyboard when it opened.
-    Event(usize, Option<egui::Id>),
+    /// The event whose details are open, and what had the keyboard when it opened.
+    Event(Event, Option<egui::Id>),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
 }
@@ -113,6 +115,9 @@ struct CalendarApp {
     connected: Option<Account>,
     /// Removing an account, from the settings.
     removal: Removal,
+    /// Synchronizing with Google and reading the cache, off the UI thread.
+    sync: Synchronization,
+    /// What the views show, from the cache; empty until it is read.
     events: Vec<Event>,
     /// The system's regional settings, read at start (`DEC-29`).
     regional: Regional,
@@ -137,10 +142,8 @@ impl CalendarApp {
     fn new(ctx: egui::Context) -> Self {
         let regional = Regional::from_env(|key| std::env::var(key).ok());
         let zone = system_zone();
-        let zone_changes = watch_zone(zone, ctx);
+        let zone_changes = watch_zone(zone, ctx.clone());
         let today = Utc::now().with_timezone(&zone).date_naive();
-        // Test data until synchronization exists (`US-02-01`).
-        let events = fixtures::profile(today);
         let settings_path = settings::default_path();
         let last_view = settings_path
             .as_deref()
@@ -161,6 +164,12 @@ impl CalendarApp {
             .as_deref()
             .map(Accounts::load)
             .unwrap_or_default();
+        let account_ids = accounts
+            .list()
+            .iter()
+            .map(|e| e.account.id.clone())
+            .collect();
+        let sync = Synchronization::start(&ctx, account_ids, Window::around(today, zone));
         let accounts_writer = accounts_path.map(|path| {
             let (sender, receiver) = mpsc::channel::<Accounts>();
             std::thread::spawn(move || {
@@ -173,6 +182,7 @@ impl CalendarApp {
         });
         let navigation = Navigation::start(last_view, today, regional.week_start);
         let built_at = Utc::now();
+        let events = Vec::new();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
             accounts,
@@ -182,6 +192,7 @@ impl CalendarApp {
             connect: Connect::new(),
             connected: None,
             removal: Removal::new(),
+            sync,
             events,
             regional,
             zone,
@@ -211,6 +222,11 @@ impl CalendarApp {
 
     fn today(&self) -> NaiveDate {
         Utc::now().with_timezone(&self.zone).date_naive()
+    }
+
+    /// The days the cache holds, around today (`MOD-02-F11`).
+    fn window(&self) -> Window {
+        Window::around(self.today(), self.zone)
     }
 
     /// Google Calendar's shortcuts (`DEC-55`), unless a text field is taking the keys. Focus on a
@@ -321,8 +337,8 @@ impl CalendarApp {
                     ui.label(self.regional.long_date(self.navigation.selected));
                     ui.label("Creating events is not available yet.");
                 }
-                Dialog::Event(index, _) => {
-                    let details = event_details(&self.events[*index], self.zone);
+                Dialog::Event(event, _) => {
+                    let details = event_details(event, self.zone);
                     ui.heading(details.title.as_deref().unwrap_or("Busy"));
                     ui.label(details.when.describe(&self.regional));
                     if let Some(own) = details.in_own_zone(&self.regional) {
@@ -392,6 +408,8 @@ impl CalendarApp {
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
+        let window = self.window();
+        self.sync.forget(id, window);
         if self
             .connected
             .as_ref()
@@ -451,11 +469,17 @@ impl eframe::App for CalendarApp {
                 if self.accounts.apply(&checked) {
                     self.save_accounts();
                 }
+                let window = self.window();
+                self.sync.checked(&checked, window);
             }
             Some(Err(problem)) => self.problem = Some(problem),
             None => {}
         }
         self.checks.tick(ui.ctx(), &self.accounts);
+        if let Some(events) = self.sync.poll() {
+            self.events = events;
+            self.rebuild();
+        }
         // With no account connected there is only the welcome screen (`MOD-01-F12`).
         if self.accounts.is_empty() {
             connect::welcome(ui, &mut self.connect);
@@ -614,7 +638,7 @@ impl eframe::App for CalendarApp {
         });
         if let Some(event) = opened {
             let focused = ui.ctx().memory(|m| m.focused());
-            self.dialog = Some(Dialog::Event(event, focused));
+            self.dialog = Some(Dialog::Event(self.events[event].clone(), focused));
         }
     }
 }

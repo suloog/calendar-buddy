@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod agenda;
+pub mod cache;
 pub mod details;
 pub mod fixtures;
 pub mod layout;
@@ -9,8 +10,10 @@ pub mod model;
 pub mod month;
 pub mod navigation;
 pub mod platform;
+pub mod recurrence;
 pub mod regional;
 pub mod settings;
 pub mod shortcuts;
+pub mod sync;
 pub mod view_model;
 pub mod week;

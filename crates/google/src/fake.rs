@@ -1,5 +1,6 @@
-//! Fakes for the sign-in tests: Google (its consent screen, as seen through the browser, its token
-//! service and user info) and the secret store. Nothing here leaves `127.0.0.1`.
+//! Fakes for the tests: Google (its consent screen, as seen through the browser, its token
+//! service, user info and the Calendar API) and the secret store. Nothing here leaves
+//! `127.0.0.1`.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
@@ -8,6 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use calendar_core::accounts::Account;
 use calendar_core::platform::{Browser, SecretStore, SecretStoreError};
+use chrono::{DateTime, NaiveDate, Utc};
+use serde_json::{Value, json};
 use url::Url;
 
 use crate::{Endpoints, challenge};
@@ -52,9 +55,20 @@ struct State {
     refresh: HashMap<String, &'static str>,
     /// Every refresh token the app asked to refresh.
     refreshed: Vec<String>,
-    /// Every request to the token service, user info and revocation: method and path.
+    /// Every request to the token service, user info, revocation and the Calendar API: method
+    /// and path with the query.
     requests: Vec<String>,
+    /// Each account's calendar list entries, as Google sends them.
+    calendars: Vec<(&'static str, Value)>,
+    /// The events of each account's calendars, as Google sends them: account, calendar ID, event.
+    events: Vec<(&'static str, String, Value)>,
+    /// Calendars whose events Google refuses to send.
+    failing: Vec<String>,
 }
+
+/// How many items the fake sends per page; Google may send fewer than asked for.
+const CALENDARS_PER_PAGE: usize = 2;
+const EVENTS_PER_PAGE: usize = 100;
 
 pub struct FakeGoogle {
     pub endpoints: Endpoints,
@@ -82,6 +96,7 @@ impl FakeGoogle {
                 token: format!("{base}/token"),
                 userinfo: format!("{base}/userinfo"),
                 revoke: format!("{base}/revoke"),
+                calendar: format!("{base}/calendar/v3"),
             },
             state,
         }
@@ -120,6 +135,40 @@ impl FakeGoogle {
 
     pub fn requests(&self) -> Vec<String> {
         self.state.lock().unwrap().requests.clone()
+    }
+
+    /// The account has signed in before: Google knows the refresh token returned.
+    pub fn signed_in(&self, account: &'static str) -> String {
+        let token = format!("refresh-{account}");
+        self.state
+            .lock()
+            .unwrap()
+            .refresh
+            .insert(token.clone(), account);
+        token
+    }
+
+    /// A calendar on the account's calendar list, as Google's `calendarList` entry.
+    pub fn add_calendar(&self, account: &'static str, entry: Value) {
+        self.state.lock().unwrap().calendars.push((account, entry));
+    }
+
+    /// An event of one of the account's calendars, as Google's `events` resource.
+    pub fn add_event(&self, account: &'static str, calendar: &str, event: Value) {
+        self.state
+            .lock()
+            .unwrap()
+            .events
+            .push((account, calendar.to_string(), event));
+    }
+
+    /// Google refuses to send the calendar's events.
+    pub fn fail_calendar(&self, calendar: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .failing
+            .push(calendar.to_string());
     }
 }
 
@@ -226,6 +275,21 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         respond(&mut stream, answer);
         return;
     }
+    let bearer = head
+        .lines()
+        .find_map(|line| line.split_once("Bearer "))
+        .and_then(|(_, token)| state.access.get(token.trim()).copied());
+    if head.starts_with("GET /calendar/v3/") {
+        let answer = match bearer {
+            Some(account) => calendar_api(&state, account, request[1]),
+            None => (
+                "401 Unauthorized",
+                r#"{"error": {"code": 401, "message": "Invalid Credentials"}}"#.to_string(),
+            ),
+        };
+        respond(&mut stream, answer);
+        return;
+    }
     let (status, json) = if head.starts_with("POST /token") {
         let form: HashMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
             .into_owned()
@@ -235,6 +299,8 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
             state.refreshed.push(token.clone());
             let known = state.refresh.contains_key(token) && form["client_id"] == CLIENT_ID;
             let answer = if known {
+                let account = state.refresh[token];
+                state.access.insert(format!("access-{token}"), account);
                 (
                     "200 OK",
                     format!(r#"{{"access_token": "access-{token}", "expires_in": 3599}}"#),
@@ -304,6 +370,102 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         )
     };
     respond(&mut stream, (status, json));
+}
+
+/// The Calendar API's calendar list and events lists, in pages.
+fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let offset: usize = param(&url, "pageToken").map_or(0, |token| token.parse().unwrap());
+    let segments: Vec<String> = url
+        .path_segments()
+        .unwrap()
+        .map(|segment| {
+            percent_encoding::percent_decode_str(segment)
+                .decode_utf8()
+                .unwrap()
+                .into_owned()
+        })
+        .collect();
+    let (items, per_page): (Vec<&Value>, usize) = match segments.as_slice() {
+        [_, _, users, me, list] if users == "users" && me == "me" && list == "calendarList" => (
+            state
+                .calendars
+                .iter()
+                .filter(|(owner, _)| *owner == account)
+                .map(|(_, entry)| entry)
+                .collect(),
+            CALENDARS_PER_PAGE,
+        ),
+        [_, _, calendars, id, events] if calendars == "calendars" && events == "events" => {
+            let listed = state
+                .calendars
+                .iter()
+                .any(|(owner, entry)| *owner == account && entry["id"] == id.as_str());
+            if !listed {
+                return (
+                    "404 Not Found",
+                    r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+                );
+            }
+            if state.failing.contains(id) {
+                return (
+                    "500 Internal Server Error",
+                    r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
+                );
+            }
+            let instant = |name: &str| {
+                DateTime::parse_from_rfc3339(&param(&url, name).unwrap())
+                    .unwrap()
+                    .with_timezone(&Utc)
+            };
+            let (from, until) = (instant("timeMin"), instant("timeMax"));
+            (
+                state
+                    .events
+                    .iter()
+                    .filter(|(owner, calendar, _)| *owner == account && calendar == id)
+                    .map(|(_, _, event)| event)
+                    .filter(|event| in_window(event, from, until))
+                    .collect(),
+                EVENTS_PER_PAGE,
+            )
+        }
+        _ => {
+            return (
+                "404 Not Found",
+                r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+            );
+        }
+    };
+    let page: Vec<&Value> = items.iter().skip(offset).take(per_page).copied().collect();
+    let mut answer = json!({ "items": page });
+    if offset + per_page < items.len() {
+        answer["nextPageToken"] = json!((offset + per_page).to_string());
+    }
+    ("200 OK", answer.to_string())
+}
+
+/// Google's `timeMin` and `timeMax`: an event ending after the one and starting before the other;
+/// a series is sent whole, a cancelled occurrence by its original start.
+fn in_window(event: &Value, from: DateTime<Utc>, until: DateTime<Utc>) -> bool {
+    let at = |when: &Value| match when["dateTime"].as_str() {
+        Some(at) => DateTime::parse_from_rfc3339(at)
+            .unwrap()
+            .with_timezone(&Utc),
+        None => NaiveDate::parse_from_str(when["date"].as_str().unwrap(), "%Y-%m-%d")
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc(),
+    };
+    if event.get("recurrence").is_some() {
+        return true;
+    }
+    if event["status"] == "cancelled" {
+        let original = at(&event["originalStartTime"]);
+        return original >= from && original < until;
+    }
+    at(&event["end"]) > from && at(&event["start"]) < until
 }
 
 fn respond(stream: &mut TcpStream, (status, json): (&str, String)) {

@@ -8,9 +8,14 @@ publish.workspace = true
 [dependencies]
 base64 = "0.23.1"
 calendar-core = { version = "0.1.0", path = "../core" }
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
 getrandom = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 ureq = "3.5.0"
 url = "2.5.8"
+
+[dev-dependencies]
+percent-encoding = "2.3.2"

@@ -59,7 +59,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-02-01` | As a User, I can see the calendars of all my accounts together, in their Google colours, so that I have one calendar instead of several browser tabs | F01, F02, F03, F11, F22, NFR-02 | must | ready | `US-01-01`, `US-03-01` | — |
+| `US-02-01` | As a User, I can see the calendars of all my accounts together, in their Google colours, so that I have one calendar instead of several browser tabs | F01, F02, F03, F11, F22, NFR-02 | must | review | `US-01-01`, `US-03-01` | — |
 | `US-02-02` | As a User, I can see read-only, subscribed and free/busy calendars without accidentally changing them, so that holidays and colleagues' calendars are there but safe | F19, F20, U01 | must | ready | `US-02-01` | — |
 | `US-02-03` | As a User, I see changes made on my phone or in the browser without doing anything, so that the app is always current | F07, F08, F09, F10, F23, NFR-01 | must | ready | `US-02-01` | — |
 | `US-02-04` | As a User, my list of calendars stays current, including calendars I lose access to or disable, so that nothing stale or unwanted is synchronized | F05, F06, F21 | must | ready | `US-02-03` | — |

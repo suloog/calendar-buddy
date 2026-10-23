@@ -1,5 +1,6 @@
 //! Signing in to Google (`MOD-01`): the OAuth 2.0 flow for installed apps with PKCE (S256), the
-//! system browser and a loopback redirect to `127.0.0.1` on a random port.
+//! system browser and a loopback redirect to `127.0.0.1` on a random port. Reading calendars and
+//! events is in `calendar` (`MOD-02`).
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -16,8 +17,11 @@ use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use url::Url;
 
+mod calendar;
 #[cfg(test)]
 mod fake;
+
+pub use calendar::sync_account;
 
 /// The client file's name in the app's config directory (`DEC-77`).
 pub const CLIENT_FILE: &str = "google-oauth-client.json";
@@ -48,6 +52,8 @@ pub struct Endpoints {
     pub token: String,
     pub userinfo: String,
     pub revoke: String,
+    /// The Google Calendar API's base URL.
+    pub calendar: String,
 }
 
 impl Endpoints {
@@ -57,6 +63,7 @@ impl Endpoints {
             token: "https://oauth2.googleapis.com/token".into(),
             userinfo: "https://openidconnect.googleapis.com/v1/userinfo".into(),
             revoke: "https://oauth2.googleapis.com/revoke".into(),
+            calendar: "https://www.googleapis.com/calendar/v3".into(),
         }
     }
 }
@@ -169,7 +176,7 @@ pub fn connect(
 
 /// Asks Google whether each connected account's sign-in still works, with its refresh token from
 /// the secret store, without the browser (`MOD-01-F04`, `F05`). The access tokens Google sends
-/// back are not kept until synchronization needs them (`MOD-02`). The secret store is read for
+/// back are not kept; synchronization asks for its own (`MOD-02`). The secret store is read for
 /// every account before Google is asked, so a locked store asks to be unlocked once.
 pub fn check(
     client_file: &Path,
@@ -192,7 +199,9 @@ pub fn check(
         .zip(tokens)
         .map(|(account, token)| {
             let check = match token {
-                Some(token) => refresh(&client, endpoints, &token),
+                Some(token) => {
+                    refresh(&client, endpoints, &token).map_or_else(|c| c, |_| Check::Works)
+                }
                 None => Check::SignInNeeded,
             };
             (account.id.clone(), check)
@@ -212,27 +221,30 @@ pub fn revoke(endpoints: &Endpoints, refresh_token: &str) -> bool {
 
 /// Exchanges a refresh token for an access token; `invalid_grant` means Google revoked or ended
 /// the access.
-fn refresh(client: &Client, endpoints: &Endpoints, refresh_token: &str) -> Check {
+fn refresh(client: &Client, endpoints: &Endpoints, refresh_token: &str) -> Result<String, Check> {
     let response = agent(HTTP_TIMEOUT).post(&endpoints.token).send_form([
         ("client_id", client.id.as_str()),
         ("client_secret", &client.secret),
         ("refresh_token", refresh_token),
         ("grant_type", "refresh_token"),
     ]);
-    let mut response = match response {
-        Ok(response) => response,
-        Err(error) => return Check::Failed(error.to_string()),
-    };
-    if response.status().is_success() {
-        return Check::Works;
-    }
+    let mut response = response.map_err(|error| Check::Failed(error.to_string()))?;
     let body = response.body_mut().read_to_string().unwrap_or_default();
-    match google_reason(&body) {
+    if response.status().is_success() {
+        #[derive(Deserialize)]
+        struct Access {
+            access_token: String,
+        }
+        return serde_json::from_str::<Access>(&body)
+            .map(|access| access.access_token)
+            .map_err(|_| Check::Failed("Google's answer could not be read".into()));
+    }
+    Err(match google_reason(&body) {
         Some(reason) if reason.split_whitespace().next() == Some("invalid_grant") => {
             Check::SignInNeeded
         }
         reason => Check::Failed(reason.unwrap_or_else(|| response.status().to_string())),
-    }
+    })
 }
 
 fn has(granted: &str, scope: &str) -> bool {
