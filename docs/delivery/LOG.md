@@ -173,3 +173,10 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings, spec review compliant. Fixed after code review: the details decide from the fresh event, and a tested seam (`tell_unmovable`) carries the drag notice. Kept: a guest's copy cannot be edited at all, though Google lets guests change their own busy/free, colour and reminders (story's criterion, DEC-110). The details dialog and resize-by-edge refusal are proven in code, not by a test. The read-only details text changed from DEC-89's (TC-02-03's manual check updated). One squash commit: one logical change.
 - Manual checks: TC-05-06 (drawing, real window), US-05-05#1 (real guest's copy), US-05-05#2 (real Google's refusal)
 - Commits on main: e6e8b96 feat(events): guard events the user may not change
+
+## US-05-06 — review — 2026-10-23 20:29
+- What: The full editor of a new event gets **Repeats** (Daily, Every weekday, Weekly on chosen days, Monthly, Annually) and **Series ends** (Never, On a date, After N). New `core::repeat` turns them into Google's RRULEs (`UNTIL` is the last second of the day in the event's zone, in UTC, or a date for all-day events). The series is sent to Google with `recurrence`. The "saving" overlay now clears once the series' occurrences (`<id>_<start>`) are synchronized. **Calendar-provider interface change:** `NewEvent::recurrence`. `Save::Create` now boxes its `NewEvent`.
+- Decisions: DEC-111, DEC-112
+- Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings, spec review compliant. Fixed after code review: a weekly series' single day follows the start, Weekly can no longer end up with no days, the `UNTIL` conversion reuses `recurrence::until_in_utc`, and the series row is labelled "Series ends". The owner should ratify DEC-111 (repeat for new events only). One squash commit: one logical change.
+- Manual checks: TC-05-12, US-05-06#1 (real window), US-05-06#2 (real Google)
+- Commits on main: 57f8914 feat(events): make a new event repeat with Google's presets [US-05-06]
