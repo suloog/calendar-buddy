@@ -335,7 +335,7 @@
 - **Why:** Fast enough for everyday use without a backend.
 - **Scope effect:** within scope
 - **Resolves:** —
-- **Status:** accepted
+- **Status:** superseded by DEC-53
 
 ## [DEC-27] MVP views: day, 3 days, full week, month, agenda
 
@@ -623,4 +623,52 @@
 - **Why:** The company boilerplates are web stacks; this is a native Linux desktop application (`DSC-01-01`), and the PRD prefers Rust.
 - **Scope effect:** within scope
 - **Resolves:** —
+- **Status:** accepted
+
+## [DEC-51] Account management in the settings
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-14`)
+- **Affects:** `MOD-01-U01`, `MOD-01-U02`, `MOD-01-U03`
+- **Decision:** Accounts are managed in one place in the settings, listing each account by e-mail address with its state and offering add, sign in again and remove; removal asks for confirmation and says what is deleted locally; before the browser opens, the app warns about Google's "unverified app" screen.
+- **Why:** Confirms the default proposed for `Q37`.
+- **Scope effect:** within scope
+- **Resolves:** `Q37`
+- **Status:** accepted
+
+## [DEC-52] Account edge cases
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-14`)
+- **Affects:** `MOD-01-F09`, `MOD-01-F14`, MOD-01 Constraints and edge cases
+- **Decision:** Removing an account also withdraws the app's access at Google (the local deletion happens even offline); removing the last account returns to the welcome screen; with partial consent the account connects only if calendar access was granted, and features needing a missing permission show as unavailable; with the secret store locked and not unlocked, cached calendars are shown but nothing synchronizes or changes.
+- **Why:** Confirms the default proposed for `Q38`.
+- **Scope effect:** within scope
+- **Resolves:** `Q38`
+- **Status:** accepted
+
+## [DEC-53] Adaptive background sync and sync on focus
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-15`)
+- **Affects:** `DSC-04-14`, `MOD-02-F07`, `MOD-02-F23`, `MOD-02-NFR-01`
+- **Decision:** Background synchronization is adaptive: calendars the user can edit are synchronized about every minute, read-only and subscribed calendars about every 15 minutes, and less often while the window is hidden in the tray. The app also synchronizes immediately when its window becomes active and before an event is opened for editing, as well as after waking and when the network returns. Push notifications from Google stay out (they need a server). Replaces `DEC-26`.
+- **Why:** "Every calendar every minute" spends most requests on calendars that rarely change (holidays, birthdays, colleagues'); adaptive polling cuts the request volume about fourfold while keeping data fresh where and when the user looks.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-54] Calendar and cache details
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-16`)
+- **Affects:** `MOD-02-F04`, `MOD-02-F07`, `MOD-02-F12`, `MOD-02-U03`, `MOD-02-U04`, MOD-02 Constraints and edge cases
+- **Decision:** While the window is hidden in the tray, editable calendars are refreshed at least every 5 minutes. A local calendar colour is chosen from the calendar's menu in the side panel and can be reset to the Google colour. Events fetched outside the cache window while browsing online are not kept for offline use. The synchronization indicator shows the time of the last successful sync. An event crossing the window edge is kept whole. A damaged cache is discarded and rebuilt from Google.
+- **Why:** Confirms the defaults proposed for `Q39`.
+- **Scope effect:** within scope
+- **Resolves:** `Q39`
 - **Status:** accepted

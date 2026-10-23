@@ -31,6 +31,7 @@
 | 2026-10-23 | analyst + agent | `DSC-08` | 14 findings, 4 questions resolved, 5 decisions (`DEC-38`…`DEC-42`), new source `SRC-03` |
 | 2026-10-23 | analyst + agent | `DSC-09` | 14 findings, 3 questions resolved, 4 decisions (`DEC-43`…`DEC-46`) |
 | 2026-10-23 | analyst + agent | close | actor, glossary, scope, goals, risks, stack settled; `PROJECT.md` and draft `constitution.md` written; 2 decisions (`DEC-47`, `DEC-48`) |
+| 2026-10-23 | analyst + agent | `DSC-04` (revisit, during `/og:requirements MOD-02`) | `DSC-04-14` withdrawn, `DSC-04-15` added; `DEC-53` supersedes `DEC-26` (adaptive sync) |
 
 ## Topics
 
@@ -39,7 +40,7 @@
 | `DSC-01` | Product, roles, platform and integrations | cross-cutting | `SRC-01`, `SRC-02` | 18 | 0 [W] / 0 [A] | settled | — |
 | `DSC-02` | Non-functional requirements | cross-cutting | `SRC-01`, `SRC-02` | 13 | 0 [W] / 0 [A] | settled | — |
 | `DSC-03` | Google accounts and sign-in | business | `SRC-01`, `SRC-02` | 8 | 0 [W] / 0 [A] | settled | `MOD-01` |
-| `DSC-04` | Calendars, synchronisation and offline cache | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-02` |
+| `DSC-04` | Calendars, synchronisation and offline cache | business | `SRC-01`, `SRC-02`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | `MOD-02` |
 | `DSC-05` | Views and navigation | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-03` |
 | `DSC-06` | Visual direction and themes | business | `SRC-01`, `SRC-02` | 6 | 0 [W] / 0 [A] | settled | `MOD-04` |
 | `DSC-07` | Creating and editing events | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-05` |
