@@ -73,7 +73,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-03-01` | As a User, I can see my week as a clear, smoothly scrolling grid, so that I see at a glance what my week looks like | F02, F14, F19, F21, F22, U01, U02, U05, NFR-01 | must | ready | — | — |
+| `US-03-01` | As a User, I can see my week as a clear, smoothly scrolling grid, so that I see at a glance what my week looks like | F02, F14, F19, F21, F22, U01, U02, U05, NFR-01 | must | review | — | — |
 | `US-03-02` | As a User, I can look at a single day or three days, so that I can focus on today or use a smaller screen | F01, F04 | must | ready | `US-03-01` | — |
 | `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20 | must | ready | `US-03-01` | — |
 | `US-03-04` | As a User, I can see my upcoming events as a list, so that I know what is next without reading a grid | F05 | must | ready | `US-03-01` | — |

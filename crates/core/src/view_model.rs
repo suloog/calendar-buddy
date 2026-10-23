@@ -1,0 +1,234 @@
+//! What the week view shows, independent of how it is drawn.
+
+use chrono::{DateTime, NaiveDate, Utc};
+use chrono_tz::Tz;
+
+use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, timed_placements};
+use crate::model::{Event, Rgb, Timing};
+use crate::week::{Week, wall_minute};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DayColumn {
+    pub date: NaiveDate,
+    pub is_today: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Block {
+    pub placement: TimedPlacement,
+    /// `None` for events of calendars shared as free/busy only.
+    pub title: Option<String>,
+    pub color: Rgb,
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bar {
+    pub bar: AllDayBar,
+    pub title: Option<String>,
+    pub color: Rgb,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NowLine {
+    pub day: usize,
+    pub minute: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeekViewModel {
+    pub week: Week,
+    pub zone: Tz,
+    pub days: Vec<DayColumn>,
+    pub blocks: Vec<Block>,
+    pub bars: Vec<Bar>,
+    pub lanes: u32,
+    pub now: Option<NowLine>,
+    /// Minute of the day the hours are scrolled to when the view opens: the current time.
+    pub initial_scroll_minute: u32,
+}
+
+fn shown_title(event: &Event) -> Option<String> {
+    (!event.busy_only).then(|| event.title.clone())
+}
+
+pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> WeekViewModel {
+    let today = now.with_timezone(&zone).date_naive();
+    let days: Vec<DayColumn> = week
+        .days()
+        .iter()
+        .map(|&date| DayColumn {
+            date,
+            is_today: date == today,
+        })
+        .collect();
+
+    let blocks = timed_placements(events, week, zone)
+        .into_iter()
+        .map(|placement| {
+            let event = &events[placement.event];
+            let Timing::Timed { start, end, .. } = event.timing else {
+                unreachable!("timed placements come from timed events")
+            };
+            Block {
+                placement,
+                title: shown_title(event),
+                color: event.color,
+                start,
+                end,
+            }
+        })
+        .collect();
+
+    let bars: Vec<Bar> = all_day_bars(events, week, zone)
+        .into_iter()
+        .map(|bar| Bar {
+            bar,
+            title: shown_title(&events[bar.event]),
+            color: events[bar.event].color,
+        })
+        .collect();
+    let lanes = bars.iter().map(|b| b.bar.lane + 1).max().unwrap_or(0);
+
+    let minute_now = wall_minute(now, zone);
+    let now_line = days.iter().position(|d| d.is_today).map(|day| NowLine {
+        day,
+        minute: minute_now,
+    });
+
+    WeekViewModel {
+        week,
+        zone,
+        days,
+        blocks,
+        bars,
+        lanes,
+        now: now_line,
+        initial_scroll_minute: minute_now,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::{d, tc_03_01_week, timed};
+    use chrono::TimeZone;
+    use chrono_tz::Europe::Warsaw;
+
+    fn clock() -> DateTime<Utc> {
+        Warsaw
+            .with_ymd_and_hms(2026, 11, 11, 10, 0, 0)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn vm() -> WeekViewModel {
+        week_view(
+            &tc_03_01_week(),
+            Week::containing(d(2026, 11, 11)),
+            Warsaw,
+            clock(),
+        )
+    }
+
+    #[test]
+    fn tc_03_01_week_shows_seven_days_with_timed_events_in_the_hours() {
+        let vm = vm();
+        assert_eq!(vm.days.len(), 7);
+        assert_eq!(vm.days[0].date, d(2026, 11, 9));
+        assert_eq!(vm.days[6].date, d(2026, 11, 15));
+        let standup = vm
+            .blocks
+            .iter()
+            .find(|b| b.title.as_deref() == Some("Standup"))
+            .unwrap();
+        assert_eq!(standup.placement.day, 0);
+        assert_eq!(
+            (standup.placement.start_min, standup.placement.end_min),
+            (540, 600)
+        );
+    }
+
+    #[test]
+    fn tc_03_01_all_day_and_multi_day_events_are_in_the_strip() {
+        let vm = vm();
+        let bar = |t: &str| {
+            vm.bars
+                .iter()
+                .find(|b| b.title.as_deref() == Some(t))
+                .unwrap()
+                .bar
+        };
+        let conference = bar("Conference day");
+        assert_eq!((conference.first_day, conference.last_day), (1, 1));
+        let offsite = bar("Offsite");
+        assert_eq!((offsite.first_day, offsite.last_day), (3, 5));
+        assert!(
+            vm.blocks
+                .iter()
+                .all(|b| b.title.as_deref() != Some("Offsite"))
+        );
+    }
+
+    #[test]
+    fn tc_03_01_free_busy_events_are_busy_blocks_without_a_title() {
+        let vm = vm();
+        let friday: Vec<&Block> = vm.blocks.iter().filter(|b| b.placement.day == 4).collect();
+        assert_eq!(friday.len(), 1);
+        assert_eq!(friday[0].title, None);
+        assert_eq!(
+            (friday[0].placement.start_min, friday[0].placement.end_min),
+            (780, 840)
+        );
+    }
+
+    #[test]
+    fn today_is_highlighted_and_the_view_opens_at_the_current_time() {
+        let vm = vm();
+        let today: Vec<usize> = vm
+            .days
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.is_today)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(today, vec![2]);
+        assert_eq!(
+            vm.now,
+            Some(NowLine {
+                day: 2,
+                minute: 600
+            })
+        );
+        assert_eq!(vm.initial_scroll_minute, 600);
+    }
+
+    #[test]
+    fn another_week_has_no_now_line_but_still_opens_at_the_current_time() {
+        let vm = week_view(&[], Week::containing(d(2026, 11, 20)), Warsaw, clock());
+        assert!(vm.days.iter().all(|d| !d.is_today));
+        assert_eq!(vm.now, None);
+        assert_eq!(vm.initial_scroll_minute, 600);
+    }
+
+    fn placed(event: crate::model::Event, date: NaiveDate) -> (u32, u32) {
+        let vm = week_view(&[event], Week::containing(date), Warsaw, clock());
+        let p = vm.blocks[0].placement;
+        (p.start_min, p.end_min)
+    }
+
+    #[test]
+    fn on_daylight_saving_days_events_sit_on_their_clock_hours() {
+        // Clocks go back on 25 October and forward on 29 March (Europe/Warsaw).
+        for date in [d(2026, 10, 25), d(2026, 3, 29)] {
+            assert_eq!(
+                placed(timed("ten", date, (10, 0), (11, 0)), date),
+                (600, 660)
+            );
+        }
+        // 01:00–04:00 on the 25-hour day lasts four real hours but spans 01:00–04:00 on the clock.
+        let night = timed("night", d(2026, 10, 25), (1, 0), (4, 0));
+        assert_eq!(placed(night, d(2026, 10, 25)), (60, 240));
+    }
+}

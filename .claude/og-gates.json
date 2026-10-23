@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "commit": [
+    "cargo fmt --all --check",
+    "cargo clippy --workspace --all-targets -- -D warnings"
+  ],
+  "push": [
+    "cargo fmt --all --check",
+    "cargo clippy --workspace --all-targets -- -D warnings",
+    "cargo test --workspace"
+  ]
+}

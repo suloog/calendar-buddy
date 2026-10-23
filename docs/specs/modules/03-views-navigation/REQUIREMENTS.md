@@ -85,7 +85,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - Many events overlap at the same time → each gets a narrower column and keeps at least the start of its title visible; opening it shows everything.
 - An event runs past midnight → it is shown on both days.
-- A day with a daylight-saving change has 23 or 25 hours → the hours are drawn as they are on that day.
+- A day with a daylight-saving change → the hour grid stays 0:00–24:00 and events sit on their clock hours; the skipped hour stays empty, the repeated hour is shared. — *source: `DEC-67`*
 - No calendar is visible (all hidden or disabled) → the view is empty and points to the side panel. — *source: `DEC-56`*
 - The agenda has nothing ahead → it says there are no upcoming events. — *source: `DEC-56`*
 - Offline, the user moves outside the cache window → the period is shown empty with a note that it is not available offline (`MOD-02-F12`).

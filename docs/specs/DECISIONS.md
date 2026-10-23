@@ -804,3 +804,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-66] NFR-03 thresholds stay qualitative; the first measurement is the product owner's observation
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** implementation (`/og:start-story US-03-01`)
+- **Affects:** `NFR-03`, `MOD-03-NFR-01`, `US-03-01#5`, `TC-03-04`
+- **Decision:** No numeric performance thresholds are set for now. The "first measurement" of `US-03-01#5` is the product owner's observation that the week view on the ~20,000-event profile scrolls and switches weeks without visible stutter on the target desktop (`DEC-12`). Numeric thresholds are added later only if a problem shows up.
+- **Why:** The developer chose manual observation over an instrumented measuring mode; consistent with `DEC-62` (no performance targets beyond need for a personal tool).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-67] Daylight-saving days follow the clock
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** implementation (`/og:start-story US-03-01`, spec-compliance review)
+- **Affects:** MOD-03 Constraints and edge cases, `US-03-01` edge cases, `MOD-03-F17`
+- **Decision:** On a day with a daylight-saving change the hour grid stays 0:00–24:00 and events sit on their wall-clock hours, as Google Calendar draws them: the skipped hour stays empty and the two occurrences of the repeated hour share it. Replaces the edge case "the hours are drawn as they are on that day" (23 or 25 hours).
+- **Why:** One hour grid with shared labels for the whole week can only be right on the clock; follows `DEC-62` (do as Google does).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-68] egui passes the feasibility check
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** implementation — manual check of `US-03-01` (`TC-03-03`, `TC-03-04`)
+- **Affects:** `DEC-33`, `US-03-01#4`…`#6`, `NFR-03`, constitution.md (Stack)
+- **Decision:** egui (eframe 0.37 on wgpu) stays the UI toolkit; the Iced fallback is not needed. The week view on the ~20,000-event profile — scrolling, switching weeks, overlapping events, resizing and screen scaling, dragging an event — was judged fine by the product owner on Ubuntu 26.10 with KDE Plasma (Wayland). This observation is also the first NFR-03 measurement (`DEC-66`).
+- **Why:** The product owner's check found no problem ("jest spoko").
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
