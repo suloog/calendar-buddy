@@ -61,3 +61,4 @@
 - **Q39** How do the calendar and cache details behave? — confirmed as proposed, 2026-10-23 (`DEC-54`)
 - **Q40** How do the remaining view details behave? — confirmed as proposed, 2026-10-23 (`DEC-56`)
 - **Q41** How is "compact" and "restrained" measured? — confirmed as proposed, 2026-10-23 (`DEC-58`)
+- **Q42** How do the event-editing details behave? — confirmed as proposed, 2026-10-23 (`DEC-60`)
