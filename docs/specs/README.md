@@ -4,8 +4,8 @@ Not sure what's next? `/og:guide` in Claude Code. Full description of the work: 
 (plugin/docs/handbook.en.md).
 
 ## Phases
-[ ]  Analysis — sources register        /og:analyze          → SOURCES.md, sources/, QUESTIONS.md
-[ ]  Discovery — workshop by topic      /og:discovery        → discovery/, at closing PROJECT.md + draft constitution.md
+[x]  Analysis — sources register        /og:analyze          → SOURCES.md, sources/, QUESTIONS.md
+[x]  Discovery — workshop by topic      /og:discovery        → discovery/, at closing PROJECT.md + draft constitution.md
 [ ]  Discovery report for the client    /og:discovery-report → docs/reports/discovery-<date>/*.pdf
 [ ]  Modules — split (tech lead)        /og:modules          → modules/NN-<slug>/, NFR.md, constitution.md active
 [ ]  Requirements (module by module)    /og:requirements MOD-NN → modules/NN-<slug>/REQUIREMENTS.md
