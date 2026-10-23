@@ -8,3 +8,4 @@ story, so its Δ is not meaningful. Cost is Claude Code's own figure (notional o
 | Story | Result | Started | Wall time | Turns | Tokens in / out (cache read) | Cost (USD) | 5h before → after (Δ) | 7d before → after (Δ) |
 | ----- | ------ | ------- | --------- | ----- | ---------------------------- | ---------- | --------------------- | --------------------- |
 | US-03-02 | review | 2026-10-23 13:18 | 4 min | 27 | 71113 / 18017 (1351524) | 1.73 | 43.0% → 52.0% (~) | 37.0% → 38.0% (~) |
+| US-03-03 | review | 2026-10-23 13:22 | 5 min | 5 | 5880 / 2702 (451917) | 1.93 | 52.0% → 62.0% (~) | 38.0% → 39.0% (~) |
