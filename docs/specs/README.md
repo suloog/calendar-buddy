@@ -12,7 +12,7 @@ Not sure what's next? `/og:guide` in Claude Code. Full description of the work: 
 [x]  User stories (module by module)    /og:stories MOD-NN   → modules/NN-<slug>/stories/, BACKLOG.md
 [x]  Quality gate                       /og:clarify          → status: ready
 [ ]  YouTrack / estimate                /og:sync-youtrack, /og:estimate-project
-[ ]  Test cases (module by module)      /og:tests MOD-NN     → modules/NN-<slug>/tests/, TESTPLAN.md
+[x]  Test cases (module by module)      /og:tests MOD-NN     → modules/NN-<slug>/tests/, TESTPLAN.md
 [ ]  Test run and report                /og:run-tests        → test-runs/<date>/report.html
 (optional) Autonomous delivery          /og:deliver, then /loop /og:deliver-next → docs/delivery/
 After every client contact: /og:decide. Tree status: og-status.

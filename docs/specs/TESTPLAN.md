@@ -48,9 +48,9 @@ that module. Numbers are never reused or renumbered.
 | `MOD-03` Views and navigation | 31 | 22 | 10 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 34 | 18 | 10 / 2 | written |
-| `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
+| `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 19 | 11 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **177** | **87** | **40 / 11** | 6 / 7 modules written |
+| **Total** | **177** | **106** | **51 / 13** | 7 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -139,6 +139,26 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-05-10` | Changing an event's colour in the editor sends the new colour to Google | `US-05-09` | desktop | happy-path | auto | draft |
 | `TC-05-11` | An event's attachments are listed and open in the browser | `US-05-10` | desktop | happy-path | manual-only | draft |
 | `TC-05-12` | A series created in the app shows the same occurrences in Google Calendar in the browser | `US-05-06` | desktop | happy-path | manual-only | draft |
+
+## [MOD-06] Guests, invitations, RSVP and Google Meet
+
+`docs/specs/modules/06-guests-rsvp-meet/REQUIREMENTS.md` · `docs/specs/modules/06-guests-rsvp-meet/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-06-01` | Typing part of a name suggests people from contacts and recent guests, and saving sends the invitations | `US-06-01` | desktop | happy-path | auto | draft |
+| `TC-06-02` | On a Workspace account, a colleague from the directory is suggested | `US-06-01` | desktop | happy-path | auto | draft |
+| `TC-06-03` | A guest's answer is shown as an icon and changes after the next synchronization | `US-06-02` | desktop | happy-path | auto | draft |
+| `TC-06-04` | Dragging an event with guests asks once whether to notify them, and "No" sends no update | `US-06-03` | desktop | happy-path | auto | draft |
+| `TC-06-05` | An invitation awaiting an answer is marked in the views and counted in the side panel, which opens the list | `US-06-04` | desktop | happy-path | auto | draft |
+| `TC-06-06` | Accepting an invitation from the list sends the answer to Google | `US-06-05` | desktop | happy-path | auto | draft |
+| `TC-06-07` | Declining one occurrence of a recurring invitation leaves the other occurrences unanswered | `US-06-05` | desktop | happy-path | auto | draft |
+| `TC-06-08` | As a guest without edit rights, the user cannot change the event's time | `US-06-05` | desktop | negative | auto | draft |
+| `TC-06-09` | A declined event is struck through and the switch hides and shows it | `US-06-06` | desktop | happy-path | auto | draft |
+| `TC-06-10` | Adding the first guest turns Google Meet on, and the saved event has a Meet link | `US-06-07` | desktop | happy-path | auto | draft |
+| `TC-06-11` | Join in the event details and in the agenda opens the Meet meeting in the browser | `US-06-07` | desktop | happy-path | manual-only | draft |
+| `TC-06-12` | The editor shows each guest's busy blocks for the day and marks a conflict with the chosen time | `US-06-08` | desktop | happy-path | auto | draft |
+| `TC-06-13` | A guest invited from the app receives Google's invitation e-mail | `US-06-01` | desktop | happy-path | manual-only | draft |
 
 ## [MOD-07] Reminders and notifications
 
