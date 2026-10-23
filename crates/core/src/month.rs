@@ -134,7 +134,7 @@ pub fn month_view(
                     MonthItem {
                         event: i,
                         title: shown_title(event),
-                        color: event.color,
+                        color: event.shown_color(),
                         read_only: event.read_only,
                         saving: event.saving,
                         start: timed_start(event),

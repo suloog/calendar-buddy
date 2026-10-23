@@ -5,12 +5,14 @@
 //! what changed, as a patch against the version opened (`MOD-05-F11`), moving it to another
 //! calendar of the same account when another is picked (`MOD-05-F15`). A new event can be made to
 //! repeat (`US-05-06`, `MOD-05-F18`, `F19`), and made out of office or focus time where the
-//! account allows it (`US-05-08`, `MOD-05-F24`).
+//! account allows it (`US-05-08`, `MOD-05-F24`). The event's own colour is picked from Google's
+//! event colours (`US-05-09`, `MOD-05-F25`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
 
 use crate::accounts::Entry;
+use crate::colors::EventColor;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
 use crate::model::{About, Access, Calendar, Event, Kind, Show, Timing, Visibility};
 use crate::regional::Regional;
@@ -52,6 +54,8 @@ pub struct Editor {
     /// The event's type: picked for a new one where offered (`MOD-05-F24`), kept for an existing
     /// one.
     pub kind: Kind,
+    /// The event's own colour; `None` for its calendar's (`MOD-05-F25`).
+    pub color: Option<EventColor>,
     /// How a new event repeats; `None` when it does not (`MOD-05-F18`).
     pub repeat: Option<Pattern>,
     /// How the series ends (`MOD-05-F19`).
@@ -91,6 +95,8 @@ pub struct Patch {
     pub visibility: Option<Visibility>,
     /// A series' rule lines, replaced whole (`MOD-05-F20`).
     pub recurrence: Option<Vec<String>>,
+    /// The event's own colour, `Some(None)` taking it away (`MOD-05-F25`).
+    pub color: Option<Option<EventColor>>,
 }
 
 impl Patch {
@@ -142,6 +148,9 @@ impl Edit {
         if let Some(visibility) = patch.visibility {
             event.about.visibility = visibility;
         }
+        if let Some(color) = patch.color {
+            event.about.color = color;
+        }
         if let Some(to) = &self.to {
             event.calendar_id = to.id.clone();
             event.color = to.color;
@@ -181,6 +190,7 @@ impl Editor {
             show: Show::default(),
             visibility: Visibility::default(),
             kind: Kind::default(),
+            color: None,
             repeat: None,
             ends: Ending::default(),
             last_date: regional.numeric_date(start.date()),
@@ -236,6 +246,7 @@ impl Editor {
             show: event.about.show,
             visibility: event.about.visibility,
             kind: event.about.kind,
+            color: event.about.color,
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
@@ -439,6 +450,7 @@ impl Editor {
             },
             visibility: self.visibility,
             kind: self.kind,
+            color: self.color,
         };
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
@@ -463,6 +475,7 @@ impl Editor {
             show: changed(event.about.show, about.show),
             visibility: changed(event.about.visibility, about.visibility),
             recurrence: None,
+            color: changed(event.about.color, about.color),
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {
@@ -583,6 +596,7 @@ mod tests {
                     show: Show::Free,
                     visibility: Visibility::Private,
                     kind: Kind::Ordinary,
+                    color: None,
                 },
                 recurrence: Vec::new(),
             }
@@ -947,6 +961,44 @@ mod tests {
         let changed = edit.changed();
         assert_eq!(changed.about.location, "Room 3");
         assert_eq!(changed.id, event.id);
+    }
+
+    #[test]
+    fn an_events_own_colour_is_shown_changed_and_taken_away_in_the_editor() {
+        let event = standup();
+        let mut editor = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        assert_eq!(editor.color, None);
+
+        editor.color = Some(EventColor::Tomato);
+        let edit = change(&editor);
+        assert_eq!(
+            edit.patch,
+            Patch {
+                color: Some(Some(EventColor::Tomato)),
+                ..Patch::default()
+            }
+        );
+        let changed = edit.changed();
+        assert_eq!(changed.about.color, Some(EventColor::Tomato));
+        assert_eq!(changed.shown_color(), EventColor::Tomato.rgb());
+
+        // Back to the calendar's colour.
+        let mut editor = Editor::of(&changed, calendar("1", "a@example.com"), &regional());
+        assert_eq!(editor.color, Some(EventColor::Tomato));
+        editor.color = None;
+        let edit = change(&editor);
+        assert_eq!(edit.patch.color, Some(None));
+        assert_eq!(edit.changed().shown_color(), event.color);
+    }
+
+    #[test]
+    fn a_new_event_is_created_in_the_colour_picked() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.color = Some(EventColor::Basil);
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert_eq!(event.about.color, Some(EventColor::Basil));
     }
 
     #[test]

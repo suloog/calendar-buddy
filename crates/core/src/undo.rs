@@ -55,6 +55,7 @@ impl Undo {
                 show: patch.show.map(|_| before.about.show),
                 visibility: patch.visibility.map(|_| before.about.visibility),
                 recurrence: None,
+                color: patch.color.map(|_| before.about.color),
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
             event,
@@ -146,6 +147,7 @@ impl LastChange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::colors::EventColor;
     use crate::create::NO_TITLE;
     use crate::fixtures::{d, timed};
     use crate::model::{Access, Rgb, Show, Timing};
@@ -225,6 +227,7 @@ mod tests {
                 show: Some(Show::Free),
                 visibility: Some(crate::model::Visibility::Private),
                 recurrence: None,
+                color: Some(Some(EventColor::Tomato)),
             },
             to: Some(calendar("team")),
         };
@@ -244,6 +247,7 @@ mod tests {
                 show: Some(Show::Busy),
                 visibility: Some(crate::model::Visibility::Default),
                 recurrence: None,
+                color: Some(None),
             }
         );
         assert_eq!(undo.calendar, calendar("team"));

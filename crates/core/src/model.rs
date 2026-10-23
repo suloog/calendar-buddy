@@ -1,6 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
+use crate::colors::EventColor;
 use crate::sync::Start;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +29,7 @@ pub struct Event {
     pub account_id: String,
     pub calendar_id: String,
     pub title: String,
+    /// Its calendar's colour; the views show `shown_color`.
     pub color: Rgb,
     pub timing: Timing,
     /// Event of a calendar shared as free/busy only: no details may be shown.
@@ -81,6 +83,11 @@ impl Protected {
 }
 
 impl Event {
+    /// The colour the views show the event in: its own (`MOD-05-F25`), or else its calendar's.
+    pub fn shown_color(&self) -> Rgb {
+        self.about.color.map_or(self.color, EventColor::rgb)
+    }
+
     /// Why the user may not drag, resize, edit or delete the event; `None` when they may.
     pub fn protected(&self) -> Option<Protected> {
         if self.read_only {
@@ -167,6 +174,8 @@ pub struct About {
     pub visibility: Visibility,
     /// Its type; set when it is created, never changed afterwards (as in Google).
     pub kind: Kind,
+    /// Its own colour, shown instead of its calendar's (`MOD-05-F25`); `None` when it has none.
+    pub color: Option<EventColor>,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).

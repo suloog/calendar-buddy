@@ -2989,6 +2989,81 @@ mod tests {
         );
     }
 
+    /// "Dentist" on 12 November 16:00–17:00 in "Personal", in the colour Google gives it, if any.
+    fn dentist(google: &Google, color_id: Option<&str>) {
+        let mut dentist = json!({
+            "id": "dentist",
+            "status": "confirmed",
+            "summary": "Dentist",
+            "start": {"dateTime": "2026-11-12T16:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            "end": {"dateTime": "2026-11-12T17:00:00+01:00", "timeZone": "Europe/Warsaw"},
+        });
+        if let Some(id) = color_id {
+            dentist["colorId"] = json!(id);
+        }
+        google.fake.add_event(ACCOUNT_ID, EMAIL, dentist);
+    }
+
+    /// The colours of the blocks of the week of 12 November the events are shown in.
+    fn week_colors(events: &[Event]) -> Vec<Rgb> {
+        let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+        let (Built::Grid(week), _) =
+            build(events, &Settings::default(), navigation, 30, Warsaw, now)
+        else {
+            panic!("the week view is built");
+        };
+        week.blocks.iter().map(|block| block.color).collect()
+    }
+
+    #[test]
+    fn an_event_with_its_own_colour_in_google_is_shown_in_that_colour() {
+        let google = Google::start("own-colour");
+        personal(&google);
+        // Flamingo, in a calendar of another colour.
+        dentist(&google, Some("4"));
+        let engine = first_sync(&google, Instant::now());
+
+        assert_eq!(
+            week_colors(&now_shown(&engine)),
+            [colors::EventColor::Flamingo.rgb()]
+        );
+    }
+
+    #[test]
+    fn tc_05_10_changing_dentists_colour_in_the_editor_sends_it_to_google_and_shows_it() {
+        let google = Google::start("tc-05-10");
+        personal(&google);
+        dentist(&google, None);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let shown_before = now_shown(&engine);
+        assert_eq!(week_colors(&shown_before), [calendar.color]);
+
+        // 1. "Dentist" opened in the editor, given Tomato and saved.
+        let dentist = shown_before
+            .into_iter()
+            .find(|e| e.id == "dentist")
+            .unwrap();
+        let mut editor = Editor::of(&dentist, calendar, &regional);
+        assert_eq!(editor.color, None);
+        editor.color = Some(colors::EventColor::Tomato);
+        let updates = engine.handle(Some(Job::Change(1, edit(&editor, &regional))), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "dentist").unwrap();
+        assert_eq!(kept["colorId"], "11");
+        assert_eq!(
+            week_colors(&shown(&updates).unwrap()),
+            [colors::EventColor::Tomato.rgb()]
+        );
+    }
+
     #[test]
     fn choosing_another_calendar_of_the_account_moves_the_event_there() {
         let (google, mut engine, start) = standup_and_team("move");

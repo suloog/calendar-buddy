@@ -8,12 +8,13 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
+use crate::colors::EventColor;
 use crate::model::{About, Access, Calendar, Kind, Rgb, Show, Timing, Visibility};
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
 /// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 3;
+const VERSION: i64 = 4;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -44,6 +45,7 @@ const SCHEMA: &str = "
         etag TEXT NOT NULL,
         organizer_only INTEGER NOT NULL,
         kind TEXT NOT NULL,
+        color TEXT,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -373,7 +375,7 @@ impl Cache {
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
                  series_id, original_start, description, location, show, visibility, etag, \
-                 organizer_only, kind FROM events",
+                 organizer_only, kind, color FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -395,6 +397,8 @@ impl Cache {
                         show: parse_show(&row.get::<_, String>(12)?),
                         visibility: parse_visibility(&row.get::<_, String>(13)?),
                         kind: parse_kind(&row.get::<_, String>(16)?),
+                        color: (row.get::<_, Option<String>>(17)?)
+                            .and_then(|key| parse_event_color(&key)),
                     },
                     row.get::<_, String>(14)?,
                     row.get::<_, bool>(15)?,
@@ -456,7 +460,7 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         )
         .map_err(failed)?;
     for event in events {
@@ -499,6 +503,7 @@ fn insert(
                 event.etag,
                 event.organizer_only,
                 kind_key(event.about.kind),
+                event.about.color.map(EventColor::name),
             ])
             .map_err(failed)?;
     }
@@ -596,6 +601,12 @@ fn parse_kind(key: &str) -> Kind {
         "birthday" => Kind::Birthday,
         _ => Kind::Ordinary,
     }
+}
+
+fn parse_event_color(name: &str) -> Option<EventColor> {
+    EventColor::ALL
+        .into_iter()
+        .find(|color| color.name() == name)
 }
 
 fn access_key(access: Access) -> &'static str {
@@ -702,6 +713,7 @@ mod tests {
                     show: Show::Free,
                     visibility: Visibility::Private,
                     kind: Kind::OutOfOffice,
+                    color: Some(EventColor::Grape),
                 },
                 etag: "\"3\"".into(),
                 organizer_only: true,

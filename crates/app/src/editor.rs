@@ -2,21 +2,25 @@
 //! location, description, calendar, busy or free and visibility of a new or an existing event,
 //! and how a new one repeats (`US-05-06`); a series' repetition opens in Google Calendar
 //! (`US-05-07`); out of office and focus time where the account allows them (`US-05-08`). What
-//! the fields mean and what saving does is `calendar_core::editor`'s.
+//! the fields mean and what saving does is `calendar_core::editor`'s. The event's own colour is
+//! picked from Google's event colours (`US-05-09`).
 
 use calendar_core::accounts::Entry;
+use calendar_core::colors::EventColor;
 use calendar_core::editor::{Editor, Ending, Save};
 use calendar_core::model::{Calendar, Kind, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
-use eframe::egui;
+use eframe::egui::{self, Sense, Vec2};
 
 use crate::calendar_list;
+use crate::grid_view::{color, text_on};
 
 const FIELD_WIDTH: f32 = 320.0;
 const DATE_WIDTH: f32 = 100.0;
 const TIME_WIDTH: f32 = 70.0;
 const COUNT_WIDTH: f32 = 40.0;
+const SWATCH: f32 = 20.0;
 /// How tall the list of time zones grows before it scrolls.
 const ZONES_HEIGHT: f32 = 320.0;
 
@@ -116,6 +120,46 @@ fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
         }
     });
     ui.end_row();
+}
+
+/// The event's own colour, one of Google's event colours, or none for its calendar's, as Google
+/// Calendar's event colour menu offers them (`MOD-05-F25`). Reached and picked from the keyboard
+/// as any button.
+fn event_color(ui: &mut egui::Ui, picked: &mut Option<EventColor>) {
+    ui.horizontal(|ui| {
+        for choice in std::iter::once(None).chain(EventColor::ALL.map(Some)) {
+            let (rect, response) = ui.allocate_exact_size(Vec2::splat(SWATCH), Sense::click());
+            let name = choice.map_or("Calendar colour", EventColor::name);
+            let chosen = *picked == choice;
+            response.widget_info(|| {
+                egui::WidgetInfo::selected(egui::Role::RadioButton, true, chosen, name)
+            });
+            let (center, radius) = (rect.center(), SWATCH / 2.0 - 1.0);
+            let painter = ui.painter();
+            let ink = match choice {
+                Some(own) => {
+                    painter.circle_filled(center, radius, color(own.rgb()));
+                    text_on(own.rgb())
+                }
+                None => {
+                    let stroke = ui.visuals().widgets.inactive.fg_stroke;
+                    painter.circle_stroke(center, radius, stroke);
+                    ui.visuals().text_color()
+                }
+            };
+            if chosen {
+                let font = egui::FontId::proportional(12.0);
+                painter.text(center, egui::Align2::CENTER_CENTER, "✔", font, ink);
+            }
+            if response.has_focus() {
+                let focus = ui.visuals().selection.stroke;
+                painter.circle_stroke(center, radius + 2.0, focus);
+            }
+            if response.on_hover_text(name).clicked() {
+                *picked = choice;
+            }
+        }
+    });
 }
 
 /// A date or time field of the editor; says whether it changed.
@@ -244,6 +288,10 @@ pub fn show(
 
             ui.label("Calendar");
             calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
+            ui.end_row();
+
+            ui.label("Colour");
+            event_color(ui, &mut editor.color);
             ui.end_row();
 
             // Out of office and focus time are always busy.

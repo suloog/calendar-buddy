@@ -1428,3 +1428,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-118] Event colours: Google Calendar's eleven, built in, shown over the calendar's colour
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-09
+- **Affects:** `US-05-09`, `MOD-05-F25`, `MOD-05` *Integrations* (colours), `DEC-35`, `DEC-99`
+- **Decision:** The event colours are Google's eleven `colorId`s (1–11), built into the app with the names and colours Google Calendar shows them in (Lavender, Sage, Grape, Flamingo, Banana, Tangerine, Peacock, Graphite, Blueberry, Basil, Tomato), instead of being read from the Calendar API's `colors` endpoint. An event's own colour is shown instead of its calendar's colour, a local calendar colour included. The editor offers "Calendar colour" (none of its own) and the eleven colours, for new and existing events; taking the colour away sends `colorId: null`. A `colorId` outside the eleven is shown in the calendar's colour. "This and following" gives the new series the series' colour, or the one picked.
+- **Why:** The `colors` endpoint still answers with Google's older, paler palette, which Google Calendar in the browser no longer shows; the IDs are fixed by the API, so the built-in palette matches what the user sees in Google (`DEC-62`). Google Calendar shows an event's own colour over its calendar's, and offers the calendar's colour first in the event colour menu.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
