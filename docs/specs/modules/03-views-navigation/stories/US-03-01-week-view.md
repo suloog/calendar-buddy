@@ -3,7 +3,7 @@ id: US-03-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-03
 covers: [MOD-03-F02, MOD-03-F14, MOD-03-F19, MOD-03-F21, MOD-03-F22, MOD-03-U01, MOD-03-U02, MOD-03-U05, MOD-03-NFR-01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [] # story IDs that must be done first
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
 | **Covers** | `MOD-03-F02`, `F14`, `F19`, `F21`, `F22`, `U01`, `U02`, `U05`, `NFR-01` |
 | **Priority** | must |
-| **Status** | ready |
+| **Status** | review |
 | **Depends on** | — |
 | **YouTrack** | — |
 | **Open questions** | — |
@@ -37,7 +37,7 @@ The week view — the main view of the app — and the feasibility check of the 
 
 - Many events overlap at the same time → each gets a narrower column and keeps at least the start of its title visible.
 - An event runs past midnight → it is shown on both days.
-- A day with a daylight-saving change has 23 or 25 hours → the hours are drawn as they are on that day.
+- A day with a daylight-saving change → the hour grid stays 0:00–24:00 and events sit on their clock hours; the skipped hour stays empty, the repeated hour is shared. — *source: `DEC-67`*
 - The window is made very small → it does not go below a minimum size at which a day stays readable.
 
 ## Out of scope / what not to worry about

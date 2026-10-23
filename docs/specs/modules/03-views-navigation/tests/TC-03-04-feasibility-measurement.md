@@ -10,7 +10,7 @@ status: ready # draft | ready
 depends_on: [] # test case IDs that must pass first
 ---
 
-# [TC-03-04] The interface-technology feasibility check is recorded and the NFR-03 thresholds are set from the first measurement
+# [TC-03-04] The interface-technology feasibility check and the first performance observation are recorded
 
 |  |  |
 | --- | --- |
@@ -30,11 +30,11 @@ depends_on: [] # test case IDs that must pass first
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
 | 1 | Run the feasibility check: smooth scrolling, overlapping events, resizing at 100/150/200 %, dragging an event. | A verdict for the chosen technology is recorded as a decision, with the reasons. | screenshot |
-| 2 | Measure start-up to first view, switching weeks and scrolling the week on the test data. | The measured times are recorded and the NFR-03 thresholds are set from them. | app state |
+| 2 | Start the app, scroll the week and switch weeks on the test data, watching for stutter. | The product owner records that start-up, scrolling and switching show no visible stutter; this observation is the NFR-03 measurement (`DEC-66`). | screenshot |
 
 ## Pass criterion
 
-- The feasibility verdict and the NFR-03 thresholds exist as recorded decisions.
+- The feasibility verdict and the product owner's performance observation exist as recorded decisions (`DEC-66`).
 
 ## Cleanup
 

@@ -5,12 +5,14 @@ A calendar application. The repo is at the specification stage — no applicatio
 ## Repo map
 
 - `docs/specs/` — specification (sources, discovery, modules, stories, tests); see `docs/specs/README.md`
-
-<!-- TODO: add application directories once the stack is chosen -->
+- `crates/core` (`calendar-core`) — domain model, week layout and view models; no UI toolkit, no Google
+- `crates/app` (`calendar-buddy`) — the egui/eframe desktop app; only draws view models and handles input
 
 ## Commands
 
-<!-- TODO: none yet — add dev server, test runner, migrations once the stack exists -->
+- Run the app: `cargo run -p calendar-buddy` (test data: ~20,000 generated events until sync exists)
+- Tests: `cargo test --workspace`
+- Gates (also run by the commit/push hook, `.claude/og-gates.json`): `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`
 
 ## Invariants
 
