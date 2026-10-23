@@ -10,7 +10,7 @@ Per-project engineering law for calendar-buddy. Every module, user story and PR 
 ## Stack
 
 - Language: Rust (stable). Versions are pinned by the tech lead at `/og:modules`.
-- UI: egui (eframe on wgpu); Iced is the fallback if the feasibility check in the first stories fails (`DEC-33`).
+- UI: egui (eframe on wgpu), confirmed by the feasibility check of `US-03-01` (`DEC-33`, `DEC-68`).
 - Package manager: cargo. Distribution: a .deb package for Ubuntu 26.10 (`DEC-12`).
 - Local storage: SQLite cache (`DEC-23`); tokens in the platform secret store through one interface (`DEC-47`).
 - Integrations: Google Calendar API and Google People API over HTTPS; no backend of our own (`DSC-01-04`).
