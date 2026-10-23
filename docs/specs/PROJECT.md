@@ -2,7 +2,7 @@
 project: calendar-buddy
 client: internal
 language: en # language of every spec artifact (en | pl) — chosen once, at /og:analyze
-status: draft # draft | approved | active | done
+status: approved
 created: 2026-10-22
 analyst: Maciej
 ---
