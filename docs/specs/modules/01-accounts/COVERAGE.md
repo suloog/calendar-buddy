@@ -24,21 +24,36 @@
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-F01` | `US-NN-01` |
+| `MOD-01-F01` | `US-01-01` |
+| `MOD-01-F02` | `US-01-02` |
+| `MOD-01-F03` | `US-01-01` |
+| `MOD-01-F04` | `US-01-03` |
+| `MOD-01-F05` | `US-01-03` |
+| `MOD-01-F06` | `US-01-03` |
+| `MOD-01-F07` | `US-01-04` |
+| `MOD-01-F08` | `US-01-04` |
+| `MOD-01-F09` | `US-01-04` |
+| `MOD-01-F10` | `US-01-01` |
+| `MOD-01-F11` | `US-01-03` |
+| `MOD-01-F12` | `US-01-01` |
+| `MOD-01-F13` | `US-01-01` |
+| `MOD-01-F14` | `US-01-04` |
 
 ### UI/UX requirements
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-U01` | `US-NN-01`, `US-NN-02` |
+| `MOD-01-U01` | `US-01-02` |
+| `MOD-01-U02` | `US-01-04` |
+| `MOD-01-U03` | `US-01-01` |
 
 ### Non-functional requirements
 
-<Module NFRs only. Global NFR-nn are delivered across modules and are not tracked per module.>
+Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not tracked per module.
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-NFR-01` | `US-NN-03` |
+| `MOD-01-NFR-01` | `US-01-02` |
 
 <!-- og:part tests -->
 
