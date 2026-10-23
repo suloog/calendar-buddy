@@ -9,7 +9,7 @@ mod platform;
 mod remove;
 mod sync;
 
-use calendar_core::accounts::{self, Account, AccountState, Accounts, CheckError};
+use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::details::event_details;
 use calendar_core::model::Event;
@@ -19,6 +19,7 @@ use calendar_core::offline;
 use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
+use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
 use calendar_core::view_model::{GridViewModel, grid_view};
 use checks::Checks;
@@ -183,12 +184,21 @@ impl CalendarApp {
             .iter()
             .map(|e| e.account.id.clone())
             .collect();
-        let sync = Synchronization::start(
+        let mut sync = Synchronization::start(
             &ctx,
             account_ids,
             Window::around(today, zone),
             settings.disabled.clone(),
         );
+        // Accounts Google turned away in an earlier run are not checked, nor synchronized: their
+        // calendars are marked as not synchronizing.
+        let turned_away: Vec<(String, Check)> = accounts
+            .list()
+            .iter()
+            .filter(|entry| entry.state == AccountState::NeedsSignIn)
+            .map(|entry| (entry.account.id.clone(), Check::SignInNeeded))
+            .collect();
+        sync.checked(&turned_away, Window::around(today, zone));
         let accounts_writer = accounts_path.map(|path| {
             let (sender, receiver) = mpsc::channel::<Accounts>();
             std::thread::spawn(move || {
@@ -547,6 +557,8 @@ impl eframe::App for CalendarApp {
             .request_repaint_after(std::time::Duration::from_secs(30));
         let before = self.navigation;
         self.shortcuts(ui.ctx());
+        let online = self.online.get();
+        let sync_status = self.sync.status().clone();
         egui::Panel::top("view-bar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Today").clicked() {
@@ -576,6 +588,26 @@ impl eframe::App for CalendarApp {
                     if ui.button("Refresh").clicked() {
                         self.sync.refresh();
                     }
+                    // The synchronization indicator (`MOD-02-F17`, `MOD-02-U03`).
+                    let today = self.today();
+                    ui.label(status::last_synced(
+                        sync_status.last_synced,
+                        self.zone,
+                        today,
+                        &self.regional,
+                    ));
+                    // Accounts that cannot be checked are not synchronized either (`DEC-52`).
+                    let state = match sync_status.state(online) {
+                        State::Offline => State::Offline,
+                        _ if self.problem.is_some() => State::Error,
+                        state => state,
+                    };
+                    let label = status::label(state);
+                    if matches!(state, State::Delayed | State::Error) {
+                        ui.colored_label(ui.visuals().warn_fg_color, label);
+                    } else {
+                        ui.label(label);
+                    }
                     for view in View::ALL.into_iter().rev() {
                         if ui
                             .selectable_label(self.navigation.view == view, view.name())
@@ -587,7 +619,6 @@ impl eframe::App for CalendarApp {
                 });
             });
         });
-        let online = self.online.get();
         // Everything cached can still be browsed (`MOD-02-U02`, `MOD-02-F15`).
         if let Some(indicator) = offline::indicator(online) {
             egui::Panel::top("offline").show(ui, |ui| {
@@ -671,6 +702,15 @@ impl eframe::App for CalendarApp {
             if close {
                 self.gone.clear();
             }
+        }
+        // A problem with one calendar is told on that calendar (`MOD-02-F18`).
+        let problems = sync_status.problems(online);
+        if !problems.is_empty() {
+            egui::Panel::top("sync-problems").show(ui, |ui| {
+                for problem in problems {
+                    ui.colored_label(ui.visuals().warn_fg_color, problem);
+                }
+            });
         }
         egui::Panel::left("side-panel")
             .resizable(false)

@@ -100,6 +100,20 @@ impl Window {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyncError(pub String);
 
+/// Why a synchronization did not finish when the provider asked to slow down.
+const RATE_LIMITED: &str = "the provider asked to slow down (rate limit)";
+
+impl SyncError {
+    /// The provider asked to slow down: requests came too often (`MOD-02-F16`).
+    pub fn rate_limited() -> SyncError {
+        SyncError(RATE_LIMITED.into())
+    }
+
+    pub fn is_rate_limited(&self) -> bool {
+        self.0 == RATE_LIMITED
+    }
+}
+
 /// What a provider sends for a calendar: its events, all or only those changed, and the state to
 /// ask for changes since.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -131,7 +145,10 @@ pub fn sync_account(
     cache: &mut Cache,
 ) -> Result<(), SyncError> {
     let list = sync_calendar_list(provider, account_id, cache)?;
-    sync_calendars(provider, &list.calendars, window, cache).map(|_| ())
+    sync_calendars(provider, &list.calendars, window, cache)
+        .into_iter()
+        .find_map(Result::err)
+        .map_or(Ok(()), Err)
 }
 
 /// An account's calendar list as just fetched, and how it differs from the one cached before.
@@ -173,26 +190,19 @@ pub fn sync_calendar_list(
     })
 }
 
-/// Synchronizes each calendar (`sync_calendar`) and says whether anything changed. A calendar
-/// that fails keeps what the cache had and does not stop the others; the first such failure is
-/// returned once they are done.
+/// Synchronizes each calendar (`sync_calendar`) and says, calendar by calendar, whether anything
+/// changed. A calendar that fails keeps what the cache had and does not stop the others
+/// (`MOD-02-F18`).
 pub fn sync_calendars(
     provider: &dyn Provider,
     calendars: &[Calendar],
     window: Window,
     cache: &mut Cache,
-) -> Result<bool, SyncError> {
-    let mut changed = false;
-    let mut failed = None;
-    for calendar in calendars {
-        match sync_calendar(provider, calendar, window, cache) {
-            Ok(change) => changed |= change,
-            Err(error) => {
-                failed.get_or_insert(error);
-            }
-        }
-    }
-    failed.map_or(Ok(changed), Err)
+) -> Vec<Result<bool, SyncError>> {
+    calendars
+        .iter()
+        .map(|calendar| sync_calendar(provider, calendar, window, cache))
+        .collect()
 }
 
 /// Synchronizes one calendar's events and says whether anything changed (`MOD-02-F10`): after its

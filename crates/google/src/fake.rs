@@ -71,6 +71,10 @@ struct State {
     failing: Vec<String>,
     /// Google refuses to send the calendar lists.
     list_failing: bool,
+    /// Calendars whose events Google refuses with a rate limit, and the HTTP status it answers.
+    limited: Vec<(String, &'static str)>,
+    /// Google cannot be reached: every connection is closed unanswered.
+    unreachable: bool,
 }
 
 /// How many items the fake sends per page; Google may send fewer than asked for.
@@ -224,6 +228,30 @@ impl FakeGoogle {
             .failing
             .push(calendar.to_string());
     }
+
+    /// Google answers requests for the calendar's events with a rate limit: `429 Too Many
+    /// Requests` or `403 Forbidden`, with the reason `rateLimitExceeded`.
+    pub fn limit_calendar(&self, calendar: &str, status: &'static str) {
+        self.state
+            .lock()
+            .unwrap()
+            .limited
+            .push((calendar.to_string(), status));
+    }
+
+    /// The connection to Google is lost: nothing is answered.
+    pub fn disconnect(&self) {
+        self.state.lock().unwrap().unreachable = true;
+    }
+
+    /// Google works again: it can be reached, and sends every calendar list and calendar.
+    pub fn recover(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.failing.clear();
+        state.list_failing = false;
+        state.limited.clear();
+        state.unreachable = false;
+    }
 }
 
 pub fn param(url: &Url, name: &str) -> Option<String> {
@@ -307,6 +335,9 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         }
     };
     let mut state = state.lock().unwrap();
+    if state.unreachable {
+        return;
+    }
     let request: Vec<&str> = head.split_whitespace().take(2).collect();
     state.requests.push(request.join(" "));
     if head.starts_with("POST /revoke") {
@@ -473,6 +504,15 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
                 return (
                     "500 Internal Server Error",
                     r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
+                );
+            }
+            if let Some((_, status)) = state.limited.iter().find(|(limited, _)| limited == id) {
+                return (
+                    status,
+                    r#"{"error": {"errors": [{"domain": "usageLimits", "reason": "rateLimitExceeded",
+                        "message": "Rate Limit Exceeded"}],
+                        "message": "Rate Limit Exceeded"}}"#
+                        .to_string(),
                 );
             }
             let of_calendar = state

@@ -44,3 +44,4 @@ The side panel with each account and its calendars, the quick toggle that hides 
 ## Technical notes
 
 - Decisions: `DEC-28`, `DEC-56`, `DEC-89` (the same lock as on read-only events).
+- A calendar that is not up to date shows its synchronization problem on its row, as the band of `US-02-06` does until then (`DEC-97`).

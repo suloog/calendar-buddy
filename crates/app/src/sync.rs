@@ -8,9 +8,13 @@
 //! in the settings stay listed but are never synchronized. A removed account's data is deleted.
 //! Days on screen that the cache does not hold are fetched from Google while browsed, and shown
 //! without being kept (`US-02-05`). Whenever what the cache holds may have changed, the views get
-//! the events to show.
+//! the events to show. The views are told when synchronization runs, when it last got through,
+//! and which calendars are not up to date and why; a calendar that fails waits longer before each
+//! retry, and the others go on (`US-02-06`).
 
+use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::BuildHasher;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
@@ -20,10 +24,12 @@ use calendar_core::cache::{self, Cache};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
+use calendar_core::status::{Problem, Status};
 use calendar_core::sync::{
     Provider, SyncError, Window, fetch_events, shown_events, sync_calendar_list, sync_calendars,
 };
 use calendar_google::{Endpoints, Session};
+use chrono::{DateTime, Utc};
 use eframe::egui;
 
 use crate::platform::{SystemSecretStore, SystemWakeups};
@@ -32,6 +38,8 @@ enum Job {
     Sync(String, Window),
     /// Google turned the account's sign-in away: it is not polled until it works again.
     Stop(String),
+    /// Google could not confirm the sign-in of an account not synchronized yet in this run.
+    Unconfirmed(String),
     Forget(String, Window),
     Refresh,
     Activated,
@@ -52,6 +60,10 @@ enum Update {
     Failed(String),
     /// The names of calendars gone from their accounts' lists (`MOD-02-F21`).
     Gone(Vec<String>),
+    /// A synchronization is under way.
+    Synchronizing,
+    /// Where synchronization stands, once the worker is done for now.
+    Status(Status),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -73,6 +85,8 @@ pub struct Synchronization {
     gone: Vec<String>,
     /// The days outside the cache to fetch, as last told to the worker.
     browsed: Option<Window>,
+    /// Where synchronization stands, as the worker last told.
+    status: Status,
 }
 
 impl Synchronization {
@@ -121,6 +135,7 @@ impl Synchronization {
             let _ = engine.cache.retain_accounts(&account_ids);
             engine.clear_disabled();
             send(engine.shown());
+            send(Update::Status(engine.status()));
             loop {
                 let job = match engine.schedule.next() {
                     Some(next) => {
@@ -138,11 +153,15 @@ impl Synchronization {
                 };
                 let mut jobs = vec![job];
                 jobs.extend(received.try_iter().map(Some));
+                if jobs.iter().any(synchronizes) {
+                    send(Update::Synchronizing);
+                }
                 for job in latest_browsing(jobs) {
                     for update in engine.handle(job, Instant::now()) {
                         send(update);
                     }
                 }
+                send(Update::Status(engine.status()));
             }
         });
         Synchronization {
@@ -153,6 +172,7 @@ impl Synchronization {
             window,
             gone: Vec::new(),
             browsed: None,
+            status: Status::default(),
         }
     }
 
@@ -165,7 +185,8 @@ impl Synchronization {
     }
 
     /// Google confirmed or turned away these accounts' sign-ins: those confirmed and not
-    /// synchronized yet in this run are, those turned away are no longer polled.
+    /// synchronized yet in this run are, those turned away are no longer polled. Those Google
+    /// could not confirm before their first synchronization count as failed.
     pub fn checked(&mut self, checked: &[(String, Check)], window: Window) {
         for (id, check) in checked {
             match check {
@@ -176,6 +197,9 @@ impl Synchronization {
                     // Also an account whose first synchronization got through only on a retry.
                     self.synced.remove(id);
                     let _ = self.jobs.send(Job::Stop(id.clone()));
+                }
+                Check::Failed(_) if !self.synced.contains(id) => {
+                    let _ = self.jobs.send(Job::Unconfirmed(id.clone()));
                 }
                 _ => {}
             }
@@ -245,9 +269,16 @@ impl Synchronization {
                     self.synced.remove(&id);
                 }
                 Update::Gone(names) => self.gone.extend(names),
+                Update::Synchronizing => self.status.synchronizing = true,
+                Update::Status(status) => self.status = status,
             }
         }
         events
+    }
+
+    /// Where synchronization stands, for the indicator (`MOD-02-F17`).
+    pub fn status(&self) -> &Status {
+        &self.status
     }
 
     /// The names of calendars gone from their accounts' lists since last asked; each is given
@@ -272,12 +303,18 @@ struct Engine {
     /// The days on screen outside the cache, and their events as fetched; never cached.
     browsed: Option<Window>,
     outside: Vec<Event>,
+    /// The polled calendars whose last synchronization failed, by account ID and calendar ID.
+    problems: HashMap<(String, String), Problem>,
+    /// Accounts Google turned away, until they work again.
+    stopped: HashSet<String>,
+    /// When a synchronization last got through, kept in the cache too.
+    last_synced: Option<DateTime<Utc>>,
+    clock: Box<dyn Fn() -> DateTime<Utc> + Send>,
 }
 
 impl Engine {
     fn new(cache: Cache, sign_in: SignIn, window: Window, disabled: Disabled) -> Self {
         Engine {
-            cache,
             schedule: Schedule::new(),
             sign_in,
             sessions: HashMap::new(),
@@ -286,6 +323,11 @@ impl Engine {
             disabled,
             browsed: None,
             outside: Vec::new(),
+            problems: HashMap::new(),
+            stopped: HashSet::new(),
+            last_synced: cache.last_synced().ok().flatten(),
+            clock: Box::new(Utc::now),
+            cache,
         }
     }
 
@@ -300,11 +342,19 @@ impl Engine {
             }
             Some(Job::Stop(id)) => {
                 self.stop(&id);
+                self.stopped.insert(id);
+                return Vec::new();
+            }
+            Some(Job::Unconfirmed(id)) => {
+                if !self.sessions.contains_key(&id) {
+                    self.pending.insert(id);
+                }
                 return Vec::new();
             }
             Some(Job::Forget(id, window)) => {
                 self.window = window;
                 self.stop(&id);
+                self.stopped.remove(&id);
                 let _ = self.cache.forget_account(&id);
                 self.fetch_outside();
                 return vec![self.shown()];
@@ -354,6 +404,7 @@ impl Engine {
     /// since the last run, e.g. deleted while the app was offline, are told of.
     fn first(&mut self, id: &str, now: Instant) -> Vec<Update> {
         self.pending.remove(id);
+        self.stopped.remove(id);
         let listed = (self.sign_in)(id).and_then(|session| {
             let list = sync_calendar_list(session.as_ref(), id, &mut self.cache)?;
             Ok((session, list))
@@ -363,9 +414,10 @@ impl Engine {
             Ok((session, list)) => {
                 updates.extend(gone(list.gone));
                 let calendars = enabled(&self.disabled, &list.calendars);
-                // A calendar that fails is tried again at its next turn.
-                let _ = sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
+                let synced =
+                    sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
                 self.schedule.set_account(id, &calendars, now);
+                self.record(&calendars, &synced);
                 self.sessions.insert(id.to_string(), session);
                 self.fetch_outside();
             }
@@ -381,12 +433,14 @@ impl Engine {
     /// Synchronizes the calendars, each with its account's session, after bringing those
     /// accounts' calendar lists up to date (`MOD-02-F05`): calendars new on a list are
     /// synchronized too, and those gone from it are told of (`MOD-02-F21`). The views get the
-    /// events when what the cache holds may have changed. A calendar that fails is tried again
-    /// at its next turn; a list that cannot be fetched stays as it was.
+    /// events when what the cache holds may have changed. A calendar that fails does not stop
+    /// the others, and is tried again after a growing wait; a list that cannot be fetched stays
+    /// as it was.
     fn round(&mut self, calendars: &[Calendar], now: Instant) -> Vec<Update> {
         self.schedule.synced(calendars, now);
         let mut changed = false;
         let mut updates = Vec::new();
+        let mut results = Vec::new();
         for (account, session) in &self.sessions {
             let mut of_account: Vec<Calendar> = calendars
                 .iter()
@@ -408,9 +462,14 @@ impl Engine {
                     .chain(added)
                     .collect();
             }
-            // A failure can come after other calendars changed.
-            changed |= sync_calendars(session.as_ref(), &of_account, self.window, &mut self.cache)
-                .unwrap_or(true);
+            let synced =
+                sync_calendars(session.as_ref(), &of_account, self.window, &mut self.cache);
+            // A failure can come after the calendar's events changed in the cache.
+            changed |= synced.iter().any(|result| !matches!(result, Ok(false)));
+            results.push((of_account, synced));
+        }
+        for (calendars, synced) in results {
+            self.record(&calendars, &synced);
         }
         if changed {
             updates.push(self.shown());
@@ -432,6 +491,7 @@ impl Engine {
         let Ok(known) = self.cache.calendar_list() else {
             return;
         };
+        let mut results = Vec::new();
         for (account, session) in &self.sessions {
             let of_account: Vec<Calendar> = known
                 .iter()
@@ -440,7 +500,81 @@ impl Engine {
                 .collect();
             let calendars = enabled(&self.disabled, &of_account);
             let added = self.schedule.update_account(account, &calendars, now);
-            let _ = sync_calendars(session.as_ref(), &added, self.window, &mut self.cache);
+            let synced = sync_calendars(session.as_ref(), &added, self.window, &mut self.cache);
+            results.push((added, synced));
+        }
+        for (calendars, synced) in results {
+            self.record(&calendars, &synced);
+        }
+    }
+
+    /// Takes note of how each calendar's synchronization went (`MOD-02-F16`, `MOD-02-F18`): one
+    /// that failed is in error, or delayed when Google asked to slow down, and waits longer
+    /// before each retry; one that got through is up to date, and the time is kept.
+    fn record(&mut self, calendars: &[Calendar], synced: &[Result<bool, SyncError>]) {
+        let mut through = false;
+        for (calendar, result) in calendars.iter().zip(synced) {
+            let key = (calendar.account_id.clone(), calendar.id.clone());
+            match result {
+                Ok(_) => {
+                    through = true;
+                    self.schedule.succeeded(calendar);
+                    self.problems.remove(&key);
+                }
+                Err(error) => {
+                    self.schedule.failed(calendar, jitter());
+                    let problem = if error.is_rate_limited() {
+                        Problem::Delayed
+                    } else {
+                        Problem::Failed
+                    };
+                    self.problems.insert(key, problem);
+                }
+            }
+        }
+        if through {
+            let at = (self.clock)();
+            self.last_synced = Some(at);
+            // Losing the time only shows an older one at the next start.
+            let _ = self.cache.set_last_synced(at);
+        }
+    }
+
+    /// Where synchronization stands: the enabled cached calendars not up to date, those of
+    /// accounts Google turned away not synchronizing and those of accounts whose first
+    /// synchronization did not get through in error; those of the other accounts not signed in
+    /// yet wait for it.
+    fn status(&self) -> Status {
+        // An unreadable cache knows no calendars to tell of.
+        let known = enabled(
+            &self.disabled,
+            &self.cache.calendar_list().unwrap_or_default(),
+        );
+        let waiting = known.iter().any(|calendar| {
+            let account = &calendar.account_id;
+            !self.sessions.contains_key(account)
+                && !self.pending.contains(account)
+                && !self.stopped.contains(account)
+        });
+        let problems = known
+            .into_iter()
+            .filter_map(|calendar| {
+                let problem = if self.stopped.contains(&calendar.account_id) {
+                    Some(Problem::NotSynchronizing)
+                } else if self.pending.contains(&calendar.account_id) {
+                    Some(Problem::Failed)
+                } else {
+                    let key = (calendar.account_id.clone(), calendar.id.clone());
+                    self.problems.get(&key).copied()
+                };
+                problem.map(|problem| (calendar, problem))
+            })
+            .collect();
+        Status {
+            synchronizing: false,
+            waiting,
+            last_synced: self.last_synced,
+            problems,
         }
     }
 
@@ -469,6 +603,7 @@ impl Engine {
         self.pending.remove(id);
         self.schedule.forget(id);
         self.sessions.remove(id);
+        self.problems.retain(|(account, _), _| account != id);
     }
 
     fn shown(&self) -> Update {
@@ -507,6 +642,21 @@ fn latest_browsing(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
         .collect()
 }
 
+/// A number from 0 to 1, different each time: spreads the retries of calendars that failed
+/// together.
+fn jitter() -> f64 {
+    let random = RandomState::new().hash_one(Instant::now());
+    (random >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// Whether the job, or with none the polling round, may ask Google for something.
+fn synchronizes(job: &Option<Job>) -> bool {
+    !matches!(
+        job,
+        Some(Job::Stop(_) | Job::Unconfirmed(_) | Job::Shown(_) | Job::Window(_))
+    )
+}
+
 /// The calendars not disabled in the settings.
 fn enabled(disabled: &Disabled, calendars: &[Calendar]) -> Vec<Calendar> {
     calendars
@@ -539,6 +689,8 @@ mod tests {
     use calendar_core::model::{Access, Calendar, Rgb, Timing};
     use calendar_core::offline;
     use calendar_core::platform::Network;
+    use calendar_core::regional::Regional;
+    use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_google::CLIENT_FILE;
     use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, FakeGoogle, FakeStore};
@@ -1374,6 +1526,338 @@ mod tests {
             told(engine.handle(Some(Job::Browse(Some(edge))), start)).unwrap(),
             ["Holiday"]
         );
+    }
+
+    /// 14:05 in Warsaw on Wednesday 11 November 2026, plus `minutes`.
+    fn clock_at(minutes: i64) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 11, 11, 13, 5, 0).unwrap() + chrono::Duration::minutes(minutes)
+    }
+
+    /// The calendars not up to date, by ID, and why.
+    fn problems(engine: &Engine) -> Vec<(String, Problem)> {
+        engine
+            .status()
+            .problems
+            .into_iter()
+            .map(|(calendar, problem)| (calendar.id, problem))
+            .collect()
+    }
+
+    #[test]
+    fn tc_02_08_an_error_on_one_calendar_is_shown_on_it_while_the_others_stay_up_to_date() {
+        let google = Google::start("tc-02-08");
+        google.calendar("Work", "owner");
+        google.calendar("Home", "owner");
+        google.event("Work", "standup", "Standup");
+        google.event("Home", "dinner", "Dinner");
+        let start = Instant::now();
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            google.sign_in(),
+            window(),
+            Disabled::new(),
+        );
+        engine.clock = Box::new(|| clock_at(0));
+        engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+        assert_eq!(engine.status().last_synced, Some(clock_at(0)));
+        assert_eq!(engine.status().state(true), State::UpToDate);
+
+        // 1. Every request for "Work" fails, "Home" changes, and the next round runs.
+        google.fake.fail_calendar("Work");
+        google.event("Home", "dinner", "Dinner moved");
+        engine.clock = Box::new(|| clock_at(1));
+        let updates = engine.handle(None, start + secs(60));
+
+        assert_eq!(told(updates).unwrap(), ["Dinner moved", "Standup"]);
+        assert_eq!(problems(&engine), [("Work".to_string(), Problem::Failed)]);
+        let status = engine.status();
+        assert_eq!(status.state(true), State::Error);
+        assert_eq!(
+            status.problems(true),
+            ["“Work” could not be synchronized; trying again."]
+        );
+        assert_eq!(status.last_synced, Some(clock_at(1)));
+        let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+        assert_eq!(
+            status::last_synced(status.last_synced, Warsaw, d(2026, 11, 11), &regional),
+            "Last synchronized at 14:06"
+        );
+        // The time is kept for the next start.
+        assert_eq!(engine.cache.last_synced().unwrap(), Some(clock_at(1)));
+    }
+
+    #[test]
+    fn after_a_rate_limit_the_calendar_is_delayed_then_resumes_with_growing_waits_and_nothing_lost()
+    {
+        let google = Google::start("rate-limit");
+        google.calendar("work", "owner");
+        google.calendar("home", "owner");
+        google.event("work", "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        google.fake.limit_calendar("work", "429 Too Many Requests");
+        google.event("work", "standup", "Standup moved");
+        google.event("home", "dinner", "Dinner");
+
+        // The calendar Google did not limit goes on.
+        let updates = engine.handle(None, start + secs(60));
+        assert_eq!(told(updates).unwrap(), ["Dinner", "Standup"]);
+        let mut now = start + secs(60);
+        let mut waits = Vec::new();
+        for _ in 0..3 {
+            assert_eq!(problems(&engine), [("work".to_string(), Problem::Delayed)]);
+            assert_eq!(engine.status().state(true), State::Delayed);
+            assert!(label(engine.status().state(true)).contains("delayed"));
+            let mut retry = now;
+            while engine.schedule.due(retry).iter().all(|c| c.id != "work") {
+                retry += secs(1);
+            }
+            waits.push((retry - now).as_secs());
+            now = retry;
+            engine.handle(None, now);
+        }
+        // The cached event stays meanwhile.
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Dinner", "Standup"]);
+        assert!(
+            waits[0] >= 60 && waits[1] >= 120 && waits[2] >= 240,
+            "{waits:?}"
+        );
+        assert!(waits[0] < waits[1] && waits[1] < waits[2], "{waits:?}");
+
+        google.fake.recover();
+        while engine.schedule.due(now).iter().all(|c| c.id != "work") {
+            now += secs(1);
+        }
+        let updates = engine.handle(None, now);
+
+        assert_eq!(told(updates).unwrap(), ["Dinner", "Standup moved"]);
+        assert_eq!(problems(&engine), []);
+        assert_eq!(engine.status().state(true), State::UpToDate);
+        assert_eq!(engine.schedule.next(), Some(now + secs(60)));
+    }
+
+    #[test]
+    fn after_a_lost_connection_synchronization_resumes_on_its_own_and_nothing_is_lost() {
+        let google = Google::start("lost-connection");
+        google.calendar("work", "owner");
+        google.event("work", "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        google.fake.disconnect();
+        google.event("work", "standup", "Standup moved");
+        google.event("work", "retro", "Retro");
+        engine.handle(None, start + secs(60));
+
+        assert_eq!(problems(&engine), [("work".to_string(), Problem::Failed)]);
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Standup"]);
+
+        google.fake.recover();
+        let retry = engine.schedule.next().unwrap();
+        assert!(retry >= start + secs(120));
+        let updates = engine.handle(None, retry);
+
+        assert_eq!(told(updates).unwrap(), ["Retro", "Standup moved"]);
+        assert_eq!(problems(&engine), []);
+    }
+
+    #[test]
+    fn an_account_google_turned_away_keeps_its_calendars_shown_and_marked_not_synchronizing() {
+        let google = Google::start("not-synchronizing");
+        google.calendar("work", "owner");
+        google.event("work", "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        engine.handle(Some(Job::Stop(ACCOUNT_ID.into())), start);
+
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Standup"]);
+        assert_eq!(
+            problems(&engine),
+            [("work".to_string(), Problem::NotSynchronizing)]
+        );
+        assert_eq!(
+            engine.status().problems(false),
+            ["“work” is not synchronizing: its account needs sign-in."]
+        );
+
+        // Signed in again, it synchronizes as before.
+        engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+        assert_eq!(problems(&engine), []);
+    }
+
+    #[test]
+    fn the_calendars_of_an_account_whose_first_synchronization_failed_are_in_error() {
+        let mut engine = Engine::new(
+            cache_of(&["1"])(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+
+        engine.handle(Some(Job::Sync("1".into(), window())), Instant::now());
+
+        assert_eq!(
+            problems(&engine),
+            [("1@example.com".to_string(), Problem::Failed)]
+        );
+        assert_eq!(engine.status().state(true), State::Error);
+        assert_eq!(engine.status().state(false), State::Offline);
+        assert_eq!(engine.status().problems(false), Vec::<String>::new());
+    }
+
+    #[test]
+    fn until_an_account_first_synchronizes_its_calendars_are_not_up_to_date() {
+        let mut engine = Engine::new(
+            cache_of(&["1"])(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+
+        // Waiting for Google to confirm the account's sign-in.
+        assert_eq!(engine.status().state(true), State::Synchronizing);
+        assert_eq!(problems(&engine), []);
+
+        // Google could not be asked.
+        engine.handle(Some(Job::Unconfirmed("1".into())), Instant::now());
+
+        assert_eq!(engine.status().state(true), State::Error);
+        assert_eq!(
+            problems(&engine),
+            [("1@example.com".to_string(), Problem::Failed)]
+        );
+    }
+
+    #[test]
+    fn a_check_that_did_not_get_through_marks_only_accounts_not_synchronized_yet() {
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            unreachable_google(),
+            vec!["1".to_string()],
+            window(),
+            Disabled::new(),
+        );
+        next_events(&mut sync);
+        sync.synced.insert("2".to_string());
+
+        sync.checked(
+            &[
+                ("1".to_string(), Check::Failed("timeout".into())),
+                ("2".to_string(), Check::Failed("timeout".into())),
+            ],
+            window(),
+        );
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while sync.status().problems.is_empty() {
+            assert!(Instant::now() < deadline, "no problem was told");
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        assert_eq!(sync.status().problems[0].1, Problem::Failed);
+    }
+
+    #[test]
+    fn an_account_turned_away_in_an_earlier_run_is_marked_not_synchronizing_at_start() {
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            unreachable_google(),
+            vec!["1".to_string()],
+            window(),
+            Disabled::new(),
+        );
+
+        // What the app does at start for an account saved as needing sign-in.
+        sync.checked(&[("1".to_string(), Check::SignInNeeded)], window());
+
+        assert_eq!(next_events(&mut sync), ["1"]);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while sync.status().problems.is_empty() || sync.status().synchronizing {
+            assert!(Instant::now() < deadline, "no problem was told");
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        assert_eq!(sync.status().problems[0].1, Problem::NotSynchronizing);
+        assert!(!sync.status().waiting);
+        assert_eq!(sync.status().state(true), State::Error);
+    }
+
+    #[test]
+    fn the_time_of_the_last_synchronization_is_shown_from_the_cache_at_start() {
+        let mut cache = cache_of(&["1"])();
+        cache.set_last_synced(clock_at(0)).unwrap();
+        let ctx = egui::Context::default();
+
+        let mut sync = Synchronization::with(
+            &ctx,
+            move || cache,
+            unreachable_google(),
+            vec!["1".to_string()],
+            window(),
+            Disabled::new(),
+        );
+
+        next_events(&mut sync);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while sync.status().last_synced.is_none() {
+            assert!(Instant::now() < deadline, "no status came");
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        assert_eq!(sync.status().last_synced, Some(clock_at(0)));
+        assert_eq!(sync.status().state(false), State::Offline);
+    }
+
+    #[test]
+    fn the_views_keep_working_while_a_synchronization_runs() {
+        let ctx = egui::Context::default();
+        let (release, released) = mpsc::channel::<()>();
+        let released = Mutex::new(released);
+        // Signing in waits until the test lets it go on.
+        let sign_in: SignIn = Box::new(move |_| {
+            let _ = released.lock().unwrap().recv();
+            Err(SyncError("Google could not be reached".into()))
+        });
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            sign_in,
+            vec!["1".to_string()],
+            window(),
+            Disabled::new(),
+        );
+        assert_eq!(next_events(&mut sync), ["1"]);
+
+        sync.checked(&[("1".to_string(), Check::Works)], window());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !sync.status().synchronizing {
+            assert!(
+                Instant::now() < deadline,
+                "the synchronization did not start"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+            // Each frame's calls come back at once while the worker waits for Google.
+            let frame = Instant::now();
+            sync.poll();
+            sync.browse(None);
+            sync.set_window(window());
+            assert!(frame.elapsed() < Duration::from_millis(50));
+        }
+        assert_eq!(sync.status().state(true), State::Synchronizing);
+
+        release.send(()).unwrap();
+        while sync.status().synchronizing {
+            assert!(Instant::now() < deadline, "the synchronization did not end");
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        assert_eq!(sync.status().state(true), State::Error);
     }
 
     /// The system's wake-ups, faked: the test says when the computer woke.

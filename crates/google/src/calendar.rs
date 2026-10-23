@@ -142,7 +142,8 @@ impl Session {
 
     /// Google's answer; `None` for 410 Gone, Google's word for a synchronization state it no
     /// longer accepts. An access token Google refuses (it expired, e.g. while the computer slept)
-    /// is renewed once.
+    /// is renewed once. Google's rate limits, 429 and 403 for `rateLimitExceeded` or
+    /// `userRateLimitExceeded`, are told apart from other refusals (`MOD-02-F16`).
     fn get<T: DeserializeOwned>(&self, url: Url) -> Result<Option<T>, SyncError> {
         let (mut status, mut body) = self.call(&url)?;
         if status == 401 {
@@ -151,6 +152,9 @@ impl Session {
         }
         if status == 410 {
             return Ok(None);
+        }
+        if status == 429 || (status == 403 && rate_limited(&body)) {
+            return Err(SyncError::rate_limited());
         }
         if !status.is_success() {
             let reason = google_reason(&body).unwrap_or_else(|| status.to_string());
@@ -192,6 +196,21 @@ impl Session {
         }
         Ok(Some(fetched))
     }
+}
+
+/// Whether a 403 from Google's APIs is a rate limit rather than a refusal.
+fn rate_limited(body: &str) -> bool {
+    let value: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+    value["error"]["errors"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|error| {
+            matches!(
+                error["reason"].as_str(),
+                Some("rateLimitExceeded" | "userRateLimitExceeded")
+            )
+        })
 }
 
 impl Provider for Session {
