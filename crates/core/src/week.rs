@@ -32,6 +32,26 @@ impl Week {
     }
 }
 
+/// The views drawn on the hour grid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GridView {
+    Day,
+    ThreeDays,
+    Week,
+}
+
+impl GridView {
+    /// The days shown for the selected date: that day, three days from it (as Google Calendar's
+    /// custom view of 3 days), or the week containing it.
+    pub fn days(self, selected: NaiveDate) -> Vec<NaiveDate> {
+        match self {
+            GridView::Day => vec![selected],
+            GridView::ThreeDays => (0..3).map(|i| selected + Duration::days(i)).collect(),
+            GridView::Week => Week::containing(selected).days().to_vec(),
+        }
+    }
+}
+
 /// The instant a local day starts. A zone may skip midnight; the day then starts at the first
 /// local time that exists.
 pub fn day_start(date: NaiveDate, tz: Tz) -> DateTime<Utc> {
@@ -73,6 +93,20 @@ mod tests {
         assert_eq!(w.days()[6], d(2026, 11, 15));
         assert_eq!(w.next().first, d(2026, 11, 16));
         assert_eq!(w.previous().first, d(2026, 11, 2));
+    }
+
+    #[test]
+    fn tc_03_05_day_shows_the_selected_day_and_three_days_start_from_it() {
+        let selected = d(2026, 11, 11);
+        assert_eq!(GridView::Day.days(selected), vec![selected]);
+        assert_eq!(
+            GridView::ThreeDays.days(selected),
+            vec![d(2026, 11, 11), d(2026, 11, 12), d(2026, 11, 13)]
+        );
+        assert_eq!(
+            GridView::Week.days(selected),
+            Week::containing(selected).days()
+        );
     }
 
     #[test]

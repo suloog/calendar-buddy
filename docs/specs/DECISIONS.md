@@ -840,3 +840,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-69] Day and 3-day views: the 3 days start at the selected date; a plain picker until `US-03-05`
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-02
+- **Affects:** `US-03-02`, `MOD-03-F01`, `MOD-03-F04`, `MOD-03-F07`
+- **Decision:** The 3-day view shows the selected date and the two days after it, as Google Calendar's custom view does; the week view still shows the week containing the selected date. Previous and next move by the view's length (1, 3 or 7 days). Until `US-03-05`, the views are picked with three plain buttons (Day, 3 days, Week) in the bar above the grid, keeping the selected date; the app opens in the week view on today.
+- **Why:** Follows Google Calendar (`DEC-62`) and the pass criterion of `TC-03-05`; the simplest way for the user to pick a view before the full navigation of `US-03-05` exists.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

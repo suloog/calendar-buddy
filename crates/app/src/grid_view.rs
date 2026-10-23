@@ -1,8 +1,8 @@
-//! Draws a `WeekViewModel` with egui. Only drawing and input live here; what goes where is
-//! decided in `calendar_core::view_model`.
+//! Draws a `GridViewModel` (the day, 3-day or week view) with egui. Only drawing and input live
+//! here; what goes where is decided in `calendar_core::view_model`.
 
 use calendar_core::model::{Event, Rgb, Timing};
-use calendar_core::view_model::WeekViewModel;
+use calendar_core::view_model::GridViewModel;
 use chrono::Duration;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Stroke, Vec2,
@@ -73,9 +73,10 @@ pub fn apply(events: &mut [Event], change: Change) {
     }
 }
 
-pub fn show(ui: &mut egui::Ui, view: &WeekViewModel, state: &mut State) -> Option<Change> {
+pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Option<Change> {
     let width = ui.available_width();
-    let day_width = ((width - GUTTER) / 7.0).max(40.0);
+    let columns = view.days.len();
+    let day_width = ((width - GUTTER) / columns as f32).max(40.0);
     let visuals = ui.visuals().clone();
     let grid_line = visuals.widgets.noninteractive.bg_stroke;
     let weak_text = visuals.weak_text_color();
@@ -130,7 +131,7 @@ pub fn show(ui: &mut egui::Ui, view: &WeekViewModel, state: &mut State) -> Optio
     // The grid follows the clock, also on daylight-saving days (`DEC-67`).
     let grid_height = 24.0 * HOUR_HEIGHT;
     let mut scroll = ScrollArea::vertical()
-        .id_salt("week-hours")
+        .id_salt("grid-hours")
         .auto_shrink([false, false]);
     if !state.scrolled_to_now {
         let target = (view.initial_scroll_minute as f32 / 60.0 - 1.0).max(0.0) * HOUR_HEIGHT;
@@ -157,7 +158,7 @@ pub fn show(ui: &mut egui::Ui, view: &WeekViewModel, state: &mut State) -> Optio
                 );
             }
         }
-        for i in 0..=7 {
+        for i in 0..=columns {
             let x = grid.left() + GUTTER + i as f32 * day_width;
             painter.vline(x, grid.y_range(), grid_line);
         }

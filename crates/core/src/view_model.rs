@@ -1,11 +1,11 @@
-//! What the week view shows, independent of how it is drawn.
+//! What the day, 3-day and week views show, independent of how it is drawn.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, timed_placements};
 use crate::model::{Event, Rgb, Timing};
-use crate::week::{Week, wall_minute};
+use crate::week::wall_minute;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DayColumn {
@@ -37,8 +37,7 @@ pub struct NowLine {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WeekViewModel {
-    pub week: Week,
+pub struct GridViewModel {
     pub zone: Tz,
     pub days: Vec<DayColumn>,
     pub blocks: Vec<Block>,
@@ -53,10 +52,15 @@ fn shown_title(event: &Event) -> Option<String> {
     (!event.busy_only).then(|| event.title.clone())
 }
 
-pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> WeekViewModel {
+/// The hour grid over `dates`: one day, three days or a week.
+pub fn grid_view(
+    events: &[Event],
+    dates: &[NaiveDate],
+    zone: Tz,
+    now: DateTime<Utc>,
+) -> GridViewModel {
     let today = now.with_timezone(&zone).date_naive();
-    let days: Vec<DayColumn> = week
-        .days()
+    let days: Vec<DayColumn> = dates
         .iter()
         .map(|&date| DayColumn {
             date,
@@ -64,7 +68,7 @@ pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> 
         })
         .collect();
 
-    let blocks = timed_placements(events, week, zone)
+    let blocks = timed_placements(events, dates, zone)
         .into_iter()
         .map(|placement| {
             let event = &events[placement.event];
@@ -81,7 +85,7 @@ pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> 
         })
         .collect();
 
-    let bars: Vec<Bar> = all_day_bars(events, week, zone)
+    let bars: Vec<Bar> = all_day_bars(events, dates, zone)
         .into_iter()
         .map(|bar| Bar {
             bar,
@@ -97,8 +101,7 @@ pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> 
         minute: minute_now,
     });
 
-    WeekViewModel {
-        week,
+    GridViewModel {
         zone,
         days,
         blocks,
@@ -113,6 +116,7 @@ pub fn week_view(events: &[Event], week: Week, zone: Tz, now: DateTime<Utc>) -> 
 mod tests {
     use super::*;
     use crate::fixtures::{d, tc_03_01_week, timed};
+    use crate::week::{GridView, Week};
     use chrono::TimeZone;
     use chrono_tz::Europe::Warsaw;
 
@@ -123,10 +127,10 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn vm() -> WeekViewModel {
-        week_view(
+    fn vm() -> GridViewModel {
+        grid_view(
             &tc_03_01_week(),
-            Week::containing(d(2026, 11, 11)),
+            &Week::containing(d(2026, 11, 11)).days(),
             Warsaw,
             clock(),
         )
@@ -206,14 +210,19 @@ mod tests {
 
     #[test]
     fn another_week_has_no_now_line_but_still_opens_at_the_current_time() {
-        let vm = week_view(&[], Week::containing(d(2026, 11, 20)), Warsaw, clock());
+        let vm = grid_view(
+            &[],
+            &Week::containing(d(2026, 11, 20)).days(),
+            Warsaw,
+            clock(),
+        );
         assert!(vm.days.iter().all(|d| !d.is_today));
         assert_eq!(vm.now, None);
         assert_eq!(vm.initial_scroll_minute, 600);
     }
 
     fn placed(event: crate::model::Event, date: NaiveDate) -> (u32, u32) {
-        let vm = week_view(&[event], Week::containing(date), Warsaw, clock());
+        let vm = grid_view(&[event], &Week::containing(date).days(), Warsaw, clock());
         let p = vm.blocks[0].placement;
         (p.start_min, p.end_min)
     }
@@ -230,5 +239,146 @@ mod tests {
         // 01:00–04:00 on the 25-hour day lasts four real hours but spans 01:00–04:00 on the clock.
         let night = timed("night", d(2026, 10, 25), (1, 0), (4, 0));
         assert_eq!(placed(night, d(2026, 10, 25)), (60, 240));
+    }
+
+    /// `TC-03-05`: Wednesday 11 to Friday 13 November have events, and so do the days around.
+    fn tc_03_05_events() -> Vec<crate::model::Event> {
+        vec![
+            timed("Tuesday", d(2026, 11, 10), (9, 0), (10, 0)),
+            timed("Wednesday", d(2026, 11, 11), (9, 0), (10, 0)),
+            timed("Thursday", d(2026, 11, 12), (9, 0), (10, 0)),
+            timed("Friday", d(2026, 11, 13), (9, 0), (10, 0)),
+            timed("Saturday", d(2026, 11, 14), (9, 0), (10, 0)),
+        ]
+    }
+
+    fn titles(vm: &GridViewModel) -> Vec<(usize, &str)> {
+        let mut t: Vec<(usize, &str)> = vm
+            .blocks
+            .iter()
+            .map(|b| (b.placement.day, b.title.as_deref().unwrap()))
+            .collect();
+        t.sort();
+        t
+    }
+
+    fn shown(view: GridView) -> GridViewModel {
+        grid_view(
+            &tc_03_05_events(),
+            &view.days(d(2026, 11, 11)),
+            Warsaw,
+            clock(),
+        )
+    }
+
+    #[test]
+    fn tc_03_05_day_view_shows_only_the_selected_day_and_its_events() {
+        let vm = shown(GridView::Day);
+        let dates: Vec<NaiveDate> = vm.days.iter().map(|c| c.date).collect();
+        assert_eq!(dates, vec![d(2026, 11, 11)]);
+        assert_eq!(titles(&vm), vec![(0, "Wednesday")]);
+    }
+
+    #[test]
+    fn tc_03_05_three_day_view_shows_three_days_from_the_selected_day() {
+        let vm = shown(GridView::ThreeDays);
+        let dates: Vec<NaiveDate> = vm.days.iter().map(|c| c.date).collect();
+        assert_eq!(
+            dates,
+            vec![d(2026, 11, 11), d(2026, 11, 12), d(2026, 11, 13)]
+        );
+        assert_eq!(
+            titles(&vm),
+            vec![(0, "Wednesday"), (1, "Thursday"), (2, "Friday")]
+        );
+    }
+
+    #[test]
+    fn day_and_three_day_views_show_the_strip_and_the_current_time_as_the_week_does() {
+        let events = tc_03_01_week();
+        let day = grid_view(
+            &events,
+            &GridView::Day.days(d(2026, 11, 12)),
+            Warsaw,
+            clock(),
+        );
+        let offsite = day
+            .bars
+            .iter()
+            .find(|b| b.title.as_deref() == Some("Offsite"));
+        assert_eq!(
+            offsite.map(|b| (b.bar.first_day, b.bar.last_day)),
+            Some((0, 0))
+        );
+        assert_eq!(day.lanes, 1);
+        assert_eq!(day.now, None);
+
+        let three = grid_view(
+            &events,
+            &GridView::ThreeDays.days(d(2026, 11, 10)),
+            Warsaw,
+            clock(),
+        );
+        let bars: Vec<(&str, usize, usize)> = three
+            .bars
+            .iter()
+            .map(|b| (b.title.as_deref().unwrap(), b.bar.first_day, b.bar.last_day))
+            .collect();
+        assert_eq!(bars, vec![("Conference day", 0, 0), ("Offsite", 2, 2)]);
+        assert_eq!(
+            three.now,
+            Some(NowLine {
+                day: 1,
+                minute: 600
+            })
+        );
+        assert_eq!(three.initial_scroll_minute, 600);
+    }
+
+    #[test]
+    fn day_view_places_overlapping_events_side_by_side() {
+        let events = [
+            timed("a", d(2026, 11, 11), (10, 0), (11, 0)),
+            timed("b", d(2026, 11, 11), (10, 30), (11, 30)),
+        ];
+        let vm = grid_view(
+            &events,
+            &GridView::Day.days(d(2026, 11, 11)),
+            Warsaw,
+            clock(),
+        );
+        let mut columns: Vec<(u32, u32)> = vm
+            .blocks
+            .iter()
+            .map(|b| (b.placement.column, b.placement.columns))
+            .collect();
+        columns.sort();
+        assert_eq!(columns, vec![(0, 2), (1, 2)]);
+    }
+
+    #[test]
+    fn day_and_three_day_views_highlight_today_and_show_free_busy_as_busy_blocks() {
+        let events = tc_03_01_week();
+        for view in [GridView::Day, GridView::ThreeDays] {
+            let vm = grid_view(&events, &view.days(d(2026, 11, 11)), Warsaw, clock());
+            assert!(vm.days[0].is_today);
+            assert!(vm.days[1..].iter().all(|c| !c.is_today));
+            assert_eq!(
+                vm.now,
+                Some(NowLine {
+                    day: 0,
+                    minute: 600
+                })
+            );
+        }
+        let friday = grid_view(
+            &events,
+            &GridView::Day.days(d(2026, 11, 13)),
+            Warsaw,
+            clock(),
+        );
+        assert_eq!(friday.blocks.len(), 1);
+        assert_eq!(friday.blocks[0].title, None);
+        assert!(friday.days.iter().all(|c| !c.is_today));
     }
 }

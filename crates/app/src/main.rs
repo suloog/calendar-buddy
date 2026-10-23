@@ -1,10 +1,10 @@
-mod week_view;
+mod grid_view;
 
 use calendar_core::fixtures;
 use calendar_core::model::Event;
-use calendar_core::view_model::{WeekViewModel, week_view};
-use calendar_core::week::Week;
-use chrono::{DateTime, Utc};
+use calendar_core::view_model::{GridViewModel, grid_view};
+use calendar_core::week::GridView;
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Tz;
 use eframe::egui;
 
@@ -18,10 +18,11 @@ fn system_zone() -> Tz {
 struct CalendarApp {
     events: Vec<Event>,
     zone: Tz,
-    week: Week,
-    view: WeekViewModel,
+    grid: GridView,
+    selected: NaiveDate,
+    view: GridViewModel,
     built_at: DateTime<Utc>,
-    view_state: week_view::State,
+    view_state: grid_view::State,
 }
 
 impl CalendarApp {
@@ -30,22 +31,24 @@ impl CalendarApp {
         let today = Utc::now().with_timezone(&zone).date_naive();
         // Test data until synchronization exists (`US-02-01`).
         let events = fixtures::profile(today);
-        let week = Week::containing(today);
+        let grid = GridView::Week;
         let built_at = Utc::now();
-        let view = week_view(&events, week, zone, built_at);
+        let view = grid_view(&events, &grid.days(today), zone, built_at);
         CalendarApp {
             events,
             zone,
-            week,
+            grid,
+            selected: today,
             view,
             built_at,
-            view_state: week_view::State::default(),
+            view_state: grid_view::State::default(),
         }
     }
 
     fn rebuild(&mut self) {
         self.built_at = Utc::now();
-        self.view = week_view(&self.events, self.week, self.zone, self.built_at);
+        let days = self.grid.days(self.selected);
+        self.view = grid_view(&self.events, &days, self.zone, self.built_at);
     }
 }
 
@@ -57,28 +60,41 @@ impl eframe::App for CalendarApp {
         }
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs(30));
-        egui::Panel::top("week-bar").show(ui, |ui| {
+        egui::Panel::top("view-bar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                // Only for the feasibility check; full navigation is `US-03-05`.
+                // A plain picker and period buttons; full navigation and shortcuts are `US-03-05`.
+                for (grid, name) in [
+                    (GridView::Day, "Day"),
+                    (GridView::ThreeDays, "3 days"),
+                    (GridView::Week, "Week"),
+                ] {
+                    if ui.selectable_label(self.grid == grid, name).clicked() && self.grid != grid {
+                        self.grid = grid;
+                        self.rebuild();
+                    }
+                }
+                ui.separator();
+                let step = Duration::days(self.grid.days(self.selected).len() as i64);
                 if ui.button("‹").clicked() {
-                    self.week = self.week.previous();
+                    self.selected -= step;
                     self.rebuild();
                 }
                 if ui.button("›").clicked() {
-                    self.week = self.week.next();
+                    self.selected += step;
                     self.rebuild();
                 }
-                let days = self.week.days();
-                ui.label(format!(
-                    "{} – {}",
-                    days[0].format("%-d %b"),
-                    days[6].format("%-d %b %Y")
-                ));
+                let days = self.grid.days(self.selected);
+                let (first, last) = (days[0], days[days.len() - 1]);
+                ui.label(if first == last {
+                    first.format("%a %-d %b %Y").to_string()
+                } else {
+                    format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
+                });
             });
         });
         egui::CentralPanel::default().show(ui, |ui| {
-            if let Some(change) = week_view::show(ui, &self.view, &mut self.view_state) {
-                week_view::apply(&mut self.events, change);
+            if let Some(change) = grid_view::show(ui, &self.view, &mut self.view_state) {
+                grid_view::apply(&mut self.events, change);
                 self.rebuild();
             }
         });
