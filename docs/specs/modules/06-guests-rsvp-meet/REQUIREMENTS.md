@@ -2,7 +2,7 @@
 id: MOD-06
 title: Guests, invitations, RSVP and Google Meet
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | done
+status: ready # draft | ready | in-progress | done
 depends_on: [MOD-05] # other module IDs
 sources: [SRC-01, SRC-03] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---

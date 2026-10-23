@@ -3,7 +3,7 @@ id: US-03-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-03
 covers: [MOD-03-F02, MOD-03-F14, MOD-03-F19, MOD-03-F21, MOD-03-F22, MOD-03-U01, MOD-03-U02, MOD-03-U05, MOD-03-NFR-01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | review | done | blocked
+status: ready # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [] # story IDs that must be done first
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
 | **Covers** | `MOD-03-F02`, `F14`, `F19`, `F21`, `F22`, `U01`, `U02`, `U05`, `NFR-01` |
 | **Priority** | must |
-| **Status** | draft |
+| **Status** | ready |
 | **Depends on** | — |
 | **YouTrack** | — |
 | **Open questions** | — |
@@ -29,7 +29,6 @@ The week view — the main view of the app — and the feasibility check of the 
 - [ ] A week grid shows seven days with their hours; all-day and multi-day events sit in a strip above the hours; calendars shared as free/busy only appear as "busy" blocks.
 - [ ] Today is highlighted, a line marks the current time, and the view opens scrolled to the current time.
 - [ ] Overlapping events are placed side by side, each one readable.
-- [ ] Scrolling through the hours is smooth.
 - [ ] The layout adapts to the window size and to 100%, 150% and 200% screen scale.
 - [ ] On a profile of 5 accounts, 50 calendars and about 20,000 events, scrolling the week and switching weeks meet the `NFR-03` thresholds; the first measurement of this story sets them.
 - [ ] The feasibility check of the interface technology — smooth scrolling, overlapping events, resizing at several scales, and dragging an event, on test data — is done and its result recorded; if it fails, the views move to the fallback technology before other views are built.
