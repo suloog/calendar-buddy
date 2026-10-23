@@ -21,6 +21,7 @@ use calendar_core::offline;
 use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
+use calendar_core::side_panel::{self, Panel};
 use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
 use calendar_core::view_model::{GridViewModel, grid_view};
@@ -86,20 +87,26 @@ enum Dialog {
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
 
-/// The view's model, each event in its calendar's local colour where it has one; the events keep
-/// their places, so the model's indices still point into `events`.
+/// The view's model, of the events of calendars not hidden in the side panel (`MOD-03-F12`), each
+/// in its calendar's local colour where it has one; with the places in `events` of the events
+/// the model's indices point to.
 fn build(
     events: &[Event],
-    colors: &LocalColors,
+    settings: &Settings,
     navigation: Navigation,
     agenda_days: i64,
     zone: Tz,
     now: DateTime<Utc>,
-) -> Built {
-    let events = &colors::apply(events, colors);
+) -> (Built, Vec<usize>) {
+    let places = side_panel::shown(events, &settings.hidden);
+    let events: &Vec<Event> = &colors::apply(events, &settings.colors)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, event)| places.binary_search(&i).is_ok().then_some(event))
+        .collect();
     let selected = navigation.selected;
     let week_start = navigation.week_start;
-    match navigation.view {
+    let built = match navigation.view {
         View::Grid(grid) => Built::Grid(grid_view(
             events,
             &grid.days(selected, week_start),
@@ -108,7 +115,8 @@ fn build(
         )),
         View::Month => Built::Month(month_view(events, selected, zone, now, week_start)),
         View::Agenda => Built::Agenda(agenda_view(events, zone, now, agenda_days)),
-    }
+    };
+    (built, places)
 }
 
 /// Keeps a calendar's local colour picked in its menu, or forgets it on "Reset"; only in the
@@ -150,6 +158,8 @@ struct CalendarApp {
     zone: Tz,
     zone_changes: Receiver<Tz>,
     navigation: Navigation,
+    /// Whether the side panel is shown.
+    panel: Panel,
     /// Any day of the month the mini calendar shows; follows the view, browsed on its own.
     mini_month: NaiveDate,
     /// The app's settings, as last saved.
@@ -162,6 +172,8 @@ struct CalendarApp {
     /// Days from today the agenda covers; grows as the user scrolls down.
     agenda_days: i64,
     built: Built,
+    /// The places in `events` of the events the built view's indices point to.
+    places: Vec<usize>,
     built_at: DateTime<Utc>,
     view_state: grid_view::State,
     month_state: month_view::State,
@@ -228,14 +240,7 @@ impl CalendarApp {
         let navigation = Navigation::start(settings.last_view, today, regional.week_start);
         let built_at = Utc::now();
         let events = Vec::new();
-        let built = build(
-            &events,
-            &settings.colors,
-            navigation,
-            AGENDA_DAYS,
-            zone,
-            built_at,
-        );
+        let (built, places) = build(&events, &settings, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
             accounts,
             accounts_writer,
@@ -252,12 +257,14 @@ impl CalendarApp {
             zone,
             zone_changes,
             navigation,
+            panel: Panel::new(settings.side_panel_collapsed),
             mini_month: today,
             settings,
             settings_writer,
             gone: Vec::new(),
             agenda_days: AGENDA_DAYS,
             built,
+            places,
             built_at,
             view_state: grid_view::State::default(),
             month_state: month_view::State::default(),
@@ -267,9 +274,9 @@ impl CalendarApp {
 
     fn rebuild(&mut self) {
         self.built_at = Utc::now();
-        self.built = build(
+        (self.built, self.places) = build(
             &self.events,
-            &self.settings.colors,
+            &self.settings,
             self.navigation,
             self.agenda_days,
             self.zone,
@@ -586,8 +593,19 @@ impl eframe::App for CalendarApp {
         self.shortcuts(ui.ctx());
         let online = self.online.get();
         let sync_status = self.sync.status().clone();
+        self.panel.resized(ui.ctx().content_rect().width());
         egui::Panel::top("view-bar").show(ui, |ui| {
             ui.horizontal(|ui| {
+                // Google Calendar's main menu button, at the far left.
+                let hint = if self.panel.expanded() {
+                    "Hide the side panel"
+                } else {
+                    "Show the side panel"
+                };
+                if ui.button("☰").on_hover_text(hint).clicked() {
+                    self.settings.side_panel_collapsed = self.panel.toggle();
+                    self.save_settings();
+                }
                 if ui.button("Today").clicked() {
                     self.navigation.today(self.today());
                     // Brings back a mini calendar browsed away, even when the view stays put.
@@ -730,18 +748,10 @@ impl eframe::App for CalendarApp {
                 self.gone.clear();
             }
         }
-        // A problem with one calendar is told on that calendar (`MOD-02-F18`).
-        let problems = sync_status.problems(online);
-        if !problems.is_empty() {
-            egui::Panel::top("sync-problems").show(ui, |ui| {
-                for problem in problems {
-                    ui.colored_label(ui.visuals().warn_fg_color, problem);
-                }
-            });
-        }
+        let mut expanded = self.panel.expanded();
         egui::Panel::left("side-panel")
             .resizable(false)
-            .show(ui, |ui| {
+            .show_collapsible(ui, &mut expanded, |ui| {
                 let today = self.today();
                 let mini = mini_calendar(self.mini_month, &self.navigation, today);
                 match mini_calendar::show(ui, &mini, &self.regional) {
@@ -753,19 +763,25 @@ impl eframe::App for CalendarApp {
                     None => {}
                 }
                 ui.separator();
-                // Disabled calendars are only in the settings (`MOD-03-F13`).
-                let disabled = &self.settings.disabled;
-                let listed: Vec<_> = self
-                    .sync
-                    .calendars()
-                    .iter()
-                    .filter(|c| !disabled.contains(&(c.account_id.clone(), c.id.clone())))
-                    .collect();
-                if let Some(picked) = calendar_list::show(ui, &listed, &self.settings.colors) {
-                    pick(&mut self.settings.colors, picked);
-                    self.save_settings();
-                    self.rebuild();
+                // A problem with one calendar is told on that calendar (`MOD-02-F18`).
+                let groups = side_panel::groups(
+                    self.accounts.list(),
+                    self.sync.calendars(),
+                    &self.settings,
+                    &sync_status,
+                    online,
+                );
+                match calendar_list::show(ui, &groups, &self.settings.colors) {
+                    Some(calendar_list::Action::Picked(picked)) => {
+                        pick(&mut self.settings.colors, picked)
+                    }
+                    Some(calendar_list::Action::Toggled(calendar)) => {
+                        side_panel::toggle(&mut self.settings.hidden, &calendar)
+                    }
+                    None => return,
                 }
+                self.save_settings();
+                self.rebuild();
             });
         self.dialog(ui.ctx());
         if !matches!(self.dialog, Some(Dialog::Settings)) {
@@ -782,6 +798,9 @@ impl eframe::App for CalendarApp {
             if let Some(note) = browsed.note {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
             }
+            if side_panel::nothing_shown(self.sync.calendars(), &self.settings) {
+                ui.label(side_panel::NOTHING_SHOWN);
+            }
             match &self.built {
                 Built::Grid(view) => {
                     // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
@@ -790,6 +809,10 @@ impl eframe::App for CalendarApp {
                         grid_view::show(ui, view, &self.regional, state, online, &mut opened)
                             .filter(|_| online)
                     {
+                        let change = grid_view::Change {
+                            event: self.places[change.event],
+                            ..change
+                        };
                         grid_view::apply(&mut self.events, change);
                         self.rebuild();
                     }
@@ -807,6 +830,7 @@ impl eframe::App for CalendarApp {
             }
         });
         if let Some(event) = opened {
+            let event = self.places[event];
             // The editor opens from here in `MOD-05`; the event is brought up to date first.
             self.sync.opening(&self.events[event].calendar_id);
             let focused = ui.ctx().memory(|m| m.focused());

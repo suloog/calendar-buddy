@@ -1212,3 +1212,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-100] The side panel: its button, collapsing in a narrow window, hidden calendars in the settings
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-06
+- **Affects:** `US-03-06`, `MOD-03-F10`, `MOD-03-F11`, `MOD-03-F12`, `MOD-03-U03`, MOD-03 *Constraints and edge cases*, `DEC-28`, `DEC-56`, `DEC-72`
+- **Decision:** Like Google Calendar's main menu button, a **☰** button at the far left of the top bar collapses and expands the side panel. The user's choice is kept in the settings file as `side_panel = collapsed` (no line when expanded) and the app starts that way. Below a window width of 800 points the panel collapses on its own. This is not saved. **☰** still opens it while the window is narrow, and once the window is wide again the panel is back as the user left it. Under the mini calendar the panel lists each connected account by its e-mail address, in the order the accounts were connected. Under each account come its calendars in Google's order, those disabled in the settings left out. Each calendar's quick toggle is Google's checkbox in the calendar's colour: filled and ticked while its events are shown, an empty box while they are hidden. It is reached and used from the keyboard like a button. The calendars hidden by the toggle are kept as `hidden = <account ID> <calendar ID>` lines and forgotten with their account. When the calendar list is known and every calendar is hidden or disabled, the view says "No calendars are shown. Choose calendars in the side panel." above its empty grid.
+- **Why:** Google Calendar puts the drawer toggle top left and lets its checkboxes hide calendars (`DEC-62`). Not saving the automatic collapse keeps "remembers which" (`MOD-03-F11`) about what the user chose. 800 points still leaves a readable week next to the panel, and the window's minimum width is 480. Before the first synchronization there are no calendars, so an empty list is not a reason to point to the panel.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-101] A calendar's row: the lock, its synchronization problem, and the emoji fonts
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-06
+- **Affects:** `US-03-06`, `MOD-02-U01`, `MOD-02-F18`, `DEC-89`, `DEC-97`, `DEC-99`
+- **Decision:** A calendar the account cannot change (`reader` or `freeBusyReader`) has the lock 🔒 before its name in the side panel, as its events have before their titles (`DEC-89`), with "Read-only: this calendar can't be changed" on hover. A calendar that is not up to date says so in small warning-coloured text under its row: "Could not be synchronized; trying again.", "Synchronized later: Google asked to slow down." or "Not synchronizing: its account needs sign-in." The same offline rule as before applies: offline only the last is shown. The band under the top bar that named these calendars (`DEC-97`) is gone. The app turns on egui's `monochrome_emoji_fonts`. Since egui 0.37 its default fonts leave out the emoji fonts, so 🔒, ✔ and ☰ were not drawn. A test now checks that the app's fonts have them.
+- **Why:** `DEC-97` moves each calendar's problem from the band to its row once the panel lists calendars, and the name is already on the row. Without the emoji fonts the lock of `MOD-02-U01` would not be visible anywhere, neither in the panel nor on events.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

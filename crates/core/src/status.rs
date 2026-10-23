@@ -65,14 +65,14 @@ impl Status {
         }
     }
 
-    /// The calendars' problems as the user is told of them, one per calendar; offline only
-    /// those of accounts needing sign-in, as the other failures are expected then.
-    pub fn problems(&self, online: bool) -> Vec<String> {
+    /// What keeps the calendar from being up to date, as the user is told on its row; offline
+    /// only an account needing sign-in, as the other failures are expected then.
+    pub fn problem(&self, calendar: &Calendar, online: bool) -> Option<Problem> {
         self.problems
             .iter()
-            .filter(|(_, problem)| online || *problem == Problem::NotSynchronizing)
-            .map(|(calendar, problem)| describe(&calendar.name, *problem))
-            .collect()
+            .find(|(c, _)| c.account_id == calendar.account_id && c.id == calendar.id)
+            .map(|(_, problem)| *problem)
+            .filter(|problem| online || *problem == Problem::NotSynchronizing)
     }
 }
 
@@ -106,15 +106,12 @@ pub fn last_synced(
     }
 }
 
-fn describe(name: &str, problem: Problem) -> String {
+/// A problem as its calendar's row in the side panel says it (`DEC-97`).
+pub fn on_row(problem: Problem) -> &'static str {
     match problem {
-        Problem::Failed => format!("“{name}” could not be synchronized; trying again."),
-        Problem::Delayed => {
-            format!("“{name}” is synchronized later: Google asked to slow down.")
-        }
-        Problem::NotSynchronizing => {
-            format!("“{name}” is not synchronizing: its account needs sign-in.")
-        }
+        Problem::Failed => "Could not be synchronized; trying again.",
+        Problem::Delayed => "Synchronized later: Google asked to slow down.",
+        Problem::NotSynchronizing => "Not synchronizing: its account needs sign-in.",
     }
 }
 
@@ -190,18 +187,31 @@ mod tests {
             ("Home", Problem::NotSynchronizing),
         ]);
 
+        let told = |online| {
+            status
+                .problems
+                .iter()
+                .map(|(calendar, _)| status.problem(calendar, online).map(on_row))
+                .collect::<Vec<_>>()
+        };
+
         assert_eq!(
-            status.problems(true),
+            told(true),
             [
-                "“Work” could not be synchronized; trying again.",
-                "“Team” is synchronized later: Google asked to slow down.",
-                "“Home” is not synchronizing: its account needs sign-in.",
+                Some("Could not be synchronized; trying again."),
+                Some("Synchronized later: Google asked to slow down."),
+                Some("Not synchronizing: its account needs sign-in."),
             ]
         );
         assert_eq!(
-            status.problems(false),
-            ["“Home” is not synchronizing: its account needs sign-in."]
+            told(false),
+            [
+                None,
+                None,
+                Some("Not synchronizing: its account needs sign-in.")
+            ]
         );
+        assert_eq!(status.problem(&calendar("Other"), true), None);
     }
 
     #[test]
