@@ -5,6 +5,7 @@ mod grid_view;
 mod mini_calendar;
 mod month_view;
 mod platform;
+mod remove;
 
 use calendar_core::accounts::{self, Account, AccountState, Accounts, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
@@ -22,6 +23,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use connect::Connect;
 use eframe::egui;
+use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 fn system_zone() -> Tz {
@@ -109,6 +111,8 @@ struct CalendarApp {
     connect: Connect,
     /// The account just connected, until the user closes the notice about it.
     connected: Option<Account>,
+    /// Removing an account, from the settings.
+    removal: Removal,
     events: Vec<Event>,
     /// The system's regional settings, read at start (`DEC-29`).
     regional: Regional,
@@ -177,6 +181,7 @@ impl CalendarApp {
             problem: None,
             connect: Connect::new(),
             connected: None,
+            removal: Removal::new(),
             events,
             regional,
             zone,
@@ -258,12 +263,16 @@ impl CalendarApp {
     }
 
     fn dialog(&mut self, ctx: &egui::Context) {
+        // Connecting and removing an account never run at once.
+        let can_change = self.connect.idle() && self.removal.idle();
+        let can_remove = self.connect.idle();
         let Some(dialog) = &mut self.dialog else {
             return;
         };
         let mut open = true;
         let mut go_to = None;
         let mut again = None;
+        let mut remove = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -330,7 +339,7 @@ impl CalendarApp {
                             if entry.state == AccountState::NeedsSignIn {
                                 if ui
                                     .add_enabled(
-                                        self.connect.idle(),
+                                        can_change,
                                         egui::Button::new(accounts::SIGN_IN_AGAIN),
                                     )
                                     .clicked()
@@ -340,18 +349,27 @@ impl CalendarApp {
                             } else {
                                 ui.label("");
                             }
-                            // What this does comes with `US-01-04`.
-                            ui.add_enabled(false, egui::Button::new("Remove"))
-                                .on_disabled_hover_text("Not available yet.");
+                            if ui
+                                .add_enabled(can_change, egui::Button::new(accounts::REMOVE))
+                                .clicked()
+                            {
+                                remove = Some(entry.account.clone());
+                            }
                             ui.end_row();
                         }
                     });
-                    ui.add_space(8.0);
-                    self.connect.show(ui, "Add account");
+                    self.removal.show(ui, can_remove);
+                    if self.removal.idle() {
+                        ui.add_space(8.0);
+                        self.connect.show(ui, "Add account");
+                    }
                 }
             });
         if let Some(email) = again {
             self.sign_in_again(ctx, &email);
+        }
+        if let Some(account) = remove {
+            self.removal.ask(account);
         }
         if let Some(date) = go_to {
             self.navigation.go_to(date);
@@ -366,6 +384,25 @@ impl CalendarApp {
     fn save_accounts(&self) {
         if let Some(writer) = &self.accounts_writer {
             let _ = writer.send(self.accounts.clone());
+        }
+    }
+
+    /// The removed account's credentials are gone: the app forgets it, and with the last one gone
+    /// the welcome screen comes back (`MOD-01-F14`).
+    fn removed(&mut self, id: &str) {
+        self.accounts.remove(id);
+        self.save_accounts();
+        if self
+            .connected
+            .as_ref()
+            .is_some_and(|account| account.id == id)
+        {
+            self.connected = None;
+        }
+        if self.accounts.is_empty() {
+            // The settings close, so they do not reopen over the calendar after a new connection.
+            self.dialog = None;
+            self.connect.close();
         }
     }
 
@@ -404,6 +441,9 @@ impl eframe::App for CalendarApp {
             // The secret store just kept a sign-in; the next check says whether a problem stays.
             self.problem = None;
             self.save_accounts();
+        }
+        if let Some(id) = self.removal.poll() {
+            self.removed(&id);
         }
         match self.checks.poll() {
             Some(Ok(checked)) => {
@@ -501,7 +541,8 @@ impl eframe::App for CalendarApp {
                         let warn = ui.visuals().warn_fg_color;
                         ui.colored_label(warn, accounts::needs_sign_in(email));
                         let button = egui::Button::new(accounts::SIGN_IN_AGAIN);
-                        if ui.add_enabled(self.connect.idle(), button).clicked() {
+                        let can_change = self.connect.idle() && self.removal.idle();
+                        if ui.add_enabled(can_change, button).clicked() {
                             again = Some(email.to_string());
                         }
                     });
@@ -547,6 +588,7 @@ impl eframe::App for CalendarApp {
         self.dialog(ui.ctx());
         if !matches!(self.dialog, Some(Dialog::Settings)) {
             self.connect.close();
+            self.removal.close();
         }
         self.navigated(before);
         let mut opened = None;

@@ -47,6 +47,7 @@ pub struct Endpoints {
     pub auth: String,
     pub token: String,
     pub userinfo: String,
+    pub revoke: String,
 }
 
 impl Endpoints {
@@ -55,6 +56,7 @@ impl Endpoints {
             auth: "https://accounts.google.com/o/oauth2/v2/auth".into(),
             token: "https://oauth2.googleapis.com/token".into(),
             userinfo: "https://openidconnect.googleapis.com/v1/userinfo".into(),
+            revoke: "https://oauth2.googleapis.com/revoke".into(),
         }
     }
 }
@@ -196,6 +198,16 @@ pub fn check(
             (account.id.clone(), check)
         })
         .collect())
+}
+
+/// Withdraws the app's access to an account at Google (`MOD-01-F09`), so the app leaves the
+/// account's list of third-party apps; says whether Google confirmed it. Best effort: the local
+/// deletion never waits for it, and a failure is not retried (`DEC-52`).
+pub fn revoke(endpoints: &Endpoints, refresh_token: &str) -> bool {
+    agent(HTTP_TIMEOUT)
+        .post(&endpoints.revoke)
+        .send_form([("token", refresh_token)])
+        .is_ok_and(|response| response.status().is_success())
 }
 
 /// Exchanges a refresh token for an access token; `invalid_grant` means Google revoked or ended

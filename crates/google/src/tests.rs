@@ -222,6 +222,7 @@ fn offline_signing_in_is_refused_and_works_again_once_the_network_is_back() {
         auth: format!("http://127.0.0.1:{port}/auth"),
         token: format!("http://127.0.0.1:{port}/token"),
         userinfo: format!("http://127.0.0.1:{port}/userinfo"),
+        revoke: format!("http://127.0.0.1:{port}/revoke"),
     };
     let store = FakeStore::default();
     let offline = prepare(&path, &store, &endpoints);
@@ -720,4 +721,101 @@ fn a_locked_secret_store_leaves_every_account_as_it_was() {
     assert_eq!(none, Err(CheckError::NoSecretStore));
     assert_eq!(no_client, Err(CheckError::ClientFile(missing)));
     assert!(google.refreshed().is_empty());
+}
+
+#[test]
+fn tc_01_04_removing_an_account_deletes_its_local_data_and_withdraws_access() {
+    let google = FakeGoogle::start(
+        Some("example.com"),
+        &[
+            Reply::Consent(&[]),
+            Reply::Consent(&[]),
+            Reply::OtherAccount,
+        ],
+    );
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("tc-01-04");
+    let remembered = dir.join("accounts");
+    let mut accounts = two_accounts(&google, &store);
+    accounts.save(&remembered).unwrap();
+    assert!(google.has_access(ACCOUNT_ID));
+    let asked = google.requests().len();
+
+    // Remove and confirm: the credentials go from this computer first, then the app's access is
+    // withdrawn at Google.
+    let token = store.take(ACCOUNT_ID).unwrap();
+    assert!(accounts.remove(ACCOUNT_ID));
+    accounts.save(&remembered).unwrap();
+    let withdrawn = revoke(&google.endpoints, &token.unwrap());
+    let received = google.requests()[asked..].to_vec();
+
+    let kept = std::fs::read_to_string(&remembered).unwrap();
+    let others = check(
+        &client_file,
+        &google.endpoints,
+        &store,
+        &accounts.connected(),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(!kept.contains(ACCOUNT_ID) && !kept.contains(EMAIL));
+    assert_eq!(states(&accounts), [(OTHER_EMAIL, AccountState::Connected)]);
+    let saved = store.saved.lock().unwrap();
+    assert_eq!(
+        saved.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(),
+        [OTHER_ID]
+    );
+    assert!(withdrawn);
+    assert!(!google.has_access(ACCOUNT_ID));
+    // Google was asked only to withdraw the access: nothing in the account itself changed.
+    assert_eq!(received, ["POST /revoke"]);
+    // The other account keeps working.
+    assert!(google.has_access(OTHER_ID));
+    assert_eq!(others, Ok(vec![(OTHER_ID.to_string(), Check::Works)]));
+}
+
+#[test]
+fn without_network_removing_still_deletes_everything_locally() {
+    let google = FakeGoogle::start(None, &[Reply::Consent(&[])]);
+    let store = FakeStore::default();
+    connect_to(&google, &store).unwrap();
+    // Google's port, with nothing answering on it.
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let offline = Endpoints {
+        revoke: format!("http://127.0.0.1:{port}/revoke"),
+        ..google.endpoints.clone()
+    };
+
+    let token = store.take(ACCOUNT_ID).unwrap();
+    assert!(store.saved.lock().unwrap().is_empty());
+    assert!(!revoke(&offline, &token.unwrap()));
+}
+
+#[test]
+fn a_locked_secret_store_keeps_the_credentials_of_an_account_not_removed() {
+    let google = FakeGoogle::start(None, &[Reply::Consent(&[])]);
+    let mut store = FakeStore::default();
+    connect_to(&google, &store).unwrap();
+    store.locked = true;
+
+    assert_eq!(
+        store.take(ACCOUNT_ID),
+        Err(SecretStoreError::Failed("unlocking it was declined".into()))
+    );
+    assert_eq!(store.saved.lock().unwrap().len(), 1);
+    let none = FakeStore {
+        not_running: true,
+        ..FakeStore::default()
+    };
+    assert_eq!(none.take(ACCOUNT_ID), Err(SecretStoreError::NotRunning));
+}
+
+#[test]
+fn an_account_without_credentials_is_removed_with_nothing_to_withdraw() {
+    let store = FakeStore::default();
+    assert_eq!(store.take(ACCOUNT_ID), Ok(None));
 }

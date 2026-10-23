@@ -19,6 +19,10 @@ pub trait SecretStore: Send + Sync {
     fn save(&self, account: &Account, refresh_token: &str) -> Result<(), SecretStoreError>;
     /// The account's refresh token, unlocking the store if needed; `None` when it holds none.
     fn load(&self, account_id: &str) -> Result<Option<String>, SecretStoreError>;
+    /// Deletes everything kept for the account, unlocking the store if needed, and returns its
+    /// refresh token; `None` when it held none or the token could not be read, which does not
+    /// stop the deletion.
+    fn take(&self, account_id: &str) -> Result<Option<String>, SecretStoreError>;
 }
 
 /// The system's default browser, opened through the desktop's URL handler.

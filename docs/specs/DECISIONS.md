@@ -1032,3 +1032,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-85] Removing an account: asked in the settings, the credentials first, Google afterwards
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-04
+- **Affects:** `US-01-04`, `MOD-01-F07`, `MOD-01-F08`, `MOD-01-F09`, `MOD-01-F14`, `MOD-01-U02`, `DEC-20`, `DEC-52`, `DEC-84`
+- **Decision:** **Remove** on an account's row in the settings asks inside the settings window: "Remove <e-mail>? Its calendars, events, credentials and local settings will be deleted from this computer, and Calendar Buddy's access to it will be withdrawn at Google. The Google account itself stays untouched: its calendars and events stay in Google." with **Remove** and **Cancel**. Confirmed, the app deletes the account's items from the secret store (unlocking it if needed) off the UI thread, keeping the refresh token in memory if it can still be read (an unreadable item is deleted all the same); once they are gone, the app forgets the account in `~/.config/calendar-buddy/accounts` while the refresh token is sent to Google's token revocation endpoint, once, which nothing waits for and nothing retries, so offline the removal is complete locally and Google's grant stays until the user withdraws it in the Google account. If the secret store is not running or does not delete the items (e.g. it stays locked), the account stays listed and the settings say why — also when they were closed meanwhile — with **Try again**. One removal at a time, and never while an account is being connected or signed in again: while one runs or is asked about, **Add account** and **Sign in again** are not offered, and while connecting, **Remove** is disabled. Removing the last account closes the settings and shows the welcome screen. The app keeps no calendar or event cache and no per-account settings yet (synchronization is `MOD-02`; the events shown are test data of no account), so today an account's local data is its line in the accounts file and its credentials; whatever later stories keep per account (cache, calendar colours, default calendar) is deleted in the same step.
+- **Why:** Deleting the credentials before telling Google means the local deletion never waits for the network (`DEC-52`); a store that refuses to delete would otherwise leave a credential behind for an account the app no longer lists, which `MOD-01-F08` rules out. A question inside the settings keeps one window open at a time (`DEC-73`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
