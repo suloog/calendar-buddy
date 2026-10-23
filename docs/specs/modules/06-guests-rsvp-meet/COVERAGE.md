@@ -24,21 +24,37 @@
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-F01` | `US-NN-01` |
+| `MOD-06-F01` | `US-06-01` |
+| `MOD-06-F02` | `US-06-01` |
+| `MOD-06-F03` | `US-06-01` |
+| `MOD-06-F04` | `US-06-01` |
+| `MOD-06-F05` | `US-06-02` |
+| `MOD-06-F06` | `US-06-01` |
+| `MOD-06-F07` | `US-06-01` |
+| `MOD-06-F08` | `US-06-01` |
+| `MOD-06-F09` | `US-06-04` |
+| `MOD-06-F10` | `US-06-04` |
+| `MOD-06-F11` | `US-06-05` |
+| `MOD-06-F12` | `US-06-03` |
+| `MOD-06-F13` | `US-06-05` |
+| `MOD-06-F14` | `US-06-06` |
+| `MOD-06-F22` | `US-06-06` |
+| `MOD-06-F15` | `US-06-05` |
+| `MOD-06-F21` | `US-06-04` |
+| `MOD-06-F16` | `US-06-07` |
+| `MOD-06-F17` | `US-06-07` |
+| `MOD-06-F18` | `US-06-07` |
+| `MOD-06-F19` | `US-06-08` |
+| `MOD-06-F20` | `US-06-08` |
 
 ### UI/UX requirements
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-U01` | `US-NN-01`, `US-NN-02` |
-
-### Non-functional requirements
-
-<Module NFRs only. Global NFR-nn are delivered across modules and are not tracked per module.>
-
-| Requirement | Covered by |
-| ----------- | ---------- |
-| `MOD-NN-NFR-01` | `US-NN-03` |
+| `MOD-06-U01` | `US-06-02` |
+| `MOD-06-U02` | `US-06-08` |
+| `MOD-06-U03` | `US-06-05` |
+| `MOD-06-U04` | `US-06-04` |
 
 <!-- og:part tests -->
 

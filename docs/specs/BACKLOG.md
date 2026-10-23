@@ -36,9 +36,9 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-03` Views and navigation | 24 / 5 | 9 | 0 | sliced |
 | `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 29 / 4 | 10 | 0 | sliced |
-| `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 0 | 0 | not sliced |
+| `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 8 | 0 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 0 | 0 | not sliced |
-| **Total** | **136 / 28** | **33** | **0** | 5 / 7 modules sliced |
+| **Total** | **136 / 28** | **41** | **0** | 6 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -109,3 +109,18 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-05-08` | As a User, I can see out-of-office, focus-time and similar events at a glance and create out-of-office and focus time, so that my availability is clear | F23, F24, U01 | must | draft | `US-05-02` | — |
 | `US-05-09` | As a User, I can see and change an event's own colour, so that it matches how I colour events in Google | F25 | must | draft | `US-05-02` | — |
 | `US-05-10` | As a User, I can open an event's attachments, so that the documents for a meeting are one click away | F26 | must | draft | `US-05-02` | — |
+
+## [MOD-06] Guests, invitations, RSVP and Google Meet
+
+`docs/specs/modules/06-guests-rsvp-meet/REQUIREMENTS.md` · `docs/specs/modules/06-guests-rsvp-meet/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-06-01` | As a User, I can invite people to an event with suggestions from my contacts, recent guests and my organization, so that inviting a colleague takes a few keystrokes | F01, F02, F03, F04, F06, F07, F08 | must | draft | `US-05-02` | — |
+| `US-06-02` | As a User, I can see who is invited and how each guest answered, so that I know who is coming | F05, U01 | must | draft | `US-02-01` | — |
+| `US-06-03` | As a User, I am asked whether to notify guests when I change or delete an event, so that I decide when people get an e-mail | F12 | must | draft | `US-06-01`, `US-05-03` | — |
+| `US-06-04` | As a User, I can spot invitations waiting for my answer and list them, so that none slips through | F09, F10, F21, U04 | must | draft | `US-02-01` | — |
+| `US-06-05` | As a User, I can accept, decline or answer maybe — for one occurrence or a whole series — while guest rules are respected, so that organizers know whether I come | F11, F13, F15, U03 | must | draft | `US-06-04` | — |
+| `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | draft | `US-06-05` | — |
+| `US-06-07` | As a User, I can add Google Meet to a meeting and join it with one click, so that video calls start on time | F16, F17, F18 | must | draft | `US-06-01` | — |
+| `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | draft | `US-06-01` | — |
