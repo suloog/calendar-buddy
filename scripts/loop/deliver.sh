@@ -11,6 +11,7 @@
 #
 # Settings (environment, all optional):
 #   LOOP_MODEL=opus        model for the session (subagents are asked for opus in the brief)
+#   LOOP_EFFORT=high       effort level for the session (low | medium | high | xhigh | max)
 #   LOOP_FIVE_HOUR_MAX=100 pause until the 5-hour window resets at or above this %
 #   LOOP_SEVEN_DAY_MAX=100 stop the run at or above this %
 #   LOOP_STORY_TIMEOUT=3h  wall-clock limit per story
@@ -21,6 +22,7 @@ cd "$ROOT"
 HERE="$ROOT/scripts/loop"
 OG_USAGE="${OG_USAGE:-$HOME/.claude-og/plugins/cache/order-group/og/0.16.0/bin/og-usage}"
 MODEL="${LOOP_MODEL:-opus}"
+EFFORT="${LOOP_EFFORT:-high}"
 FIVE_MAX="${LOOP_FIVE_HOUR_MAX:-100}"
 SEVEN_MAX="${LOOP_SEVEN_DAY_MAX:-100}"
 TIMEOUT="${LOOP_STORY_TIMEOUT:-3h}"
@@ -99,6 +101,7 @@ for STORY in "$@"; do
   echo "▶ $STORY ($STARTED)"
   timeout "$TIMEOUT" claude -p "Deliver user story $STORY. Follow the brief you were given exactly." \
     --model "$MODEL" \
+    --effort "$EFFORT" \
     --permission-mode auto \
     --append-system-prompt "$(cat "$HERE/BRIEF.md")" \
     --output-format json > "$OUT" 2> "$OUT.err"
