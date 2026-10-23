@@ -1,5 +1,5 @@
-//! The welcome screen of a first run (`US-01-01`): its one action connects a Google account.
-//! Checking and signing in run off the UI thread.
+//! Connecting a Google account: from the welcome screen of a first run (`US-01-01`) and from the
+//! settings (`US-01-02`). Checking and signing in run off the UI thread.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,7 +35,8 @@ enum Outcome {
     Connected(Result<Account, ConnectError>),
 }
 
-pub struct Welcome {
+/// Connecting one account at a time, step by step.
+pub struct Connect {
     stage: Stage,
     sender: Sender<Outcome>,
     outcomes: Receiver<Outcome>,
@@ -43,10 +44,10 @@ pub struct Welcome {
     browser: Arc<dyn Browser>,
 }
 
-impl Welcome {
+impl Connect {
     pub fn new() -> Self {
         let (sender, outcomes) = mpsc::channel();
-        Welcome {
+        Connect {
             stage: Stage::Start(None),
             sender,
             outcomes,
@@ -94,70 +95,75 @@ impl Welcome {
         self.stage = Stage::Waiting(cancel);
     }
 
-    /// Draws the welcome screen; returns the account once one is connected.
-    pub fn show(&mut self, ui: &mut egui::Ui) -> Option<Account> {
+    /// Takes what the work off the UI thread brought; returns the account once one is connected.
+    /// Called every frame, so an account connects even with its screen closed.
+    pub fn poll(&mut self) -> Option<Account> {
         let mut connected = None;
         for outcome in self.outcomes.try_iter() {
             match outcome {
                 Outcome::Checked(Ok(client)) => self.stage = Stage::HeadsUp(client),
-                Outcome::Connected(Ok(account)) => connected = Some(account),
+                Outcome::Connected(Ok(account)) => {
+                    self.stage = Stage::Start(None);
+                    connected = Some(account);
+                }
                 Outcome::Checked(Err(error)) | Outcome::Connected(Err(error)) => {
                     self.stage = Stage::Start(Some(error))
                 }
             }
         }
-        if connected.is_some() {
-            return connected;
+        connected
+    }
+
+    /// Back to the start when the screen showing connecting closes, so it opens afresh; a sign-in
+    /// the browser has goes on.
+    pub fn close(&mut self) {
+        if matches!(self.stage, Stage::Start(Some(_)) | Stage::HeadsUp(_)) {
+            self.stage = Stage::Start(None);
         }
+    }
+
+    /// Draws the current step; `start` names the action that begins connecting.
+    pub fn show(&mut self, ui: &mut egui::Ui, start: &str) {
         let mut chosen = None;
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.set_max_width(480.0);
-                ui.add_space(ui.available_height() / 4.0);
-                ui.heading("Welcome to Calendar Buddy");
-                ui.label("Connect a Google account to see your calendars.");
-                ui.add_space(16.0);
-                match &self.stage {
-                    Stage::Start(error) => {
-                        let label = match error {
-                            Some(error) => {
-                                ui.colored_label(ui.visuals().warn_fg_color, error.message());
-                                ui.add_space(8.0);
-                                "Try again"
-                            }
-                            None => accounts::CONNECT,
-                        };
-                        if ui.button(label).clicked() {
-                            chosen = Some(Action::Check);
-                        }
-                    }
-                    Stage::Checking => {
-                        ui.spinner();
-                    }
-                    Stage::HeadsUp(client) => {
-                        ui.label(accounts::UNVERIFIED_HEADS_UP);
+        match &self.stage {
+            Stage::Start(error) => {
+                let label = match error {
+                    Some(error) => {
+                        ui.colored_label(ui.visuals().warn_fg_color, error.message());
                         ui.add_space(8.0);
-                        ui.horizontal(|ui| {
-                            if ui.button("Continue in the browser").clicked() {
-                                chosen = Some(Action::SignIn(client.clone()));
-                            }
-                            if ui.button("Cancel").clicked() {
-                                chosen = Some(Action::Back);
-                            }
-                        });
+                        "Try again"
                     }
-                    Stage::Waiting(cancel) => {
-                        ui.spinner();
-                        ui.label(accounts::WAITING);
-                        ui.add_space(8.0);
-                        if ui.button("Cancel").clicked() {
-                            // The sign-in then ends as cancelled and says so.
-                            cancel.store(true, Ordering::Relaxed);
-                        }
-                    }
+                    None => start,
+                };
+                if ui.button(label).clicked() {
+                    chosen = Some(Action::Check);
                 }
-            });
-        });
+            }
+            Stage::Checking => {
+                ui.spinner();
+            }
+            Stage::HeadsUp(client) => {
+                ui.label(accounts::UNVERIFIED_HEADS_UP);
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Continue in the browser").clicked() {
+                        chosen = Some(Action::SignIn(client.clone()));
+                    }
+                    if ui.button("Cancel").clicked() {
+                        chosen = Some(Action::Back);
+                    }
+                });
+            }
+            Stage::Waiting(cancel) => {
+                ui.spinner();
+                ui.label(accounts::WAITING);
+                ui.add_space(8.0);
+                if ui.button("Cancel").clicked() {
+                    // The sign-in then ends as cancelled and says so.
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            }
+        }
         let ctx = ui.ctx().clone();
         match chosen {
             Some(Action::Check) => self.check(&ctx),
@@ -165,6 +171,19 @@ impl Welcome {
             Some(Action::Back) => self.stage = Stage::Start(None),
             None => {}
         }
-        None
     }
+}
+
+/// The welcome screen of a first run: its one action connects a Google account (`MOD-01-F12`).
+pub fn welcome(ui: &mut egui::Ui, connect: &mut Connect) {
+    egui::CentralPanel::default().show(ui, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.set_max_width(480.0);
+            ui.add_space(ui.available_height() / 4.0);
+            ui.heading("Welcome to Calendar Buddy");
+            ui.label("Connect a Google account to see your calendars.");
+            ui.add_space(16.0);
+            connect.show(ui, accounts::CONNECT);
+        });
+    });
 }

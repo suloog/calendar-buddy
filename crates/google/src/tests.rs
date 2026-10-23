@@ -2,7 +2,11 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 use super::*;
-use crate::fake::{ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore, Reply, param};
+use calendar_core::accounts::{AccountState, Accounts};
+
+use crate::fake::{
+    ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore, OTHER_EMAIL, OTHER_ID, Reply, param,
+};
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -86,6 +90,11 @@ fn the_authorization_request_asks_for_calendar_and_contacts_with_pkce() {
         ]
     );
     assert_eq!(param(&url, "login_hint"), None);
+    // Google's account chooser, so another account than the browser's current one can be picked.
+    assert_eq!(
+        param(&url, "prompt").as_deref(),
+        Some("select_account consent")
+    );
 }
 
 #[test]
@@ -246,6 +255,8 @@ fn a_workspace_account_is_asked_for_the_directory_on_its_own() {
         param(&opened[1], "include_granted_scopes").as_deref(),
         Some("true")
     );
+    // The account is already picked; no chooser on the second screen.
+    assert_eq!(param(&opened[1], "prompt").as_deref(), Some("consent"));
     // The second token covers both grants.
     assert_eq!(
         *store.saved.lock().unwrap(),
@@ -294,6 +305,62 @@ fn another_account_picked_on_the_directory_screen_is_not_mixed_in() {
     assert_eq!(
         *store.saved.lock().unwrap(),
         [(ACCOUNT_ID.to_string(), "refresh-code-1".to_string())]
+    );
+}
+
+#[test]
+fn a_personal_account_is_connected_beside_a_workspace_one() {
+    let google = FakeGoogle::start(
+        Some("example.com"),
+        &[
+            Reply::Consent(&[]),
+            Reply::Consent(&[]),
+            Reply::OtherAccount,
+        ],
+    );
+    let store = FakeStore::default();
+    let mut accounts = Accounts::default();
+
+    assert!(accounts.add(connect_to(&google, &store).unwrap()));
+    // The second account is picked in Google's account chooser.
+    assert!(accounts.add(connect_to(&google, &store).unwrap()));
+
+    let listed: Vec<_> = accounts
+        .list()
+        .iter()
+        .map(|e| (e.account.email.as_str(), e.account.workspace, e.state))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            (EMAIL, true, AccountState::Connected),
+            (OTHER_EMAIL, false, AccountState::Connected),
+        ]
+    );
+    // Each account keeps its own refresh token.
+    assert_eq!(
+        *store.saved.lock().unwrap(),
+        [
+            (ACCOUNT_ID.to_string(), "refresh-code-2".to_string()),
+            (OTHER_ID.to_string(), "refresh-code-3".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn signing_in_to_a_connected_account_again_keeps_one_account() {
+    let google = FakeGoogle::start(None, &[Reply::Consent(&[]), Reply::Consent(&[])]);
+    let store = FakeStore::default();
+    let mut accounts = Accounts::default();
+
+    assert!(accounts.add(connect_to(&google, &store).unwrap()));
+    assert!(!accounts.add(connect_to(&google, &store).unwrap()));
+
+    assert_eq!(accounts.list().len(), 1);
+    // Saved again under the same account ID.
+    assert_eq!(
+        *store.saved.lock().unwrap(),
+        [(ACCOUNT_ID.to_string(), "refresh-code-2".to_string())]
     );
 }
 

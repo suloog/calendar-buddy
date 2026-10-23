@@ -1,11 +1,11 @@
 mod agenda_view;
+mod connect;
 mod grid_view;
 mod mini_calendar;
 mod month_view;
 mod platform;
-mod welcome;
 
-use calendar_core::accounts::Account;
+use calendar_core::accounts::{Account, Accounts};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::details::event_details;
 use calendar_core::fixtures;
@@ -18,9 +18,9 @@ use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::view_model::{GridViewModel, grid_view};
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
+use connect::Connect;
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver, Sender};
-use welcome::Welcome;
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -66,6 +66,8 @@ enum Dialog {
     NewEvent,
     /// The index of the event whose details are open, and what had the keyboard when it opened.
     Event(usize, Option<egui::Id>),
+    /// The settings, where accounts are managed (`MOD-01-U01`).
+    Settings,
 }
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
@@ -94,8 +96,9 @@ fn build(
 
 struct CalendarApp {
     /// The connected Google accounts; none on a first run.
-    accounts: Vec<Account>,
-    welcome: Welcome,
+    accounts: Accounts,
+    /// Connecting an account, from the welcome screen or the settings.
+    connect: Connect,
     /// The account just connected, until the user closes the notice about it.
     connected: Option<Account>,
     events: Vec<Event>,
@@ -145,8 +148,8 @@ impl CalendarApp {
         let built_at = Utc::now();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
-            accounts: Vec::new(),
-            welcome: Welcome::new(),
+            accounts: Accounts::default(),
+            connect: Connect::new(),
             connected: None,
             events,
             regional,
@@ -239,6 +242,7 @@ impl CalendarApp {
             Dialog::GoToDate(..) => "Go to date",
             Dialog::NewEvent => "New event",
             Dialog::Event(..) => "Event",
+            Dialog::Settings => "Settings",
         };
         egui::Window::new(title)
             .open(&mut open)
@@ -289,6 +293,23 @@ impl CalendarApp {
                         ui.label(own);
                     }
                 }
+                Dialog::Settings => {
+                    ui.heading("Accounts");
+                    egui::Grid::new("accounts").show(ui, |ui| {
+                        for entry in self.accounts.list() {
+                            ui.label(&entry.account.email);
+                            ui.label(entry.state.label());
+                            // What these do comes with `US-01-03` and `US-01-04`.
+                            for action in ["Sign in again", "Remove"] {
+                                ui.add_enabled(false, egui::Button::new(action))
+                                    .on_disabled_hover_text("Not available yet.");
+                            }
+                            ui.end_row();
+                        }
+                    });
+                    ui.add_space(8.0);
+                    self.connect.show(ui, "Add account");
+                }
             });
         if let Some(date) = go_to {
             self.navigation.go_to(date);
@@ -322,13 +343,13 @@ impl CalendarApp {
 
 impl eframe::App for CalendarApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if let Some(account) = self.connect.poll() {
+            self.connected = Some(account.clone());
+            self.accounts.add(account);
+        }
         // With no account connected there is only the welcome screen (`MOD-01-F12`).
         if self.accounts.is_empty() {
-            if let Some(account) = self.welcome.show(ui) {
-                self.connected = Some(account.clone());
-                self.accounts.push(account);
-                ui.ctx().request_repaint();
-            }
+            connect::welcome(ui, &mut self.connect);
             return;
         }
         // Events move to their new local times when the system's time zone changes.
@@ -367,6 +388,9 @@ impl eframe::App for CalendarApp {
                     (_, None) => "Upcoming".to_string(),
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Settings").clicked() {
+                        self.dialog = Some(Dialog::Settings);
+                    }
                     for view in View::ALL.into_iter().rev() {
                         if ui
                             .selectable_label(self.navigation.view == view, view.name())
@@ -412,6 +436,9 @@ impl eframe::App for CalendarApp {
                 }
             });
         self.dialog(ui.ctx());
+        if !matches!(self.dialog, Some(Dialog::Settings)) {
+            self.connect.close();
+        }
         self.navigated(before);
         let mut opened = None;
         egui::CentralPanel::default().show(ui, |ui| match &self.built {

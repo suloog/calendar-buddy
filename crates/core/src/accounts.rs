@@ -31,6 +31,70 @@ impl Account {
     }
 }
 
+/// An account's state in the settings (`MOD-01-U01`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountState {
+    Connected,
+    /// Google ended the app's access; the account waits for the user to sign in again.
+    NeedsSignIn,
+}
+
+impl AccountState {
+    pub fn label(self) -> &'static str {
+        match self {
+            AccountState::Connected => "Connected",
+            AccountState::NeedsSignIn => "Needs sign-in",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub account: Account,
+    pub state: AccountState,
+}
+
+/// The connected accounts, personal and Workspace side by side (`MOD-01-F02`), in the order they
+/// were connected and keyed by Google's account ID. There is no cap: five is the profile the app
+/// is measured on (`MOD-01-NFR-01`, `DEC-14`).
+#[derive(Clone, Debug, Default)]
+pub struct Accounts {
+    entries: Vec<Entry>,
+}
+
+impl Accounts {
+    /// Adds a newly signed-in account and says whether it is new. Signing in to an account that
+    /// is already connected refreshes it in place instead of adding it twice.
+    pub fn add(&mut self, account: Account) -> bool {
+        let entry = Entry {
+            account,
+            state: AccountState::Connected,
+        };
+        match self
+            .entries
+            .iter_mut()
+            .find(|e| e.account.id == entry.account.id)
+        {
+            Some(existing) => {
+                *existing = entry;
+                false
+            }
+            None => {
+                self.entries.push(entry);
+                true
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn list(&self) -> &[Entry] {
+        &self.entries
+    }
+}
+
 /// Why connecting an account stopped; in every case no account was added.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConnectError {
@@ -123,6 +187,85 @@ mod tests {
             contacts,
             directory,
         }
+    }
+
+    fn signed_in(id: &str, email: &str) -> Account {
+        Account {
+            id: id.into(),
+            email: email.into(),
+            ..account(false, true, false)
+        }
+    }
+
+    fn listed(accounts: &Accounts) -> Vec<(&str, AccountState)> {
+        accounts
+            .list()
+            .iter()
+            .map(|entry| (entry.account.email.as_str(), entry.state))
+            .collect()
+    }
+
+    #[test]
+    fn a_second_account_is_listed_beside_the_first() {
+        let mut accounts = Accounts::default();
+        assert!(accounts.is_empty());
+        assert!(accounts.add(signed_in("1", "me@gmail.com")));
+        assert!(accounts.add(Account {
+            workspace: true,
+            ..signed_in("2", "me@work.example.com")
+        }));
+        assert_eq!(
+            listed(&accounts),
+            [
+                ("me@gmail.com", AccountState::Connected),
+                ("me@work.example.com", AccountState::Connected),
+            ]
+        );
+    }
+
+    #[test]
+    fn five_accounts_are_connected_at_the_same_time() {
+        let mut accounts = Accounts::default();
+        for n in 1..=5 {
+            assert!(accounts.add(signed_in(&n.to_string(), &format!("user{n}@example.com"))));
+        }
+        assert_eq!(accounts.list().len(), 5);
+        assert!(
+            accounts
+                .list()
+                .iter()
+                .all(|entry| entry.state == AccountState::Connected)
+        );
+    }
+
+    #[test]
+    fn signing_in_to_a_connected_account_refreshes_it_without_a_duplicate() {
+        let mut accounts = Accounts::default();
+        accounts.add(signed_in("1", "me@gmail.com"));
+        accounts.add(signed_in("2", "me@work.example.com"));
+        accounts.entries[0].state = AccountState::NeedsSignIn;
+
+        // The same Google account, now with another address and contacts no longer granted.
+        let again = Account {
+            contacts: false,
+            ..signed_in("1", "renamed@gmail.com")
+        };
+        assert!(!accounts.add(again.clone()));
+
+        assert_eq!(
+            listed(&accounts),
+            [
+                ("renamed@gmail.com", AccountState::Connected),
+                ("me@work.example.com", AccountState::Connected),
+            ]
+        );
+        assert_eq!(accounts.list()[0].account, again);
+    }
+
+    #[test]
+    fn each_state_has_its_label() {
+        assert_eq!(AccountState::Connected.label(), "Connected");
+        assert_eq!(AccountState::NeedsSignIn.label(), "Needs sign-in");
     }
 
     #[test]

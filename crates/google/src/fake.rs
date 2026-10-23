@@ -15,8 +15,9 @@ use crate::{Endpoints, challenge};
 pub const CLIENT_ID: &str = "test-client.apps.googleusercontent.com";
 pub const ACCOUNT_ID: &str = "107691503500061507151";
 pub const EMAIL: &str = "owner@example.com";
-/// Another account signed in to the same browser.
-const OTHER_ID: &str = "100000000000000000001";
+/// Another account signed in to the same browser; a personal one.
+pub const OTHER_ID: &str = "100000000000000000001";
+pub const OTHER_EMAIL: &str = "other@example.com";
 
 /// How the user answers one of Google's consent screens.
 #[derive(Clone, Copy)]
@@ -207,13 +208,16 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         .flatten()
         .and_then(|(_, token)| state.access.get(token.trim()))
     {
-        let hd = state
-            .hd
+        let (email, hd) = match sub {
+            OTHER_ID => (OTHER_EMAIL, None),
+            _ => (EMAIL, state.hd),
+        };
+        let hd = hd
             .map(|hd| format!(r#", "hd": "{hd}""#))
             .unwrap_or_default();
         (
             "200 OK",
-            format!(r#"{{"sub": "{sub}", "email": "{EMAIL}", "name": "Owner"{hd}}}"#),
+            format!(r#"{{"sub": "{sub}", "email": "{email}", "name": "Owner"{hd}}}"#),
         )
     } else {
         (

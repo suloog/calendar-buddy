@@ -268,13 +268,19 @@ fn authorization_url(
         .append_pair("code_challenge_method", "S256")
         .append_pair("state", state)
         // A refresh token every time, so the account stays signed in (`MOD-01-F04`).
-        .append_pair("access_type", "offline")
-        .append_pair("prompt", "consent");
-    if let Some(hint) = login_hint {
-        url.query_pairs_mut()
+        .append_pair("access_type", "offline");
+    match login_hint {
+        Some(hint) => url
+            .query_pairs_mut()
+            .append_pair("prompt", "consent")
             .append_pair("login_hint", hint)
-            .append_pair("include_granted_scopes", "true");
-    }
+            .append_pair("include_granted_scopes", "true"),
+        // Google's account chooser, so a second account can be picked in a browser already
+        // signed in to the first (`MOD-01-F02`).
+        None => url
+            .query_pairs_mut()
+            .append_pair("prompt", "select_account consent"),
+    };
     url
 }
 
