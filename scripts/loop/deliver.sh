@@ -46,7 +46,27 @@ story, so its Δ is not meaningful. Cost is Claude Code's own figure (notional o
 EOF
 fi
 
+story_file() { ls "$ROOT"/docs/specs/modules/*/stories/"$1"-*.md 2>/dev/null | head -1; }
+field() { sed -n "s/^$2:[[:space:]]*\([^#]*\).*/\1/p" "$1" | head -1 | tr -d '[] ' ; }
+
+# Checked here, before a session is spent: the story is ready and its dependencies are on main.
+startable() {
+  local f s dep df ds
+  f="$(story_file "$1")"
+  [ -n "$f" ] || { echo "no story file"; return 1; }
+  s="$(field "$f" status)"
+  [ "$s" = "ready" ] || { echo "status is $s"; return 1; }
+  for dep in $(field "$f" depends_on | tr ',' ' '); do
+    df="$(story_file "$dep")"; ds="$(field "$df" status)"
+    case "$ds" in review|done) ;; *) echo "waits for $dep ($ds)"; return 1 ;; esac
+  done
+}
+
+SKIPPED=()
 for STORY in "$@"; do
+  if ! WHY="$(startable "$STORY")"; then
+    echo "⏭ $STORY skipped: $WHY"; SKIPPED+=("$STORY: $WHY"); continue
+  fi
   # --- limits ---------------------------------------------------------------------------------
   while :; do
     U="$(usage_json)"
@@ -88,8 +108,8 @@ for STORY in "$@"; do
     b="$(pct "$1" "$BEFORE")"; a="$(pct "$1" "$AFTER")"
     rb="$(resets "$1" "$BEFORE")"; ra="$(resets "$1" "$AFTER")"
     if [ "$b" = "?" ] || [ "$a" = "?" ]; then echo "?"; return; fi
-    # resets_at carries sub-second jitter between reads; a real reset moves it by hours.
-    if [ "${rb:0:16}" != "${ra:0:16}" ]; then echo "${b}% → ${a}% (~)"; return; fi
+    # A window that reset during the story shows as a drop; resets_at itself drifts between reads.
+    if awk -v a="$a" -v b="$b" 'BEGIN{exit !(a < b)}'; then echo "${b}% → ${a}% (~)"; return; fi
     echo "${b}% → ${a}% (+$(awk -v a="$a" -v b="$b" 'BEGIN{printf "%.0f", a-b}')pp)"
   }
   printf '| %s | %s | %s | %s min | %s | %s | %s | %s | %s |\n' \
@@ -103,4 +123,5 @@ for STORY in "$@"; do
     *) echo "Stopping: $STORY did not finish ($RESULT_LINE). Session output: $OUT"; exit 1 ;;
   esac
 done
+[ "${#SKIPPED[@]}" -gt 0 ] && printf 'Skipped (not started, no usage):\n' && printf '  %s\n' "${SKIPPED[@]}"
 echo "All stories processed. Nothing was pushed — review docs/delivery/LOG.md and push main when happy."
