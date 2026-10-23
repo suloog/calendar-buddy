@@ -7,7 +7,7 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{color, text_on};
+use crate::grid_view::{color, openable, text_on};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -66,7 +66,12 @@ fn paint_item(
     }
 }
 
-pub fn show(ui: &mut egui::Ui, view: &MonthViewModel, state: &mut State) {
+pub fn show(
+    ui: &mut egui::Ui,
+    view: &MonthViewModel,
+    state: &mut State,
+    opened: &mut Option<usize>,
+) {
     let visuals = ui.visuals().clone();
     let grid_line = visuals.widgets.noninteractive.bg_stroke;
     let (area, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
@@ -143,14 +148,18 @@ pub fn show(ui: &mut egui::Ui, view: &MonthViewModel, state: &mut State) {
             };
             let (shown, more) = day.fit(slots);
             for (n, item) in day.items[..shown].iter().enumerate() {
-                paint_item(&painter, row(n), item, view, visuals.text_color());
+                let rect = row(n);
+                let id = ui.scope_id().with(("item", day.date, n));
+                let response = ui.interact(rect, id, Sense::click());
+                paint_item(&painter, rect, item, view, visuals.text_color());
+                openable(ui, &response, rect, item.event, opened);
             }
             // With no row free in a very short window, there is nowhere to put "+N more".
             if more > 0 && slots > 0 {
                 let rect = row(shown);
                 let response =
                     ui.interact(rect, ui.scope_id().with(("more", day.date)), Sense::click());
-                if response.hovered() {
+                if response.hovered() || response.has_focus() {
                     painter.rect_filled(
                         rect,
                         CornerRadius::same(3),
@@ -188,19 +197,16 @@ pub fn show(ui: &mut egui::Ui, view: &MonthViewModel, state: &mut State) {
         .show(ui.ctx(), |ui| {
             ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
                 for item in &day.items {
-                    let (rect, _) =
-                        ui.allocate_exact_size(Vec2::new(220.0, ITEM_HEIGHT), Sense::hover());
-                    paint_item(
-                        ui.painter(),
-                        rect.shrink2(Vec2::new(0.0, 1.0)),
-                        item,
-                        view,
-                        ui.visuals().text_color(),
-                    );
+                    let (rect, response) =
+                        ui.allocate_exact_size(Vec2::new(220.0, ITEM_HEIGHT), Sense::click());
+                    let rect = rect.shrink2(Vec2::new(0.0, 1.0));
+                    paint_item(ui.painter(), rect, item, view, ui.visuals().text_color());
+                    openable(ui, &response, rect, item.event, opened);
                 }
             });
         });
-    if !open {
+    // Like Google Calendar, opening one of its events or Escape closes the list.
+    if !open || opened.is_some() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.open_day = None;
     }
 }

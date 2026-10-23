@@ -4,7 +4,7 @@
 use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
-use crate::grid_view::color;
+use crate::grid_view::{color, openable};
 
 const DATE_WIDTH: f32 = 96.0;
 const TIME_WIDTH: f32 = 110.0;
@@ -25,7 +25,7 @@ fn time_label(item: &AgendaItem, view: &AgendaViewModel) -> String {
 }
 
 /// Returns true when the user has scrolled near the end and more days should be loaded.
-pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel) -> bool {
+pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel, opened: &mut Option<usize>) -> bool {
     if view.is_empty() {
         ui.centered_and_justified(|ui| ui.label("No upcoming events"));
         return false;
@@ -38,7 +38,27 @@ pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel) -> bool {
                 Vec2::new(ui.available_width(), height + DAY_GAP),
                 Sense::hover(),
             );
-            // Days scrolled out of sight are not drawn, however far the list has grown.
+            // Days scrolled out of sight are not drawn, however far the list has grown. Those
+            // within a screen of it still take the keyboard, so Tab can scroll on to them.
+            let screen = Vec2::new(0.0, ui.clip_rect().height());
+            if !ui.is_rect_visible(rect.expand2(screen)) {
+                continue;
+            }
+            for (n, item) in day.items.iter().enumerate() {
+                let row = egui::Rect::from_min_size(
+                    Pos2::new(
+                        rect.left() + DATE_WIDTH,
+                        rect.top() + n as f32 * ITEM_HEIGHT,
+                    ),
+                    Vec2::new(rect.width() - DATE_WIDTH, ITEM_HEIGHT),
+                );
+                let response = ui.interact(
+                    row,
+                    ui.scope_id().with(("item", day.date, n)),
+                    Sense::click(),
+                );
+                openable(ui, &response, row, item.event, opened);
+            }
             if !ui.is_rect_visible(rect) {
                 continue;
             }

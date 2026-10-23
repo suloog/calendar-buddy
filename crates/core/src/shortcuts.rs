@@ -1,0 +1,159 @@
+//! Google Calendar's keyboard shortcuts (`DEC-55`): which key does what, and the list "?" shows.
+//! Independent of how keys are read or the list is drawn.
+
+use chrono::NaiveDate;
+
+use crate::navigation::{Navigation, View};
+use crate::week::GridView;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Command {
+    Switch(View),
+    Next,
+    Previous,
+    Today,
+    /// Asks for a date to go to.
+    GoToDate,
+    NewEvent,
+    ShowShortcuts,
+}
+
+/// Every shortcut with what it does, in the order the list shows them. `/` (search) is not bound:
+/// there is no search (`DEC-30`).
+pub const SHORTCUTS: [(char, Command, &str); 13] = [
+    ('d', Command::Switch(View::Grid(GridView::Day)), "Day view"),
+    (
+        'x',
+        Command::Switch(View::Grid(GridView::ThreeDays)),
+        "3-day view",
+    ),
+    (
+        'w',
+        Command::Switch(View::Grid(GridView::Week)),
+        "Week view",
+    ),
+    ('m', Command::Switch(View::Month), "Month view"),
+    ('a', Command::Switch(View::Agenda), "Agenda view"),
+    ('j', Command::Next, "Next period"),
+    ('n', Command::Next, "Next period"),
+    ('k', Command::Previous, "Previous period"),
+    ('p', Command::Previous, "Previous period"),
+    ('t', Command::Today, "Today"),
+    ('g', Command::GoToDate, "Go to date"),
+    ('c', Command::NewEvent, "New event"),
+    ('?', Command::ShowShortcuts, "Keyboard shortcuts"),
+];
+
+/// The command of a typed character, if it is a shortcut.
+pub fn command(key: char) -> Option<Command> {
+    SHORTCUTS
+        .iter()
+        .find(|(shortcut, _, _)| *shortcut == key)
+        .map(|(_, command, _)| *command)
+}
+
+impl Navigation {
+    /// Carries out a command that only moves the view; the others (go to date, new event, the
+    /// shortcut list) open something and are the caller's.
+    pub fn run(&mut self, command: Command, today: NaiveDate) {
+        match command {
+            Command::Switch(view) => self.switch(view),
+            Command::Next => self.next(),
+            Command::Previous => self.previous(),
+            Command::Today => self.today(today),
+            Command::GoToDate | Command::NewEvent | Command::ShowShortcuts => {}
+        }
+    }
+}
+
+/// The date typed after `g`, as `YYYY-MM-DD` (`DEC-73`).
+pub fn parse_date(text: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d").ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::d;
+
+    /// `TC-03-11`: the clock says Wednesday 11 November 2026; the week of 9–15 November is shown.
+    fn tc_03_11_start() -> Navigation {
+        Navigation::start(Some(View::Grid(GridView::Week)), d(2026, 11, 11))
+    }
+
+    fn press(nav: &mut Navigation, key: char) -> Command {
+        let command = command(key).expect("a shortcut");
+        nav.run(command, d(2026, 11, 11));
+        command
+    }
+
+    #[test]
+    fn tc_03_11_view_keys_switch_to_day_three_days_week_month_and_agenda() {
+        let mut nav = tc_03_11_start();
+        let mut shown = Vec::new();
+        for key in ['d', 'x', 'w', 'm', 'a'] {
+            press(&mut nav, key);
+            shown.push(nav.view);
+        }
+        assert_eq!(shown, View::ALL);
+    }
+
+    #[test]
+    fn tc_03_11_j_k_and_t_move_between_weeks_and_back_to_today() {
+        let mut nav = tc_03_11_start();
+        let mut periods = Vec::new();
+        for key in ['w', 'j', 'k', 'j', 't'] {
+            press(&mut nav, key);
+            periods.push(nav.period());
+        }
+        assert_eq!(
+            periods,
+            [
+                Some((d(2026, 11, 9), d(2026, 11, 15))),
+                Some((d(2026, 11, 16), d(2026, 11, 22))),
+                Some((d(2026, 11, 9), d(2026, 11, 15))),
+                Some((d(2026, 11, 16), d(2026, 11, 22))),
+                Some((d(2026, 11, 9), d(2026, 11, 15))),
+            ]
+        );
+    }
+
+    #[test]
+    fn tc_03_11_question_mark_shows_the_shortcut_list() {
+        let mut nav = tc_03_11_start();
+        assert_eq!(press(&mut nav, '?'), Command::ShowShortcuts);
+        assert_eq!(nav, tc_03_11_start());
+        let listed: Vec<char> = SHORTCUTS.iter().map(|(key, _, _)| *key).collect();
+        assert_eq!(listed, "dxwmajnkptgc?".chars().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn n_and_p_are_next_and_previous_like_j_and_k() {
+        assert_eq!(command('n'), command('j'));
+        assert_eq!(command('p'), command('k'));
+        assert_eq!(command('j'), Some(Command::Next));
+        assert_eq!(command('k'), Some(Command::Previous));
+    }
+
+    #[test]
+    fn g_asks_for_a_date_and_c_starts_a_new_event_without_moving_the_view() {
+        let mut nav = tc_03_11_start();
+        assert_eq!(press(&mut nav, 'g'), Command::GoToDate);
+        assert_eq!(press(&mut nav, 'c'), Command::NewEvent);
+        assert_eq!(nav, tc_03_11_start());
+    }
+
+    #[test]
+    fn search_and_other_keys_are_not_shortcuts() {
+        for key in ['/', 'D', 'q', ' ', '1'] {
+            assert_eq!(command(key), None, "{key:?}");
+        }
+    }
+
+    #[test]
+    fn a_typed_date_is_read_as_year_month_day() {
+        assert_eq!(parse_date(" 2027-03-04 "), Some(d(2027, 3, 4)));
+        assert_eq!(parse_date("2027-02-30"), None);
+        assert_eq!(parse_date("tomorrow"), None);
+    }
+}

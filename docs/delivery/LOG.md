@@ -30,3 +30,10 @@
 - Reviews: code 1 round(s), spec 2 round(s); open notes: fixed Today not bringing back a browsed mini calendar and the settings write on the UI thread (constitution); not fixed (non-blocking): month steps clamp the day (31 Jan → 28 Feb → 28 Mar, per DEC-72), a settings save in flight at exit can be lost (DEC-15).
 - Manual checks: TC-03-08 (buttons and restart in the real app), US-03-05#3 (mini calendar drawing and clicks)
 - Commits on main: one squash commit — 0d51b6d feat(views): add navigation, mini calendar and last view
+
+## US-03-08 — review — 2026-10-23 14:49
+- What: Google Calendar's keys (`calendar_core::shortcuts`: d x w m a, j/n k/p, t, g, c, ?) with the "?" list, "Go to date" and a stand-in "New event" dialog; Tab/Enter reach and open events in every view into a minimal details dialog (`calendar_core::details`).
+- Decisions: DEC-73, DEC-74
+- Reviews: code 1 round(s), spec 1 round(s); open notes: resumed session (earlier fixes committed as found); fixed non-blocking focus return after details, "+N more" list closing on Escape, Alt-modified keys, mini calendar reset only on `t`, all-day range year; not fixed: focus drops after dragging an event to another day; app-side key wiring has no automated test.
+- Manual checks: TC-03-11, US-03-08#3, US-03-08#5
+- Commits on main: one squash commit — feat(views): add keyboard shortcuts and keyboard navigation

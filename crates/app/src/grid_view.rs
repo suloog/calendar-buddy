@@ -5,7 +5,8 @@ use calendar_core::model::{Event, Rgb, Timing};
 use calendar_core::view_model::GridViewModel;
 use chrono::Duration;
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Stroke, Vec2,
+    self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind,
+    Vec2,
 };
 
 const HOUR_HEIGHT: f32 = 44.0;
@@ -26,6 +27,31 @@ pub fn text_on(c: Rgb) -> Color32 {
         Color32::BLACK
     } else {
         Color32::WHITE
+    }
+}
+
+/// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
+/// keeps it in sight and rings it; Enter or a click opens it into `opened`.
+pub fn openable(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    rect: Rect,
+    event: usize,
+    opened: &mut Option<usize>,
+) {
+    if response.gained_focus() {
+        response.scroll_to_me(None);
+    }
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            rect,
+            CornerRadius::same(3),
+            ui.visuals().selection.stroke,
+            StrokeKind::Outside,
+        );
+    }
+    if response.clicked() {
+        *opened = Some(event);
     }
 }
 
@@ -73,7 +99,12 @@ pub fn apply(events: &mut [Event], change: Change) {
     }
 }
 
-pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Option<Change> {
+pub fn show(
+    ui: &mut egui::Ui,
+    view: &GridViewModel,
+    state: &mut State,
+    opened: &mut Option<usize>,
+) -> Option<Change> {
     let width = ui.available_width();
     let columns = view.days.len();
     let day_width = ((width - GUTTER) / columns as f32).max(40.0);
@@ -115,6 +146,11 @@ pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Optio
         let x1 = strip.left() + GUTTER + (bar.bar.last_day + 1) as f32 * day_width - 2.0;
         let y = strip.top() + 2.0 + bar.bar.lane as f32 * LANE_HEIGHT;
         let rect = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + LANE_HEIGHT - 2.0));
+        let response = ui.interact(
+            rect,
+            ui.scope_id().with(("bar", bar.bar.event)),
+            Sense::click(),
+        );
         painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
         painter.with_clip_rect(rect).text(
             rect.left_center() + Vec2::new(4.0, 0.0),
@@ -123,6 +159,7 @@ pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Optio
             FontId::proportional(12.0),
             text_on(bar.color),
         );
+        openable(ui, &response, rect, bar.bar.event, opened);
     }
     ui.painter()
         .hline(strip.x_range(), strip.bottom(), grid_line);
@@ -171,7 +208,12 @@ pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Optio
                 Pos2::new(x, minute_y(p.start_min as f32) + 1.0),
                 Pos2::new(x + column_width - 2.0, minute_y(p.end_min as f32) - 1.0),
             );
-            let response = ui.interact(rect, ui.scope_id().with(("block", index)), Sense::drag());
+            let response = ui.interact(
+                rect,
+                // Keyed on the event, so focus stays on it when the view is rebuilt.
+                ui.scope_id().with(("block", p.event, p.day)),
+                Sense::click_and_drag(),
+            );
             if response.drag_started() {
                 state.drag = Some(Drag {
                     block: index,
@@ -179,7 +221,10 @@ pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Optio
                 });
             }
             if let Some(drag) = state.drag.as_mut().filter(|d| d.block == index) {
-                drag.delta += response.drag_delta();
+                // From where the press started: a click-and-drag starts only after a few points.
+                if let Some(total) = response.total_drag_delta() {
+                    drag.delta = total;
+                }
                 let days = (drag.delta.x / day_width).round();
                 let minutes =
                     (drag.delta.y / HOUR_HEIGHT * 60.0 / SNAP_MINUTES).round() * SNAP_MINUTES;
@@ -212,6 +257,7 @@ pub fn show(ui: &mut egui::Ui, view: &GridViewModel, state: &mut State) -> Optio
                 FontId::proportional(12.0),
                 ink,
             );
+            openable(ui, &response, rect, p.event, opened);
         }
 
         if let Some(now) = view.now {
