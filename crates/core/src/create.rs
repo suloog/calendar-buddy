@@ -242,6 +242,7 @@ impl Saving {
             timing: event.timing,
             busy_only: false,
             read_only: false,
+            organizer_only: false,
             saving: true,
             recurring: false,
             about: event.about.clone(),

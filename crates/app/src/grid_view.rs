@@ -34,9 +34,6 @@ pub fn text_on(c: Rgb) -> Color32 {
     }
 }
 
-/// What the details say of an event whose calendar cannot be changed (`MOD-02-U01`).
-pub const READ_ONLY: &str = "🔒 Read-only: this event can't be changed";
-
 /// What an event is called in the views: its title, or "Busy" for an event of a calendar shared
 /// as free/busy only, after a lock when its calendar cannot be changed (`MOD-02-U01`), and marked
 /// while Google has not confirmed a new event (`MOD-05-U03`).
@@ -122,6 +119,8 @@ enum Grabbed {
 pub enum Action {
     /// An event dragged and dropped (`MOD-05-F13`, `MOD-05-F14`).
     Dropped { event: usize, drop: Target },
+    /// A drag started on an event that cannot be moved, which stays where it is (`MOD-05-F17`).
+    Unmovable { event: usize },
     /// A click on a time where there is no event: the day's index and the minute of the day.
     Clicked { day: usize, minute: u32 },
     /// A range selected in one day, from the minute pressed to the minute released.
@@ -235,11 +234,17 @@ pub fn show(
             ui.scope_id().with(("bar", bar.bar.event)),
             Sense::click_and_drag(),
         );
-        if response.drag_started_by(PointerButton::Primary) && movable && bar.movable {
-            state.drag = Some(Drag {
-                grabbed: Grabbed::Bar(index),
-                delta: Vec2::ZERO,
-            });
+        if response.drag_started_by(PointerButton::Primary) && movable {
+            if bar.movable {
+                state.drag = Some(Drag {
+                    grabbed: Grabbed::Bar(index),
+                    delta: Vec2::ZERO,
+                });
+            } else {
+                action = Some(Action::Unmovable {
+                    event: bar.bar.event,
+                });
+            }
         }
         if state.drag.as_ref().map(|d| d.grabbed) == Some(Grabbed::Bar(index)) && !held(&response) {
             state.drag = None;
@@ -420,11 +425,15 @@ pub fn show(
                 )
                 .on_hover_cursor(CursorIcon::ResizeVertical)
             });
-            if response.drag_started_by(PointerButton::Primary) && movable && block.movable {
-                state.drag = Some(Drag {
-                    grabbed: Grabbed::Block(index),
-                    delta: Vec2::ZERO,
-                });
+            if response.drag_started_by(PointerButton::Primary) && movable {
+                if block.movable {
+                    state.drag = Some(Drag {
+                        grabbed: Grabbed::Block(index),
+                        delta: Vec2::ZERO,
+                    });
+                } else {
+                    action = Some(Action::Unmovable { event: p.event });
+                }
             }
             if let Some(end) = &end
                 && end.drag_started_by(PointerButton::Primary)

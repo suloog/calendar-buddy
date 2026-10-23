@@ -527,6 +527,16 @@ struct GoogleEvent {
     visibility: Option<String>,
     #[serde(default)]
     etag: String,
+    organizer: Option<Organizer>,
+    #[serde(default)]
+    guests_can_modify: bool,
+}
+
+/// Google's `organizer` of an event; `self` when it is the calendar the copy is on.
+#[derive(Deserialize)]
+struct Organizer {
+    #[serde(rename = "self", default)]
+    is_self: bool,
 }
 
 /// Google's `start`, `end` and `originalStartTime`: a date for all-day events, otherwise an
@@ -607,6 +617,9 @@ impl GoogleEvent {
                 },
             },
             etag: self.etag,
+            // A guest's copy, with the organizer's event elsewhere, as Google tells them apart.
+            organizer_only: self.organizer.is_some_and(|organizer| !organizer.is_self)
+                && !self.guests_can_modify,
         })
     }
 }

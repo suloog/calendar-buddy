@@ -711,8 +711,9 @@ fn insert_event(
 }
 
 /// The Calendar API's `events.patch`: the fields sent replace those kept, a null one goes; only
-/// when the version sent in `If-Match` is the one kept. A deleted event is kept cancelled, and
-/// patching its status to confirmed brings it back.
+/// when the version sent in `If-Match` is the one kept, and not in a guest's copy the organizer
+/// does not let guests change. A deleted event is kept cancelled, and patching its status to
+/// confirmed brings it back.
 fn patch_event(
     state: &mut State,
     account: &'static str,
@@ -733,6 +734,19 @@ fn patch_event(
     };
     if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
         return precondition_failed();
+    }
+    // A guest's copy of an event whose organizer does not let guests change it.
+    if event["organizer"].is_object()
+        && event["organizer"]["self"] != true
+        && event["guestsCanModify"] != true
+    {
+        return (
+            "403 Forbidden",
+            r#"{"error": {"code": 403,
+                "message": "Shared properties can only be changed by the organizer of the event.",
+                "errors": [{"domain": "calendar", "reason": "forbiddenForNonOrganizer"}]}}"#
+                .to_string(),
+        );
     }
     let patch: Value = serde_json::from_str(body).unwrap();
     state

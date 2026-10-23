@@ -138,6 +138,17 @@ fn build(
     (built, places)
 }
 
+/// A drag left `event` where it was: when the user may not change it, the notices say why, once
+/// however often it is tried (`MOD-05-F17`).
+fn tell_unmovable(notices: &mut Vec<String>, event: &Event) {
+    if let Some(protected) = event.protected() {
+        let why = protected.why().to_string();
+        if !notices.contains(&why) {
+            notices.push(why);
+        }
+    }
+}
+
 /// Keeps a calendar's local colour picked in its menu, or forgets it on "Reset"; only in the
 /// app's settings, never sent to Google (`MOD-02-F04`).
 fn pick(colors: &mut LocalColors, picked: calendar_list::Picked) {
@@ -176,7 +187,8 @@ struct CalendarApp {
     saving: Saving,
     /// The last change to an event, and what undoes it (`MOD-05-F28`).
     last: LastChange,
-    /// What could not be saved, deleted or undone, and why, until the user closes the notice.
+    /// What could not be saved, deleted, undone or changed, and why, until the user closes the
+    /// notice.
     not_saved: Vec<String>,
     /// Whether the computer is online, as the system says (`MOD-02-F14`).
     online: Online,
@@ -577,11 +589,6 @@ impl CalendarApp {
                     if let Some(own) = details.in_own_zone(&self.regional) {
                         ui.label(own);
                     }
-                    if details.read_only {
-                        ui.label(grid_view::READ_ONLY);
-                    } else if let Some(reason) = refused {
-                        ui.label(reason);
-                    }
                     // The event as last synchronized, which may have come since it was opened.
                     let event = self
                         .events
@@ -592,6 +599,13 @@ impl CalendarApp {
                                 && e.account_id == event.account_id
                         })
                         .unwrap_or(event);
+                    // Editing is not offered for an event the user may not change (`MOD-05-F17`).
+                    let protected = event.protected();
+                    if let Some(protected) = protected {
+                        ui.label(protected.why());
+                    } else if let Some(reason) = refused {
+                        ui.label(reason);
+                    }
                     let calendar = self.sync.calendars().iter().find(|calendar| {
                         calendar.account_id == event.account_id && calendar.id == event.calendar_id
                     });
@@ -602,7 +616,7 @@ impl CalendarApp {
                     } else {
                         None
                     };
-                    if let (false, Some(calendar)) = (details.read_only, calendar) {
+                    if let (None, Some(calendar)) = (protected, calendar) {
                         let can_edit = refused.is_none() && not_yet.is_none();
                         ui.horizontal(|ui| {
                             if ui
@@ -1131,6 +1145,7 @@ impl eframe::App for CalendarApp {
         let mut opened = None;
         let mut started = None;
         let mut dropped = None;
+        let mut unmovable = None;
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(note) = browsed.note {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
@@ -1145,6 +1160,9 @@ impl eframe::App for CalendarApp {
                     match grid_view::show(ui, view, &self.regional, state, online, &mut opened) {
                         Some(grid_view::Action::Dropped { event, drop }) if online => {
                             dropped = Some((self.places[event], drop));
+                        }
+                        Some(grid_view::Action::Unmovable { event }) => {
+                            unmovable = Some(self.places[event]);
                         }
                         // A click or a selection in the hours starts a new event (`MOD-05-F01`).
                         Some(grid_view::Action::Clicked { day, minute }) => {
@@ -1177,6 +1195,9 @@ impl eframe::App for CalendarApp {
         });
         if let Some((event, drop)) = dropped {
             self.dropped(event, drop);
+        }
+        if let Some(event) = unmovable {
+            tell_unmovable(&mut self.not_saved, &self.events[event]);
         }
         if let Some((date, pressed, released)) = started {
             let zone = self.zone;

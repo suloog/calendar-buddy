@@ -92,7 +92,7 @@
 | `US-05-04#2` | An event without guests that is not part of a series is deleted wit… | `TC-05-04` | auto | — |
 | `US-05-04#3` | After moving, resizing or editing an event, Ctrl+Z — or Undo in the… | `TC-05-05` | auto | — |
 | `US-05-05#1` | Events of read-only calendars, and events the user is not allowed t… | `TC-05-06` | auto | — |
-| `US-05-05#2` | When Google or the organizer refuses a change, a clear message is s… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-05#2` | When Google or the organizer refuses a change, a clear message is s… | — | — | no test case (smoke depth, `DEC-65`); proven by `a_change_google_refuses_is_told_clearly_and_the_event_returns_to_how_it_was` |
 | `US-05-06#1` | In the editor the user makes an event repeat daily, every weekday,… | `TC-05-07` | auto | — |
 | `US-05-06#2` | The series ends on a chosen date, after a chosen number of occurren… | `TC-05-07` | auto | — |
 | `US-05-06#3` | A series created in the app shows the same occurrences in Google Ca… | `TC-05-12` | manual-only | manual — checked by the product owner (`DEC-65`) |

@@ -33,6 +33,8 @@ pub struct Event {
     /// Event of a calendar the account cannot change: read-only, subscribed or free/busy
     /// (`MOD-02-U01`).
     pub read_only: bool,
+    /// A guest's copy of someone else's event, who does not let guests change it (`MOD-05-F17`).
+    pub organizer_only: bool,
     /// A new or changed event Google has not confirmed yet (`MOD-05-U03`); view state only,
     /// never cached.
     pub saving: bool,
@@ -42,6 +44,42 @@ pub struct Event {
     /// The version of the event at the provider, which a change is sent against; empty when not
     /// known yet.
     pub etag: String,
+}
+
+/// Why the user may not change an event (`MOD-05-F17`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Protected {
+    /// Its calendar is read-only, subscribed or free/busy (`DEC-22`).
+    ReadOnlyCalendar,
+    /// A guest's copy of someone else's event, who does not let guests change it.
+    OrganizerOnly,
+}
+
+impl Protected {
+    /// What the app says when the user tries to change the event.
+    pub fn why(self) -> &'static str {
+        match self {
+            Protected::ReadOnlyCalendar => {
+                "🔒 This event can't be changed: its calendar is read-only."
+            }
+            Protected::OrganizerOnly => {
+                "This event can't be changed: only its organizer can change it."
+            }
+        }
+    }
+}
+
+impl Event {
+    /// Why the user may not drag, resize, edit or delete the event; `None` when they may.
+    pub fn protected(&self) -> Option<Protected> {
+        if self.read_only {
+            Some(Protected::ReadOnlyCalendar)
+        } else if self.organizer_only {
+            Some(Protected::OrganizerOnly)
+        } else {
+            None
+        }
+    }
 }
 
 /// Whether an event shows the user as busy or free (`MOD-05-F07`).
