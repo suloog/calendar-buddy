@@ -71,6 +71,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - A Workspace administrator blocks third-party apps, or the app has reached Google's 100-user cap → the sign-in fails with Google's reason, and the app says the account could not be connected.
 - The system secret store is locked and the user declines to unlock it → the app shows its cached calendars but cannot synchronize or change anything until it is unlocked. — *source: `DEC-52`*
 - No network while the app runs → connected accounts stay connected; signing in a new account is not possible until the network returns.
+- The Google OAuth client file is missing or unreadable → connecting an account stops, and the app says which file to put where (`~/.config/calendar-buddy/google-oauth-client.json`). — *source: `DEC-77`*
 
 ## Integrations
 
@@ -83,6 +84,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - OAuth 2.0 authorization code flow for installed apps with PKCE (S256), the system browser opened through the desktop's URL handler, and a loopback redirect to `127.0.0.1` on a random port.
 - The OAuth client is an External app in production status, unverified, in the product owner's GCP project (`DEC-10`); the desktop client secret is not treated as confidential.
+- The client ID and secret are read at runtime from `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json` (default `~/.config/…`), the JSON exactly as downloaded from Google Cloud Console (`installed.client_id`, `installed.client_secret`, `installed.redirect_uris`) — never from the repository, an environment file or the binary (`DEC-77`). Tests point the app at a test client file and the fake Google.
 - Scopes: `openid`, `email`, `profile`, Google Calendar, Google contacts (including "other contacts"), and the directory scope on Workspace accounts — the exact set is fixed by the stories of `MOD-02`, `MOD-05` and `MOD-06` and kept minimal (`NFR-05`).
 - Accounts are keyed by Google's stable account ID, not the e-mail address.
 - The refresh token lives only in the secret store, behind the platform interface (constitution, `DEC-47`); access tokens are kept in memory only.
