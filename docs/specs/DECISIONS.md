@@ -696,3 +696,27 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q40`
 - **Status:** accepted
+
+## [DEC-57] Theme switching, accent colour and grid density
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** /og:requirements MOD-04 2026-10-23 (`SRC-03-21`, `SRC-03-22`, `SRC-03-23`)
+- **Affects:** `MOD-04-F02`, `MOD-04-F03`, `MOD-04-U01`, `MOD-04-U03`
+- **Decision:** The theme follows the system's light or dark setting by default and switches live; the settings offer System, Light and Dark. The app has one fixed, restrained accent colour of its own (not taken from the system), so calendar colours stay the only loud colours. The day and week grids have one compact density, like Morgen, with no density setting.
+- **Why:** Restrained interface (`SRC-01-52`) and Morgen's density (`SRC-01-49`); advanced customization is outside the MVP (`SRC-01-117`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-58] Measures of a compact, restrained look
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-24`)
+- **Affects:** `MOD-04-U01`, `MOD-04-U02`, `MOD-04-U05`, `MOD-04-NFR-01`, MOD-04 Constraints and edge cases
+- **Decision:** In a 1080-pixel-high window at 100% scale the week view shows 8:00–18:00 without scrolling. Event blocks in the grid show only title and time. There are no transition animations when changing views or periods. Text contrast is at least 4.5:1 (WCAG 2.1 AA) in both themes. When the desktop reports no light/dark preference, the light theme is used.
+- **Why:** Confirms the defaults proposed for `Q41`.
+- **Scope effect:** within scope
+- **Resolves:** `Q41`
+- **Status:** accepted
