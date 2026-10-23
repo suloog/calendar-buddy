@@ -1,5 +1,6 @@
 //! Connecting a Google account: from the welcome screen of a first run (`US-01-01`) and from the
-//! settings (`US-01-02`). Checking and signing in run off the UI thread.
+//! settings (`US-01-02`), and signing in again to one that needs it (`US-01-03`). Checking and
+//! signing in run off the UI thread.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,6 +43,8 @@ pub struct Connect {
     outcomes: Receiver<Outcome>,
     store: Arc<dyn SecretStore>,
     browser: Arc<dyn Browser>,
+    /// The e-mail address of the account being signed in to again; `None` adds an account.
+    again: Option<String>,
 }
 
 impl Connect {
@@ -53,7 +56,20 @@ impl Connect {
             outcomes,
             store: Arc::new(SystemSecretStore),
             browser: Arc::new(SystemBrowser),
+            again: None,
         }
+    }
+
+    /// Whether nothing is under way, so a new connection can start.
+    pub fn idle(&self) -> bool {
+        matches!(self.stage, Stage::Start(_))
+    }
+
+    /// Starts signing in again to an account that needs it (`MOD-01-F06`): the same steps as
+    /// adding one, with Google asked for that account.
+    pub fn sign_in_again(&mut self, ctx: &egui::Context, email: &str) {
+        self.again = Some(email.to_string());
+        self.check(ctx);
     }
 
     /// Runs `work` off the UI thread and wakes the UI with its outcome.
@@ -82,12 +98,14 @@ impl Connect {
     fn sign_in(&mut self, ctx: &egui::Context, client: Client) {
         let cancel = Arc::new(AtomicBool::new(false));
         let (store, browser, flag) = (self.store.clone(), self.browser.clone(), cancel.clone());
+        let again = self.again.clone();
         self.spawn(ctx, move || {
             Outcome::Connected(calendar_google::connect(
                 &client,
                 &Endpoints::google(),
                 browser.as_ref(),
                 store.as_ref(),
+                again.as_deref(),
                 &flag,
                 SIGN_IN_WAIT,
             ))
@@ -104,6 +122,7 @@ impl Connect {
                 Outcome::Checked(Ok(client)) => self.stage = Stage::HeadsUp(client),
                 Outcome::Connected(Ok(account)) => {
                     self.stage = Stage::Start(None);
+                    self.again = None;
                     connected = Some(account);
                 }
                 Outcome::Checked(Err(error)) | Outcome::Connected(Err(error)) => {
@@ -119,12 +138,18 @@ impl Connect {
     pub fn close(&mut self) {
         if matches!(self.stage, Stage::Start(Some(_)) | Stage::HeadsUp(_)) {
             self.stage = Stage::Start(None);
+            self.again = None;
         }
     }
 
     /// Draws the current step; `start` names the action that begins connecting.
     pub fn show(&mut self, ui: &mut egui::Ui, start: &str) {
         let mut chosen = None;
+        if let Some(email) = &self.again
+            && !matches!(self.stage, Stage::Start(None))
+        {
+            ui.label(format!("Signing in again to {email}."));
+        }
         match &self.stage {
             Stage::Start(error) => {
                 let label = match error {
@@ -168,7 +193,10 @@ impl Connect {
         match chosen {
             Some(Action::Check) => self.check(&ctx),
             Some(Action::SignIn(client)) => self.sign_in(&ctx, client),
-            Some(Action::Back) => self.stage = Stage::Start(None),
+            Some(Action::Back) => {
+                self.stage = Stage::Start(None);
+                self.again = None;
+            }
             None => {}
         }
     }

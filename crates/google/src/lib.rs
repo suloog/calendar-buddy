@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use calendar_core::accounts::{Account, ConnectError};
+use calendar_core::accounts::{Account, Check, CheckError, ConnectError};
 use calendar_core::platform::{Browser, SecretStore, SecretStoreError};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -112,16 +112,20 @@ pub fn prepare(
 
 /// Signs in to one account in the browser, keeps its refresh token in the secret store and
 /// returns it. Workspace accounts are then asked for the directory, so personal accounts never
-/// see that permission (`MOD-01-F03`).
+/// see that permission (`MOD-01-F03`). Signing in again to an account names it in `login_hint`
+/// (`MOD-01-F06`).
 pub fn connect(
     client: &Client,
     endpoints: &Endpoints,
     browser: &dyn Browser,
     store: &dyn SecretStore,
+    login_hint: Option<&str>,
     cancel: &AtomicBool,
     wait: Duration,
 ) -> Result<Account, ConnectError> {
-    let first = authorize(client, endpoints, browser, &SCOPES, None, cancel, wait)?;
+    let first = authorize(
+        client, endpoints, browser, &SCOPES, login_hint, cancel, wait,
+    )?;
     let mut granted = first.scope.clone();
     if !has(&granted, CALENDAR) {
         return Err(ConnectError::CalendarNotGranted);
@@ -159,6 +163,64 @@ pub fn connect(
     }
     store.save(&account, &refresh_token).map_err(store_error)?;
     Ok(account)
+}
+
+/// Asks Google whether each connected account's sign-in still works, with its refresh token from
+/// the secret store, without the browser (`MOD-01-F04`, `F05`). The access tokens Google sends
+/// back are not kept until synchronization needs them (`MOD-02`). The secret store is read for
+/// every account before Google is asked, so a locked store asks to be unlocked once.
+pub fn check(
+    client_file: &Path,
+    endpoints: &Endpoints,
+    store: &dyn SecretStore,
+    accounts: &[Account],
+) -> Result<Vec<(String, Check)>, CheckError> {
+    let client =
+        Client::read(client_file).map_err(|_| CheckError::ClientFile(client_file.into()))?;
+    let tokens = accounts
+        .iter()
+        .map(|account| store.load(&account.id))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| match error {
+            SecretStoreError::NotRunning => CheckError::NoSecretStore,
+            SecretStoreError::Failed(reason) => CheckError::SecretStore(reason),
+        })?;
+    Ok(accounts
+        .iter()
+        .zip(tokens)
+        .map(|(account, token)| {
+            let check = match token {
+                Some(token) => refresh(&client, endpoints, &token),
+                None => Check::SignInNeeded,
+            };
+            (account.id.clone(), check)
+        })
+        .collect())
+}
+
+/// Exchanges a refresh token for an access token; `invalid_grant` means Google revoked or ended
+/// the access.
+fn refresh(client: &Client, endpoints: &Endpoints, refresh_token: &str) -> Check {
+    let response = agent(HTTP_TIMEOUT).post(&endpoints.token).send_form([
+        ("client_id", client.id.as_str()),
+        ("client_secret", &client.secret),
+        ("refresh_token", refresh_token),
+        ("grant_type", "refresh_token"),
+    ]);
+    let mut response = match response {
+        Ok(response) => response,
+        Err(error) => return Check::Failed(error.to_string()),
+    };
+    if response.status().is_success() {
+        return Check::Works;
+    }
+    let body = response.body_mut().read_to_string().unwrap_or_default();
+    match google_reason(&body) {
+        Some(reason) if reason.split_whitespace().next() == Some("invalid_grant") => {
+            Check::SignInNeeded
+        }
+        reason => Check::Failed(reason.unwrap_or_else(|| response.status().to_string())),
+    }
 }
 
 fn has(granted: &str, scope: &str) -> bool {

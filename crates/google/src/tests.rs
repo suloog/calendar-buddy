@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 use super::*;
-use calendar_core::accounts::{AccountState, Accounts};
+use calendar_core::accounts::{AccountState, Accounts, Check, CheckError};
 
 use crate::fake::{
     ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore, OTHER_EMAIL, OTHER_ID, Reply, param,
@@ -19,7 +19,43 @@ fn client() -> Client {
 
 fn connect_to(google: &FakeGoogle, store: &FakeStore) -> Result<Account, ConnectError> {
     let cancel = AtomicBool::new(false);
-    connect(&client(), &google.endpoints, google, store, &cancel, WAIT)
+    connect(
+        &client(),
+        &google.endpoints,
+        google,
+        store,
+        None,
+        &cancel,
+        WAIT,
+    )
+}
+
+/// A client file pointing at the test client, in a directory of the test's own.
+fn client_file(name: &str) -> (PathBuf, PathBuf) {
+    let dir = temp_dir(name);
+    let path = dir.join(CLIENT_FILE);
+    std::fs::write(
+        &path,
+        format!(r#"{{"installed":{{"client_id":"{CLIENT_ID}","client_secret":"test-secret"}}}}"#),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+/// A personal and a Workspace account, both connected.
+fn two_accounts(google: &FakeGoogle, store: &FakeStore) -> Accounts {
+    let mut accounts = Accounts::default();
+    accounts.add(connect_to(google, store).unwrap());
+    accounts.add(connect_to(google, store).unwrap());
+    accounts
+}
+
+fn states(accounts: &Accounts) -> Vec<(&str, AccountState)> {
+    accounts
+        .list()
+        .iter()
+        .map(|e| (e.account.email.as_str(), e.state))
+        .collect()
 }
 
 fn scopes(url: &Url) -> Vec<String> {
@@ -395,6 +431,7 @@ fn a_closed_browser_ends_in_a_time_out_or_the_users_cancel() {
             &google.endpoints,
             &google,
             &store,
+            None,
             &cancel,
             short
         ),
@@ -402,7 +439,15 @@ fn a_closed_browser_ends_in_a_time_out_or_the_users_cancel() {
     );
     let cancel = AtomicBool::new(true);
     assert_eq!(
-        connect(&client(), &google.endpoints, &google, &store, &cancel, WAIT),
+        connect(
+            &client(),
+            &google.endpoints,
+            &google,
+            &store,
+            None,
+            &cancel,
+            WAIT
+        ),
         Err(ConnectError::Cancelled)
     );
     assert!(store.saved.lock().unwrap().is_empty());
@@ -460,4 +505,219 @@ fn a_stray_request_to_the_loopback_port_is_ignored() {
         wait_for_code(&listener, "s", &AtomicBool::new(false), WAIT),
         Ok("c".to_string())
     );
+}
+
+#[test]
+fn tc_01_03_connected_accounts_stay_connected_after_a_restart() {
+    let google = FakeGoogle::start(
+        Some("example.com"),
+        &[
+            Reply::Consent(&[]),
+            Reply::Consent(&[]),
+            Reply::OtherAccount,
+        ],
+    );
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("tc-01-03");
+    let remembered = dir.join("accounts");
+    two_accounts(&google, &store).save(&remembered).unwrap();
+    let signed_in = google.opened().len();
+
+    // The app starts again: the accounts are read back and Google is asked about each.
+    let mut accounts = Accounts::load(&remembered);
+    let checked = check(
+        &client_file,
+        &google.endpoints,
+        &store,
+        &accounts.connected(),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let checked = checked.unwrap();
+    assert_eq!(
+        checked,
+        [
+            (ACCOUNT_ID.to_string(), Check::Works),
+            (OTHER_ID.to_string(), Check::Works),
+        ]
+    );
+    assert!(!accounts.apply(&checked));
+    assert_eq!(
+        states(&accounts),
+        [
+            (EMAIL, AccountState::Connected),
+            (OTHER_EMAIL, AccountState::Connected),
+        ]
+    );
+    // No browser sign-in: the refresh tokens from the secret store were enough.
+    assert_eq!(google.opened().len(), signed_in);
+    assert_eq!(google.refreshed(), ["refresh-code-2", "refresh-code-3"]);
+}
+
+#[test]
+fn revoked_access_marks_only_that_account_and_signing_in_again_restores_it() {
+    let google = FakeGoogle::start(
+        Some("example.com"),
+        &[
+            Reply::Consent(&[]),
+            Reply::Consent(&[]),
+            Reply::OtherAccount,
+            Reply::Consent(&[]),
+            Reply::Consent(&[]),
+        ],
+    );
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("revoked");
+    let mut accounts = two_accounts(&google, &store);
+
+    google.revoke(ACCOUNT_ID);
+    let checked = check(
+        &client_file,
+        &google.endpoints,
+        &store,
+        &accounts.connected(),
+    )
+    .unwrap();
+    assert_eq!(
+        checked,
+        [
+            (ACCOUNT_ID.to_string(), Check::SignInNeeded),
+            (OTHER_ID.to_string(), Check::Works),
+        ]
+    );
+    assert!(accounts.apply(&checked));
+    assert_eq!(
+        states(&accounts),
+        [
+            (EMAIL, AccountState::NeedsSignIn),
+            (OTHER_EMAIL, AccountState::Connected),
+        ]
+    );
+
+    // "Sign in again" asks Google for that account, which is restored in its place.
+    let cancel = AtomicBool::new(false);
+    let again = connect(
+        &client(),
+        &google.endpoints,
+        &google,
+        &store,
+        Some(EMAIL),
+        &cancel,
+        WAIT,
+    )
+    .unwrap();
+    let first = &google.opened()[3];
+    assert_eq!(param(first, "login_hint").as_deref(), Some(EMAIL));
+    assert_eq!(param(first, "prompt").as_deref(), Some("consent"));
+    assert!(!accounts.add(again));
+    assert_eq!(
+        states(&accounts),
+        [
+            (EMAIL, AccountState::Connected),
+            (OTHER_EMAIL, AccountState::Connected),
+        ]
+    );
+    let checked = check(
+        &client_file,
+        &google.endpoints,
+        &store,
+        &accounts.connected(),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(
+        checked
+            .unwrap()
+            .iter()
+            .all(|(_, check)| *check == Check::Works)
+    );
+}
+
+#[test]
+fn an_account_without_a_sign_in_in_the_secret_store_needs_sign_in() {
+    let google = FakeGoogle::start(None, &[Reply::Consent(&[])]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("no-token");
+    let account = connect_to(&google, &store).unwrap();
+    store.saved.lock().unwrap().clear();
+
+    let checked = check(&client_file, &google.endpoints, &store, &[account]);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(
+        checked,
+        Ok(vec![(ACCOUNT_ID.to_string(), Check::SignInNeeded)])
+    );
+    assert!(google.refreshed().is_empty());
+}
+
+#[test]
+fn offline_the_accounts_stay_connected() {
+    let google = FakeGoogle::start(None, &[Reply::Consent(&[])]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("offline-check");
+    let mut accounts = Accounts::default();
+    accounts.add(connect_to(&google, &store).unwrap());
+    // Google's port, with nothing answering on it.
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let offline = Endpoints {
+        token: format!("http://127.0.0.1:{port}/token"),
+        ..google.endpoints.clone()
+    };
+
+    let checked = check(&client_file, &offline, &store, &accounts.connected());
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let checked = checked.unwrap();
+    assert!(matches!(checked[0].1, Check::Failed(_)));
+    assert!(!accounts.apply(&checked));
+    assert_eq!(states(&accounts), [(EMAIL, AccountState::Connected)]);
+}
+
+#[test]
+fn a_locked_secret_store_leaves_every_account_as_it_was() {
+    let google = FakeGoogle::start(None, &[]);
+    let (dir, client_file) = client_file("locked");
+    let account = Account {
+        id: ACCOUNT_ID.into(),
+        email: EMAIL.into(),
+        workspace: false,
+        contacts: true,
+        directory: false,
+    };
+    let locked = FakeStore {
+        locked: true,
+        ..FakeStore::default()
+    };
+    let not_running = FakeStore {
+        not_running: true,
+        ..FakeStore::default()
+    };
+
+    let declined = check(
+        &client_file,
+        &google.endpoints,
+        &locked,
+        std::slice::from_ref(&account),
+    );
+    let none = check(
+        &client_file,
+        &google.endpoints,
+        &not_running,
+        std::slice::from_ref(&account),
+    );
+    let missing = dir.join("missing.json");
+    let no_client = check(&missing, &google.endpoints, &locked, &[account]);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(
+        declined,
+        Err(CheckError::SecretStore("unlocking it was declined".into()))
+    );
+    assert_eq!(none, Err(CheckError::NoSecretStore));
+    assert_eq!(no_client, Err(CheckError::ClientFile(missing)));
+    assert!(google.refreshed().is_empty());
 }

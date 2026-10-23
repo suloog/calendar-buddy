@@ -48,6 +48,10 @@ struct State {
     granted: Vec<String>,
     /// The token service refuses every code with this error.
     token_error: Option<&'static str>,
+    /// Issued refresh tokens and their accounts; revoking access removes them.
+    refresh: HashMap<String, &'static str>,
+    /// Every refresh token the app asked to refresh.
+    refreshed: Vec<String>,
 }
 
 pub struct FakeGoogle {
@@ -86,6 +90,19 @@ impl FakeGoogle {
 
     pub fn opened(&self) -> Vec<Url> {
         self.state.lock().unwrap().opened.clone()
+    }
+
+    /// The user revokes the app's access in the account's Google security settings.
+    pub fn revoke(&self, account: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .refresh
+            .retain(|_, owner| *owner != account);
+    }
+
+    pub fn refreshed(&self) -> Vec<String> {
+        self.state.lock().unwrap().refreshed.clone()
     }
 }
 
@@ -174,6 +191,25 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         let form: HashMap<String, String> = url::form_urlencoded::parse(body.as_bytes())
             .into_owned()
             .collect();
+        if form["grant_type"] == "refresh_token" {
+            let token = &form["refresh_token"];
+            state.refreshed.push(token.clone());
+            let known = state.refresh.contains_key(token) && form["client_id"] == CLIENT_ID;
+            let answer = if known {
+                (
+                    "200 OK",
+                    format!(r#"{{"access_token": "access-{token}", "expires_in": 3599}}"#),
+                )
+            } else {
+                (
+                    "400 Bad Request",
+                    r#"{"error": "invalid_grant", "error_description": "Token has been expired or revoked."}"#
+                        .to_string(),
+                )
+            };
+            respond(&mut stream, answer);
+            return;
+        }
         let issued = state.codes.remove(&form["code"]);
         match (state.token_error, issued) {
             (Some(error), _) => (
@@ -188,6 +224,9 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
                 state
                     .access
                     .insert(format!("access-{}", form["code"]), account);
+                state
+                    .refresh
+                    .insert(format!("refresh-{}", form["code"]), account);
                 (
                     "200 OK",
                     format!(
@@ -225,6 +264,10 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
             r#"{"error": {"code": 401, "message": "Invalid Credentials"}}"#.to_string(),
         )
     };
+    respond(&mut stream, (status, json));
+}
+
+fn respond(stream: &mut TcpStream, (status, json): (&str, String)) {
     let _ = write!(
         stream,
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\
@@ -259,5 +302,17 @@ impl SecretStore for FakeStore {
         saved.retain(|(id, _)| *id != account.id);
         saved.push((account.id.clone(), refresh_token.to_string()));
         Ok(())
+    }
+
+    fn load(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
+        self.check()?;
+        if self.locked {
+            return Err(SecretStoreError::Failed("unlocking it was declined".into()));
+        }
+        let saved = self.saved.lock().unwrap();
+        Ok(saved
+            .iter()
+            .find(|(id, _)| id == account_id)
+            .map(|(_, token)| token.clone()))
     }
 }

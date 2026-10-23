@@ -17,6 +17,8 @@ pub trait SecretStore: Send + Sync {
     fn check(&self) -> Result<(), SecretStoreError>;
     /// Keeps the account's refresh token, replacing an earlier one.
     fn save(&self, account: &Account, refresh_token: &str) -> Result<(), SecretStoreError>;
+    /// The account's refresh token, unlocking the store if needed; `None` when it holds none.
+    fn load(&self, account_id: &str) -> Result<Option<String>, SecretStoreError>;
 }
 
 /// The system's default browser, opened through the desktop's URL handler.
