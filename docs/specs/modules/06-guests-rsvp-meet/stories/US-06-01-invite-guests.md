@@ -3,7 +3,7 @@ id: US-06-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-06
 covers: [MOD-06-F01, MOD-06-F02, MOD-06-F03, MOD-06-F04, MOD-06-F06, MOD-06-F07, MOD-06-F08] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-05-02] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-05-02] # story IDs that must be done first
 | **Module** | `[MOD-06]` Guests, invitations, RSVP and Google Meet — `docs/specs/modules/06-guests-rsvp-meet/REQUIREMENTS.md` |
 | **Covers** | `MOD-06-F01`, `F02`, `F03`, `F04`, `F06`, `F07`, `F08` |
 | **Priority** | must |
-| **Status** | ready |
+| **Status** | review |
 | **Depends on** | blocked by `US-05-02` |
 | **YouTrack** | — |
 | **Open questions** | — |

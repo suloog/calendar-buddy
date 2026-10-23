@@ -13,7 +13,8 @@
 //! retry, and the others go on (`US-02-06`). A new event goes to Google first and comes back
 //! through synchronizing its calendar (`US-05-01`), and so does a changed one (`US-05-02`), a
 //! deleted one and one restored (`US-05-04`); each account's default event length is read with
-//! its first synchronization.
+//! its first synchronization. People to invite are searched for at Google while the user types a
+//! guest (`US-06-01`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -26,6 +27,7 @@ use calendar_core::accounts::Check;
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
+use calendar_core::guests::{Person, Reach};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
@@ -74,6 +76,9 @@ enum Job {
     /// An occurrence of a series to delete from the calendar with the following or all events,
     /// by the number the views know it by (`MOD-05-F21`).
     DeleteSeries(u64, Calendar, Event, Scope),
+    /// What is typed in the guest field, to search the account's people for where it may look
+    /// (`MOD-06-F02`, `F04`).
+    Suggest(String, String, Reach),
 }
 
 enum Update {
@@ -101,6 +106,8 @@ enum Update {
     NotDeleted(u64, String),
     /// The account's default event length, in minutes (`MOD-05-F09`).
     DefaultLength(String, u32),
+    /// The people of the account found for what was last typed in the guest field.
+    People(String, Vec<Person>),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -130,6 +137,8 @@ pub struct Synchronization {
     lengths: HashMap<String, u32>,
     /// What became of new and changed events at Google, not yet taken.
     saved: Vec<Saved>,
+    /// The people Google last found to invite, and the account they were found for.
+    people: Option<(String, Vec<Person>)>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -214,7 +223,7 @@ impl Synchronization {
                 if jobs.iter().any(synchronizes) {
                     send(Update::Synchronizing);
                 }
-                for job in latest_browsing(jobs) {
+                for job in latest_only(jobs) {
                     for update in engine.handle(job, Instant::now()) {
                         send(update);
                     }
@@ -234,6 +243,7 @@ impl Synchronization {
             calendars: Vec::new(),
             lengths: HashMap::new(),
             saved: Vec::new(),
+            people: None,
         }
     }
 
@@ -358,6 +368,21 @@ impl Synchronization {
             .send(Job::DeleteSeries(local, calendar, event, scope));
     }
 
+    /// Searches the account's people at Google for what is typed in the guest field, where
+    /// `reach` lets it look; `people` gives them once found.
+    pub fn suggest(&self, account_id: &str, query: &str, reach: Reach) {
+        let job = Job::Suggest(account_id.to_string(), query.to_string(), reach);
+        let _ = self.jobs.send(job);
+    }
+
+    /// The people Google last found to invite for the account; none until it answers.
+    pub fn people(&self, account_id: &str) -> &[Person] {
+        match &self.people {
+            Some((account, people)) if account == account_id => people,
+            _ => &[],
+        }
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
@@ -397,6 +422,7 @@ impl Synchronization {
                 Update::DefaultLength(account, minutes) => {
                     self.lengths.insert(account, minutes);
                 }
+                Update::People(account, people) => self.people = Some((account, people)),
             }
         }
         events
@@ -547,6 +573,13 @@ impl Engine {
             }
             Some(Job::DeleteSeries(local, calendar, event, scope)) => {
                 return self.delete_series(local, calendar, &event, scope, now);
+            }
+            Some(Job::Suggest(account, query, reach)) => {
+                // An account not signed in yet finds nobody.
+                let people = (self.sessions.get(&account))
+                    .map(|session| session.people(&query, reach))
+                    .unwrap_or_default();
+                return vec![Update::People(account, people)];
             }
         };
         self.round(&calendars, now)
@@ -1030,15 +1063,19 @@ fn refusal(error: SyncError) -> String {
     }
 }
 
-/// The jobs waiting, with only the last of the browsing among them: days left behind while the
-/// worker was busy are not fetched.
-fn latest_browsing(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
-    let last = jobs
-        .iter()
-        .rposition(|job| matches!(job, Some(Job::Browse(_))));
+/// The jobs waiting, with only the last of the browsing and of the searches for guests among
+/// them: days left behind and what was typed before while the worker was busy are not fetched.
+fn latest_only(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
+    let browsing = |job: &Option<Job>| matches!(job, Some(Job::Browse(_)));
+    let searching = |job: &Option<Job>| matches!(job, Some(Job::Suggest(..)));
+    let last_browsing = jobs.iter().rposition(browsing);
+    let last_searching = jobs.iter().rposition(searching);
     jobs.into_iter()
         .enumerate()
-        .filter(|(i, job)| !matches!(job, Some(Job::Browse(_))) || Some(*i) == last)
+        .filter(|(i, job)| {
+            (!browsing(job) || Some(*i) == last_browsing)
+                && (!searching(job) || Some(*i) == last_searching)
+        })
         .map(|(_, job)| job)
         .collect()
 }
@@ -1054,7 +1091,9 @@ fn jitter() -> f64 {
 fn synchronizes(job: &Option<Job>) -> bool {
     !matches!(
         job,
-        Some(Job::Stop(_) | Job::Unconfirmed(_) | Job::Shown(_) | Job::Window(_))
+        Some(
+            Job::Stop(_) | Job::Unconfirmed(_) | Job::Shown(_) | Job::Window(_) | Job::Suggest(..)
+        )
     )
 }
 
@@ -1093,6 +1132,7 @@ mod tests {
     use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
+    use calendar_core::guests::{self, Person};
     use calendar_core::model::{Access, Calendar, Kind, Protected, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
     use calendar_core::offline;
@@ -1895,7 +1935,7 @@ mod tests {
     }
 
     #[test]
-    fn of_the_browsing_waiting_only_the_last_is_done() {
+    fn of_the_browsing_and_the_guest_searches_waiting_only_the_last_of_each_is_done() {
         let week = |day| {
             Some(
                 window()
@@ -1903,20 +1943,25 @@ mod tests {
                     .unwrap(),
             )
         };
+        let typed = |query: &str| Some(Job::Suggest("1".into(), query.into(), Reach::default()));
         let jobs = vec![
             Some(Job::Browse(week(4))),
+            typed("a"),
             None,
             Some(Job::Browse(week(11))),
+            typed("ad"),
             Some(Job::Refresh),
             Some(Job::Browse(week(18))),
+            typed("ada"),
         ];
 
-        let done = latest_browsing(jobs);
+        let done = latest_only(jobs);
 
-        assert_eq!(done.len(), 3);
+        assert_eq!(done.len(), 4);
         assert!(done[0].is_none());
         assert!(matches!(done[1], Some(Job::Refresh)));
         assert!(matches!(&done[2], Some(Job::Browse(span)) if *span == week(18)));
+        assert!(matches!(&done[3], Some(Job::Suggest(_, query, _)) if query == "ada"));
     }
 
     #[test]
@@ -4145,5 +4190,225 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The people the engine finds for what is typed in the guest field, with the account's
+    /// recent guests after them, as the editor is offered them.
+    fn suggested(engine: &mut Engine, editor: &Editor, reach: Reach) -> Vec<Person> {
+        let updates = engine.handle(
+            Some(Job::Suggest(
+                ACCOUNT_ID.into(),
+                editor.guest_field.clone(),
+                reach,
+            )),
+            Instant::now(),
+        );
+        let [Update::People(account, found)] = updates.as_slice() else {
+            panic!("the people found");
+        };
+        assert_eq!(account, ACCOUNT_ID);
+        let found: Vec<Person> = (found.iter().cloned())
+            .chain(guests::recent(&now_shown(engine), ACCOUNT_ID))
+            .collect();
+        guests::suggestions(&editor.guest_field, &found, &editor.guests, &[])
+    }
+
+    fn named(people: &[Person]) -> Vec<String> {
+        people.iter().map(Person::label).collect()
+    }
+
+    #[test]
+    fn tc_06_01_typing_part_of_a_name_suggests_contacts_and_recent_guests_and_saving_invites_them()
+    {
+        let google = Google::start("tc-06-01");
+        personal(&google);
+        google
+            .fake
+            .add_contact(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+        // "ewa@example.com" was invited to an earlier event.
+        let mut earlier = event("earlier", "Planning");
+        earlier["attendees"] = json!([
+            {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "ewa@example.com", "responseStatus": "accepted"}
+        ]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, earlier);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendars = engine.cache.calendar_list().unwrap();
+        let reach = Reach::of(&accounts()[0].account);
+        // A new event "Kickoff" on 13 November 10:00–11:00, open in the editor.
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let entry = QuickEntry {
+            title: "Kickoff".to_string(),
+            ..QuickEntry::new(
+                create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+                Warsaw,
+                default,
+            )
+        };
+        let mut editor = Editor::from_quick(&entry, &regional);
+        let own = editor.own_addresses(&accounts());
+
+        // 1. "Ada" typed: "Adam Kowalski" is suggested.
+        editor.guest_field = "Ada".to_string();
+        let found = suggested(&mut engine, &editor, reach);
+        assert_eq!(named(&found), ["Adam Kowalski <adam@example.com>"]);
+
+        // 2. He is chosen, then "ewa" typed and "ewa@example.com" chosen: both are guests.
+        editor.add_guest(&found[0], &own);
+        editor.guest_field = "ewa".to_string();
+        let found = suggested(&mut engine, &editor, reach);
+        assert_eq!(named(&found), ["ewa@example.com"]);
+        editor.add_guest(&found[0], &own);
+        let listed: Vec<String> = editor.listed_guests().map(|g| g.email.clone()).collect();
+        assert_eq!(listed, ["adam@example.com", "ewa@example.com"]);
+
+        // 3. Saved: Google receives "Kickoff" with both guests, and is asked to invite them.
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the event");
+        };
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(sent["summary"], "Kickoff");
+        assert_eq!(
+            sent["attendees"],
+            json!([
+                {"email": "adam@example.com", "displayName": "Adam Kowalski", "responseStatus": "needsAction"},
+                {"email": "ewa@example.com", "responseStatus": "needsAction"}
+            ])
+        );
+        let created: Vec<String> = (google.fake.requests().into_iter())
+            .filter(|r| r.starts_with("POST /calendar/v3/"))
+            .collect();
+        assert_eq!(created.len(), 1);
+        assert!(
+            created[0].ends_with("/events?sendUpdates=all"),
+            "{created:?}"
+        );
+        // Back through synchronization, with its guests.
+        let kickoff = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.title == "Kickoff")
+            .unwrap();
+        let guests: Vec<String> = kickoff.about.guests.into_iter().map(|g| g.email).collect();
+        assert_eq!(guests, ["adam@example.com", "ewa@example.com"]);
+    }
+
+    #[test]
+    fn tc_06_02_on_a_workspace_account_a_colleague_from_the_directory_is_suggested() {
+        let google = Google::start("tc-06-02");
+        personal(&google);
+        // "Anna Nowak" is in the organization's directory, not in the contacts.
+        google
+            .fake
+            .add_colleague(ACCOUNT_ID, "Anna Nowak", "anna.nowak@example.com");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let workspace = calendar_core::accounts::Account {
+            workspace: true,
+            directory: true,
+            ..accounts()[0].account.clone()
+        };
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+            Warsaw,
+            Some(calendar),
+        );
+        let mut editor = Editor::from_quick(&entry, &regional);
+
+        // 1. "Anna" typed: "Anna Nowak" is suggested, from the directory.
+        editor.guest_field = "Anna".to_string();
+        let found = suggested(&mut engine, &editor, Reach::of(&workspace));
+
+        assert_eq!(named(&found), ["Anna Nowak <anna.nowak@example.com>"]);
+        assert!(
+            (google.fake.requests().iter())
+                .any(|r| r.starts_with("GET /people/v1/people:searchDirectoryPeople?"))
+        );
+    }
+
+    #[test]
+    fn without_the_directory_granted_at_sign_in_no_colleague_is_suggested_or_asked_for() {
+        let google = Google::start("no-directory");
+        personal(&google);
+        google
+            .fake
+            .add_colleague(ACCOUNT_ID, "Anna Nowak", "anna.nowak@example.com");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        // A Workspace account that did not grant the directory (`DEC-52`).
+        let without = calendar_core::accounts::Account {
+            workspace: true,
+            directory: false,
+            ..accounts()[0].account.clone()
+        };
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+            Warsaw,
+            Some(calendar),
+        );
+        let mut editor = Editor::from_quick(&entry, &polish());
+        editor.guest_field = "Anna".to_string();
+
+        let found = suggested(&mut engine, &editor, Reach::of(&without));
+
+        assert!(found.is_empty());
+        assert!((google.fake.requests().iter()).all(|r| !r.contains("searchDirectoryPeople")));
+    }
+
+    #[test]
+    fn guests_are_added_to_and_removed_from_an_existing_event_at_google() {
+        let google = Google::start("edit-guests");
+        personal(&google);
+        let mut review = event("review", "Review");
+        review["organizer"] = json!({"email": EMAIL, "self": true});
+        review["attendees"] = json!([
+            {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "ewa@example.com", "responseStatus": "declined"}
+        ]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, review);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let review = (now_shown(&engine).into_iter())
+            .find(|e| e.id == "review")
+            .unwrap();
+        let mut editor = Editor::of(&review, calendar, &regional);
+
+        // Ewa removed, Adam added as an optional guest.
+        editor.remove_guest("ewa@example.com");
+        editor.guest_field = "adam@example.com".to_string();
+        editor.add_typed_guest(&editor.own_addresses(&accounts()));
+        editor.listed_guests().next().unwrap().optional = true;
+        let updates = engine.handle(Some(Job::Change(1, edit(&editor, &regional))), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "review").unwrap();
+        assert_eq!(
+            kept["attendees"],
+            json!([
+                {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+                {"email": "adam@example.com", "optional": true, "responseStatus": "needsAction"}
+            ])
+        );
+        let review = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.id == "review")
+            .unwrap();
+        let guests: Vec<(String, bool)> = (review.about.guests.into_iter())
+            .filter(|g| !g.own)
+            .map(|g| (g.email, g.optional))
+            .collect();
+        assert_eq!(guests, [("adam@example.com".to_string(), true)]);
     }
 }

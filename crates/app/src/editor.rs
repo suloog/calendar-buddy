@@ -3,11 +3,13 @@
 //! and how a new one repeats (`US-05-06`); a series' repetition opens in Google Calendar
 //! (`US-05-07`); out of office and focus time where the account allows them (`US-05-08`). What
 //! the fields mean and what saving does is `calendar_core::editor`'s. The event's own colour is
-//! picked from Google's event colours (`US-05-09`).
+//! picked from Google's event colours (`US-05-09`). Guests are added by address or from the people
+//! suggested while typing, marked optional and removed (`US-06-01`).
 
 use calendar_core::accounts::Entry;
 use calendar_core::colors::EventColor;
 use calendar_core::editor::{Editor, Ending, Save};
+use calendar_core::guests::Person;
 use calendar_core::model::{Calendar, Kind, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
@@ -162,6 +164,52 @@ fn event_color(ui: &mut egui::Ui, picked: &mut Option<EventColor>) {
     });
 }
 
+/// The guest field, the people suggested for what is typed in it, why what was typed was not
+/// added, and the guests, each marked optional or not and removable (`MOD-06-F01`…`F07`). Enter
+/// or a click adds; the user's own addresses (`own`) are never added.
+fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[String]) {
+    ui.vertical(|ui| {
+        let field = ui.add(
+            egui::TextEdit::singleline(&mut editor.guest_field)
+                .hint_text("Add guests")
+                .desired_width(FIELD_WIDTH),
+        );
+        if field.changed() {
+            editor.guest_problem = None;
+        }
+        if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            editor.enter_guest(suggested, own);
+            // The field keeps the keyboard for the next guest.
+            field.request_focus();
+        }
+        if let Some(problem) = &editor.guest_problem {
+            ui.colored_label(ui.visuals().warn_fg_color, problem);
+        }
+        for person in suggested {
+            if ui.button(person.label()).clicked() {
+                editor.add_guest(person, own);
+            }
+        }
+        let mut removed = None;
+        for guest in editor.listed_guests() {
+            ui.horizontal(|ui| {
+                let shown = Person {
+                    name: guest.name.clone(),
+                    email: guest.email.clone(),
+                };
+                ui.label(shown.label());
+                ui.checkbox(&mut guest.optional, "Optional");
+                if ui.button("Remove").clicked() {
+                    removed = Some(guest.email.clone());
+                }
+            });
+        }
+        if let Some(email) = removed {
+            editor.remove_guest(&email);
+        }
+    });
+}
+
 /// A date or time field of the editor; says whether it changed.
 fn field(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
     ui.add(egui::TextEdit::singleline(text).desired_width(width))
@@ -179,7 +227,7 @@ pub enum Edited {
 /// accounts allow (`MOD-05-F24`), and why changes are refused now, if they are; what saving
 /// does once the user saves. Until the event can be saved, the editor says why and **Save** is
 /// unavailable. An occurrence of a series offers to change its repetition in Google Calendar, as
-/// the app does not (`DEC-111`).
+/// the app does not (`DEC-111`). The people `suggested` are offered as guests.
 pub fn show(
     ui: &mut egui::Ui,
     editor: &mut Editor,
@@ -187,7 +235,9 @@ pub fn show(
     choices: &[(String, Vec<Calendar>)],
     accounts: &[Entry],
     refused: Option<&str>,
+    suggested: &[Person],
 ) -> Option<Edited> {
+    let own = editor.own_addresses(accounts);
     let mut open_series = false;
     let kinds = editor.kinds(accounts);
     egui::Grid::new("editor")
@@ -277,6 +327,13 @@ pub fn show(
                     .desired_width(FIELD_WIDTH),
             );
             ui.end_row();
+
+            // Google takes no guests for out of office and focus time.
+            if !editor.kind.timed_only() {
+                ui.label("Guests");
+                guests(ui, editor, suggested, &own);
+                ui.end_row();
+            }
 
             ui.label("Description");
             ui.add(

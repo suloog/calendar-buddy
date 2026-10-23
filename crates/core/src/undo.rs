@@ -56,6 +56,7 @@ impl Undo {
                 visibility: patch.visibility.map(|_| before.about.visibility),
                 recurrence: None,
                 color: patch.color.map(|_| before.about.color),
+                guests: (patch.guests.as_ref()).map(|_| before.about.guests.clone()),
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
             event,
@@ -150,6 +151,7 @@ mod tests {
     use crate::colors::EventColor;
     use crate::create::NO_TITLE;
     use crate::fixtures::{d, timed};
+    use crate::guests::{Guest, Person};
     use crate::model::{Access, Rgb, Show, Timing};
     use chrono_tz::Europe::Warsaw;
 
@@ -228,6 +230,10 @@ mod tests {
                 visibility: Some(crate::model::Visibility::Private),
                 recurrence: None,
                 color: Some(Some(EventColor::Tomato)),
+                guests: Some(vec![Guest::invited(&Person {
+                    name: String::new(),
+                    email: "adam@example.com".to_string(),
+                })]),
             },
             to: Some(calendar("team")),
         };
@@ -248,6 +254,7 @@ mod tests {
                 visibility: Some(crate::model::Visibility::Default),
                 recurrence: None,
                 color: Some(None),
+                guests: Some(Vec::new()),
             }
         );
         assert_eq!(undo.calendar, calendar("team"));

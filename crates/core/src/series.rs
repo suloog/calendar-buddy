@@ -190,6 +190,7 @@ pub fn change(
                     color: patch.color.unwrap_or(about.color),
                     // Sent with the rest of the series by copying the event at Google.
                     attachments: about.attachments.clone(),
+                    guests: (patch.guests.clone()).unwrap_or_else(|| about.guests.clone()),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
             };

@@ -18,6 +18,7 @@ use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
+use calendar_core::guests::{self, Person, Reach};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
@@ -549,6 +550,7 @@ impl CalendarApp {
         let mut cancelled = false;
         let mut open_series = None;
         let mut attachment = None;
+        let mut search = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -642,12 +644,36 @@ impl CalendarApp {
                         &self.settings,
                     ));
                     let accounts = self.accounts.list();
-                    match editor::show(ui, editor, &self.regional, &choices, accounts, refused) {
+                    let typed = editor.guest_field.trim().to_string();
+                    let account = editor.calendar.as_ref().map(|c| c.account_id.clone());
+                    // The people Google found, then the account's recent guests (`MOD-06-F03`).
+                    let found: Vec<Person> = match &account {
+                        Some(id) if !typed.is_empty() => (self.sync.people(id).iter().cloned())
+                            .chain(guests::recent(&self.cached, id))
+                            .collect(),
+                        _ => Vec::new(),
+                    };
+                    let own = editor.own_addresses(accounts);
+                    let suggested = guests::suggestions(&typed, &found, &editor.guests, &own);
+                    let regional = &self.regional;
+                    match editor::show(
+                        ui, editor, regional, &choices, accounts, refused, &suggested,
+                    ) {
                         Some(editor::Edited::Save(saved)) => save = Some(saved),
                         Some(editor::Edited::OpenSeries) => {
                             open_series = editor.opened.as_ref().map(|(event, _)| event.clone());
                         }
                         None => {}
+                    }
+                    // What is typed is searched for at Google as it changes, and in the account of
+                    // another calendar picked (`MOD-06-F02`).
+                    let now_typed = editor.guest_field.trim();
+                    let now_account = editor.calendar.as_ref().map(|c| c.account_id.clone());
+                    if let Some(id) = now_account
+                        && (now_typed != typed || account.as_ref() != Some(&id))
+                        && !now_typed.is_empty()
+                    {
+                        search = Some((id, now_typed.to_string()));
                     }
                 }
                 Dialog::Event(event, _) => {
@@ -830,6 +856,14 @@ impl CalendarApp {
         }
         if let Some(event) = open_series {
             self.open_series(&event);
+        }
+        if let Some((id, query)) = search {
+            // As far as the account allowed at sign-in (`DEC-52`).
+            let reach = (self.accounts.list().iter())
+                .find(|entry| entry.account.id == id)
+                .map(|entry| Reach::of(&entry.account))
+                .unwrap_or_default();
+            self.sync.suggest(&id, &query, reach);
         }
         if let Some(url) = attachment
             && let Err(error) = SystemBrowser.open(&url)
