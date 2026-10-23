@@ -1,6 +1,6 @@
 //! Signing in to Google (`MOD-01`): the OAuth 2.0 flow for installed apps with PKCE (S256), the
 //! system browser and a loopback redirect to `127.0.0.1` on a random port. Reading calendars and
-//! events is in `calendar` (`MOD-02`).
+//! events, and searching for people to invite, is in `calendar` (`MOD-02`, `MOD-06`).
 
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -54,6 +54,8 @@ pub struct Endpoints {
     pub revoke: String,
     /// The Google Calendar API's base URL.
     pub calendar: String,
+    /// The Google People API's base URL.
+    pub people: String,
 }
 
 impl Endpoints {
@@ -64,6 +66,7 @@ impl Endpoints {
             userinfo: "https://openidconnect.googleapis.com/v1/userinfo".into(),
             revoke: "https://oauth2.googleapis.com/revoke".into(),
             calendar: "https://www.googleapis.com/calendar/v3".into(),
+            people: "https://people.googleapis.com/v1".into(),
         }
     }
 }

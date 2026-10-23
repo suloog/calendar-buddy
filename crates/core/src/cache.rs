@@ -9,12 +9,13 @@ use chrono::{DateTime, NaiveDate, Utc};
 use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
 use crate::colors::EventColor;
+use crate::guests::{Guest, Response};
 use crate::model::{About, Access, Attachment, Calendar, Kind, Rgb, Show, Timing, Visibility};
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
 /// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 5;
+const VERSION: i64 = 6;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -47,6 +48,7 @@ const SCHEMA: &str = "
         kind TEXT NOT NULL,
         color TEXT,
         attachments TEXT NOT NULL,
+        guests TEXT NOT NULL,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -376,7 +378,7 @@ impl Cache {
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
                  series_id, original_start, description, location, show, visibility, etag, \
-                 organizer_only, kind, color, attachments FROM events",
+                 organizer_only, kind, color, attachments, guests FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -401,6 +403,7 @@ impl Cache {
                         color: (row.get::<_, Option<String>>(17)?)
                             .and_then(|key| parse_event_color(&key)),
                         attachments: parse_attachments(&row.get::<_, String>(18)?),
+                        guests: parse_guests(&row.get::<_, String>(19)?),
                     },
                     row.get::<_, String>(14)?,
                     row.get::<_, bool>(15)?,
@@ -462,7 +465,7 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         )
         .map_err(failed)?;
     for event in events {
@@ -507,6 +510,7 @@ fn insert(
                 kind_key(event.about.kind),
                 event.about.color.map(EventColor::name),
                 attachments_text(&event.about.attachments),
+                guests_text(&event.about.guests),
             ])
             .map_err(failed)?;
     }
@@ -618,6 +622,42 @@ fn parse_attachments(text: &str) -> Vec<Attachment> {
     let pairs: Vec<(String, String)> = serde_json::from_str(text).unwrap_or_default();
     (pairs.into_iter())
         .map(|(title, url)| Attachment { title, url })
+        .collect()
+}
+
+/// An event's guests as a JSON list of `[email, name, optional, response, own]`.
+fn guests_text(guests: &[Guest]) -> String {
+    let rows: Vec<(&str, &str, bool, &str, bool)> = (guests.iter())
+        .map(|guest| {
+            let response = match guest.response {
+                Response::Awaiting => "awaiting",
+                Response::Accepted => "accepted",
+                Response::Declined => "declined",
+                Response::Maybe => "maybe",
+            };
+            let (email, name) = (guest.email.as_str(), guest.name.as_str());
+            (email, name, guest.optional, response, guest.own)
+        })
+        .collect();
+    serde_json::to_string(&rows).expect("strings serialize")
+}
+
+fn parse_guests(text: &str) -> Vec<Guest> {
+    let rows: Vec<(String, String, bool, String, bool)> =
+        serde_json::from_str(text).unwrap_or_default();
+    (rows.into_iter())
+        .map(|(email, name, optional, response, own)| Guest {
+            email,
+            name,
+            optional,
+            response: match response.as_str() {
+                "accepted" => Response::Accepted,
+                "declined" => Response::Declined,
+                "maybe" => Response::Maybe,
+                _ => Response::Awaiting,
+            },
+            own,
+        })
         .collect()
 }
 
@@ -740,6 +780,22 @@ mod tests {
                         Attachment {
                             title: "Hotel, \"Lisboa\"\n2".into(),
                             url: "https://docs.google.com/document/d/2def/edit".into(),
+                        },
+                    ],
+                    guests: vec![
+                        Guest {
+                            email: "owner@example.com".into(),
+                            name: String::new(),
+                            optional: false,
+                            response: Response::Accepted,
+                            own: true,
+                        },
+                        Guest {
+                            email: "adam@example.com".into(),
+                            name: "Adam \"Kowalski\"".into(),
+                            optional: true,
+                            response: Response::Maybe,
+                            own: false,
                         },
                     ],
                 },

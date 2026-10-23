@@ -8,6 +8,7 @@ use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
+use calendar_core::guests::{Guest, Person, Reach, Response};
 use calendar_core::model::{About, Access, Attachment, Event, Kind, Rgb, Show, Visibility};
 use calendar_core::sync::shown_events;
 use calendar_core::view_model::grid_view;
@@ -17,7 +18,7 @@ use chrono_tz::Europe::{London, Warsaw};
 use serde_json::{Value, json};
 
 use crate::CLIENT_FILE;
-use crate::fake::{ACCOUNT_ID, CLIENT_ID, FakeGoogle, FakeStore, OTHER_ID};
+use crate::fake::{ACCOUNT_ID, CLIENT_ID, FakeGoogle, FakeStore, OTHER_ID, param};
 
 /// The fake clock's today: a Wednesday, in the week of 9–15 November 2026.
 fn today() -> NaiveDate {
@@ -1011,6 +1012,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             kind: Kind::Ordinary,
             color: None,
             attachments: Vec::new(),
+            guests: Vec::new(),
         }
     );
     assert_eq!(
@@ -1183,6 +1185,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             kind: Kind::Ordinary,
             color: Some(EventColor::Tomato),
             attachments: Vec::new(),
+            guests: Vec::new(),
         },
         recurrence: Vec::new(),
     };
@@ -1691,9 +1694,11 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
             end: at(10) + chrono::Duration::minutes(15),
             zone: Warsaw,
         },
-        // The series' colour, as synchronized.
+        // The series' colour and guests, as synchronized.
         about: About {
             color: Some(EventColor::Banana),
+            // As known from the occurrence, unanswered; Google's own answer of the series stays.
+            guests: vec![Guest::invited(&person("", "guest@example.com"))],
             ..About::default()
         },
         recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6".into()],
@@ -1710,11 +1715,13 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
     let copy = google.event(ACCOUNT_ID, "work", &id).unwrap();
     assert_ne!(id, "weekly");
     assert_eq!(copy["attendees"][0]["email"], "guest@example.com");
+    assert_eq!(copy["attendees"][0]["responseStatus"], "accepted");
     assert_eq!(copy["reminders"]["overrides"][0]["minutes"], 5);
     assert_eq!(copy["colorId"], "5");
     // A colour taken away for the new series is not copied from the old.
     let without = google.event(ACCOUNT_ID, "work", &without).unwrap();
     assert_eq!(without.get("colorId"), None);
+    assert_eq!(without.get("attendees"), None);
     assert_eq!(copy["start"]["dateTime"], "2026-12-14T11:00:00+01:00");
     assert_eq!(
         copy["recurrence"],
@@ -1727,4 +1734,291 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
             .iter()
             .any(|r| r.starts_with("POST ") && r.contains("conferenceDataVersion=1"))
     );
+}
+
+fn person(name: &str, email: &str) -> Person {
+    Person {
+        name: name.to_string(),
+        email: email.to_string(),
+    }
+}
+
+#[test]
+fn events_come_with_their_guests_their_answers_and_the_accounts_own_entry() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("guests");
+    let mut kickoff = timed(
+        "kickoff",
+        "Kickoff",
+        "2026-11-13T10:00:00+01:00",
+        "2026-11-13T11:00:00+01:00",
+    );
+    kickoff["attendees"] = json!([
+        {"email": "owner@example.com", "self": true, "organizer": true, "responseStatus": "accepted"},
+        {"email": "adam@example.com", "displayName": "Adam Kowalski", "responseStatus": "tentative"},
+        {"email": "ewa@example.com", "optional": true, "responseStatus": "declined"},
+        {"email": "jan@example.com", "responseStatus": "needsAction"},
+        // Without an address, as Google may send one: it cannot be invited again.
+        {"displayName": "Someone", "responseStatus": "accepted"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", kickoff);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(
+        cached(&cache, "work", "kickoff").unwrap().about.guests,
+        [
+            Guest {
+                response: Response::Accepted,
+                own: true,
+                ..Guest::invited(&person("", "owner@example.com"))
+            },
+            Guest {
+                response: Response::Maybe,
+                ..Guest::invited(&person("Adam Kowalski", "adam@example.com"))
+            },
+            Guest {
+                optional: true,
+                response: Response::Declined,
+                ..Guest::invited(&person("", "ewa@example.com"))
+            },
+            Guest::invited(&person("", "jan@example.com")),
+        ]
+    );
+    assert_eq!(cached(&cache, "work", "standup").unwrap().about.guests, []);
+}
+
+#[test]
+fn a_new_event_with_guests_is_created_with_them_and_google_sends_the_invitations() {
+    let (google, store, dir, client_file, cache) = synchronized_once("invite");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let mut kickoff = planning();
+    kickoff.about.guests = vec![
+        Guest::invited(&person("Adam Kowalski", "adam@example.com")),
+        Guest {
+            optional: true,
+            ..Guest::invited(&person("", "ewa@example.com"))
+        },
+    ];
+
+    let invited = session.create(&work, &kickoff).unwrap();
+    let alone = session.create(&work, &planning()).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let sent = google.event(ACCOUNT_ID, "work", &invited).unwrap();
+    assert_eq!(
+        sent["attendees"],
+        json!([
+            {"email": "adam@example.com", "displayName": "Adam Kowalski", "responseStatus": "needsAction"},
+            {"email": "ewa@example.com", "optional": true, "responseStatus": "needsAction"}
+        ])
+    );
+    let creations: Vec<String> = (google.requests().into_iter())
+        .filter(|r| r.starts_with("POST /calendar/v3/calendars/work/events"))
+        .collect();
+    assert_eq!(
+        creations,
+        [
+            "POST /calendar/v3/calendars/work/events?sendUpdates=all",
+            "POST /calendar/v3/calendars/work/events",
+        ]
+    );
+    let alone = google.event(ACCOUNT_ID, "work", &alone).unwrap();
+    assert_eq!(alone.get("attendees"), None);
+}
+
+#[test]
+fn an_events_guests_are_patched_whole_and_those_google_has_no_entry_for_go_unanswered() {
+    let (google, store, dir, client_file, cache) = synchronized_once("patch-guests");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = google.event(ACCOUNT_ID, "work", "standup").unwrap()["etag"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let patch = Patch {
+        guests: Some(vec![
+            Guest {
+                response: Response::Accepted,
+                own: true,
+                ..Guest::invited(&person("", "owner@example.com"))
+            },
+            Guest {
+                response: Response::Maybe,
+                ..Guest::invited(&person("Adam", "adam@example.com"))
+            },
+        ]),
+        ..Patch::default()
+    };
+
+    let patched = session.update(&work, "standup", &etag, &patch);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(patched.is_ok());
+    let [(_, sent)] = google.patched().try_into().unwrap();
+    assert_eq!(
+        sent,
+        json!({"attendees": [
+            {"email": "owner@example.com", "responseStatus": "needsAction"},
+            {"email": "adam@example.com", "displayName": "Adam", "responseStatus": "needsAction"}
+        ]})
+    );
+    // Without the notify question of `US-06-03`, Google is not asked to e-mail the guests.
+    assert!(
+        (google.requests().iter())
+            .filter(|r| r.starts_with("PATCH "))
+            .all(|r| !r.contains("sendUpdates"))
+    );
+}
+
+#[test]
+fn people_are_searched_in_contacts_and_other_contacts_after_a_warm_up_and_in_the_directory_if_reached()
+ {
+    let (google, store, dir, client_file, _cache) = synchronized_once("people");
+    google.add_contact(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+    google.add_contact(ACCOUNT_ID, "Ewa Nowak", "ewa@example.com");
+    google.add_other_contact(ACCOUNT_ID, "", "adam.k@mail.example.com");
+    google.add_colleague(ACCOUNT_ID, "Adam Nowak", "adam.nowak@example.com");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let contacts = Reach {
+        contacts: true,
+        directory: false,
+    };
+    let everywhere = Reach {
+        contacts: true,
+        directory: true,
+    };
+
+    let personal = session.people("ada", contacts);
+    let workspace = session.people("ADA", everywhere);
+    let nowhere = session.people("ada", Reach::default());
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(
+        personal,
+        [
+            person("Adam Kowalski", "adam@example.com"),
+            person("", "adam.k@mail.example.com"),
+        ]
+    );
+    assert_eq!(
+        workspace,
+        [
+            person("Adam Kowalski", "adam@example.com"),
+            person("", "adam.k@mail.example.com"),
+            person("Adam Nowak", "adam.nowak@example.com"),
+        ]
+    );
+    assert_eq!(nowhere, []);
+    let searches: Vec<String> = (google.requests().into_iter())
+        .filter(|r| r.starts_with("GET /people/v1/"))
+        .map(|r| {
+            let url = Url::parse(&format!("http://127.0.0.1{}", &r["GET ".len()..])).unwrap();
+            format!("{} {}", url.path(), param(&url, "query").unwrap())
+        })
+        .collect();
+    // One warm-up of each contact search, the first time only; the directory needs none.
+    assert_eq!(
+        searches,
+        [
+            "/people/v1/people:searchContacts ",
+            "/people/v1/otherContacts:search ",
+            "/people/v1/people:searchContacts ada",
+            "/people/v1/otherContacts:search ada",
+            "/people/v1/people:searchContacts ADA",
+            "/people/v1/otherContacts:search ADA",
+            "/people/v1/people:searchDirectoryPeople ADA",
+        ]
+    );
+}
+
+#[test]
+fn a_search_google_does_not_answer_suggests_nobody_from_there() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("people-offline");
+    google.add_contact(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    google.disconnect();
+
+    let found = session.people(
+        "ada",
+        Reach {
+            contacts: true,
+            directory: true,
+        },
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(found, []);
+}
+
+#[test]
+fn a_guest_change_keeps_what_google_keeps_of_each_guest_but_optional_and_their_name() {
+    let (google, store, dir, client_file, cache) = synchronized_once("merge-guests");
+    let mut kept = google.event(ACCOUNT_ID, "work", "standup").unwrap();
+    kept["attendees"] = json!([
+        {"email": "owner@example.com", "self": true, "organizer": true, "responseStatus": "accepted"},
+        {"email": "Ewa@example.com", "responseStatus": "declined", "comment": "On leave",
+            "additionalGuests": 1, "optional": true},
+        {"email": "room@resource.calendar.google.com", "resource": true, "responseStatus": "accepted"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", kept);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = google.event(ACCOUNT_ID, "work", "standup").unwrap()["etag"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // As an occurrence knows them: Ewa's answer there differs from the series'.
+    let patch = Patch {
+        guests: Some(vec![
+            Guest {
+                own: true,
+                ..Guest::invited(&person("", "owner@example.com"))
+            },
+            Guest {
+                response: Response::Accepted,
+                ..Guest::invited(&person("Ewa", "ewa@example.com"))
+            },
+            Guest::invited(&person("", "room@resource.calendar.google.com")),
+            Guest::invited(&person("", "adam@example.com")),
+        ]),
+        ..Patch::default()
+    };
+
+    let patched = session.update(&work, "standup", &etag, &patch);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(patched.is_ok());
+    let [(_, sent)] = google.patched().try_into().unwrap();
+    assert_eq!(
+        sent["attendees"],
+        json!([
+            {"email": "owner@example.com", "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "Ewa@example.com", "displayName": "Ewa", "responseStatus": "declined",
+                "comment": "On leave", "additionalGuests": 1},
+            {"email": "room@resource.calendar.google.com", "resource": true, "responseStatus": "accepted"},
+            {"email": "adam@example.com", "responseStatus": "needsAction"}
+        ])
+    );
+}
+
+#[test]
+fn a_contact_warm_up_that_did_not_get_through_is_tried_again_at_the_next_search() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("warm-up-again");
+    google.add_contact(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let contacts = Reach {
+        contacts: true,
+        directory: false,
+    };
+    google.disconnect();
+    assert_eq!(session.people("ada", contacts), []);
+    google.recover();
+
+    let found = session.people("ada", contacts);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(found, [person("Adam Kowalski", "adam@example.com")]);
 }

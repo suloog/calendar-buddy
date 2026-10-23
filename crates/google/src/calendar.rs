@@ -1,9 +1,10 @@
 //! Reading an account's calendars and events from the Google Calendar API (`MOD-02`) into the
 //! app's own model: the calendar list with Google's colours, and each calendar's events within the
 //! cache window, series as master plus exceptions (not expanded by Google), then only what changed
-//! since (`syncToken`).
+//! since (`syncToken`). People to invite are searched for in the account's contacts and its
+//! organization's directory with the Google People API (`MOD-06`).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -13,6 +14,7 @@ use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
+use calendar_core::guests::{Guest, Person, Reach, Response, same};
 use calendar_core::model::{About, Attachment, Calendar, Kind, Show, Timing, Visibility};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
@@ -28,6 +30,12 @@ use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, refresh};
 /// Google's largest pages: fewer requests for the first full synchronization.
 const CALENDARS_PER_PAGE: &str = "250";
 const EVENTS_PER_PAGE: &str = "2500";
+
+/// How many people each search of the People API asks for.
+const PEOPLE_PER_SEARCH: &str = "10";
+
+/// The People API's searches of the account's contacts and of the people it has e-mailed.
+const CONTACT_SEARCHES: [&str; 2] = ["people:searchContacts", "otherContacts:search"];
 
 /// How long an access token is used before a new one is asked for; Google's last an hour.
 const ACCESS_FOR: Duration = Duration::from_secs(45 * 60);
@@ -70,6 +78,8 @@ pub struct Session {
     refresh_token: String,
     /// The access token in use and when it was issued; `None` once Google refused it.
     access: RefCell<Option<(String, Instant)>>,
+    /// Whether the People API's contact searches were warmed up, as Google asks before the first.
+    warmed: Cell<bool>,
 }
 
 impl Session {
@@ -101,6 +111,7 @@ impl Session {
             account_id: account_id.to_string(),
             refresh_token,
             access: RefCell::new(None),
+            warmed: Cell::new(false),
         };
         session.access_token()?;
         Ok(session)
@@ -125,6 +136,17 @@ impl Session {
         url.path_segments_mut()
             .expect("a base URL")
             .extend(segments);
+        url
+    }
+
+    /// The People API's search, for `query`, of names and e-mail addresses.
+    fn people_url(&self, search: &str, query: &str) -> Url {
+        let mut url = Url::parse(&self.endpoints.people).expect("a valid People API URL");
+        url.path_segments_mut().expect("a base URL").push(search);
+        url.query_pairs_mut()
+            .append_pair("query", query)
+            .append_pair("readMask", "names,emailAddresses")
+            .append_pair("pageSize", PEOPLE_PER_SEARCH);
         url
     }
 
@@ -321,6 +343,9 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
     if let Some(color) = event.about.color {
         fields["colorId"] = json!(color_id(color));
     }
+    if !event.about.guests.is_empty() {
+        fields["attendees"] = attendees(&event.about.guests, &[]);
+    }
     // Out of office and focus time with what Google Calendar sets them up with: new invitations
     // that clash are declined, and chat is set to do not disturb during focus time; both busy.
     match event.about.kind {
@@ -348,6 +373,46 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
         unreachable!("an object");
     };
     fields
+}
+
+/// Google's `attendees` of an event for the guests. A guest Google keeps an entry for in `kept`
+/// keeps it as it is, with their answer, comment, additional guests and room mark, but for being
+/// optional and their name: changing the guests, or copying them from an occurrence to its
+/// series, changes nobody's answer. Another guest is new to the event, and sent unanswered.
+/// Google gives the account's own entry its `self` mark.
+fn attendees(guests: &[Guest], kept: &[Value]) -> Value {
+    let attendees: Vec<Value> = (guests.iter())
+        .map(|guest| {
+            let entry = kept.iter().find(|attendee| {
+                (attendee["email"].as_str()).is_some_and(|email| same(email, &guest.email))
+            });
+            if let Some(Value::Object(entry)) = entry {
+                let mut attendee = entry.clone();
+                attendee.remove("optional");
+                if guest.optional {
+                    attendee.insert("optional".into(), json!(true));
+                }
+                if !guest.name.is_empty() {
+                    attendee.insert("displayName".into(), json!(guest.name));
+                }
+                return Value::Object(attendee);
+            }
+            let mut attendee = json!({"email": guest.email, "responseStatus": "needsAction"});
+            if !guest.name.is_empty() {
+                attendee["displayName"] = json!(guest.name);
+            }
+            if guest.optional {
+                attendee["optional"] = json!(true);
+            }
+            attendee
+        })
+        .collect();
+    Value::Array(attendees)
+}
+
+/// The entries of Google's `attendees`; none when it has none.
+fn kept_list(attendees: &Value) -> &[Value] {
+    attendees.as_array().map_or(&[], Vec::as_slice)
 }
 
 /// A new event's ID, as Google answers its creation.
@@ -494,8 +559,12 @@ impl Provider for Session {
         self.fetch(url, calendar)
     }
 
+    /// Google e-mails the invitations to a new event's guests (`MOD-06-F08`).
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
-        let url = self.url(&["calendars", &calendar.id, "events"]);
+        let mut url = self.url(&["calendars", &calendar.id, "events"]);
+        if !event.about.guests.is_empty() {
+            url.query_pairs_mut().append_pair("sendUpdates", "all");
+        }
         let change = Value::Object(fields(event));
         Ok(self.post::<Created>(url, Some(&change))?.id)
     }
@@ -522,9 +591,17 @@ impl Provider for Session {
         ] {
             event.remove(own);
         }
-        // The new series has the colour `new` gives it, none included.
+        // The new series has the colour and the guests `new` gives it, none included; the
+        // guests keep what Google keeps of them.
         event.remove("colorId");
+        let kept = event.remove("attendees").unwrap_or_default();
         event.extend(fields(new));
+        if !new.about.guests.is_empty() {
+            event.insert(
+                "attendees".into(),
+                attendees(&new.about.guests, kept_list(&kept)),
+            );
+        }
         let mut url = self.url(&["calendars", &calendar.id, "events"]);
         url.query_pairs_mut()
             .append_pair("conferenceDataVersion", "1")
@@ -562,6 +639,15 @@ impl Provider for Session {
             patch.color.map(|color| json!(color.map(color_id))),
         );
         let url = self.url(&["calendars", &calendar.id, "events", id]);
+        // Sent without e-mails to the guests: asking whether to send them is `US-06-03`'s. What
+        // Google keeps of each guest is read first, as the list is replaced whole.
+        if let Some(guests) = &patch.guests {
+            let kept = self.get::<Value>(url.clone())?.unwrap_or_default();
+            set(
+                "attendees",
+                Some(attendees(guests, kept_list(&kept["attendees"]))),
+            );
+        }
         Ok(self
             .patch::<Version>(url, &Value::Object(change), version(etag))?
             .etag)
@@ -594,6 +680,38 @@ impl Provider for Session {
         Ok(self.patch::<Version>(url, &change, None)?.etag)
     }
 
+    /// The account's contacts, the people it has e-mailed and its organization's directory,
+    /// each searched as `reach` allows; a search Google does not answer adds nobody.
+    fn people(&self, query: &str, reach: Reach) -> Vec<Person> {
+        let mut found = Vec::new();
+        if reach.contacts {
+            // Google searches a cache it brings up to date on an empty search; tried again at
+            // the next search until both get through.
+            if !self.warmed.get() {
+                let warmed = CONTACT_SEARCHES
+                    .map(|search| self.get::<Value>(self.people_url(search, "")).is_ok());
+                self.warmed.set(warmed.iter().all(|ok| *ok));
+            }
+            for search in CONTACT_SEARCHES {
+                if let Ok(Some(answer)) = self.get::<Results>(self.people_url(search, query)) {
+                    found.extend(answer.results.into_iter().map(|result| result.person));
+                }
+            }
+        }
+        if reach.directory {
+            let mut url = self.people_url("people:searchDirectoryPeople", query);
+            url.query_pairs_mut()
+                .append_pair("sources", "DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE");
+            if let Ok(Some(answer)) = self.get::<Directory>(url) {
+                found.extend(answer.people);
+            }
+        }
+        found
+            .into_iter()
+            .flat_map(GooglePerson::into_people)
+            .collect()
+    }
+
     fn default_length(&self) -> Result<u32, SyncError> {
         #[derive(Deserialize)]
         struct Setting {
@@ -607,6 +725,62 @@ impl Provider for Session {
             .value
             .parse()
             .map_err(|_| SyncError("Google's answer could not be read".into()))
+    }
+}
+
+/// The People API's answer to a search of contacts.
+#[derive(Deserialize)]
+struct Results {
+    #[serde(default)]
+    results: Vec<Found>,
+}
+
+#[derive(Deserialize)]
+struct Found {
+    person: GooglePerson,
+}
+
+/// The People API's answer to a search of the directory.
+#[derive(Deserialize)]
+struct Directory {
+    #[serde(default)]
+    people: Vec<GooglePerson>,
+}
+
+/// A People API `person`, with only what the app uses.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GooglePerson {
+    #[serde(default)]
+    names: Vec<PersonName>,
+    #[serde(default)]
+    email_addresses: Vec<PersonAddress>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersonName {
+    display_name: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PersonAddress {
+    value: Option<String>,
+}
+
+impl GooglePerson {
+    /// One person to invite for each of their addresses, under their first name.
+    fn into_people(self) -> Vec<Person> {
+        let name = (self.names.into_iter())
+            .find_map(|name| name.display_name)
+            .unwrap_or_default();
+        (self.email_addresses.into_iter())
+            .filter_map(|address| address.value.filter(|value| !value.is_empty()))
+            .map(|email| Person {
+                name: name.clone(),
+                email,
+            })
+            .collect()
     }
 }
 
@@ -665,6 +839,39 @@ struct GoogleEvent {
     color_id: Option<String>,
     #[serde(default)]
     attachments: Vec<GoogleAttachment>,
+    #[serde(default)]
+    attendees: Vec<GoogleAttendee>,
+}
+
+/// One of Google's `attendees` of an event.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleAttendee {
+    email: Option<String>,
+    display_name: Option<String>,
+    #[serde(default)]
+    optional: bool,
+    response_status: Option<String>,
+    #[serde(rename = "self", default)]
+    is_self: bool,
+}
+
+impl GoogleAttendee {
+    /// The guest as the app keeps them; `None` without an address, which cannot be invited again.
+    fn into_guest(self) -> Option<Guest> {
+        Some(Guest {
+            email: self.email.filter(|email| !email.is_empty())?,
+            name: self.display_name.unwrap_or_default(),
+            optional: self.optional,
+            response: match self.response_status.as_deref() {
+                Some("accepted") => Response::Accepted,
+                Some("declined") => Response::Declined,
+                Some("tentative") => Response::Maybe,
+                _ => Response::Awaiting,
+            },
+            own: self.is_self,
+        })
+    }
 }
 
 /// One of Google's `attachments` of an event: a file, mostly on Google Drive.
@@ -784,6 +991,9 @@ impl GoogleEvent {
                 color: self.color_id.as_deref().and_then(event_color),
                 attachments: (self.attachments.into_iter())
                     .filter_map(GoogleAttachment::into_attachment)
+                    .collect(),
+                guests: (self.attendees.into_iter())
+                    .filter_map(GoogleAttendee::into_guest)
                     .collect(),
             },
             etag: self.etag,

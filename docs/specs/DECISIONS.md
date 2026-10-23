@@ -1452,3 +1452,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-120] Guest suggestions: what matches, in what order, and what Enter adds
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-01
+- **Affects:** `US-06-01`, `MOD-06-F01`, `MOD-06-F02`, `MOD-06-F03`, `MOD-06-F04`, `DEC-39`, `DEC-52`
+- **Decision:** What is typed in the guest field suggests the people whose name, a word of their name or whose address starts with it, ignoring case: first those Google finds (People API `searchContacts`, then `otherContacts.search`, both warmed up once per run with an empty search, then `searchDirectoryPeople` with the domain profiles, only on an account that granted the directory at sign-in), then the guests of the account's cached events, those of the latest events first. Each address is suggested once, never one already invited or one of the user's own (the account's address and the calendar's ID), and at most 8 are shown. Enter adds the address typed when it is a valid one, otherwise the first person suggested; a click adds the person clicked. An address is valid with one `@`, something before it, a domain of at least two non-empty dot-separated parts after it, and no spaces; otherwise it is not added and the field says "This is not a valid e-mail address." A Google search that fails, e.g. offline, adds nobody; the recent guests are still suggested.
+- **Why:** Google Calendar suggests people by the start of their name or address as one list, and its Enter picks the highlighted (first) suggestion (`DEC-62`); keeping an address typed in full avoids replacing it with a longer one that merely starts the same way. The cache holds no "invited by me" mark, so the guests of the account's events stand for the addresses it has invited.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-121] Guests are sent whole with their answers; invitations e-mailed for new events only, until the notify question
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-01
+- **Affects:** `US-06-01`, `US-06-03`, `MOD-06-F06`, `MOD-06-F07`, `MOD-06-F08`, `MOD-06-F12`
+- **Decision:** A new event with guests is created with `sendUpdates=all`, so Google e-mails the invitations. A change to an existing event's guests patches Google's `attendees` whole, each guest with their address, name, `optional` when marked optional, and the `responseStatus` they gave, and without `sendUpdates`, so Google e-mails nobody, until `US-06-03` asks the user (`MOD-06-F12`). The account's own entry (Google's `self`) is kept in the list sent but not shown among the guests in the editor. Out of office and focus time take no guests, as Google allows none there. A guest is required unless marked optional, as in Google.
+- **Why:** The story leaves the notify question to `US-06-03`; sending nothing until then is the API's default, and e-mailing everyone on any change would be the surprise. Resending each guest's answer, and the account's own entry, keeps the answers and the organizer as Google had them when the list is replaced.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-122] A guest change keeps what Google keeps of each guest
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-01
+- **Affects:** `US-06-01`, `MOD-06-F06`, `MOD-06-F07`, `MOD-05-F20`, `DEC-120`, `DEC-121`
+- **Decision:** Refines `DEC-121`. Before the guests of an existing event are sent, the event is read from Google, and each guest Google already has keeps their entry as Google keeps it: their answer, comment, additional guests, room mark and organizer mark. Only whether they are optional, and their name where the app knows one, are set by the app. Guests new to the event are sent unanswered. The same applies when "this and following" copies the series' guests to the new series, and when a change to one occurrence is applied to all events. Refines `DEC-120`: the contact searches' warm-up is tried again at the next search until both warm-ups get through.
+- **Why:** Google replaces the attendee list whole, and the app does not model every attendee field. Taking the answers from the occurrence opened would copy one occurrence's answers to the whole series. Without a warm-up, Google's contact searches may find nobody.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

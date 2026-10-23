@@ -116,7 +116,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-06-01` | As a User, I can invite people to an event with suggestions from my contacts, recent guests and my organization, so that inviting a colleague takes a few keystrokes | F01, F02, F03, F04, F06, F07, F08 | must | ready | `US-05-02` | — |
+| `US-06-01` | As a User, I can invite people to an event with suggestions from my contacts, recent guests and my organization, so that inviting a colleague takes a few keystrokes | F01, F02, F03, F04, F06, F07, F08 | must | review | `US-05-02` | — |
 | `US-06-02` | As a User, I can see who is invited and how each guest answered, so that I know who is coming | F05, U01 | must | ready | `US-02-01` | — |
 | `US-06-03` | As a User, I am asked whether to notify guests when I change or delete an event, so that I decide when people get an e-mail | F12 | must | ready | `US-06-01`, `US-05-03` | — |
 | `US-06-04` | As a User, I can spot invitations waiting for my answer and list them, so that none slips through | F09, F10, F21, U04 | must | ready | `US-02-01` | — |

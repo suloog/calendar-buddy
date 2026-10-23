@@ -266,3 +266,25 @@ Real Google, the drawn links and the browser opening are not. A choice to ratify
 
 - [ ] `TC-05-11` / `US-05-10#1` (real Google, a person's eyes) — in the browser, attach a Google Drive document to an event this week. Run `cargo run -p calendar-buddy` and open the event: its details list the attachment by its name, as a 📎 link.
 - [ ] `TC-05-11` / `US-05-10#2` (real Google, KDE session) — choose the attachment: the document opens in the default browser. Delete the test event afterwards.
+
+## US-06-01
+
+Needs the owner's real Google accounts (one personal, one Workspace with the directory granted), a second mailbox the owner can read, the KDE session and a person's eyes. Against the fake Google, these tests prove that guests are read from and sent to Google's `attendees`, that a new event with guests is created with `sendUpdates=all`, that a guest change keeps what Google keeps of each guest, and that people are searched for (contacts and other contacts after a warm-up, the directory only where granted) and suggested together with recent guests:
+- app: `tc_06_01_typing_part_of_a_name_suggests_contacts_and_recent_guests_and_saving_invites_them`, `tc_06_02_on_a_workspace_account_a_colleague_from_the_directory_is_suggested`, `without_the_directory_granted_at_sign_in_no_colleague_is_suggested_or_asked_for`, `guests_are_added_to_and_removed_from_an_existing_event_at_google`, `of_the_browsing_and_the_guest_searches_waiting_only_the_last_of_each_is_done`;
+- core: `guests_are_added_by_address_or_from_a_suggestion_and_saved_with_a_new_event`, `an_address_that_is_not_one_is_not_added_and_the_field_says_why`, `a_guest_added_twice_is_added_once_and_the_users_own_address_is_ignored`, `guests_are_added_to_and_removed_from_an_existing_event_the_account_itself_kept`, `enter_adds_the_address_typed_or_else_the_first_person_suggested`, `out_of_office_is_saved_without_guests_as_google_takes_none`, the `guests::tests` (address rule, matching, leaving out, at most 8, recent guests), `undoing_an_edit_restores_every_field_changed_and_moves_the_event_back`, `calendars_and_events_come_back_as_they_were_written`;
+- google: `events_come_with_their_guests_their_answers_and_the_accounts_own_entry`, `a_new_event_with_guests_is_created_with_them_and_google_sends_the_invitations`, `an_events_guests_are_patched_whole_and_those_google_has_no_entry_for_go_unanswered`, `a_guest_change_keeps_what_google_keeps_of_each_guest_but_optional_and_their_name`, `people_are_searched_in_contacts_and_other_contacts_after_a_warm_up_and_in_the_directory_if_reached`, `a_search_google_does_not_answer_suggests_nobody_from_there`, `a_contact_warm_up_that_did_not_get_through_is_tried_again_at_the_next_search`, `a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fields`.
+
+What real Google and the People API answer, the e-mail Google sends, and what the editor looks like are not proven. Choices to ratify: `DEC-120` (matching, order, at most 8 suggestions, what Enter adds, the address rule), `DEC-121` and `DEC-122` (invitations e-mailed for new events only until `US-06-03`; a guest change keeps Google's entry for each guest).
+
+- [ ] `TC-06-13` / `US-06-01#6` (real Google, second mailbox): in the app, create "Invite check" tomorrow at 12:00 with the second mailbox as a guest, and save. The second mailbox receives Google's invitation e-mail. Delete the event afterwards.
+- [ ] `TC-06-01` / `US-06-01#1`, `#2` (real Google, a person's eyes): in the editor of a new event, the **Guests** row:
+  - Typing part of a contact's name lists them (name and address) within a moment.
+  - An address invited to an earlier event is listed too.
+  - Enter or a click adds a guest; Tab reaches the suggestions.
+  - Typing a full address and pressing Enter adds it.
+  - "adam@example" with Enter shows "This is not a valid e-mail address." and adds nothing.
+  - The account's own address is never added.
+- [ ] `TC-06-02` / `US-06-01#3` (real Workspace account): typing a colleague who is not in the contacts suggests them from the directory. On a Workspace account connected without the directory permission, no colleague is suggested.
+- [ ] `US-06-01#4`, `#5` (real Google, a person's eyes):
+  - Mark a guest **Optional** and save: Google Calendar in the browser shows them as optional.
+  - Open an existing event with guests, remove one and add another, and save. In the browser the guest list matches, and the guests who stayed keep their answers.

@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::colors::EventColor;
+use crate::guests::Guest;
 use crate::sync::Start;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -178,6 +179,9 @@ pub struct About {
     pub color: Option<EventColor>,
     /// The files attached to it, which the app only shows; they are added in Google (`DEC-37`).
     pub attachments: Vec<Attachment>,
+    /// The people invited to it, the account itself included when it is one of them
+    /// (`MOD-06-F01`).
+    pub guests: Vec<Guest>,
 }
 
 /// A file attached to an event, listed by name and opened in the browser (`MOD-05-F26`).

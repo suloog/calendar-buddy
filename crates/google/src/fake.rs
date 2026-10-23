@@ -1,5 +1,5 @@
 //! Fakes for the tests: Google (its consent screen, as seen through the browser, its token
-//! service, user info and the Calendar API) and the secret store. Nothing here leaves
+//! service, user info, the Calendar API and the People API's searches) and the secret store. Nothing here leaves
 //! `127.0.0.1`.
 
 use std::collections::{HashMap, VecDeque};
@@ -79,6 +79,13 @@ struct State {
     default_lengths: Vec<(&'static str, u32)>,
     /// Every patch of an event the app sent: the version it was sent against and the patch.
     patched: Vec<(String, Value)>,
+    /// People the People API finds for each account: the search that finds them
+    /// (`people:searchContacts`, `otherContacts:search` or `people:searchDirectoryPeople`) and
+    /// the `person`.
+    people: Vec<(&'static str, &'static str, Value)>,
+    /// The contact searches warmed up for each account with an empty search, as Google asks;
+    /// until then they find nobody.
+    warmed: Vec<(&'static str, String)>,
 }
 
 impl State {
@@ -223,6 +230,7 @@ impl FakeGoogle {
                 userinfo: format!("{base}/userinfo"),
                 revoke: format!("{base}/revoke"),
                 calendar: format!("{base}/calendar/v3"),
+                people: format!("{base}/people/v1"),
             },
             state,
         }
@@ -322,6 +330,30 @@ impl FakeGoogle {
         let mut state = self.state.lock().unwrap();
         state.default_lengths.retain(|(owner, _)| *owner != account);
         state.default_lengths.push((account, minutes));
+    }
+
+    /// Someone in the account's Google Contacts.
+    pub fn add_contact(&self, account: &'static str, name: &str, email: &str) {
+        self.add_person(account, "people:searchContacts", name, email);
+    }
+
+    /// Someone the account has e-mailed, in its "other contacts".
+    pub fn add_other_contact(&self, account: &'static str, name: &str, email: &str) {
+        self.add_person(account, "otherContacts:search", name, email);
+    }
+
+    /// A colleague in the directory of the account's organization.
+    pub fn add_colleague(&self, account: &'static str, name: &str, email: &str) {
+        self.add_person(account, "people:searchDirectoryPeople", name, email);
+    }
+
+    fn add_person(&self, account: &'static str, search: &'static str, name: &str, email: &str) {
+        let person = json!({
+            "resourceName": format!("people/{}", email),
+            "names": [{"displayName": name}],
+            "emailAddresses": [{"value": email}],
+        });
+        (self.state.lock().unwrap().people).push((account, search, person));
     }
 
     /// The access tokens given out expire.
@@ -492,6 +524,17 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         .lines()
         .find_map(|line| line.split_once("Bearer "))
         .and_then(|(_, token)| state.access.get(token.trim()).copied());
+    if head.starts_with("GET /people/v1/") {
+        let answer = match bearer {
+            Some(account) => people_api(&mut state, account, request[1]),
+            None => (
+                "401 Unauthorized",
+                r#"{"error": {"code": 401, "message": "Invalid Credentials"}}"#.to_string(),
+            ),
+        };
+        respond(&mut stream, answer);
+        return;
+    }
     let insert = head.starts_with("POST /calendar/v3/");
     let patch = head.starts_with("PATCH /calendar/v3/");
     let delete = head.starts_with("DELETE /calendar/v3/");
@@ -643,9 +686,10 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
                 CALENDARS_PER_PAGE,
             )
         }
-        // `events.get`: one event, deleted ones included, as Google keeps them for a while.
+        // `events.get`: one event, deleted ones included, as Google keeps them for a while, or an
+        // occurrence of a series.
         [_, _, calendars, id, events, event] if calendars == "calendars" && events == "events" => {
-            return match state.kept_event(account, id, event) {
+            return match state.event_or_occurrence(account, id, event) {
                 Some(event) => ("200 OK", event.to_string()),
                 None => not_found(),
             };
@@ -735,6 +779,58 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
     ("200 OK", answer.to_string())
 }
 
+/// The People API's searches: the people whose name, a word of it or address starts with the
+/// query, ignoring case; contact searches find nobody until warmed up with an empty query.
+fn people_api(state: &mut State, account: &'static str, target: &str) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let Some(search) = segments(&url).last().cloned() else {
+        return not_found();
+    };
+    let query = param(&url, "query").unwrap_or_default().to_lowercase();
+    let directory = search == "people:searchDirectoryPeople";
+    if directory && param(&url, "sources").is_none() {
+        return (
+            "400 Bad Request",
+            r#"{"error": {"code": 400, "message": "Request must specify sources."}}"#.to_string(),
+        );
+    }
+    let warmed = |state: &State| {
+        (state.warmed.iter()).any(|(owner, warmed)| *owner == account && *warmed == search)
+    };
+    if query.is_empty() {
+        if !directory && !warmed(state) {
+            state.warmed.push((account, search.clone()));
+        }
+        return ("200 OK", "{}".to_string());
+    }
+    let found: Vec<Value> = (state.people.iter())
+        .filter(|(owner, of, _)| *owner == account && *of == search)
+        .map(|(_, _, person)| person.clone())
+        .filter(|person| {
+            let name = person["names"][0]["displayName"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase();
+            let email = person["emailAddresses"][0]["value"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase();
+            name.split_whitespace().any(|word| word.starts_with(&query))
+                || email.starts_with(&query)
+        })
+        .filter(|_| directory || warmed(state))
+        .collect();
+    let answer = if directory {
+        json!({"people": found})
+    } else {
+        let results: Vec<Value> = (found.into_iter())
+            .map(|person| json!({"person": person}))
+            .collect();
+        json!({"results": results})
+    };
+    ("200 OK", answer.to_string())
+}
+
 /// The Calendar API's `events.insert`: the event is kept as a change, with an ID Google gives,
 /// in a calendar the account can change; out of office and focus time only as Google takes them.
 fn insert_event(
@@ -778,6 +874,7 @@ fn insert_event(
     event["kind"] = json!("calendar#event");
     event["id"] = json!(format!("created-{}", state.changes + 1));
     event["status"] = json!("confirmed");
+    mark_self(&mut event, id);
     let event = state.put_event(account, id, event);
     ("200 OK", event.to_string())
 }
@@ -825,6 +922,7 @@ fn patch_event(
         .patched
         .push((if_match.unwrap_or_default(), patch.clone()));
     merge(&mut event, &patch);
+    mark_self(&mut event, &calendar);
     let event = state.put_event(account, &calendar, event);
     ("200 OK", event.to_string())
 }
@@ -879,6 +977,16 @@ fn precondition_failed() -> (&'static str, String) {
         "412 Precondition Failed",
         r#"{"error": {"code": 412, "message": "Precondition Failed"}}"#.to_string(),
     )
+}
+
+/// Marks the guest who is the calendar, as Google marks them `self` in the calendar's copy.
+fn mark_self(event: &mut Value, calendar: &str) {
+    let attendees = event.get_mut("attendees").and_then(Value::as_array_mut);
+    for attendee in attendees.into_iter().flatten() {
+        if attendee["email"] == calendar {
+            attendee["self"] = json!(true);
+        }
+    }
 }
 
 /// JSON merge patch: objects merged field by field, null removing a field.

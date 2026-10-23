@@ -8,6 +8,7 @@ use chrono_tz::Tz;
 use crate::cache::{Cache, CachedCalendar};
 use crate::create::NewEvent;
 use crate::editor::Patch;
+use crate::guests::{Person, Reach};
 use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::expand;
 use crate::week::day_start;
@@ -189,6 +190,12 @@ pub trait Provider {
     /// How long, in minutes, a new event started without a range is, as the account's settings at
     /// the provider say (`MOD-05-F09`).
     fn default_length(&self) -> Result<u32, SyncError>;
+    /// People to invite whose name or address starts with `query`, where `reach` lets the
+    /// provider look (`MOD-06-F02`, `F04`); none from a provider that has nowhere to look, and
+    /// none from places that cannot be reached now.
+    fn people(&self, _query: &str, _reach: Reach) -> Vec<Person> {
+        Vec::new()
+    }
 }
 
 /// Fetches every calendar of the account and synchronizes each (`sync_calendars`); calendars no

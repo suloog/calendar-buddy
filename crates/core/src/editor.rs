@@ -6,7 +6,8 @@
 //! calendar of the same account when another is picked (`MOD-05-F15`). A new event can be made to
 //! repeat (`US-05-06`, `MOD-05-F18`, `F19`), and made out of office or focus time where the
 //! account allows it (`US-05-08`, `MOD-05-F24`). The event's own colour is picked from Google's
-//! event colours (`US-05-09`, `MOD-05-F25`).
+//! event colours (`US-05-09`, `MOD-05-F25`). Guests are added by address or from the people
+//! suggested, marked required or optional, and removed (`US-06-01`, `MOD-06-F01`, `F06`, `F07`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
@@ -14,6 +15,7 @@ use chrono_tz::Tz;
 use crate::accounts::Entry;
 use crate::colors::EventColor;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
+use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person};
 use crate::model::{About, Access, Calendar, Event, Kind, Show, Timing, Visibility};
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
@@ -64,6 +66,13 @@ pub struct Editor {
     pub last_date: String,
     /// The number of occurrences of a series ending after them, as typed.
     pub count: String,
+    /// The event's guests, the account itself included when it is one of them; the editor lists
+    /// the others (`MOD-06-F01`).
+    pub guests: Vec<Guest>,
+    /// What is typed in the guest field, not added yet.
+    pub guest_field: String,
+    /// Why what was typed in the guest field was not added.
+    pub guest_problem: Option<String>,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
 }
@@ -97,6 +106,8 @@ pub struct Patch {
     pub recurrence: Option<Vec<String>>,
     /// The event's own colour, `Some(None)` taking it away (`MOD-05-F25`).
     pub color: Option<Option<EventColor>>,
+    /// The event's guests, replaced whole (`MOD-06-F07`).
+    pub guests: Option<Vec<Guest>>,
 }
 
 impl Patch {
@@ -151,6 +162,9 @@ impl Edit {
         if let Some(color) = patch.color {
             event.about.color = color;
         }
+        if let Some(guests) = patch.guests {
+            event.about.guests = guests;
+        }
         if let Some(to) = &self.to {
             event.calendar_id = to.id.clone();
             event.color = to.color;
@@ -195,6 +209,9 @@ impl Editor {
             ends: Ending::default(),
             last_date: regional.numeric_date(start.date()),
             count: DEFAULT_COUNT.to_string(),
+            guests: Vec::new(),
+            guest_field: String::new(),
+            guest_problem: None,
             start: Some(start),
         }
     }
@@ -247,6 +264,7 @@ impl Editor {
             visibility: event.about.visibility,
             kind: event.about.kind,
             color: event.about.color,
+            guests: event.about.guests.clone(),
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
@@ -355,6 +373,70 @@ impl Editor {
         }
     }
 
+    /// The addresses of the account the event is saved with, which are never added as guests:
+    /// its e-mail address and the calendar's ID, which is the address of a primary calendar.
+    pub fn own_addresses(&self, accounts: &[Entry]) -> Vec<String> {
+        let Some(calendar) = &self.calendar else {
+            return Vec::new();
+        };
+        let mut own: Vec<String> = (accounts.iter())
+            .filter(|entry| entry.account.id == calendar.account_id)
+            .map(|entry| entry.account.email.clone())
+            .chain([calendar.id.clone()])
+            .collect();
+        own.dedup();
+        own
+    }
+
+    /// The guests the editor lists: all but the account itself.
+    pub fn listed_guests(&mut self) -> impl Iterator<Item = &mut Guest> {
+        self.guests.iter_mut().filter(|guest| !guest.own)
+    }
+
+    /// Invites the person, unless they are invited already or the address is one of the user's
+    /// own (`own`); the guest field is emptied either way.
+    pub fn add_guest(&mut self, person: &Person, own: &[String]) {
+        let taken = (self.guests.iter().map(|guest| &guest.email))
+            .chain(own)
+            .any(|email| guests::same(email, &person.email));
+        if !taken {
+            self.guests.push(Guest::invited(person));
+        }
+        self.guest_field.clear();
+        self.guest_problem = None;
+    }
+
+    /// Invites the address typed in the guest field (`MOD-06-F01`); one that is not an address
+    /// is not added, and the field says why.
+    pub fn add_typed_guest(&mut self, own: &[String]) {
+        match guests::address(&self.guest_field) {
+            Some(email) => self.add_guest(
+                &Person {
+                    name: String::new(),
+                    email,
+                },
+                own,
+            ),
+            None => self.guest_problem = Some(NOT_AN_ADDRESS.to_string()),
+        }
+    }
+
+    /// Enter in the guest field: the address typed when it is one, otherwise the first person
+    /// suggested, as Google Calendar picks it; with neither, the field says why nothing was added.
+    pub fn enter_guest(&mut self, suggested: &[Person], own: &[String]) {
+        match suggested.first() {
+            Some(person) if guests::address(&self.guest_field).is_none() => {
+                self.add_guest(person, own)
+            }
+            _ => self.add_typed_guest(own),
+        }
+    }
+
+    /// No longer invites the guest with the address (`MOD-06-F07`).
+    pub fn remove_guest(&mut self, email: &str) {
+        self.guests.retain(|guest| guest.email != email);
+    }
+
     /// The rule of the series the new event starts, as the repeat fields say; none when it does
     /// not repeat; why it cannot be saved otherwise.
     fn recurrence(&self, regional: &Regional, timing: &Timing) -> Result<Vec<String>, String> {
@@ -453,6 +535,12 @@ impl Editor {
             color: self.color,
             // Attachments are added in Google (`DEC-37`).
             attachments: Vec::new(),
+            // Google takes no guests for out of office and focus time.
+            guests: if self.kind.timed_only() {
+                Vec::new()
+            } else {
+                self.guests.clone()
+            },
         };
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
@@ -478,6 +566,7 @@ impl Editor {
             visibility: changed(event.about.visibility, about.visibility),
             recurrence: None,
             color: changed(event.about.color, about.color),
+            guests: changed(event.about.guests.clone(), about.guests),
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {
@@ -600,6 +689,7 @@ mod tests {
                     kind: Kind::Ordinary,
                     color: None,
                     attachments: Vec::new(),
+                    guests: Vec::new(),
                 },
                 recurrence: Vec::new(),
             }
@@ -1147,5 +1237,139 @@ mod tests {
                 vec![calendar("1", "a@example.com")]
             )]
         );
+    }
+
+    fn person(name: &str, email: &str) -> Person {
+        Person {
+            name: name.to_string(),
+            email: email.to_string(),
+        }
+    }
+
+    #[test]
+    fn guests_are_added_by_address_or_from_a_suggestion_and_saved_with_a_new_event() {
+        let accounts = [account("1", "a@example.com", false)];
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        let own = editor.own_addresses(&accounts);
+        assert_eq!(own, ["a@example.com"]);
+
+        editor.add_guest(&person("Adam Kowalski", "adam@example.com"), &own);
+        editor.guest_field = " ewa@example.com ".to_string();
+        editor.add_typed_guest(&own);
+        editor.listed_guests().next().unwrap().optional = true;
+
+        assert_eq!(editor.guest_field, "");
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert_eq!(
+            event.about.guests,
+            [
+                Guest {
+                    optional: true,
+                    ..Guest::invited(&person("Adam Kowalski", "adam@example.com"))
+                },
+                Guest::invited(&person("", "ewa@example.com")),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_address_that_is_not_one_is_not_added_and_the_field_says_why() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.guest_field = "adam@example".to_string();
+
+        editor.add_typed_guest(&[]);
+
+        assert!(editor.guests.is_empty());
+        assert_eq!(editor.guest_field, "adam@example");
+        assert_eq!(editor.guest_problem.as_deref(), Some(NOT_AN_ADDRESS));
+        // Fixed, it is added and the field no longer complains.
+        editor.guest_field = "adam@example.com".to_string();
+        editor.add_typed_guest(&[]);
+        assert_eq!(editor.guests.len(), 1);
+        assert_eq!(editor.guest_problem, None);
+    }
+
+    #[test]
+    fn a_guest_added_twice_is_added_once_and_the_users_own_address_is_ignored() {
+        let accounts = [account("1", "me@example.com", false)];
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        let own = editor.own_addresses(&accounts);
+
+        editor.add_guest(&person("Adam", "adam@example.com"), &own);
+        editor.add_guest(&person("Adam K.", "ADAM@example.com"), &own);
+        editor.add_guest(&person("Me", "me@example.com"), &own);
+        // The primary calendar's ID is the account's address too.
+        editor.add_guest(&person("", "a@example.com"), &own);
+
+        let emails: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
+        assert_eq!(emails, ["adam@example.com"]);
+    }
+
+    #[test]
+    fn guests_are_added_to_and_removed_from_an_existing_event_the_account_itself_kept() {
+        let mut event = standup();
+        let own = Guest {
+            own: true,
+            response: crate::guests::Response::Accepted,
+            ..Guest::invited(&person("", "a@example.com"))
+        };
+        let ewa = Guest {
+            response: crate::guests::Response::Declined,
+            ..Guest::invited(&person("Ewa", "ewa@example.com"))
+        };
+        event.about.guests = vec![own.clone(), ewa];
+        let mut editor = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        let listed: Vec<String> = editor.listed_guests().map(|g| g.email.clone()).collect();
+        assert_eq!(listed, ["ewa@example.com"]);
+
+        editor.remove_guest("ewa@example.com");
+        editor.add_guest(&person("Adam", "adam@example.com"), &[]);
+        let edit = change(&editor);
+
+        let adam = Guest::invited(&person("Adam", "adam@example.com"));
+        assert_eq!(
+            edit.patch,
+            Patch {
+                guests: Some(vec![own.clone(), adam.clone()]),
+                ..Patch::default()
+            }
+        );
+        assert_eq!(edit.changed().about.guests, [own, adam]);
+        // Left as they were, the guests are not sent.
+        let unchanged = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        assert_eq!(change(&unchanged).patch.guests, None);
+    }
+
+    #[test]
+    fn out_of_office_is_saved_without_guests_as_google_takes_none() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.add_guest(&person("", "adam@example.com"), &[]);
+        editor.kind = Kind::OutOfOffice;
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert!(event.about.guests.is_empty());
+    }
+
+    #[test]
+    fn enter_adds_the_address_typed_or_else_the_first_person_suggested() {
+        let suggested = [
+            person("Adam Kowalski", "adam@example.com"),
+            person("Adam Nowak", "nowak@example.com"),
+        ];
+        let mut editor = Editor::from_quick(&quick(), &regional());
+
+        editor.guest_field = "Ada".to_string();
+        editor.enter_guest(&suggested, &[]);
+        editor.guest_field = "a@b.co".to_string();
+        editor.enter_guest(&suggested, &[]);
+        editor.guest_field = "nobody".to_string();
+        editor.enter_guest(&[], &[]);
+
+        let emails: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
+        assert_eq!(emails, ["adam@example.com", "a@b.co"]);
+        assert_eq!(editor.guest_problem.as_deref(), Some(NOT_AN_ADDRESS));
     }
 }
