@@ -17,6 +17,7 @@ pub mod offline;
 pub mod platform;
 pub mod recurrence;
 pub mod regional;
+pub mod repeat;
 pub mod schedule;
 pub mod settings;
 pub mod shortcuts;

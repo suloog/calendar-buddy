@@ -1,10 +1,12 @@
 //! Draws the full event editor (`US-05-02`): the title, start and end, all-day, time zone,
-//! location, description, calendar, busy or free and visibility of a new or an existing event.
-//! What the fields mean and what saving does is `calendar_core::editor`'s.
+//! location, description, calendar, busy or free and visibility of a new or an existing event,
+//! and how a new one repeats (`US-05-06`). What the fields mean and what saving does is
+//! `calendar_core::editor`'s.
 
-use calendar_core::editor::{Editor, Save};
+use calendar_core::editor::{Editor, Ending, Save};
 use calendar_core::model::{Calendar, Show, Visibility};
 use calendar_core::regional::Regional;
+use calendar_core::repeat::Pattern;
 use eframe::egui;
 
 use crate::calendar_list;
@@ -12,6 +14,7 @@ use crate::calendar_list;
 const FIELD_WIDTH: f32 = 320.0;
 const DATE_WIDTH: f32 = 100.0;
 const TIME_WIDTH: f32 = 70.0;
+const COUNT_WIDTH: f32 = 40.0;
 /// How tall the list of time zones grows before it scrolls.
 const ZONES_HEIGHT: f32 = 320.0;
 
@@ -28,6 +31,89 @@ fn visibility_label(visibility: Visibility) -> &'static str {
         Visibility::Public => "Public",
         Visibility::Private => "Private",
     }
+}
+
+fn repeat_label(repeat: Option<&Pattern>) -> &'static str {
+    match repeat {
+        None => "Does not repeat",
+        Some(Pattern::Daily) => "Daily",
+        Some(Pattern::Weekdays) => "Every weekday (Monday to Friday)",
+        Some(Pattern::Weekly(_)) => "Weekly",
+        Some(Pattern::Monthly) => "Monthly",
+        Some(Pattern::Yearly) => "Annually",
+    }
+}
+
+fn ending_label(ends: Ending) -> &'static str {
+    match ends {
+        Ending::Never => "Never",
+        Ending::OnDate => "On",
+        Ending::AfterCount => "After",
+    }
+}
+
+/// How a new event repeats and how its series ends (`MOD-05-F18`, `F19`), as rows of the grid.
+fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
+    ui.label("Repeats");
+    let weekly = editor.weekly();
+    let choices = [
+        None,
+        Some(Pattern::Daily),
+        Some(Pattern::Weekdays),
+        Some(weekly),
+        Some(Pattern::Monthly),
+        Some(Pattern::Yearly),
+    ];
+    egui::ComboBox::from_id_salt("editor-repeat")
+        .selected_text(repeat_label(editor.repeat.as_ref()))
+        .show_ui(ui, |ui| {
+            for choice in choices {
+                let label = repeat_label(choice.as_ref());
+                let chosen = repeat_label(editor.repeat.as_ref()) == label;
+                if ui.selectable_label(chosen, label).clicked() && !chosen {
+                    editor.repeat = choice;
+                }
+            }
+        });
+    ui.end_row();
+    let Some(pattern) = &editor.repeat else {
+        return;
+    };
+    if let Pattern::Weekly(days) = pattern {
+        let days = days.clone();
+        ui.label("On");
+        ui.horizontal(|ui| {
+            let mut day = regional.week_start;
+            for letter in regional.weekday_letters() {
+                if ui.selectable_label(days.contains(&day), letter).clicked() {
+                    editor.toggle_day(day);
+                }
+                day = day.succ();
+            }
+        });
+        ui.end_row();
+    }
+    ui.label("Series ends");
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt("editor-ends")
+            .selected_text(ending_label(editor.ends))
+            .show_ui(ui, |ui| {
+                for ends in [Ending::Never, Ending::OnDate, Ending::AfterCount] {
+                    ui.selectable_value(&mut editor.ends, ends, ending_label(ends));
+                }
+            });
+        match editor.ends {
+            Ending::Never => {}
+            Ending::OnDate => {
+                field(ui, &mut editor.last_date, DATE_WIDTH);
+            }
+            Ending::AfterCount => {
+                field(ui, &mut editor.count, COUNT_WIDTH);
+                ui.label("occurrences");
+            }
+        }
+    });
+    ui.end_row();
 }
 
 /// A date or time field of the editor; says whether it changed.
@@ -95,6 +181,11 @@ pub fn show(
                         }
                     });
                 ui.end_row();
+            }
+
+            // An existing event's repetition is not changed here (`DEC-111`).
+            if editor.opened.is_none() {
+                repeat(ui, editor, regional);
             }
 
             ui.label("Location");

@@ -2544,7 +2544,7 @@ mod tests {
         let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
             panic!("a new event");
         };
-        let updates = engine.handle(Some(Job::Create(1, calendar, event)), start);
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), start);
         let saved = saved(&updates);
         let [Saved::Created(1, id)] = saved.as_slice() else {
             panic!("Google did not create the event");
@@ -2571,6 +2571,88 @@ mod tests {
             .find(|e| e.id == *id)
             .unwrap();
         assert_eq!(review.about.location, "Room 2");
+    }
+
+    #[test]
+    fn tc_05_07_a_weekly_series_on_monday_and_wednesday_ending_after_10_is_created_with_its_rule() {
+        let google = Google::start("tc-05-07");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendars = engine.cache.calendar_list().unwrap();
+        let regional = polish();
+
+        // 1. "Training" on Monday 16 November 18:00–19:00, weekly on Monday and Wednesday,
+        //    ending after 10 occurrences: the fake Google receives a series with that rule.
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 16), 18 * 60, 60, Warsaw),
+            Warsaw,
+            default,
+        );
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.title = "Training".to_string();
+        editor.repeat = Some(editor.weekly());
+        editor.toggle_day(chrono::Weekday::Wed);
+        editor.ends = calendar_core::editor::Ending::AfterCount;
+        editor.count = "10".to_string();
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let mut saving = Saving::default();
+        let number = saving.add(&calendar, &event);
+        let updates = engine.handle(Some(Job::Create(number, calendar, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the series");
+        };
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(
+            sent["recurrence"],
+            json!(["RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10"])
+        );
+        assert_eq!(sent["start"]["dateTime"], "2026-11-16T18:00:00+01:00");
+
+        // 2. The app lists 10 occurrences, from 16 November to 16 December, on Mondays and
+        //    Wednesdays at 18:00; the series is no longer shown as saving.
+        saving.confirmed(number, id);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        let mut starts: Vec<DateTime<Utc>> = events
+            .iter()
+            .filter(|e| e.title == "Training")
+            .map(|e| match e.timing {
+                Timing::Timed { start, .. } => start,
+                Timing::AllDay { .. } => panic!("a timed occurrence"),
+            })
+            .collect();
+        starts.sort();
+        let occurrences: Vec<String> = starts
+            .iter()
+            .map(|start| start.with_timezone(&Warsaw).format("%a %F %R").to_string())
+            .collect();
+        assert_eq!(
+            occurrences,
+            [
+                "Mon 2026-11-16 18:00",
+                "Wed 2026-11-18 18:00",
+                "Mon 2026-11-23 18:00",
+                "Wed 2026-11-25 18:00",
+                "Mon 2026-11-30 18:00",
+                "Wed 2026-12-02 18:00",
+                "Mon 2026-12-07 18:00",
+                "Wed 2026-12-09 18:00",
+                "Mon 2026-12-14 18:00",
+                "Wed 2026-12-16 18:00",
+            ]
+        );
+        assert!(
+            events
+                .iter()
+                .filter(|e| e.title == "Training")
+                .all(|e| e.recurring)
+        );
     }
 
     /// "Standup" in "Personal" and the calendar "Team" of the same account, synchronized once.

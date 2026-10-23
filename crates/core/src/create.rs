@@ -34,6 +34,8 @@ pub struct NewEvent {
     pub title: String,
     pub timing: Timing,
     pub about: About,
+    /// The rule of the series it starts (`MOD-05-F18`); empty when it does not repeat.
+    pub recurrence: Vec<String>,
 }
 
 /// The instant `minute` minutes after midnight of `date` on the wall clock in `zone`; a time the
@@ -194,9 +196,21 @@ impl QuickEntry {
                 zone: self.zone,
             },
             about: About::default(),
+            recurrence: Vec::new(),
         };
         Some((self.calendar.clone()?, event))
     }
+}
+
+/// Whether synchronization brought `pending` back as `synced`: the same event, or for a new series
+/// one of its occurrences, which Google names by the series' ID and its start.
+fn brought(synced: &Event, pending: &Event) -> bool {
+    let occurrence = || {
+        (synced.id.strip_prefix(pending.id.as_str())).is_some_and(|start| start.starts_with('_'))
+            && synced.calendar_id == pending.calendar_id
+            && synced.account_id == pending.account_id
+    };
+    same(synced, pending) || (pending.recurring && occurrence())
 }
 
 /// A new or changed event shown before it comes back through synchronization.
@@ -244,7 +258,7 @@ impl Saving {
             read_only: false,
             organizer_only: false,
             saving: true,
-            recurring: false,
+            recurring: !event.recurrence.is_empty(),
             about: event.about.clone(),
             etag: String::new(),
         };
@@ -323,7 +337,7 @@ impl Saving {
             }
             p.event.saving
                 || !events.iter().any(|e| {
-                    same(e, &p.event)
+                    brought(e, &p.event)
                         && p.replaces.as_ref().is_none_or(|old| {
                             e.etag != old.etag || e.calendar_id != old.calendar_id
                         })
@@ -638,6 +652,30 @@ mod tests {
         let mut synced = saving.events().next().unwrap().clone();
         synced.id = "created-1".to_string();
         saving.synced(&[synced]);
+        assert!(saving.is_empty());
+    }
+
+    #[test]
+    fn a_new_series_is_shown_until_its_occurrences_are_synchronized() {
+        let (calendar, event) = planning();
+        let event = NewEvent {
+            recurrence: vec!["RRULE:FREQ=DAILY".to_string()],
+            ..event
+        };
+        let mut saving = Saving::default();
+        let local = saving.add(&calendar, &event);
+        assert!(saving.events().next().unwrap().recurring);
+        saving.confirmed(local, "series");
+
+        // Another event whose ID only starts the same is not one of them.
+        let mut other = saving.events().next().unwrap().clone();
+        other.id = "series2_20261112T090000Z".to_string();
+        saving.synced(&[other]);
+        assert_eq!(saving.events().count(), 1);
+
+        let mut first = saving.events().next().unwrap().clone();
+        first.id = "series_20261112T090000Z".to_string();
+        saving.synced(&[first]);
         assert!(saving.is_empty());
     }
 

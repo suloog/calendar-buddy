@@ -1344,3 +1344,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-111] Repeating is chosen in the editor of a new event; an existing event's repetition is not changed in the app
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-06
+- **Affects:** `US-05-06`, `US-05-07`, `MOD-05-F18`, `MOD-05-F19`, `DEC-36`, the calendar-provider interface
+- **Decision:** The **Repeats** and **Ends** fields of the full editor are shown for a new event only: the event is created as a series, with Google's rule in `recurrence` and its times in their own zone. The editor of an existing event, a series' occurrence included, has no repeat fields; making an existing single event repeat, or changing a series' rule, is done in Google Calendar in the browser. A new series is shown marked "saving" until Google confirms it, and then until synchronization brings its occurrences, which Google names by the series' ID and their start. **Calendar-provider interface change:** `NewEvent::recurrence`.
+- **Why:** The criteria and test cases of `US-05-06` create a series (`TC-05-07`, `TC-05-12`). Turning an existing event into a series, or changing a series' rule, is a change to a series, which comes with the scopes and undo of `US-05-07` (`MOD-05-F20`, `MOD-05-F28`); undoing it would have to turn a series back into a single event, which the spec does not describe. Complex rules are edited in the browser already (`DEC-36`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-112] Defaults and checks of the repeat fields, as Google Calendar's
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-06
+- **Affects:** `US-05-06`, `MOD-05-F18`, `MOD-05-F19`, `DEC-36`, `DEC-62`
+- **Decision:** A new event does not repeat until a preset is chosen: "Daily", "Every weekday (Monday to Friday)", "Weekly", "Monthly", "Annually". "Weekly" starts with the day of the week the event starts; further days are toggled by their letters, from the first day of the user's week, and the last chosen day cannot be taken away. "Monthly" repeats on the same day of the month and "Annually" on the same date (`FREQ=MONTHLY`, `FREQ=YEARLY`). The series ends "Never" until another end is chosen; "On" a date starts with the event's start date and moves with the start as the end does; "After" a number of occurrences starts with 13, Google Calendar's default. A date ending a timed series is written as Google writes it: the last second of that day in the event's zone, in UTC (`UNTIL=20261216T225959Z`); for an all-day series, the date. A series ending before the day it starts, an end date that cannot be read, or a number of occurrences that is not a whole number of at least 1 cannot be saved, and the editor says why: "The series ends before it starts.", "The end date of the series can't be read.", "The number of occurrences can't be read."
+- **Why:** The spec names the presets, the three ends and their rules (`MOD-05` *Technical notes*), not the defaults or what an impossible end does; these follow Google Calendar (`DEC-62`) and the editor's existing "can't be read" and end-before-start checks (`MOD-05` *Constraints and edge cases*).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

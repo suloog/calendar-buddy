@@ -571,7 +571,7 @@ impl CalendarApp {
                     if (clicked || entered) && unavailable.is_none() {
                         save = entry
                             .new_event()
-                            .map(|(calendar, event)| Save::Create(calendar, event));
+                            .map(|(calendar, event)| Save::Create(calendar, Box::new(event)));
                     }
                 }
                 Dialog::Editor(editor) => {
@@ -712,7 +712,7 @@ impl CalendarApp {
                 // Shown at once, marked "saving" until Google confirms it (`MOD-05-U03`).
                 let local = self.saving.add(&calendar, &event);
                 self.last.creating();
-                self.sync.create(local, calendar, event);
+                self.sync.create(local, calendar, *event);
                 self.show_events(None);
                 open = false;
             }
