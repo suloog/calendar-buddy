@@ -1,6 +1,7 @@
 //! The side panel (`US-03-06`): the connected accounts, each with its calendars (`MOD-03-F10`),
 //! the quick toggle that hides a calendar's events but keeps it listed (`MOD-03-F12`), and
-//! whether the panel is shown (`MOD-03-F11`, `MOD-03-U03`).
+//! whether the panel is shown (`MOD-03-F11`, `MOD-03-U03`); and the calendars disabled in the
+//! settings, left out of the panel, the calendar pickers and the views (`MOD-03-F13`).
 
 use std::collections::BTreeSet;
 
@@ -46,27 +47,22 @@ pub fn groups(
     status: &Status,
     online: bool,
 ) -> Vec<Group> {
-    accounts
-        .iter()
-        .map(|entry| Group {
-            email: entry.account.email.clone(),
-            calendars: calendars
-                .iter()
-                .filter(|calendar| calendar.account_id == entry.account.id)
-                .filter(|calendar| !settings.disabled.contains(&key(calendar)))
-                .map(|calendar| Row {
-                    calendar: calendar.clone(),
-                    color: calendar_color(calendar, &settings.colors),
-                    shown: !settings.hidden.contains(&key(calendar)),
-                    read_only: !calendar.access.can_edit(),
-                    problem: status.problem(calendar, online).map(status::on_row),
-                })
-                .collect(),
+    let rows = by_account(accounts, calendars, |calendar| {
+        (!settings.disabled.contains(&key(calendar))).then(|| Row {
+            calendar: calendar.clone(),
+            color: calendar_color(calendar, &settings.colors),
+            shown: !settings.hidden.contains(&key(calendar)),
+            read_only: !calendar.access.can_edit(),
+            problem: status.problem(calendar, online).map(status::on_row),
         })
+    });
+    rows.into_iter()
+        .map(|(email, calendars)| Group { email, calendars })
         .collect()
 }
 
-/// The quick toggle: hides the calendar's events, or shows them again.
+/// The quick toggle: hides the calendar's events, or shows them again. In the settings, the same
+/// on the disabled calendars disables the calendar or enables it again (`MOD-03-F13`).
 pub fn toggle(hidden: &mut Hidden, calendar: &Calendar) {
     let key = key(calendar);
     if !hidden.remove(&key) {
@@ -74,12 +70,61 @@ pub fn toggle(hidden: &mut Hidden, calendar: &Calendar) {
     }
 }
 
-/// The places in `events` of those whose calendar is not hidden.
-pub fn shown(events: &[Event], hidden: &Hidden) -> Vec<usize> {
+/// The places in `events` of those whose calendar is neither hidden nor disabled.
+pub fn shown(events: &[Event], settings: &Settings) -> Vec<usize> {
     (0..events.len())
         .filter(|&i| {
             let event = &events[i];
-            !hidden.contains(&(event.account_id.clone(), event.calendar_id.clone()))
+            let key = (event.account_id.clone(), event.calendar_id.clone());
+            !settings.hidden.contains(&key) && !settings.disabled.contains(&key)
+        })
+        .collect()
+}
+
+/// The settings' list of calendars: each connected account's e-mail address with all its
+/// calendars in Google's order, each with whether it is enabled (`MOD-03-F13`).
+pub fn in_settings(
+    accounts: &[Entry],
+    calendars: &[Calendar],
+    settings: &Settings,
+) -> Vec<(String, Vec<(Calendar, bool)>)> {
+    by_account(accounts, calendars, |calendar| {
+        Some((
+            calendar.clone(),
+            !settings.disabled.contains(&key(calendar)),
+        ))
+    })
+}
+
+/// The calendars a calendar picker starts from (`MOD-05-F10`): under their accounts, like the side
+/// panel (`DEC-28`), those disabled in the settings left out (`MOD-03-F13`). Which of them a
+/// picker offers, such as only those the account can change, is the picker's own.
+pub fn pickable(
+    accounts: &[Entry],
+    calendars: &[Calendar],
+    settings: &Settings,
+) -> Vec<(String, Vec<Calendar>)> {
+    by_account(accounts, calendars, |calendar| {
+        (!settings.disabled.contains(&key(calendar))).then(|| calendar.clone())
+    })
+}
+
+/// The accounts in the order they were connected, each with what `item` gives for its calendars.
+fn by_account<T>(
+    accounts: &[Entry],
+    calendars: &[Calendar],
+    item: impl Fn(&Calendar) -> Option<T>,
+) -> Vec<(String, Vec<T>)> {
+    accounts
+        .iter()
+        .map(|entry| {
+            let of_account = calendars
+                .iter()
+                .filter(|calendar| calendar.account_id == entry.account.id);
+            (
+                entry.account.email.clone(),
+                of_account.filter_map(&item).collect(),
+            )
         })
         .collect()
 }
@@ -217,7 +262,7 @@ mod tests {
         let mut settings = Settings::default();
         // The week view of Wednesday 11 November 2026, 10:00 in Warsaw.
         let week = |settings: &Settings| {
-            let shown: Vec<Event> = shown(&events, &settings.hidden)
+            let shown: Vec<Event> = shown(&events, settings)
                 .into_iter()
                 .map(|i| events[i].clone())
                 .collect();
@@ -267,6 +312,85 @@ mod tests {
         toggle(&mut settings.hidden, &calendars[2]);
         assert_eq!(panel(&settings), listed(true));
         assert_eq!(week(&settings), ["Home", "Team", "Work"]);
+    }
+
+    #[test]
+    fn tc_03_10_a_disabled_calendar_leaves_the_panel_the_pickers_and_the_views_until_enabled() {
+        let accounts = [entry("a", "a@example.com")];
+        let calendars = [
+            calendar("a", "Work", Access::Owner),
+            calendar("a", "Birthdays", Access::Reader),
+        ];
+        let events = [event("a", "Work", 10), event("a", "Birthdays", 12)];
+        let mut settings = Settings::default();
+        // The week view of Wednesday 11 November 2026, 10:00 in Warsaw.
+        let week = |settings: &Settings| {
+            let shown: Vec<Event> = shown(&events, settings)
+                .into_iter()
+                .map(|i| events[i].clone())
+                .collect();
+            let days = GridView::Week.days(d(2026, 11, 11), Weekday::Mon);
+            let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+            let view = grid_view(&shown, &days, Warsaw, now);
+            let mut titles: Vec<String> = view
+                .blocks
+                .iter()
+                .map(|block| shown[block.placement.event].title.clone())
+                .collect();
+            titles.sort();
+            titles
+        };
+        let panel = |settings: &Settings| {
+            let groups = groups(&accounts, &calendars, settings, &Status::default(), true);
+            names(&groups)[0]
+                .1
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>()
+        };
+        let picker = |settings: &Settings| {
+            pickable(&accounts, &calendars, settings)[0]
+                .1
+                .iter()
+                .map(|calendar| calendar.name.clone())
+                .collect::<Vec<_>>()
+        };
+        let in_settings = |settings: &Settings| {
+            in_settings(&accounts, &calendars, settings)
+                .into_iter()
+                .map(|(email, rows)| {
+                    let rows = rows.into_iter().map(|(c, enabled)| (c.name, enabled));
+                    (email, rows.collect::<Vec<_>>())
+                })
+                .collect::<Vec<_>>()
+        };
+        let listed = |birthdays: bool| {
+            vec![(
+                "a@example.com".to_string(),
+                vec![
+                    ("Work".to_string(), true),
+                    ("Birthdays".to_string(), birthdays),
+                ],
+            )]
+        };
+        assert_eq!(in_settings(&settings), listed(true));
+        assert_eq!(panel(&settings), ["Work", "Birthdays"]);
+        assert_eq!(picker(&settings), ["Work", "Birthdays"]);
+        assert_eq!(week(&settings), ["Birthdays", "Work"]);
+
+        // 1. Disabled in the settings: still in the settings' list, gone from everything else.
+        toggle(&mut settings.disabled, &calendars[1]);
+        assert_eq!(in_settings(&settings), listed(false));
+        assert_eq!(panel(&settings), ["Work"]);
+        assert_eq!(picker(&settings), ["Work"]);
+        assert_eq!(week(&settings), ["Work"]);
+
+        // 2. Enabled again: back in the side panel, the picker and the week.
+        toggle(&mut settings.disabled, &calendars[1]);
+        assert_eq!(in_settings(&settings), listed(true));
+        assert_eq!(panel(&settings), ["Work", "Birthdays"]);
+        assert_eq!(picker(&settings), ["Work", "Birthdays"]);
+        assert_eq!(week(&settings), ["Birthdays", "Work"]);
     }
 
     #[test]

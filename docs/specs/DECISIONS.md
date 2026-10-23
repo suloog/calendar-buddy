@@ -1236,3 +1236,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-102] Disabling calendars: a checkbox list in the settings, at once in the views, one source for the pickers
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-07
+- **Affects:** `US-03-07`, `MOD-03-F13`, `MOD-05-F10`, `DEC-28`, `DEC-94`
+- **Decision:** The settings get a **Calendars** section under **Accounts**: each connected account's e-mail address in bold, in the order the accounts were connected, and under it all its calendars in Google's order, disabled ones included, each with a checkbox ticked while it is enabled. Unticking disables the calendar, ticking enables it again; hovering says "A disabled calendar is not shown in the side panel or the views, and is not synchronized". The list scrolls once it is taller than 320 points. The change is saved as the `disabled` lines of `DEC-94` and handed to the synchronization worker. The calendar's events leave the views in the same frame, filtered by the settings like hidden calendars, without waiting for the worker to delete them. No calendar picker exists yet. The new event's and the default calendar's (`MOD-05-F10`) are to start from `side_panel::pickable`, which groups the calendars by account and leaves out those disabled; which of those a picker offers, such as only the calendars the account can change, is left to `MOD-05`.
+- **Why:** Google Calendar has no disabled calendars; its settings list every calendar, and a checkbox is the smallest control that disables one and enables it again (`DEC-62`). Filtering in the views keeps a disabled calendar out of them at once, also offline, when the worker cannot reach Google. One function for the pickers keeps `MOD-05` from listing a disabled calendar.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

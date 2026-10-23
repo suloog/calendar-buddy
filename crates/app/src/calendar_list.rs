@@ -1,7 +1,8 @@
 //! Draws the calendars in the side panel under their accounts (`MOD-03-F10`): each with the quick
 //! toggle that hides its events (`MOD-03-F12`), a lock when it cannot be changed (`MOD-02-U01`),
 //! its synchronization problem (`DEC-97`) and its menu, where a local colour is picked or reset
-//! (`MOD-02-U04`).
+//! (`MOD-02-U04`). Also the settings' list, where calendars are disabled and enabled again
+//! (`MOD-03-F13`).
 
 use calendar_core::colors::{CALENDAR_COLORS, LocalColors};
 use calendar_core::model::{Calendar, Rgb};
@@ -13,6 +14,13 @@ use crate::grid_view::{color, text_on};
 const TOGGLE: f32 = 14.0;
 const PALETTE_SWATCH: f32 = 20.0;
 const PALETTE_COLUMNS: usize = 6;
+
+/// How tall the settings' list of calendars grows before it scrolls.
+const SETTINGS_LIST_HEIGHT: f32 = 320.0;
+
+/// What a calendar's checkbox in the settings says on hover.
+const ENABLED_HINT: &str =
+    "A disabled calendar is not shown in the side panel or the views, and is not synchronized";
 
 /// What a calendar's lock says on hover.
 pub const READ_ONLY: &str = "Read-only: this calendar can't be changed";
@@ -48,6 +56,37 @@ pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<
         }
     });
     action
+}
+
+/// The settings' list of calendars under their accounts, each with a checkbox ticked while it is
+/// enabled (`MOD-03-F13`). Gives the calendar whose checkbox was used.
+pub fn in_settings(
+    ui: &mut egui::Ui,
+    accounts: &[(String, Vec<(Calendar, bool)>)],
+) -> Option<Calendar> {
+    let mut used = None;
+    egui::ScrollArea::vertical()
+        .id_salt("calendars-in-settings")
+        .max_height(SETTINGS_LIST_HEIGHT)
+        .show(ui, |ui| {
+            for (email, calendars) in accounts {
+                ui.label(egui::RichText::new(email).strong());
+                for (calendar, enabled) in calendars {
+                    let mut ticked = *enabled;
+                    ui.push_id((&calendar.account_id, &calendar.id), |ui| {
+                        if ui
+                            .checkbox(&mut ticked, &calendar.name)
+                            .on_hover_text(ENABLED_HINT)
+                            .clicked()
+                        {
+                            used = Some(calendar.clone());
+                        }
+                    });
+                }
+                ui.add_space(6.0);
+            }
+        });
+    used
 }
 
 /// The name with a lock before it when the calendar cannot be changed, as on its events.
