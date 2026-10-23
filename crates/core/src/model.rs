@@ -33,8 +33,42 @@ pub struct Event {
     /// Event of a calendar the account cannot change: read-only, subscribed or free/busy
     /// (`MOD-02-U01`).
     pub read_only: bool,
-    /// A new event Google has not confirmed yet (`MOD-05-U03`); view state only, never cached.
+    /// A new or changed event Google has not confirmed yet (`MOD-05-U03`); view state only,
+    /// never cached.
     pub saving: bool,
+    /// An occurrence of a series, changed or not.
+    pub recurring: bool,
+    pub about: About,
+    /// The version of the event at the provider, which a change is sent against; empty when not
+    /// known yet.
+    pub etag: String,
+}
+
+/// Whether an event shows the user as busy or free (`MOD-05-F07`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Show {
+    #[default]
+    Busy,
+    Free,
+}
+
+/// Who may see an event's details (`MOD-05-F08`): as the calendar's sharing says, everyone who
+/// can see the calendar, or only those who can change it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Visibility {
+    #[default]
+    Default,
+    Public,
+    Private,
+}
+
+/// What an event says besides its title and times.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct About {
+    pub description: String,
+    pub location: String,
+    pub show: Show,
+    pub visibility: Visibility,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).

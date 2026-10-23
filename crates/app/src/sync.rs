@@ -11,8 +11,8 @@
 //! the events to show. The views are told when synchronization runs, when it last got through,
 //! and which calendars are not up to date and why; a calendar that fails waits longer before each
 //! retry, and the others go on (`US-02-06`). A new event goes to Google first and comes back
-//! through synchronizing its calendar (`US-05-01`); each account's default event length is read
-//! with its first synchronization.
+//! through synchronizing its calendar (`US-05-01`), and so does a changed one (`US-05-02`); each
+//! account's default event length is read with its first synchronization.
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -24,6 +24,7 @@ use std::time::Instant;
 use calendar_core::accounts::Check;
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
+use calendar_core::editor::Edit;
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
@@ -57,6 +58,8 @@ enum Job {
     Browse(Option<Window>),
     /// A new event to create in the calendar, by the number the views know it by.
     Create(u64, Calendar, NewEvent),
+    /// A change to an event, by the number the views know it by.
+    Change(u64, Box<Edit>),
 }
 
 enum Update {
@@ -74,6 +77,10 @@ enum Update {
     Created(u64, String),
     /// Google did not create the new event, and why; never holds the event's contents.
     NotCreated(u64, String),
+    /// Google changed the event; its new version.
+    Changed(u64, String),
+    /// Google did not change the event, and why; never holds the event's contents.
+    NotChanged(u64, String),
     /// The account's default event length, in minutes (`MOD-05-F09`).
     DefaultLength(String, u32),
 }
@@ -103,16 +110,20 @@ pub struct Synchronization {
     calendars: Vec<Calendar>,
     /// Each account's default event length, in minutes, once Google told it.
     lengths: HashMap<String, u32>,
-    /// What became of new events at Google, not yet taken.
+    /// What became of new and changed events at Google, not yet taken.
     saved: Vec<Saved>,
 }
 
-/// What became of a new event at Google.
+/// What became of a new or changed event at Google.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Saved {
     Created(u64, String),
     /// Why it was not created.
     NotCreated(u64, String),
+    /// The event's new version.
+    Changed(u64, String),
+    /// Why it was not changed.
+    NotChanged(u64, String),
 }
 
 impl Synchronization {
@@ -294,6 +305,12 @@ impl Synchronization {
         let _ = self.jobs.send(Job::Create(local, calendar, event));
     }
 
+    /// Changes the event at Google, then synchronizes its calendars (`MOD-05-F16`); `poll` tells
+    /// what became of it by `local`.
+    pub fn change(&self, local: u64, edit: Box<Edit>) {
+        let _ = self.jobs.send(Job::Change(local, edit));
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
@@ -322,6 +339,10 @@ impl Synchronization {
                 Update::NotCreated(local, reason) => {
                     self.saved.push(Saved::NotCreated(local, reason))
                 }
+                Update::Changed(local, etag) => self.saved.push(Saved::Changed(local, etag)),
+                Update::NotChanged(local, reason) => {
+                    self.saved.push(Saved::NotChanged(local, reason))
+                }
                 Update::DefaultLength(account, minutes) => {
                     self.lengths.insert(account, minutes);
                 }
@@ -340,8 +361,8 @@ impl Synchronization {
         &self.status
     }
 
-    /// What became of new events at Google since last asked, in the order Google answered; each
-    /// is given once.
+    /// What became of new and changed events at Google since last asked, in the order Google
+    /// answered; each is given once.
     pub fn take_saved(&mut self) -> Vec<Saved> {
         std::mem::take(&mut self.saved)
     }
@@ -463,6 +484,7 @@ impl Engine {
             Some(Job::Create(local, calendar, event)) => {
                 return self.create(local, calendar, &event, now);
             }
+            Some(Job::Change(local, edit)) => return self.change(local, &edit, now),
         };
         self.round(&calendars, now)
     }
@@ -575,6 +597,55 @@ impl Engine {
             }
             Err(error) => vec![Update::NotCreated(local, error.0)],
         }
+    }
+
+    /// Changes the event at Google, what changed first and the move after (`MOD-05-F15`), then
+    /// synchronizes its calendars, so the change reaches the cache the way every change does. One
+    /// changed elsewhere meanwhile is brought up to date with them, for the user to change again.
+    fn change(&mut self, local: u64, edit: &Edit, now: Instant) -> Vec<Update> {
+        let Some(session) = self.sessions.get(&edit.calendar.account_id) else {
+            let reason = "its account is not signed in yet; try again in a moment".to_string();
+            return vec![Update::NotChanged(local, reason)];
+        };
+        let (calendar, id) = (&edit.calendar, &edit.event.id);
+        let mut changed = Ok(edit.event.etag.clone());
+        if !edit.patch.is_empty() {
+            changed = session.update(calendar, id, &edit.event.etag, &edit.patch);
+        }
+        let mut updates = vec![match (changed, &edit.to) {
+            (Err(error), _) if error.is_changed_elsewhere() => Update::NotChanged(
+                local,
+                format!(
+                    "{}; it is shown as it is now, make your change again",
+                    error.0
+                ),
+            ),
+            (Err(error), _) => Update::NotChanged(local, error.0),
+            (Ok(etag), None) => Update::Changed(local, etag),
+            (Ok(_), Some(to)) => match session.move_to(calendar, id, to) {
+                Ok(etag) => Update::Changed(local, etag),
+                // What was patched stays; only the move is told of.
+                Err(error) if edit.patch.is_empty() => Update::NotChanged(local, error.0),
+                Err(error) => Update::NotChanged(
+                    local,
+                    format!(
+                        "it could not be moved to the other calendar ({}); its other changes \
+                         were saved",
+                        error.0
+                    ),
+                ),
+            },
+        }];
+        let calendars: Vec<Calendar> = std::iter::once(calendar.clone())
+            .chain(edit.to.clone())
+            .collect();
+        updates.extend(self.round(&calendars, now));
+        // An event on browsed days outside the cache comes back from there.
+        if self.browsed.is_some() {
+            self.fetch_outside();
+            updates.push(self.shown());
+        }
+        updates
     }
 
     /// Deletes the disabled calendars' events; they stay listed (`MOD-02-F06`).
@@ -787,8 +858,9 @@ mod tests {
     use crate::{Built, build, pick};
     use calendar_core::colors;
     use calendar_core::create::{self, QuickEntry, Saving};
+    use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
-    use calendar_core::model::{Access, Calendar, Rgb, Timing};
+    use calendar_core::model::{Access, Calendar, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
     use calendar_core::offline;
     use calendar_core::platform::Network;
@@ -838,6 +910,8 @@ mod tests {
                     }),
                     recurrence: Vec::new(),
                     instance_of: None,
+                    about: Default::default(),
+                    etag: String::new(),
                 };
                 cache
                     .set_calendars(account, std::slice::from_ref(&calendar))
@@ -2307,5 +2381,311 @@ mod tests {
         }
         let (start, end) = create::clicked(d(2026, 11, 12), 600, 30, Warsaw);
         assert_eq!(end - start, chrono::Duration::minutes(30));
+    }
+
+    fn polish() -> Regional {
+        Regional::from_env(|var| (var == "LANG").then(|| "pl_PL.UTF-8".into()))
+    }
+
+    /// The events the engine shows now.
+    fn now_shown(engine: &Engine) -> Vec<Event> {
+        let Update::Events(_, events) = engine.shown() else {
+            panic!("events");
+        };
+        events
+    }
+
+    #[test]
+    fn tc_05_02_the_full_editor_saves_title_description_times_location_free_and_private_to_google()
+    {
+        let google = Google::start("tc-05-02");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendars = engine.cache.calendar_list().unwrap();
+        let regional = polish();
+
+        // 1. The full editor of a new event, opened from the quick-entry box, filled in.
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+            Warsaw,
+            default,
+        );
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.title = "Review".to_string();
+        editor.description = "Q4 numbers".to_string();
+        editor.start_date = "13.11.2026".to_string();
+        editor.start_time = "14:00".to_string();
+        editor.follow_start(&regional);
+        editor.location = "Room 2".to_string();
+        editor.show = Show::Free;
+        editor.visibility = Visibility::Private;
+        assert_eq!(
+            (
+                editor.title.as_str(),
+                editor.description.as_str(),
+                editor.start_date.as_str(),
+                editor.start_time.as_str(),
+                editor.end_date.as_str(),
+                editor.end_time.as_str(),
+                editor.location.as_str(),
+            ),
+            (
+                "Review",
+                "Q4 numbers",
+                "13.11.2026",
+                "14:00",
+                "13.11.2026",
+                "15:00",
+                "Room 2"
+            )
+        );
+        assert_eq!(editor.zone, Warsaw);
+        assert_eq!(editor.calendar.as_ref().unwrap().name, "Personal");
+        // The calendar list is grouped by account.
+        let choices = editor.choices(create::choices(
+            &accounts(),
+            &calendars,
+            &Settings::default(),
+        ));
+        let grouped: Vec<(String, Vec<String>)> = choices
+            .into_iter()
+            .map(|(email, calendars)| (email, calendars.into_iter().map(|c| c.name).collect()))
+            .collect();
+        assert_eq!(grouped, [(EMAIL.to_string(), vec!["Personal".to_string()])]);
+
+        // 2. Saved: the fake Google receives the event with exactly these values.
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the event");
+        };
+        let mut sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        for given in ["kind", "id", "status", "etag"] {
+            sent.as_object_mut().unwrap().remove(given);
+        }
+        assert_eq!(
+            sent,
+            json!({
+                "summary": "Review",
+                "description": "Q4 numbers",
+                "start": {"dateTime": "2026-11-13T14:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-13T15:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "location": "Room 2",
+                "transparency": "transparent",
+                "visibility": "private",
+            })
+        );
+        let review = shown(&updates)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.id == *id)
+            .unwrap();
+        assert_eq!(review.about.location, "Room 2");
+    }
+
+    /// "Standup" in "Personal" and the calendar "Team" of the same account, synchronized once.
+    fn standup_and_team(name: &str) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        google.calendar("team", "writer");
+        google.event(EMAIL, "standup", "Standup");
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    fn opened(engine: &Engine, regional: &Regional) -> (Event, Editor) {
+        let standup = now_shown(engine)
+            .into_iter()
+            .find(|e| e.id == "standup")
+            .unwrap();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let editor = Editor::of(&standup, calendar, regional);
+        (standup, editor)
+    }
+
+    fn edit(editor: &Editor, regional: &Regional) -> Box<Edit> {
+        match editor.save(regional) {
+            Ok(Save::Change(edit)) => edit,
+            other => panic!("not a change: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_field_changed_later_in_the_editor_reaches_google_and_comes_back_by_synchronization() {
+        let (google, mut engine, start) = standup_and_team("change");
+        let regional = polish();
+        let (standup, mut editor) = opened(&engine, &regional);
+        assert_eq!(
+            (editor.start_time.as_str(), editor.end_time.as_str()),
+            ("09:00", "10:00")
+        );
+        editor.title = "Daily".to_string();
+        editor.description = "Status".to_string();
+        editor.all_day = true;
+        editor.end_date = "11.11.2026".to_string();
+        let edit = edit(&editor, &regional);
+        let mut saving = Saving::default();
+        let local = saving.change(&standup, edit.changed());
+        let shown_now: Vec<(String, bool)> = saving
+            .shown(&now_shown(&engine))
+            .into_iter()
+            .map(|e| (e.title, e.saving))
+            .collect();
+        assert_eq!(shown_now, [("Daily".to_string(), true)]);
+
+        let updates = engine.handle(Some(Job::Change(local, edit)), start);
+
+        let changes = saved_changes(&updates);
+        let [Saved::Changed(confirmed, etag)] = changes.as_slice() else {
+            panic!("Google did not change the event");
+        };
+        assert_eq!(*confirmed, local);
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap();
+        assert_eq!(kept["etag"], etag.as_str());
+        assert_eq!(kept["summary"], "Daily");
+        assert_eq!(kept["description"], "Status");
+        assert_eq!(kept["start"], json!({"date": "2026-11-10"}));
+        assert_eq!(kept["end"], json!({"date": "2026-11-12"}));
+        // Only what changed was sent, against the version opened.
+        let (sent_against, patch) = google.fake.patched().pop().unwrap();
+        assert_eq!(sent_against, standup.etag);
+        assert!(patch.get("location").is_none());
+        saving.changed(local, etag);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        let daily = events.iter().find(|e| e.id == "standup").unwrap();
+        assert_eq!(daily.title, "Daily");
+        assert_eq!(
+            daily.timing,
+            Timing::AllDay {
+                start: d(2026, 11, 10),
+                end_exclusive: d(2026, 11, 12),
+            }
+        );
+    }
+
+    #[test]
+    fn choosing_another_calendar_of_the_account_moves_the_event_there() {
+        let (google, mut engine, start) = standup_and_team("move");
+        let regional = polish();
+        let (_, mut editor) = opened(&engine, &regional);
+        let calendars = engine.cache.calendar_list().unwrap();
+        let choices = editor.choices(create::choices(
+            &accounts(),
+            &calendars,
+            &Settings::default(),
+        ));
+        let team = choices[0].1.iter().find(|c| c.id == "team").unwrap();
+        editor.calendar = Some(team.clone());
+        editor.location = "Room 1".to_string();
+
+        let updates = engine.handle(Some(Job::Change(1, edit(&editor, &regional))), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        assert!(google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap()["status"] == "cancelled");
+        assert_eq!(
+            google.fake.event(ACCOUNT_ID, "team", "standup").unwrap()["location"],
+            "Room 1"
+        );
+        let events = shown(&updates).unwrap();
+        let moved: Vec<&str> = events
+            .iter()
+            .filter(|e| e.id == "standup")
+            .map(|e| e.calendar_id.as_str())
+            .collect();
+        assert_eq!(moved, ["team"]);
+    }
+
+    #[test]
+    fn a_move_google_refuses_after_the_other_changes_were_saved_says_so() {
+        let (google, mut engine, start) = standup_and_team("move-refused");
+        let regional = polish();
+        let (_, mut editor) = opened(&engine, &regional);
+        let team = engine
+            .cache
+            .calendar_list()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.id == "team")
+            .unwrap();
+        editor.calendar = Some(team);
+        editor.location = "Room 1".to_string();
+        // Google stops letting the account change "team" before the app learns of it.
+        google.fake.set_access_role("team", "reader");
+
+        let updates = engine.handle(Some(Job::Change(1, edit(&editor, &regional))), start);
+
+        let changes = saved_changes(&updates);
+        let [Saved::NotChanged(1, reason)] = changes.as_slice() else {
+            panic!("the move was not refused");
+        };
+        assert!(
+            reason.starts_with("it could not be moved to the other calendar (Google refused"),
+            "{reason}"
+        );
+        assert!(reason.ends_with("its other changes were saved"), "{reason}");
+        let standup = shown(&updates)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.id == "standup")
+            .unwrap();
+        assert_eq!(
+            (
+                standup.calendar_id.as_str(),
+                standup.about.location.as_str()
+            ),
+            (EMAIL, "Room 1")
+        );
+    }
+
+    #[test]
+    fn a_change_to_an_event_changed_elsewhere_meanwhile_is_refused_and_the_event_reloaded() {
+        let (google, mut engine, start) = standup_and_team("conflict");
+        let regional = polish();
+        let (_, mut editor) = opened(&engine, &regional);
+        google.event(EMAIL, "standup", "Standup (moved)");
+        editor.location = "Room 1".to_string();
+
+        let updates = engine.handle(Some(Job::Change(1, edit(&editor, &regional))), start);
+
+        let changes = saved_changes(&updates);
+        let [Saved::NotChanged(1, reason)] = changes.as_slice() else {
+            panic!("the change was not refused");
+        };
+        assert!(reason.contains("changed elsewhere"), "{reason}");
+        assert!(reason.contains("make your change again"), "{reason}");
+        let events = shown(&updates).unwrap();
+        assert!(events.iter().any(|e| e.title == "Standup (moved)"));
+        // An account not signed in in this run changes nothing either.
+        engine.stop(ACCOUNT_ID);
+        let updates = engine.handle(Some(Job::Change(2, edit(&editor, &regional))), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::NotChanged(2, _)]
+        ));
+    }
+
+    /// What Google answered about changed events, in order.
+    fn saved_changes(updates: &[Update]) -> Vec<Saved> {
+        updates
+            .iter()
+            .filter_map(|update| match update {
+                Update::Changed(local, etag) => Some(Saved::Changed(*local, etag.clone())),
+                Update::NotChanged(local, reason) => {
+                    Some(Saved::NotChanged(*local, reason.clone()))
+                }
+                _ => None,
+            })
+            .collect()
     }
 }

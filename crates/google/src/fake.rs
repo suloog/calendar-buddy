@@ -77,6 +77,66 @@ struct State {
     unreachable: bool,
     /// Each account's default event length in minutes, where the user set one in Google.
     default_lengths: Vec<(&'static str, u32)>,
+    /// Every patch of an event the app sent: the version it was sent against and the patch.
+    patched: Vec<(String, Value)>,
+}
+
+impl State {
+    /// Keeps the event as a new change with a new version (ETag), replacing the one with its ID.
+    fn put_event(&mut self, account: &'static str, calendar: &str, mut event: Value) -> Value {
+        self.changes += 1;
+        let change = self.changes;
+        event["etag"] = json!(format!("\"{change}\""));
+        self.events.retain(|(owner, c, e, _)| {
+            !(*owner == account && c == calendar && e["id"] == event["id"])
+        });
+        self.events
+            .push((account, calendar.to_string(), event.clone(), change));
+        event
+    }
+
+    /// The event of the account's calendar with the ID, unless deleted.
+    fn find_event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
+        self.events
+            .iter()
+            .find(|(owner, c, e, _)| *owner == account && c == calendar && e["id"] == id)
+            .map(|(_, _, event, _)| event.clone())
+            .filter(|event| !deleted(event))
+    }
+
+    /// Why the account may not change the calendar's events, as Google answers; `None` when it
+    /// may.
+    fn refuses_changes(&self, account: &str, calendar: &str) -> Option<(&'static str, String)> {
+        let entry = self
+            .calendars
+            .iter()
+            .find(|(owner, entry)| *owner == account && entry["id"] == calendar);
+        let Some((_, entry)) = entry else {
+            return Some(not_found());
+        };
+        if !matches!(entry["accessRole"].as_str(), Some("owner" | "writer")) {
+            return Some((
+                "403 Forbidden",
+                r#"{"error": {"code": 403, "message": "You need to have writer access to this calendar.",
+                    "errors": [{"domain": "calendar", "reason": "requiredAccessLevel"}]}}"#
+                    .to_string(),
+            ));
+        }
+        if self.failing.iter().any(|failing| failing == calendar) {
+            return Some((
+                "500 Internal Server Error",
+                r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
+            ));
+        }
+        None
+    }
+}
+
+fn not_found() -> (&'static str, String) {
+    (
+        "404 Not Found",
+        r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
+    )
 }
 
 /// How many items the fake sends per page; Google may send fewer than asked for.
@@ -178,15 +238,16 @@ impl FakeGoogle {
     /// An event of one of the account's calendars, as Google's `events` resource; it replaces
     /// the event with its ID, as a change made elsewhere.
     pub fn add_event(&self, account: &'static str, calendar: &str, event: Value) {
-        let mut state = self.state.lock().unwrap();
-        state.changes += 1;
-        let change = state.changes;
-        state.events.retain(|(owner, c, e, _)| {
-            !(*owner == account && c == calendar && e["id"] == event["id"])
-        });
-        state
-            .events
-            .push((account, calendar.to_string(), event, change));
+        self.state
+            .lock()
+            .unwrap()
+            .put_event(account, calendar, event);
+    }
+
+    /// The patches of events the app sent, in order: the version each was sent against and the
+    /// patch.
+    pub fn patched(&self) -> Vec<(String, Value)> {
+        self.state.lock().unwrap().patched.clone()
     }
 
     /// The event is deleted elsewhere.
@@ -384,8 +445,18 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         .find_map(|line| line.split_once("Bearer "))
         .and_then(|(_, token)| state.access.get(token.trim()).copied());
     let insert = head.starts_with("POST /calendar/v3/");
-    if head.starts_with("GET /calendar/v3/") || insert {
+    let patch = head.starts_with("PATCH /calendar/v3/");
+    if head.starts_with("GET /calendar/v3/") || insert || patch {
+        let if_match = head.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("if-match")
+                .then(|| value.trim().to_string())
+        });
         let answer = match bearer {
+            Some(account) if patch => patch_event(&mut state, account, request[1], if_match, &body),
+            Some(account) if insert && request[1].contains("/move?") => {
+                move_event(&mut state, account, request[1])
+            }
             Some(account) if insert => insert_event(&mut state, account, request[1], &body),
             Some(account) => calendar_api(&state, account, request[1]),
             None => (
@@ -623,42 +694,91 @@ fn insert_event(
             r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
         );
     };
-    let entry = state
-        .calendars
-        .iter()
-        .find(|(owner, entry)| *owner == account && entry["id"] == id.as_str());
-    if calendars != "calendars" || events != "events" || entry.is_none() {
-        return (
-            "404 Not Found",
-            r#"{"error": {"code": 404, "message": "Not Found"}}"#.to_string(),
-        );
+    if calendars != "calendars" || events != "events" {
+        return not_found();
     }
-    if !matches!(
-        entry.unwrap().1["accessRole"].as_str(),
-        Some("owner" | "writer")
-    ) {
-        return (
-            "403 Forbidden",
-            r#"{"error": {"code": 403, "message": "You need to have writer access to this calendar.",
-                "errors": [{"domain": "calendar", "reason": "requiredAccessLevel"}]}}"#
-                .to_string(),
-        );
-    }
-    if state.failing.contains(id) {
-        return (
-            "500 Internal Server Error",
-            r#"{"error": {"code": 500, "message": "Backend Error"}}"#.to_string(),
-        );
+    if let Some(refusal) = state.refuses_changes(account, id) {
+        return refusal;
     }
     let mut event: Value = serde_json::from_str(body).unwrap();
-    state.changes += 1;
-    let change = state.changes;
     event["kind"] = json!("calendar#event");
-    event["id"] = json!(format!("created-{change}"));
+    event["id"] = json!(format!("created-{}", state.changes + 1));
     event["status"] = json!("confirmed");
+    let event = state.put_event(account, id, event);
+    ("200 OK", event.to_string())
+}
+
+/// The Calendar API's `events.patch`: the fields sent replace those kept, a null one goes; only
+/// when the version sent in `If-Match` is the one kept.
+fn patch_event(
+    state: &mut State,
+    account: &'static str,
+    target: &str,
+    if_match: Option<String>,
+    body: &str,
+) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let [_, _, calendars, calendar, events, id] = segments(&url).try_into().unwrap_or_default();
+    if calendars != "calendars" || events != "events" {
+        return not_found();
+    }
+    if let Some(refusal) = state.refuses_changes(account, &calendar) {
+        return refusal;
+    }
+    let Some(mut event) = state.find_event(account, &calendar, &id) else {
+        return not_found();
+    };
+    if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
+        return (
+            "412 Precondition Failed",
+            r#"{"error": {"code": 412, "message": "Precondition Failed"}}"#.to_string(),
+        );
+    }
+    let patch: Value = serde_json::from_str(body).unwrap();
     state
-        .events
-        .push((account, id.clone(), event.clone(), change));
+        .patched
+        .push((if_match.unwrap_or_default(), patch.clone()));
+    merge(&mut event, &patch);
+    let event = state.put_event(account, &calendar, event);
+    ("200 OK", event.to_string())
+}
+
+/// JSON merge patch: objects merged field by field, null removing a field.
+fn merge(kept: &mut Value, patch: &Value) {
+    match patch.as_object() {
+        Some(fields) if kept.is_object() => {
+            for (name, value) in fields {
+                if value.is_null() {
+                    kept.as_object_mut().unwrap().remove(name);
+                } else {
+                    merge(&mut kept[name], value);
+                }
+            }
+        }
+        _ => *kept = patch.clone(),
+    }
+}
+
+/// The Calendar API's `events.move`: the event leaves its calendar, deleted there, and arrives in
+/// the destination, both calendars the account can change.
+fn move_event(state: &mut State, account: &'static str, target: &str) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let [_, _, _, calendar, _, id, _] = segments(&url).try_into().unwrap_or_default();
+    let destination = param(&url, "destination").unwrap_or_default();
+    for calendar in [&calendar, &destination] {
+        if let Some(refusal) = state.refuses_changes(account, calendar) {
+            return refusal;
+        }
+    }
+    let Some(event) = state.find_event(account, &calendar, &id) else {
+        return not_found();
+    };
+    state.put_event(
+        account,
+        &calendar,
+        json!({"kind": "calendar#event", "id": id, "status": "cancelled"}),
+    );
+    let event = state.put_event(account, &destination, event);
     ("200 OK", event.to_string())
 }
 

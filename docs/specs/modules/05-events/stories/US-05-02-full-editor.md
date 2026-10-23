@@ -3,7 +3,7 @@ id: US-05-02 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-05
 covers: [MOD-05-F03, MOD-05-F04, MOD-05-F05, MOD-05-F06, MOD-05-F07, MOD-05-F08, MOD-05-F11, MOD-05-F15, MOD-05-F16, MOD-05-U03] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-05-01] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-05-01] # story IDs that must be done first
 | **Module** | `[MOD-05]` Creating and editing events — `docs/specs/modules/05-events/REQUIREMENTS.md` |
 | **Covers** | `MOD-05-F03`, `F04`, `F05`, `F06`, `F07`, `F08`, `F11`, `F15`, `F16`, `U03` |
 | **Priority** | must |
-| **Status** | ready |
+| **Status** | review |
 | **Depends on** | blocked by `US-05-01` |
 | **YouTrack** | — |
 | **Open questions** | — |

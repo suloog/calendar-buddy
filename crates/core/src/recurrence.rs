@@ -8,6 +8,7 @@ use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, 
 use chrono_tz::Tz;
 use rrule::{RRuleSet, Tz as RuleZone};
 
+use crate::create::NO_TITLE;
 use crate::model::{Access, Calendar, Event, Timing};
 use crate::sync::{Start, SyncedEvent, Window};
 
@@ -19,15 +20,15 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         .filter_map(|event| event.instance_of.as_ref())
         .map(|(series, original)| (series.as_str(), *original))
         .collect();
-    let shown = |id: String, title: &str, timing: Timing| Event {
+    let shown = |event: &SyncedEvent, id: String, timing: Timing| Event {
         id,
         account_id: calendar.account_id.clone(),
         calendar_id: calendar.id.clone(),
         // As Google Calendar names an untitled event.
-        title: if title.is_empty() {
-            "(No title)"
+        title: if event.title.is_empty() {
+            NO_TITLE
         } else {
-            title
+            &event.title
         }
         .to_string(),
         color: calendar.color,
@@ -35,6 +36,9 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         busy_only: calendar.access == Access::FreeBusyReader,
         read_only: !calendar.access.can_edit(),
         saving: false,
+        recurring: !event.recurrence.is_empty() || event.instance_of.is_some(),
+        about: event.about.clone(),
+        etag: event.etag.clone(),
     };
     let mut shown_events = Vec::new();
     for event in events {
@@ -44,13 +48,13 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         };
         if event.recurrence.is_empty() || event.instance_of.is_some() {
             if window.overlaps(&timing) {
-                shown_events.push(shown(event.id.clone(), &event.title, timing));
+                shown_events.push(shown(event, event.id.clone(), timing));
             }
             continue;
         }
         for (start, timing) in occurrences(timing, &event.recurrence, window) {
             if !replaced.contains(&(event.id.as_str(), start)) {
-                shown_events.push(shown(occurrence_id(&event.id, start), &event.title, timing));
+                shown_events.push(shown(event, occurrence_id(&event.id, start), timing));
             }
         }
     }
@@ -248,6 +252,8 @@ mod tests {
             timing: Some(timing),
             recurrence: Vec::new(),
             instance_of: None,
+            about: Default::default(),
+            etag: String::new(),
         }
     }
 

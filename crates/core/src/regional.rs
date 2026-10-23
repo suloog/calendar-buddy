@@ -81,6 +81,29 @@ impl Regional {
         }
     }
 
+    /// A time typed on the 24-hour clock, as `15:00`, or on the 12-hour one with the locale's
+    /// AM or PM after it, as `3:00 PM`.
+    pub fn parse_time(&self, text: &str) -> Option<NaiveTime> {
+        let text = text.trim();
+        let half = self.am_pm.iter().enumerate().find_map(|(pm, mark)| {
+            let mark = mark.to_lowercase();
+            let lower = text.to_lowercase();
+            let rest = lower.strip_suffix(&mark).filter(|_| !mark.is_empty())?;
+            Some((pm == 1, rest.trim().to_string()))
+        });
+        match half {
+            Some((pm, rest)) => {
+                let time = NaiveTime::parse_from_str(&rest, "%H:%M")
+                    .ok()
+                    .filter(|time| (1..=12).contains(&time.hour()))?;
+                // 12:xx AM is just after midnight, 12:xx PM just after noon.
+                let hour = time.hour() % 12 + if pm { 12 } else { 0 };
+                time.with_hour(hour)
+            }
+            None => NaiveTime::parse_from_str(text, "%H:%M").ok(),
+        }
+    }
+
     /// The label of an hour of the grid: `3 PM` or `15:00`.
     pub fn hour(&self, hour: u32) -> String {
         if self.twelve_hour {
@@ -302,6 +325,22 @@ mod tests {
         assert_eq!(named("pl_PL").parse_date("04.03.2027"), Some(d(2027, 3, 4)));
         assert_eq!(us.parse_date("2/30/2027"), None);
         assert_eq!(us.parse_date("tomorrow"), None);
+    }
+
+    #[test]
+    fn a_typed_time_is_read_on_the_24_hour_clock_or_with_the_locales_am_and_pm() {
+        let us = named("en_US.UTF-8");
+        assert_eq!(us.parse_time("3:05 PM"), Some(at(15, 5)));
+        assert_eq!(us.parse_time(" 12:30am"), Some(at(0, 30)));
+        assert_eq!(us.parse_time("12:00 PM"), Some(at(12, 0)));
+        assert_eq!(us.parse_time("15:00"), Some(at(15, 0)));
+        let pl = named("pl_PL");
+        assert_eq!(pl.parse_time("9:00"), Some(at(9, 0)));
+        assert_eq!(pl.parse_time(&pl.time(at(23, 45))), Some(at(23, 45)));
+        assert_eq!(us.parse_time(&us.time(at(23, 45))), Some(at(23, 45)));
+        assert_eq!(us.parse_time("25:00"), None);
+        assert_eq!(us.parse_time("13:00 PM"), None);
+        assert_eq!(us.parse_time("noon"), None);
     }
 
     #[test]

@@ -8,8 +8,12 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
-use crate::model::{Access, Calendar, Rgb, Timing};
+use crate::model::{About, Access, Calendar, Rgb, Show, Timing, Visibility};
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
+
+/// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
+/// states and time of the last synchronization dropped, so they are fetched again in full.
+const VERSION: i64 = 1;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -33,6 +37,11 @@ const SCHEMA: &str = "
         recurrence TEXT NOT NULL,
         series_id TEXT,
         original_start TEXT,
+        description TEXT NOT NULL,
+        location TEXT NOT NULL,
+        show TEXT NOT NULL,
+        visibility TEXT NOT NULL,
+        etag TEXT NOT NULL,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -91,16 +100,26 @@ impl Cache {
     }
 
     fn open_file(path: &Path) -> rusqlite::Result<Cache> {
-        let connection = Connection::open(path)?;
+        Cache::with_schema(Connection::open(path)?)
+    }
+
+    fn with_schema(connection: Connection) -> rusqlite::Result<Cache> {
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version < VERSION {
+            connection.execute_batch(
+                "DROP TABLE IF EXISTS events; DROP TABLE IF EXISTS sync_tokens; \
+                 DROP TABLE IF EXISTS last_synced;",
+            )?;
+        }
         connection.execute_batch(SCHEMA)?;
+        connection.pragma_update(None, "user_version", VERSION)?;
         Ok(Cache { connection })
     }
 
     /// A cache that lives in memory only, for tests.
     pub fn in_memory() -> Cache {
         let connection = Connection::open_in_memory().expect("an in-memory database");
-        connection.execute_batch(SCHEMA).expect("the cache schema");
-        Cache { connection }
+        Cache::with_schema(connection).expect("the cache schema")
     }
 
     /// Replaces the account's calendars; the events of calendars no longer listed go with them.
@@ -351,7 +370,8 @@ impl Cache {
             .connection
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
-                 series_id, original_start FROM events",
+                 series_id, original_start, description, location, show, visibility, etag \
+                 FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -367,6 +387,13 @@ impl Cache {
                     row.get::<_, String>(7)?,
                     row.get::<_, Option<String>>(8)?,
                     row.get::<_, Option<String>>(9)?,
+                    About {
+                        description: row.get(10)?,
+                        location: row.get(11)?,
+                        show: parse_show(&row.get::<_, String>(12)?),
+                        visibility: parse_visibility(&row.get::<_, String>(13)?),
+                    },
+                    row.get::<_, String>(14)?,
                 ))
             })
             .map_err(failed)?;
@@ -382,6 +409,8 @@ impl Cache {
                 recurrence,
                 series,
                 original,
+                about,
+                etag,
             ) = row.map_err(failed)?;
             let timing = match (start, end, zone) {
                 (Some(start), Some(end), zone) => {
@@ -401,6 +430,8 @@ impl Cache {
                 timing,
                 recurrence: recurrence.lines().map(str::to_string).collect(),
                 instance_of,
+                about,
+                etag,
             };
             if let Some(&index) = index.get(&(account_id, calendar_id)) {
                 calendars[index].events.push(event);
@@ -417,7 +448,10 @@ fn insert(
     events: &[SyncedEvent],
 ) -> Result<(), SyncError> {
     let mut insert = transaction
-        .prepare("INSERT OR REPLACE INTO events VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")
+        .prepare(
+            "INSERT OR REPLACE INTO events VALUES \
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        )
         .map_err(failed)?;
     for event in events {
         let (start, end, zone) = match event.timing {
@@ -452,6 +486,11 @@ fn insert(
                 event.recurrence.join("\n"),
                 series_id,
                 original_start,
+                event.about.description,
+                event.about.location,
+                show_key(event.about.show),
+                visibility_key(event.about.visibility),
+                event.etag,
             ])
             .map_err(failed)?;
     }
@@ -499,6 +538,36 @@ pub fn parse_color(text: &str) -> Option<Rgb> {
     }
     let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
     Some(Rgb(byte(0)?, byte(2)?, byte(4)?))
+}
+
+fn show_key(show: Show) -> &'static str {
+    match show {
+        Show::Busy => "busy",
+        Show::Free => "free",
+    }
+}
+
+fn parse_show(key: &str) -> Show {
+    match key {
+        "free" => Show::Free,
+        _ => Show::Busy,
+    }
+}
+
+fn visibility_key(visibility: Visibility) -> &'static str {
+    match visibility {
+        Visibility::Default => "default",
+        Visibility::Public => "public",
+        Visibility::Private => "private",
+    }
+}
+
+fn parse_visibility(key: &str) -> Visibility {
+    match key {
+        "public" => Visibility::Public,
+        "private" => Visibility::Private,
+        _ => Visibility::Default,
+    }
 }
 
 fn access_key(access: Access) -> &'static str {
@@ -573,6 +642,8 @@ mod tests {
                     "EXDATE;TZID=Europe/Warsaw:20261109T090000".into(),
                 ],
                 instance_of: None,
+                about: About::default(),
+                etag: "\"1\"".into(),
             },
             SyncedEvent {
                 id: "series_20261116T080000Z".into(),
@@ -583,6 +654,8 @@ mod tests {
                     "series".into(),
                     Start::At(Utc.with_ymd_and_hms(2026, 11, 16, 8, 0, 0).unwrap()),
                 )),
+                about: About::default(),
+                etag: "\"2\"".into(),
             },
             SyncedEvent {
                 id: "trip".into(),
@@ -593,6 +666,13 @@ mod tests {
                 }),
                 recurrence: Vec::new(),
                 instance_of: None,
+                about: About {
+                    description: "Flights\nHotel".into(),
+                    location: "Lisbon".into(),
+                    show: Show::Free,
+                    visibility: Visibility::Private,
+                },
+                etag: "\"3\"".into(),
             },
         ]
     }
@@ -720,6 +800,44 @@ mod tests {
 
         assert_eq!(Cache::open(&path).unwrap().calendars().unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_cache_from_an_earlier_version_drops_its_events_and_states_to_fetch_them_again() {
+        let dir = std::env::temp_dir().join(format!(
+            "calendar-buddy-cache-version-{}",
+            std::process::id()
+        ));
+        let path = dir.join("cache.sqlite3");
+        std::fs::create_dir_all(&dir).unwrap();
+        // The events table before descriptions, locations and versions were kept.
+        let old = Connection::open(&path).unwrap();
+        old.execute_batch(
+            "CREATE TABLE events (account_id TEXT NOT NULL, calendar_id TEXT NOT NULL, \
+             id TEXT NOT NULL, title TEXT NOT NULL, start TEXT, end TEXT, zone TEXT, \
+             recurrence TEXT NOT NULL, series_id TEXT, original_start TEXT, \
+             PRIMARY KEY (account_id, calendar_id, id)); \
+             INSERT INTO events VALUES ('1', 'work', 'old', 'Old', NULL, NULL, NULL, '', NULL, \
+             NULL); \
+             CREATE TABLE last_synced (at TEXT NOT NULL); \
+             INSERT INTO last_synced VALUES ('2026-10-22T10:00:00+00:00');",
+        )
+        .unwrap();
+        drop(old);
+
+        let mut cache = Cache::open(&path).unwrap();
+        // Nothing synchronized is left to claim it is up to date.
+        assert_eq!(cache.last_synced().unwrap(), None);
+        let work = calendar("1", "work");
+        cache
+            .set_calendars("1", std::slice::from_ref(&work))
+            .unwrap();
+        cache.set_events(&work, &events()).unwrap();
+        drop(cache);
+        let cached = Cache::open(&path).unwrap().calendars().unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+
+        assert_eq!(cached[0].events, events());
     }
 
     #[test]

@@ -7,7 +7,8 @@ use chrono_tz::Tz;
 
 use crate::cache::{Cache, CachedCalendar};
 use crate::create::NewEvent;
-use crate::model::{Calendar, Event, Timing};
+use crate::editor::Patch;
+use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::expand;
 use crate::week::day_start;
 
@@ -30,6 +31,9 @@ pub struct SyncedEvent {
     pub recurrence: Vec<String>,
     /// For a changed or cancelled occurrence: its series' master and its original start.
     pub instance_of: Option<(String, Start)>,
+    pub about: About,
+    /// The version of the event at the provider (its ETag).
+    pub etag: String,
 }
 
 /// The days the cache holds: one year back to two years ahead of today (`MOD-02-F11`, `DEC-23`).
@@ -104,6 +108,9 @@ pub struct SyncError(pub String);
 /// Why a synchronization did not finish when the provider asked to slow down.
 const RATE_LIMITED: &str = "the provider asked to slow down (rate limit)";
 
+/// Why a change was not made: the event changed at the provider since the version it was made to.
+const CHANGED_ELSEWHERE: &str = "it was changed elsewhere in the meantime";
+
 impl SyncError {
     /// The provider asked to slow down: requests came too often (`MOD-02-F16`).
     pub fn rate_limited() -> SyncError {
@@ -112,6 +119,15 @@ impl SyncError {
 
     pub fn is_rate_limited(&self) -> bool {
         self.0 == RATE_LIMITED
+    }
+
+    /// The event changed at the provider since the version a change was made to.
+    pub fn changed_elsewhere() -> SyncError {
+        SyncError(CHANGED_ELSEWHERE.into())
+    }
+
+    pub fn is_changed_elsewhere(&self) -> bool {
+        self.0 == CHANGED_ELSEWHERE
     }
 }
 
@@ -138,6 +154,24 @@ pub trait Provider {
     /// Creates the event in the calendar and returns its ID there (`MOD-05-F16`); it reaches the
     /// cache through synchronization.
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError>;
+    /// Changes what the patch holds of the calendar's event, unless the event changed at the
+    /// provider since the version `etag` (`SyncError::changed_elsewhere`); returns the event's
+    /// new version (`MOD-05-F11`).
+    fn update(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        etag: &str,
+        patch: &Patch,
+    ) -> Result<String, SyncError>;
+    /// Moves the event to another calendar of the same account and returns its new version
+    /// (`MOD-05-F15`).
+    fn move_to(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        destination: &Calendar,
+    ) -> Result<String, SyncError>;
     /// How long, in minutes, a new event started without a range is, as the account's settings at
     /// the provider say (`MOD-05-F09`).
     fn default_length(&self) -> Result<u32, SyncError>;
@@ -362,6 +396,14 @@ mod tests {
             Ok(Some(fetched))
         }
 
+        fn update(&self, _: &Calendar, _: &str, _: &str, _: &Patch) -> Result<String, SyncError> {
+            unreachable!("synchronization changes nothing")
+        }
+
+        fn move_to(&self, _: &Calendar, _: &str, _: &Calendar) -> Result<String, SyncError> {
+            unreachable!("synchronization moves nothing")
+        }
+
         fn create(&self, _: &Calendar, _: &NewEvent) -> Result<String, SyncError> {
             unreachable!("synchronization creates nothing")
         }
@@ -392,6 +434,8 @@ mod tests {
             }),
             recurrence: Vec::new(),
             instance_of: None,
+            about: Default::default(),
+            etag: String::new(),
         }
     }
 
