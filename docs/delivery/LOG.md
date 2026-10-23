@@ -44,3 +44,6 @@
 - Reviews: code 2 round(s), spec 1 round(s); open notes: fixed a crash on `g` in locales with chrono-unsupported date formats, unreadable pre-filled dates and year-first locales written month first; not fixed: zone aliases (e.g. `Poland`) count as another zone; the app-side zone watcher has no automated test; AC1's "day and 3-day views start on Sunday" read as the week start (they start on the selected date).
 - Manual checks: none
 - Commits on main: one squash commit — feat(views): follow the system locale and time zone
+
+## Manual checks — 2026-10-23 (2)
+- The owner checked US-03-05 and US-03-08: all passed. Both set to done.
