@@ -1,10 +1,11 @@
-//! The real platform behind `calendar_core::platform`: the Secret Service and the desktop's URL
-//! handler. Tests never use these; they use fakes.
+//! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
+//! handler, and systemd-logind and NetworkManager on the system bus. Tests never use these; they
+//! use fakes.
 
 use std::collections::HashMap;
 
 use calendar_core::accounts::Account;
-use calendar_core::platform::{Browser, SecretStore, SecretStoreError};
+use calendar_core::platform::{Browser, SecretStore, SecretStoreError, Wakeups};
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
@@ -100,5 +101,52 @@ impl Browser for SystemBrowser {
         // `xdg-open` can stay until the browser closes; the sign-in does not wait for it.
         std::thread::spawn(move || child.wait());
         Ok(())
+    }
+}
+
+/// Waking from sleep, from systemd-logind, and the network's return, from NetworkManager, on the
+/// system bus. Without either, there is nothing to watch.
+pub struct SystemWakeups;
+
+/// NetworkManager's state with full connectivity (`NM_STATE_CONNECTED_GLOBAL`).
+const CONNECTED_GLOBAL: u32 = 70;
+
+impl Wakeups for SystemWakeups {
+    fn watch(&self, woke: Box<dyn Fn() + Send + Sync>) {
+        let woke = std::sync::Arc::new(woke);
+        let signals = [
+            (
+                "org.freedesktop.login1",
+                "/org/freedesktop/login1",
+                "org.freedesktop.login1.Manager",
+                "PrepareForSleep",
+            ),
+            (
+                "org.freedesktop.NetworkManager",
+                "/org/freedesktop/NetworkManager",
+                "org.freedesktop.NetworkManager",
+                "StateChanged",
+            ),
+        ];
+        for (service, path, interface, signal) in signals {
+            let woke = woke.clone();
+            std::thread::spawn(move || -> zbus::Result<()> {
+                let bus = zbus::blocking::Connection::system()?;
+                let proxy = zbus::blocking::Proxy::new(&bus, service, path, interface)?;
+                for message in proxy.receive_signal(signal)? {
+                    let body = message.body();
+                    // `PrepareForSleep(false)` comes after waking; `StateChanged(70)` when the
+                    // network is back.
+                    let back = match signal {
+                        "PrepareForSleep" => body.deserialize::<bool>().is_ok_and(|going| !going),
+                        _ => body.deserialize::<u32>() == Ok(CONNECTED_GLOBAL),
+                    };
+                    if back {
+                        woke();
+                    }
+                }
+                Ok(())
+            });
+        }
     }
 }

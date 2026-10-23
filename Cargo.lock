@@ -406,6 +406,8 @@ dependencies = [
  "eframe",
  "iana-time-zone",
  "secret-service",
+ "serde_json",
+ "zbus",
 ]
 
 [[package]]

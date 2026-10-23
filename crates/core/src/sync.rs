@@ -67,6 +67,14 @@ impl Window {
             } => start < self.until && end_exclusive > self.from,
         }
     }
+
+    /// Whether the cache keeps a changed event: one inside the window, a series (its occurrences
+    /// may fall inside), or a changed or cancelled occurrence (it stands in for one of them).
+    pub fn keeps(&self, event: &SyncedEvent) -> bool {
+        !event.recurrence.is_empty()
+            || event.instance_of.is_some()
+            || event.timing.is_some_and(|timing| self.overlaps(&timing))
+    }
 }
 
 /// Why synchronizing an account or a calendar did not finish; never holds a token or event
@@ -74,18 +82,31 @@ impl Window {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyncError(pub String);
 
+/// What a provider sends for a calendar: its events, all or only those changed, and the state to
+/// ask for changes since.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Fetched {
+    pub events: Vec<SyncedEvent>,
+    /// The IDs of events deleted since the state asked with.
+    pub removed: Vec<String>,
+    /// `None` when the provider gave no state; the next synchronization is then full again.
+    pub sync_token: Option<String>,
+}
+
 /// One account at a calendar provider.
 pub trait Provider {
     /// Every calendar the account can access, read-only and subscribed ones included.
     fn calendars(&self) -> Result<Vec<Calendar>, SyncError>;
     /// The calendar's events that fall inside the window, series as master plus exceptions.
-    fn events(&self, calendar: &Calendar, window: Window) -> Result<Vec<SyncedEvent>, SyncError>;
+    fn events(&self, calendar: &Calendar, window: Window) -> Result<Fetched, SyncError>;
+    /// What changed in the calendar since the state, wherever it falls; `None` when the provider
+    /// no longer accepts the state.
+    fn changes(&self, calendar: &Calendar, sync_token: &str) -> Result<Option<Fetched>, SyncError>;
 }
 
-/// Fetches every calendar of the account and its events within the window, replacing what the
-/// cache held for the account. A calendar that fails keeps what the cache had and does not stop
-/// the others; the first such failure is returned once they are done.
-pub fn full_sync(
+/// Fetches every calendar of the account and synchronizes each (`sync_calendars`); calendars no
+/// longer listed go from the cache with their events.
+pub fn sync_account(
     provider: &dyn Provider,
     account_id: &str,
     window: Window,
@@ -93,16 +114,59 @@ pub fn full_sync(
 ) -> Result<(), SyncError> {
     let calendars = provider.calendars()?;
     cache.set_calendars(account_id, &calendars)?;
+    sync_calendars(provider, &calendars, window, cache).map(|_| ())
+}
+
+/// Synchronizes each calendar (`sync_calendar`) and says whether anything changed. A calendar
+/// that fails keeps what the cache had and does not stop the others; the first such failure is
+/// returned once they are done.
+pub fn sync_calendars(
+    provider: &dyn Provider,
+    calendars: &[Calendar],
+    window: Window,
+    cache: &mut Cache,
+) -> Result<bool, SyncError> {
+    let mut changed = false;
     let mut failed = None;
-    for calendar in &calendars {
-        match provider.events(calendar, window) {
-            Ok(events) => cache.set_events(calendar, &events)?,
+    for calendar in calendars {
+        match sync_calendar(provider, calendar, window, cache) {
+            Ok(change) => changed |= change,
             Err(error) => {
                 failed.get_or_insert(error);
             }
         }
     }
-    failed.map_or(Ok(()), Err)
+    failed.map_or(Ok(changed), Err)
+}
+
+/// Synchronizes one calendar's events and says whether anything changed (`MOD-02-F10`): after its
+/// first full synchronization only what changed is fetched, and kept when it falls inside the
+/// window; when the provider no longer accepts the stored state, or the window has moved since
+/// (`MOD-02-F11`), the calendar is fetched in full again.
+pub fn sync_calendar(
+    provider: &dyn Provider,
+    calendar: &Calendar,
+    window: Window,
+    cache: &mut Cache,
+) -> Result<bool, SyncError> {
+    if let Some(token) = cache.sync_token(calendar, window)?
+        && let Some(changes) = provider.changes(calendar, &token)?
+    {
+        let changed = !changes.events.is_empty() || !changes.removed.is_empty();
+        let (kept, moved_out): (Vec<_>, Vec<_>) = changes
+            .events
+            .into_iter()
+            .partition(|event| window.keeps(event));
+        let mut removed = changes.removed;
+        removed.extend(moved_out.into_iter().map(|event| event.id));
+        cache.change_events(calendar, &kept, &removed)?;
+        cache.set_sync_token(calendar, changes.sync_token.as_deref(), window)?;
+        return Ok(changed);
+    }
+    let fetched = provider.events(calendar, window)?;
+    cache.set_events(calendar, &fetched.events)?;
+    cache.set_sync_token(calendar, fetched.sync_token.as_deref(), window)?;
+    Ok(true)
 }
 
 /// What the views show: the events and occurrences of every cached calendar, of all accounts
@@ -118,8 +182,207 @@ pub fn shown_events(cached: &[CachedCalendar], window: Window) -> Vec<Event> {
 mod tests {
     use super::*;
     use crate::fixtures::d;
+    use crate::model::{Access, Rgb};
     use chrono::TimeZone;
     use chrono_tz::Europe::Warsaw;
+    use std::cell::RefCell;
+
+    /// A provider with one calendar, keeping its changes since each state it gave out.
+    #[derive(Default)]
+    struct Fake {
+        events: RefCell<Vec<SyncedEvent>>,
+        /// Every change so far: a changed event, or the ID of a deleted one.
+        changes: RefCell<Vec<Result<SyncedEvent, String>>>,
+        /// The provider no longer accepts the states it gave out.
+        expired: RefCell<bool>,
+        /// What was asked: "events", or "changes since <state>".
+        asked: RefCell<Vec<String>>,
+    }
+
+    impl Fake {
+        fn put(&self, event: SyncedEvent) {
+            let mut events = self.events.borrow_mut();
+            events.retain(|e| e.id != event.id);
+            events.push(event.clone());
+            self.changes.borrow_mut().push(Ok(event));
+        }
+
+        fn delete(&self, id: &str) {
+            self.events.borrow_mut().retain(|e| e.id != id);
+            self.changes.borrow_mut().push(Err(id.to_string()));
+        }
+
+        fn state(&self) -> Option<String> {
+            Some(self.changes.borrow().len().to_string())
+        }
+    }
+
+    impl Provider for Fake {
+        fn calendars(&self) -> Result<Vec<Calendar>, SyncError> {
+            Ok(vec![calendar()])
+        }
+
+        fn events(&self, _: &Calendar, window: Window) -> Result<Fetched, SyncError> {
+            self.asked.borrow_mut().push("events".into());
+            Ok(Fetched {
+                events: self
+                    .events
+                    .borrow()
+                    .iter()
+                    .filter(|e| window.keeps(e))
+                    .cloned()
+                    .collect(),
+                removed: Vec::new(),
+                sync_token: self.state(),
+            })
+        }
+
+        fn changes(&self, _: &Calendar, since: &str) -> Result<Option<Fetched>, SyncError> {
+            self.asked
+                .borrow_mut()
+                .push(format!("changes since {since}"));
+            if *self.expired.borrow() {
+                return Ok(None);
+            }
+            let mut fetched = Fetched {
+                sync_token: self.state(),
+                ..Fetched::default()
+            };
+            // Like Google, each event once, as it is now.
+            for change in &self.changes.borrow()[since.parse().unwrap()..] {
+                let id = match change {
+                    Ok(event) => &event.id,
+                    Err(id) => id,
+                };
+                fetched.events.retain(|e| e.id != *id);
+                fetched.removed.retain(|r| r != id);
+                match change.clone() {
+                    Ok(event) => fetched.events.push(event),
+                    Err(id) => fetched.removed.push(id),
+                }
+            }
+            Ok(Some(fetched))
+        }
+    }
+
+    fn calendar() -> Calendar {
+        Calendar {
+            id: "work".into(),
+            account_id: "1".into(),
+            name: "Work".into(),
+            color: Rgb(0x9f, 0xe1, 0xe7),
+            access: Access::Owner,
+            zone: Warsaw,
+        }
+    }
+
+    fn event(id: &str, title: &str, day: NaiveDate) -> SyncedEvent {
+        SyncedEvent {
+            id: id.into(),
+            title: title.into(),
+            timing: Some(Timing::AllDay {
+                start: day,
+                end_exclusive: day.succ_opt().unwrap(),
+            }),
+            recurrence: Vec::new(),
+            instance_of: None,
+        }
+    }
+
+    /// The cached events' titles, sorted.
+    fn titles(cache: &Cache) -> Vec<String> {
+        let mut titles: Vec<String> = cache.calendars().unwrap()[0]
+            .events
+            .iter()
+            .map(|e| e.title.clone())
+            .collect();
+        titles.sort();
+        titles
+    }
+
+    fn window() -> Window {
+        Window::around(d(2026, 11, 11), Warsaw)
+    }
+
+    /// An account synchronized for the first time: "Standup" and "Review" in its calendar.
+    fn first_sync(fake: &Fake) -> Cache {
+        fake.put(event("standup", "Standup", d(2026, 11, 11)));
+        fake.put(event("review", "Review", d(2026, 11, 12)));
+        let mut cache = Cache::in_memory();
+        sync_account(fake, "1", window(), &mut cache).unwrap();
+        cache
+    }
+
+    #[test]
+    fn after_the_first_full_synchronization_only_changes_are_fetched() {
+        let fake = Fake::default();
+        let mut cache = first_sync(&fake);
+        fake.put(event("standup", "Standup 2", d(2026, 11, 11)));
+        fake.delete("review");
+        fake.put(event("retro", "Retro", d(2026, 11, 13)));
+        // Moved past the window: it goes from the cache.
+        fake.put(event("standup", "Standup 3", d(2029, 1, 1)));
+        fake.put(event("planning", "Planning", d(2026, 11, 13)));
+
+        let changed = sync_calendar(&fake, &calendar(), window(), &mut cache);
+
+        assert_eq!(changed, Ok(true));
+        assert_eq!(*fake.asked.borrow(), ["events", "changes since 2"]);
+        assert_eq!(titles(&cache), ["Planning", "Retro"]);
+        assert_eq!(
+            cache.sync_token(&calendar(), window()).unwrap().as_deref(),
+            Some("7")
+        );
+    }
+
+    #[test]
+    fn once_the_window_has_moved_the_calendar_is_fetched_in_full_again() {
+        let fake = Fake::default();
+        // Just past the window, unchanged since.
+        fake.put(event("conference", "Conference", d(2028, 11, 11)));
+        let mut cache = first_sync(&fake);
+        assert_eq!(titles(&cache), ["Review", "Standup"]);
+        let next_day = Window::around(d(2026, 11, 12), Warsaw);
+
+        let changed = sync_calendar(&fake, &calendar(), next_day, &mut cache);
+
+        assert_eq!(changed, Ok(true));
+        assert_eq!(*fake.asked.borrow(), ["events", "events"]);
+        assert_eq!(titles(&cache), ["Conference", "Review", "Standup"]);
+    }
+
+    #[test]
+    fn with_nothing_changed_nothing_is_reported() {
+        let fake = Fake::default();
+        let mut cache = first_sync(&fake);
+
+        let changed = sync_calendar(&fake, &calendar(), window(), &mut cache);
+
+        assert_eq!(changed, Ok(false));
+        assert_eq!(titles(&cache), ["Review", "Standup"]);
+    }
+
+    #[test]
+    fn a_state_no_longer_accepted_is_followed_by_a_full_synchronization() {
+        let fake = Fake::default();
+        let mut cache = first_sync(&fake);
+        fake.put(event("standup", "Standup 2", d(2026, 11, 11)));
+        fake.delete("review");
+        *fake.expired.borrow_mut() = true;
+
+        let changed = sync_calendar(&fake, &calendar(), window(), &mut cache);
+
+        assert_eq!(changed, Ok(true));
+        assert_eq!(
+            *fake.asked.borrow(),
+            ["events", "changes since 2", "events"]
+        );
+        assert_eq!(titles(&cache), ["Standup 2"]);
+        assert_eq!(
+            cache.sync_token(&calendar(), window()).unwrap().as_deref(),
+            Some("4")
+        );
+    }
 
     #[test]
     fn the_cache_window_is_one_year_back_to_two_years_ahead() {

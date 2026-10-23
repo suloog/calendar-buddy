@@ -18,10 +18,10 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 mod calendar;
-#[cfg(test)]
-mod fake;
+#[cfg(any(test, feature = "fake"))]
+pub mod fake;
 
-pub use calendar::sync_account;
+pub use calendar::{Session, sync_account};
 
 /// The client file's name in the app's config directory (`DEC-77`).
 pub const CLIENT_FILE: &str = "google-oauth-client.json";

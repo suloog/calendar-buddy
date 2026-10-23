@@ -1,13 +1,16 @@
 //! Reading an account's calendars and events from the Google Calendar API (`MOD-02`) into the
 //! app's own model: the calendar list with Google's colours, and each calendar's events within the
-//! cache window, series as master plus exceptions (not expanded by Google).
+//! cache window, series as master plus exceptions (not expanded by Google), then only what changed
+//! since (`syncToken`).
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::model::{Calendar, Timing};
 use calendar_core::platform::{SecretStore, SecretStoreError};
-use calendar_core::sync::{Provider, Start, SyncError, SyncedEvent, Window, full_sync};
+use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use serde::Deserialize;
@@ -20,8 +23,12 @@ use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, refresh};
 const CALENDARS_PER_PAGE: &str = "250";
 const EVENTS_PER_PAGE: &str = "2500";
 
-/// Synchronizes one connected account in full: signs in with its refresh token from the secret
-/// store, then fetches every calendar and its events within the window into the cache.
+/// How long an access token is used before a new one is asked for; Google's last an hour.
+const ACCESS_FOR: Duration = Duration::from_secs(45 * 60);
+
+/// Synchronizes one connected account: signs in with its refresh token from the secret store,
+/// then fetches every calendar and its events within the window into the cache, or only what
+/// changed in a calendar since its last synchronization.
 pub fn sync_account(
     client_file: &Path,
     endpoints: &Endpoints,
@@ -30,40 +37,72 @@ pub fn sync_account(
     window: Window,
     cache: &mut Cache,
 ) -> Result<(), SyncError> {
-    let client = Client::read(client_file).map_err(|_| {
-        SyncError(format!(
-            "the Google OAuth client file {} is missing or unreadable",
-            client_file.display()
-        ))
-    })?;
-    let refresh_token = store
-        .load(account_id)
-        .map_err(|error| match error {
-            SecretStoreError::NotRunning => SyncError("no secret store is running".into()),
-            SecretStoreError::Failed(reason) => {
-                SyncError(format!("the secret store is locked ({reason})"))
-            }
-        })?
-        .ok_or_else(|| SyncError("the account needs sign-in".into()))?;
-    let access_token = refresh(&client, endpoints, &refresh_token)
-        .map_err(|_| SyncError("Google did not accept the account's sign-in".into()))?;
-    let google = GoogleCalendar {
-        endpoints,
-        account_id,
-        access_token,
-    };
-    full_sync(&google, account_id, window, cache)
+    let session = Session::sign_in(client_file, endpoints, store, account_id)?;
+    calendar_core::sync::sync_account(&session, account_id, window, cache)
 }
 
-/// One account at the Google Calendar API, signed in.
-struct GoogleCalendar<'a> {
-    endpoints: &'a Endpoints,
-    account_id: &'a str,
+/// A list's items, and the synchronization state Google gave with them.
+type Listed<T> = (Vec<T>, Option<String>);
+
+/// One connected account at the Google Calendar API, signed in for as long as the app runs.
+pub struct Session {
+    client: Client,
+    endpoints: Endpoints,
+    account_id: String,
     /// Not `Debug`, so it never reaches a log (`NFR-07`).
-    access_token: String,
+    refresh_token: String,
+    /// The access token in use and when it was issued; `None` once Google refused it.
+    access: RefCell<Option<(String, Instant)>>,
 }
 
-impl GoogleCalendar<'_> {
+impl Session {
+    /// Signs in with the account's refresh token from the secret store.
+    pub fn sign_in(
+        client_file: &Path,
+        endpoints: &Endpoints,
+        store: &dyn SecretStore,
+        account_id: &str,
+    ) -> Result<Session, SyncError> {
+        let client = Client::read(client_file).map_err(|_| {
+            SyncError(format!(
+                "the Google OAuth client file {} is missing or unreadable",
+                client_file.display()
+            ))
+        })?;
+        let refresh_token = store
+            .load(account_id)
+            .map_err(|error| match error {
+                SecretStoreError::NotRunning => SyncError("no secret store is running".into()),
+                SecretStoreError::Failed(reason) => {
+                    SyncError(format!("the secret store is locked ({reason})"))
+                }
+            })?
+            .ok_or_else(|| SyncError("the account needs sign-in".into()))?;
+        let session = Session {
+            client,
+            endpoints: endpoints.clone(),
+            account_id: account_id.to_string(),
+            refresh_token,
+            access: RefCell::new(None),
+        };
+        session.access_token()?;
+        Ok(session)
+    }
+
+    /// The access token, a new one when the one in use is old or was refused.
+    fn access_token(&self) -> Result<String, SyncError> {
+        let mut access = self.access.borrow_mut();
+        match &*access {
+            Some((token, issued)) if issued.elapsed() < ACCESS_FOR => Ok(token.clone()),
+            _ => {
+                let token = refresh(&self.client, &self.endpoints, &self.refresh_token)
+                    .map_err(|_| SyncError("Google did not accept the account's sign-in".into()))?;
+                *access = Some((token.clone(), Instant::now()));
+                Ok(token)
+            }
+        }
+    }
+
     fn url(&self, segments: &[&str]) -> Url {
         let mut url = Url::parse(&self.endpoints.calendar).expect("a valid Calendar API URL");
         url.path_segments_mut()
@@ -72,14 +111,16 @@ impl GoogleCalendar<'_> {
         url
     }
 
-    /// Every item of a list, following Google's pages.
-    fn all<T: DeserializeOwned>(&self, url: Url) -> Result<Vec<T>, SyncError> {
+    /// Every item of a list, following Google's pages, and the state Google gives on the last
+    /// one; `None` when Google answers that the state asked with is gone.
+    fn all<T: DeserializeOwned>(&self, url: Url) -> Result<Option<Listed<T>>, SyncError> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Page<T> {
             #[serde(default = "Vec::new")]
             items: Vec<T>,
             next_page_token: Option<String>,
+            next_sync_token: Option<String>,
         }
         let mut items = Vec::new();
         let mut page_token: Option<String> = None;
@@ -88,49 +129,87 @@ impl GoogleCalendar<'_> {
             if let Some(token) = &page_token {
                 page_url.query_pairs_mut().append_pair("pageToken", token);
             }
-            let page: Page<T> = self.get(page_url)?;
+            let Some(page) = self.get::<Page<T>>(page_url)? else {
+                return Ok(None);
+            };
             items.extend(page.items);
             match page.next_page_token {
                 Some(token) => page_token = Some(token),
-                None => return Ok(items),
+                None => return Ok(Some((items, page.next_sync_token))),
             }
         }
     }
 
-    fn get<T: DeserializeOwned>(&self, url: Url) -> Result<T, SyncError> {
-        let mut response = agent(HTTP_TIMEOUT)
-            .get(url.as_str())
-            .header("Authorization", format!("Bearer {}", self.access_token))
-            .call()
-            .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
-        let status = response.status();
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|error| SyncError(format!("Google's answer could not be read ({error})")))?;
+    /// Google's answer; `None` for 410 Gone, Google's word for a synchronization state it no
+    /// longer accepts. An access token Google refuses (it expired, e.g. while the computer slept)
+    /// is renewed once.
+    fn get<T: DeserializeOwned>(&self, url: Url) -> Result<Option<T>, SyncError> {
+        let (mut status, mut body) = self.call(&url)?;
+        if status == 401 {
+            self.access.replace(None);
+            (status, body) = self.call(&url)?;
+        }
+        if status == 410 {
+            return Ok(None);
+        }
         if !status.is_success() {
             let reason = google_reason(&body).unwrap_or_else(|| status.to_string());
             return Err(SyncError(format!("Google refused ({reason})")));
         }
         serde_json::from_str(&body)
+            .map(Some)
             .map_err(|_| SyncError("Google's answer could not be read".into()))
+    }
+
+    fn call(&self, url: &Url) -> Result<(ureq::http::StatusCode, String), SyncError> {
+        let mut response = agent(HTTP_TIMEOUT)
+            .get(url.as_str())
+            .header("Authorization", format!("Bearer {}", self.access_token()?))
+            .call()
+            .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|error| SyncError(format!("Google's answer could not be read ({error})")))?;
+        Ok((response.status(), body))
+    }
+
+    /// A calendar's events from Google, as the app keeps them.
+    fn fetch(&self, url: Url, calendar: &Calendar) -> Result<Option<Fetched>, SyncError> {
+        let Some((events, sync_token)) = self.all::<GoogleEvent>(url)? else {
+            return Ok(None);
+        };
+        let mut fetched = Fetched {
+            sync_token,
+            ..Fetched::default()
+        };
+        for event in events {
+            match event.into_synced(calendar.zone) {
+                Ok(event) => fetched.events.push(event),
+                Err(Some(deleted)) => fetched.removed.push(deleted),
+                Err(None) => {}
+            }
+        }
+        Ok(Some(fetched))
     }
 }
 
-impl Provider for GoogleCalendar<'_> {
+impl Provider for Session {
     fn calendars(&self) -> Result<Vec<Calendar>, SyncError> {
         // Calendars hidden from the list in Google stay out, as in Google Calendar (`DEC-86`).
         let mut url = self.url(&["users", "me", "calendarList"]);
         url.query_pairs_mut()
             .append_pair("maxResults", CALENDARS_PER_PAGE);
-        let entries: Vec<CalendarEntry> = self.all(url)?;
+        let (entries, _) = self
+            .all::<CalendarEntry>(url)?
+            .ok_or_else(|| SyncError("Google refused (gone)".into()))?;
         Ok(entries
             .into_iter()
-            .filter_map(|entry| entry.into_calendar(self.account_id))
+            .filter_map(|entry| entry.into_calendar(&self.account_id))
             .collect())
     }
 
-    fn events(&self, calendar: &Calendar, window: Window) -> Result<Vec<SyncedEvent>, SyncError> {
+    fn events(&self, calendar: &Calendar, window: Window) -> Result<Fetched, SyncError> {
         let instant = |at: DateTime<Utc>| at.to_rfc3339_opts(SecondsFormat::Secs, true);
         let mut url = self.url(&["calendars", &calendar.id, "events"]);
         // Not `singleEvents`: series come as master plus exceptions, cancelled occurrences
@@ -139,11 +218,17 @@ impl Provider for GoogleCalendar<'_> {
             .append_pair("timeMin", &instant(window.start()))
             .append_pair("timeMax", &instant(window.end()))
             .append_pair("maxResults", EVENTS_PER_PAGE);
-        let events: Vec<GoogleEvent> = self.all(url)?;
-        Ok(events
-            .into_iter()
-            .filter_map(|event| event.into_synced(calendar.zone))
-            .collect())
+        self.fetch(url, calendar)?
+            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+    }
+
+    fn changes(&self, calendar: &Calendar, sync_token: &str) -> Result<Option<Fetched>, SyncError> {
+        // Google takes no time range with a `syncToken`: the window is applied by the app.
+        let mut url = self.url(&["calendars", &calendar.id, "events"]);
+        url.query_pairs_mut()
+            .append_pair("syncToken", sync_token)
+            .append_pair("maxResults", EVENTS_PER_PAGE);
+        self.fetch(url, calendar)
     }
 }
 
@@ -214,36 +299,41 @@ impl When {
 }
 
 impl GoogleEvent {
-    /// `None` for what the app cannot show: a cancelled event that is not an occurrence of a
-    /// series, or an event without readable times.
-    fn into_synced(self, calendar_zone: Tz) -> Option<SyncedEvent> {
+    /// The event as the app keeps it. `Err` for what the app cannot show: with the event's ID
+    /// when it was deleted (cancelled, not an occurrence of a series), otherwise `None` (no
+    /// readable times).
+    fn into_synced(self, calendar_zone: Tz) -> Result<SyncedEvent, Option<String>> {
         let instance_of = match (self.recurring_event_id, &self.original_start_time) {
-            (Some(series), Some(original)) => Some((series, original.start()?)),
+            (Some(series), Some(original)) => Some((series, original.start().ok_or(None)?)),
             _ => None,
         };
         let cancelled = self.status.as_deref() == Some("cancelled");
         let timing = if cancelled {
-            instance_of.as_ref()?;
+            if instance_of.is_none() {
+                return Err(Some(self.id));
+            }
             None
         } else {
-            let (start, end) = (self.start?, self.end?);
-            Some(match (start.start()?, end.start()?) {
-                (Start::At(from), Start::At(until)) => Timing::Timed {
-                    start: from,
-                    end: until,
-                    zone: start
-                        .time_zone
-                        .and_then(|zone| zone.parse().ok())
-                        .unwrap_or(calendar_zone),
+            let (start, end) = (self.start.ok_or(None)?, self.end.ok_or(None)?);
+            Some(
+                match (start.start().ok_or(None)?, end.start().ok_or(None)?) {
+                    (Start::At(from), Start::At(until)) => Timing::Timed {
+                        start: from,
+                        end: until,
+                        zone: start
+                            .time_zone
+                            .and_then(|zone| zone.parse().ok())
+                            .unwrap_or(calendar_zone),
+                    },
+                    (Start::On(from), Start::On(until)) => Timing::AllDay {
+                        start: from,
+                        end_exclusive: until,
+                    },
+                    _ => return Err(None),
                 },
-                (Start::On(from), Start::On(until)) => Timing::AllDay {
-                    start: from,
-                    end_exclusive: until,
-                },
-                _ => return None,
-            })
+            )
         };
-        Some(SyncedEvent {
+        Ok(SyncedEvent {
             id: self.id,
             title: self.summary.unwrap_or_default(),
             timing,

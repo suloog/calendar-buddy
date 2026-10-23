@@ -61,7 +61,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-02-01` | As a User, I can see the calendars of all my accounts together, in their Google colours, so that I have one calendar instead of several browser tabs | F01, F02, F03, F11, F22, NFR-02 | must | review | `US-01-01`, `US-03-01` | — |
 | `US-02-02` | As a User, I can see read-only, subscribed and free/busy calendars without accidentally changing them, so that holidays and colleagues' calendars are there but safe | F19, F20, U01 | must | review | `US-02-01` | — |
-| `US-02-03` | As a User, I see changes made on my phone or in the browser without doing anything, so that the app is always current | F07, F08, F09, F10, F23, NFR-01 | must | ready | `US-02-01` | — |
+| `US-02-03` | As a User, I see changes made on my phone or in the browser without doing anything, so that the app is always current | F07, F08, F09, F10, F23, NFR-01 | must | review | `US-02-01` | — |
 | `US-02-04` | As a User, my list of calendars stays current, including calendars I lose access to or disable, so that nothing stale or unwanted is synchronized | F05, F06, F21 | must | ready | `US-02-03` | — |
 | `US-02-05` | As a User, I can open the app and browse my calendars without network, so that I can check my schedule anywhere | F12, F13, F14, U02, F15 | must | ready | `US-02-01` | — |
 | `US-02-06` | As a User, I can see whether my calendars are up to date and the app recovers from errors on its own, so that I can trust what I see | F16, F17, F18, U03 | must | ready | `US-02-03` | — |
