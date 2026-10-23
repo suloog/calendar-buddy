@@ -37,8 +37,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 29 / 4 | 10 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 8 | 0 | sliced |
-| `MOD-07` Reminders and notifications | 20 / 3 | 0 | 0 | not sliced |
-| **Total** | **136 / 28** | **41** | **0** | 6 / 7 modules sliced |
+| `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
+| **Total** | **136 / 28** | **47** | **0** | 7 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -124,3 +124,16 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | draft | `US-06-05` | — |
 | `US-06-07` | As a User, I can add Google Meet to a meeting and join it with one click, so that video calls start on time | F16, F17, F18 | must | draft | `US-06-01` | — |
 | `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | draft | `US-06-01` | — |
+
+## [MOD-07] Reminders and notifications
+
+`docs/specs/modules/07-notifications/REQUIREMENTS.md` · `docs/specs/modules/07-notifications/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-07-01` | As a User, I get a desktop notification before my events, as set in Google, so that I don't miss a meeting | F01, F02, F06, F07, F08, F13, F19, F20, U01 | must | draft | `US-02-01` | — |
+| `US-07-02` | As a User, I can snooze or dismiss a reminder and join a Meet call straight from it, so that I act on a reminder without opening the app | F09, F10 | must | draft | `US-07-01`, `US-06-07` | — |
+| `US-07-03` | As a User, I can turn notifications off or mute a single calendar, so that only reminders I care about reach me | F11, F12, U03 | must | draft | `US-07-01`, `US-03-06` | — |
+| `US-07-04` | As a User, I can set an event's reminders in the editor, starting from my calendar's defaults, so that my phone and computer remind me the same way | F03, F04, F05 | must | draft | `US-05-02` | — |
+| `US-07-05` | As a User, the app keeps reminding me from the tray when its window is closed and can start with my session, so that reminders don't depend on an open window | F14, F15, F16, F17, U02 | must | draft | `US-07-01` | — |
+| `US-07-06` | As a User, I can open calendar subscription links from anywhere on my system, so that subscribing to a calendar works like in the browser | F18 | must | draft | `US-01-01` | — |
