@@ -1,5 +1,6 @@
 //! When each calendar is synchronized again (`MOD-02-F07`, `MOD-02-F23`, `DEC-53`, `DEC-54`):
-//! adaptive polling by the account's access to the calendar and by whether the window is shown.
+//! adaptive polling by the account's access to the calendar and by whether the window is shown,
+//! and growing waits with jitter after failures (`MOD-02-F16`).
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -22,10 +23,34 @@ pub fn interval(access: Access, shown: bool) -> Duration {
 /// A calendar synchronized this recently is not synchronized again when the window is activated.
 pub const ACTIVATION_GAP: Duration = Duration::from_secs(10);
 
+/// The longest wait after failures: the longest polling interval.
+pub const MAX_BACK_OFF: Duration = Duration::from_secs(30 * 60);
+
+/// How long a calendar waits after failing `failures` times in a row: its interval at first,
+/// doubled after each further failure up to `MAX_BACK_OFF`, and up to a quarter more by `jitter`
+/// (from 0 to 1), so calendars that failed together do not retry together.
+pub fn back_off(interval: Duration, failures: u32, jitter: f64) -> Duration {
+    let doubled = 2u32.saturating_pow(failures.saturating_sub(1));
+    interval
+        .saturating_mul(doubled)
+        .min(MAX_BACK_OFF)
+        .mul_f64(1.0 + jitter / 4.0)
+}
+
+/// A polled calendar: when it was last synchronized or tried, and its failures since it last got
+/// through, with the jitter of its wait.
+#[derive(Clone)]
+struct Turn {
+    calendar: Calendar,
+    last: Instant,
+    failures: u32,
+    jitter: f64,
+}
+
 /// The calendars polled in the background, and when each was last synchronized or tried.
 pub struct Schedule {
     shown: bool,
-    calendars: Vec<(Calendar, Instant)>,
+    calendars: Vec<Turn>,
 }
 
 impl Default for Schedule {
@@ -51,33 +76,48 @@ impl Schedule {
     /// The account's calendars, all just synchronized; they replace those it had.
     pub fn set_account(&mut self, account_id: &str, calendars: &[Calendar], now: Instant) {
         self.forget(account_id);
-        self.calendars
-            .extend(calendars.iter().map(|calendar| (calendar.clone(), now)));
+        self.calendars.extend(calendars.iter().map(|calendar| Turn {
+            calendar: calendar.clone(),
+            last: now,
+            failures: 0,
+            jitter: 0.0,
+        }));
     }
 
     /// The account's calendars to poll, as its calendar list now has them: those it had keep
-    /// their turns, those missing are no longer polled, and new ones are returned and taken as
-    /// synchronized at `now`.
+    /// their turns and failures, those missing are no longer polled, and new ones are returned and
+    /// taken as synchronized at `now`.
     pub fn update_account(
         &mut self,
         account_id: &str,
         calendars: &[Calendar],
         now: Instant,
     ) -> Vec<Calendar> {
-        let turns: HashMap<String, Instant> = self
+        let turns: HashMap<String, Turn> = self
             .calendars
             .iter()
-            .filter(|(calendar, _)| calendar.account_id == account_id)
-            .map(|(calendar, last)| (calendar.id.clone(), *last))
+            .filter(|turn| turn.calendar.account_id == account_id)
+            .map(|turn| (turn.calendar.id.clone(), turn.clone()))
             .collect();
         self.forget(account_id);
         let mut added = Vec::new();
         for calendar in calendars {
-            let last = turns.get(&calendar.id).copied().unwrap_or_else(|| {
-                added.push(calendar.clone());
-                now
-            });
-            self.calendars.push((calendar.clone(), last));
+            let turn = match turns.get(&calendar.id) {
+                Some(turn) => Turn {
+                    calendar: calendar.clone(),
+                    ..turn.clone()
+                },
+                None => {
+                    added.push(calendar.clone());
+                    Turn {
+                        calendar: calendar.clone(),
+                        last: now,
+                        failures: 0,
+                        jitter: 0.0,
+                    }
+                }
+            };
+            self.calendars.push(turn);
         }
         added
     }
@@ -85,56 +125,87 @@ impl Schedule {
     /// The account is no longer polled.
     pub fn forget(&mut self, account_id: &str) {
         self.calendars
-            .retain(|(calendar, _)| calendar.account_id != account_id);
+            .retain(|turn| turn.calendar.account_id != account_id);
     }
 
     /// The calendars whose time has come.
     pub fn due(&self, now: Instant) -> Vec<Calendar> {
-        self.select(|calendar, last| now >= last + interval(calendar.access, self.shown))
+        self.select(|turn| now >= self.next_turn(turn))
     }
 
     /// Every calendar: for "Refresh", after waking from sleep and when the network returns.
     pub fn all(&self) -> Vec<Calendar> {
-        self.select(|_, _| true)
+        self.select(|_| true)
     }
 
-    /// The calendars not synchronized within `ACTIVATION_GAP`: for activating the window.
+    /// The calendars not synchronized within `ACTIVATION_GAP`: for activating the window. One
+    /// that failed waits out its back-off.
     pub fn stale(&self, now: Instant) -> Vec<Calendar> {
-        self.select(|_, last| now >= last + ACTIVATION_GAP)
+        self.select(|turn| {
+            now >= turn.last + ACTIVATION_GAP && (turn.failures == 0 || now >= self.next_turn(turn))
+        })
     }
 
     /// Every account's calendar with this ID: for opening one of its events for editing.
     pub fn calendar(&self, id: &str) -> Vec<Calendar> {
-        self.select(|calendar, _| calendar.id == id)
+        self.select(|turn| turn.calendar.id == id)
     }
 
     /// These calendars were synchronized, or tried, at `now`.
     pub fn synced(&mut self, calendars: &[Calendar], now: Instant) {
-        for (calendar, last) in &mut self.calendars {
-            if calendars
-                .iter()
-                .any(|c| c.account_id == calendar.account_id && c.id == calendar.id)
-            {
-                *last = now;
+        for turn in &mut self.calendars {
+            if calendars.iter().any(|c| same(c, &turn.calendar)) {
+                turn.last = now;
+            }
+        }
+    }
+
+    /// The calendar's synchronization got through: it is polled at its interval again.
+    pub fn succeeded(&mut self, calendar: &Calendar) {
+        for turn in &mut self.calendars {
+            if same(calendar, &turn.calendar) {
+                turn.failures = 0;
+            }
+        }
+    }
+
+    /// The calendar's synchronization failed: it waits longer before each retry (`back_off`),
+    /// `jitter` (from 0 to 1) adding up to a quarter.
+    pub fn failed(&mut self, calendar: &Calendar, jitter: f64) {
+        for turn in &mut self.calendars {
+            if same(calendar, &turn.calendar) {
+                turn.failures += 1;
+                turn.jitter = jitter;
             }
         }
     }
 
     /// When the next calendar is due; `None` with nothing to poll.
     pub fn next(&self) -> Option<Instant> {
-        self.calendars
-            .iter()
-            .map(|(calendar, last)| *last + interval(calendar.access, self.shown))
-            .min()
+        self.calendars.iter().map(|turn| self.next_turn(turn)).min()
     }
 
-    fn select(&self, pick: impl Fn(&Calendar, Instant) -> bool) -> Vec<Calendar> {
+    fn next_turn(&self, turn: &Turn) -> Instant {
+        let interval = interval(turn.calendar.access, self.shown);
+        let wait = match turn.failures {
+            0 => interval,
+            failures => back_off(interval, failures, turn.jitter),
+        };
+        turn.last + wait
+    }
+
+    fn select(&self, pick: impl Fn(&Turn) -> bool) -> Vec<Calendar> {
         self.calendars
             .iter()
-            .filter(|(calendar, last)| pick(calendar, *last))
-            .map(|(calendar, _)| calendar.clone())
+            .filter(|turn| pick(turn))
+            .map(|turn| turn.calendar.clone())
             .collect()
     }
+}
+
+/// Whether both are the same calendar of the same account.
+fn same(a: &Calendar, b: &Calendar) -> bool {
+    a.account_id == b.account_id && a.id == b.id
 }
 
 #[cfg(test)]
@@ -262,6 +333,72 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["1", "2"]
         );
+    }
+
+    #[test]
+    fn a_failing_calendar_waits_longer_after_each_failure_up_to_30_minutes() {
+        let start = Instant::now();
+        let mut schedule = Schedule::new();
+        let work = calendar("1", "work", Access::Writer);
+        schedule.set_account("1", std::slice::from_ref(&work), start);
+        let mut now = start;
+        let mut waits = Vec::new();
+        for _ in 0..7 {
+            schedule.synced(std::slice::from_ref(&work), now);
+            schedule.failed(&work, 0.0);
+            let next = schedule.next().unwrap();
+            waits.push((next - now).as_secs() / 60);
+            assert!(schedule.due(next - secs(1)).is_empty());
+            assert_eq!(ids(schedule.due(next)), ["work"]);
+            now = next;
+        }
+
+        assert_eq!(waits, [1, 2, 4, 8, 16, 30, 30]);
+
+        // Once it gets through, it is polled every minute again.
+        schedule.synced(std::slice::from_ref(&work), now);
+        schedule.succeeded(&work);
+        assert_eq!(schedule.next(), Some(now + secs(60)));
+    }
+
+    #[test]
+    fn the_wait_after_a_failure_has_up_to_a_quarter_of_jitter() {
+        let minute = secs(60);
+
+        assert_eq!(back_off(minute, 1, 0.0), secs(60));
+        assert_eq!(
+            back_off(minute, 1, 0.5),
+            secs(67) + Duration::from_millis(500)
+        );
+        assert_eq!(back_off(minute, 3, 1.0), secs(300));
+        assert_eq!(back_off(secs(15 * 60), 3, 0.0), MAX_BACK_OFF);
+        assert_eq!(back_off(minute, 40, 0.0), MAX_BACK_OFF);
+    }
+
+    #[test]
+    fn activating_the_window_does_not_cut_a_back_off_short_but_refresh_does() {
+        let start = Instant::now();
+        let mut schedule = two_calendars(start);
+        let work = calendar("1", "work", Access::Writer);
+        schedule.failed(&work, 0.0);
+        schedule.failed(&work, 0.0);
+
+        assert_eq!(ids(schedule.stale(start + secs(60))), ["holidays"]);
+        assert_eq!(ids(schedule.stale(start + secs(120))), ["work", "holidays"]);
+        assert_eq!(ids(schedule.all()), ["work", "holidays"]);
+    }
+
+    #[test]
+    fn an_updated_calendar_list_keeps_a_calendars_failures() {
+        let start = Instant::now();
+        let mut schedule = two_calendars(start);
+        let work = calendar("1", "work", Access::Writer);
+        schedule.failed(&work, 0.0);
+        schedule.failed(&work, 0.0);
+
+        schedule.update_account("1", &[work], start + secs(30));
+
+        assert_eq!(schedule.next(), Some(start + secs(120)));
     }
 
     #[test]

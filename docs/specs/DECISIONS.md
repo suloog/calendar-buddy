@@ -1164,3 +1164,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-96] Recovering from failures: growing waits with jitter, rate limits told apart
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-06
+- **Affects:** `US-02-06`, `MOD-02-F16`, `MOD-02-F18`, MOD-02 *Technical notes*, `DEC-90`
+- **Decision:** A calendar whose synchronization fails, for any reason (no connection, a rate limit, an error from Google), keeps what the cache holds and is tried again on its own: after its first failure at its usual interval, then each wait doubles, up to 30 minutes, and each wait gets a random extra of up to a quarter so calendars that failed together do not retry together. Once it gets through it is polled at its interval again. Activating the window does not cut a calendar's wait short; "Refresh", waking from sleep, the network's return and opening one of its events try it at once. The other calendars keep their own turns. Google's answer is a rate limit when it is 429, or 403 with the reason `rateLimitExceeded` or `userRateLimitExceeded`. An account whose first synchronization of the run fails is tried again as before (`DEC-90`).
+- **Why:** The module's technical notes ask for exponential back-off with jitter on rate limits; one rule for every failure is the simplest. Starting from the calendar's own interval means a single blip costs nothing extra, and the 30-minute cap is the longest polling interval, so a calendar is never left longer than a hidden read-only one. Activation would otherwise undo the back-off at every window switch.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-97] The synchronization indicator and each calendar's problem
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-06
+- **Affects:** `US-02-06`, `MOD-02-F17`, `MOD-02-F18`, `MOD-02-U03`, `US-03-06`, `DEC-54`, `DEC-95`
+- **Decision:** The top bar, left of "Refresh", says "Synchronizing…", "Up to date", "Offline", "Synchronization delayed: Google asked to slow down" or "Synchronization error" (the last two in the warning colour), and "Last synchronized at 14:05" (with the date when not today; "Not synchronized yet" before the first). Offline comes first, then a synchronization under way, then an error, then a delay. The last successful synchronization is the last time any calendar's synchronization got through; it is kept in the cache (a new `last_synced` table) so it shows at the next start, offline too. Until the side panel lists the calendars (`US-03-06`), each calendar that is not up to date is named in a band under the top bar: "“Work” could not be synchronized; trying again.", "“Work” is synchronized later: Google asked to slow down." or, for the calendars of an account that needs sign-in, "“Work” is not synchronizing: its account needs sign-in." — and `US-03-06` shows the same on the calendar's row. A calendar of an account whose first synchronization of the run did not get through counts as failed; a calendar not synchronizing counts as an error. Offline only the calendars not synchronizing are named, as other failures are expected then (`DEC-95`). Disabled calendars are never named.
+- **Why:** The four states are those of `MOD-02-F17`; the delayed one is the rate-limit edge case. "Last synchronized" by any calendar keeps the time meaningful when one calendar fails for good, since that calendar is named on its own. Naming the calendar in the band is the closest the app can come to "shown on that calendar" before it lists calendars anywhere.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-98] The indicator before an account's first synchronization of the run
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-06
+- **Affects:** `US-02-06`, `MOD-02-F17`, `DEC-52`, `DEC-90`, `DEC-97`
+- **Decision:** Until every connected account with cached calendars has had its first synchronization of the run (`DEC-90`), the indicator says "Synchronizing…", never "Up to date" (a calendar in error or delayed is said instead). An account saved as needing sign-in in an earlier run is not checked (`MOD-01`), so at start its cached calendars are marked as not synchronizing, as when Google turns it away during the run. When Google could not be asked whether such an account's sign-in still works, its calendars count as failed (named in the band, "Synchronization error"), and "Refresh" tries it again. While the accounts cannot be checked at all (no client file, no secret store, a locked one — `DEC-52`), the indicator says "Synchronization error" when online.
+- **Why:** The code review of `US-02-06` found the indicator saying "Up to date" when nothing had been synchronized in the run; "so that I can trust what I see" rules that out.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

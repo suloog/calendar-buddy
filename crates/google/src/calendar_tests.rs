@@ -831,6 +831,39 @@ fn an_access_token_google_no_longer_takes_is_renewed_without_failing() {
     let synced = calendar_core::sync::sync_calendars(&session, &calendars, window(), &mut cache);
     std::fs::remove_dir_all(&dir).unwrap();
 
-    assert_eq!(synced, Ok(true));
+    assert_eq!(synced, [Ok(true)]);
     assert_eq!(shown_titles(&cache), ["Standup"]);
+}
+
+#[test]
+fn googles_rate_limits_are_told_from_other_errors() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("rate-limited");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap();
+    let mut errors = Vec::new();
+    for status in ["429 Too Many Requests", "403 Forbidden"] {
+        google.limit_calendar("work", status);
+        errors.push(calendar_core::sync::sync_calendars(
+            &session,
+            &work,
+            window(),
+            &mut cache,
+        ));
+        google.recover();
+    }
+    google.fail_calendar("work");
+    errors.push(calendar_core::sync::sync_calendars(
+        &session,
+        &work,
+        window(),
+        &mut cache,
+    ));
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let rate_limited: Vec<bool> = errors
+        .iter()
+        .map(|synced| synced[0].as_ref().unwrap_err().is_rate_limited())
+        .collect();
+    assert_eq!(rate_limited, [true, true, false]);
+    assert_eq!(shown_titles(&cache), ["Standup", "Review"]);
 }

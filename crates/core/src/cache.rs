@@ -42,6 +42,9 @@ const SCHEMA: &str = "
         window TEXT NOT NULL,
         PRIMARY KEY (account_id, calendar_id)
     );
+    CREATE TABLE IF NOT EXISTS last_synced (
+        at TEXT NOT NULL
+    );
 ";
 
 /// A cached calendar with its events, series not expanded.
@@ -221,6 +224,30 @@ impl Cache {
         }
         .map(|_| ())
         .map_err(failed)
+    }
+
+    /// When a synchronization last got through (`MOD-02-U03`); `None` before the first.
+    pub fn last_synced(&self) -> Result<Option<DateTime<Utc>>, SyncError> {
+        let at: Option<String> = self
+            .connection
+            .query_row("SELECT at FROM last_synced", [], |row| row.get(0))
+            .optional()
+            .map_err(failed)?;
+        Ok(at.and_then(|at| DateTime::parse_from_rfc3339(&at).ok().map(|at| at.to_utc())))
+    }
+
+    pub fn set_last_synced(&mut self, at: DateTime<Utc>) -> Result<(), SyncError> {
+        let transaction = self.connection.transaction().map_err(failed)?;
+        transaction
+            .execute("DELETE FROM last_synced", [])
+            .map_err(failed)?;
+        transaction
+            .execute(
+                "INSERT INTO last_synced VALUES (?1)",
+                params![at.to_rfc3339()],
+            )
+            .map_err(failed)?;
+        transaction.commit().map_err(failed)
     }
 
     /// Deletes everything kept for an account (`MOD-01-F08`, `DEC-85`).
@@ -663,6 +690,20 @@ mod tests {
         let cached = cache.calendars().unwrap();
         assert_eq!(cached.len(), 1);
         assert_eq!(cached[0].calendar.account_id, "2");
+    }
+
+    #[test]
+    fn the_time_of_the_last_synchronization_is_kept() {
+        let mut cache = Cache::in_memory();
+        assert_eq!(cache.last_synced().unwrap(), None);
+        let at = Utc.with_ymd_and_hms(2026, 11, 11, 13, 5, 0).unwrap();
+
+        cache
+            .set_last_synced(at - chrono::Duration::hours(1))
+            .unwrap();
+        cache.set_last_synced(at).unwrap();
+
+        assert_eq!(cache.last_synced().unwrap(), Some(at));
     }
 
     #[test]

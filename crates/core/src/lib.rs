@@ -16,6 +16,7 @@ pub mod regional;
 pub mod schedule;
 pub mod settings;
 pub mod shortcuts;
+pub mod status;
 pub mod sync;
 pub mod view_model;
 pub mod week;
