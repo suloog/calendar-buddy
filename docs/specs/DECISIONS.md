@@ -852,3 +852,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-70] Month view: whole weeks, an event on each day it covers, "+N more" opens a day list
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-03
+- **Affects:** `US-03-03`, `MOD-03-F03`, `MOD-03-F20`, `MOD-03-F07`
+- **Decision:** The month view shows the whole weeks covering the month (four to six rows, Monday first until `US-03-09`), the days of the neighbouring months dimmed, as Google Calendar does. Each day lists its events: all-day and multi-day first, then timed ones by start with their time; an all-day, multi-day or overnight event is listed on every day it covers, as a separate entry per day rather than one bar across the days. When not all fit, the day's last row shows "+N more", and choosing it opens a small window listing all of that day's events. ‹ › move by one month, and "Month" joins the plain view picker of `DEC-69`.
+- **Why:** Follows Google Calendar (`DEC-62`) where it is cheap; one entry per day keeps "how many more" exact per day without lining bars up across a week, which the spec does not ask for.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

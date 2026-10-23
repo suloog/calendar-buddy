@@ -29,7 +29,7 @@ pub struct AllDayBar {
 }
 
 /// Timed events lasting a full day or longer go to the strip, as in Google Calendar.
-fn is_strip_event(event: &Event) -> bool {
+pub(crate) fn is_strip_event(event: &Event) -> bool {
     match event.timing {
         Timing::AllDay { .. } => true,
         Timing::Timed { start, end, .. } => end - start >= Duration::hours(24),
@@ -110,7 +110,8 @@ fn pack_columns(placements: &mut [TimedPlacement]) {
     }
 }
 
-fn strip_dates(event: &Event, tz: Tz) -> (NaiveDate, NaiveDate) {
+/// The first and last local date an event covers.
+pub(crate) fn strip_dates(event: &Event, tz: Tz) -> (NaiveDate, NaiveDate) {
     match event.timing {
         Timing::AllDay {
             start,
