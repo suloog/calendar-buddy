@@ -11,8 +11,8 @@
 #
 # Settings (environment, all optional):
 #   LOOP_MODEL=opus        model for the session (subagents are asked for opus in the brief)
-#   LOOP_FIVE_HOUR_MAX=90  pause until the 5-hour window resets at or above this %
-#   LOOP_SEVEN_DAY_MAX=85  stop the run at or above this %
+#   LOOP_FIVE_HOUR_MAX=100 pause until the 5-hour window resets at or above this %
+#   LOOP_SEVEN_DAY_MAX=100 stop the run at or above this %
 #   LOOP_STORY_TIMEOUT=3h  wall-clock limit per story
 set -uo pipefail
 
@@ -21,8 +21,8 @@ cd "$ROOT"
 HERE="$ROOT/scripts/loop"
 OG_USAGE="${OG_USAGE:-$HOME/.claude-og/plugins/cache/order-group/og/0.16.0/bin/og-usage}"
 MODEL="${LOOP_MODEL:-opus}"
-FIVE_MAX="${LOOP_FIVE_HOUR_MAX:-90}"
-SEVEN_MAX="${LOOP_SEVEN_DAY_MAX:-85}"
+FIVE_MAX="${LOOP_FIVE_HOUR_MAX:-100}"
+SEVEN_MAX="${LOOP_SEVEN_DAY_MAX:-100}"
 TIMEOUT="${LOOP_STORY_TIMEOUT:-3h}"
 RUNS="$ROOT/.git/og-loop"          # raw session output, outside the repository's history
 USAGE_MD="$ROOT/docs/delivery/USAGE.md"
