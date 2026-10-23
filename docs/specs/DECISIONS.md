@@ -984,3 +984,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-81] The account list in the settings, its actions before US-01-03/04, and no cap on accounts
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-02
+- **Affects:** `US-01-02`, `MOD-01-F02`, `MOD-01-U01`, `MOD-01-NFR-01`
+- **Decision:** The settings open from a **Settings** button at the right end of the top bar, as a window whose "Accounts" section lists every account, in the order connected, by e-mail address with its state ("Connected" / "Needs sign-in"), and below the list **Add account**, which runs the same steps as the welcome screen (checks, the "unverified app" heads-up, the browser). Each row shows **Sign in again** and **Remove**, disabled with "Not available yet." until `US-01-03` and `US-01-04` give them their behaviour. A connection finishing while the settings are closed still adds the account, with the "Connected <e-mail>." notice. Signing in to an account already connected (same Google account ID) replaces its entry in place — new e-mail address and permissions, state back to "Connected" — and the secret store keeps only its newest refresh token. The app sets no maximum on accounts: `MOD-01-NFR-01`'s five is the profile it must support (`DEC-14`), like Google Calendar, which has no such cap.
+- **Why:** One place for accounts as `DEC-51` asks, without building ahead the actions owned by the next stories; a cap would add a refusal nobody asked for.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-82] Google's account chooser on every new sign-in
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-02
+- **Affects:** `US-01-02`, `MOD-01-F02`, `DEC-78`
+- **Decision:** The first consent screen of a sign-in asks Google with `prompt=select_account consent`, so Google shows its account chooser even when the browser is already signed in to a connected account, and the user can pick or add another; the Workspace directory screen keeps `prompt=consent` with `login_hint`, as the account is already known.
+- **Why:** Without the chooser Google may reuse the browser's current account, and a second account could not be connected; this is what Google's own sign-in offers apps that support several accounts.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
