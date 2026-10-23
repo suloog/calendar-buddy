@@ -1,11 +1,11 @@
 ---
 project: calendar-buddy
-status: draft # draft (written at discovery close) | active (confirmed by the tech lead at /og:modules)
+status: active # draft (written at discovery close) | active (confirmed by the tech lead at /og:modules)
 ---
 
 # Engineering constitution
 
-<Per-project engineering law. Every module, user story, and PR must satisfy this document. Keep it short; link to company/repo standards instead of restating them.>
+Per-project engineering law for calendar-buddy. Every module, user story and PR satisfies this document.
 
 ## Stack
 
@@ -18,15 +18,20 @@ status: draft # draft (written at discovery close) | active (confirmed by the te
 
 ## Architecture principles
 
-<3–7 rules specific to this project, e.g. "all external calls go through services/", "no business logic in views/components".>
-
-- …
+- The domain model (accounts, calendars, events, guests, recurrence, RSVP) does not depend on Google. The Google adapter sits behind a calendar-provider interface with capability flags; provider-specific features are optional (`NFR-14`).
+- Platform specifics — secret store, notifications, tray, autostart, URL handlers, single instance — sit behind platform interfaces (`NFR-13`).
+- The UI never waits on network or disk: Google calls, synchronization and SQLite run off the UI thread, and views read from the local store (`NFR-01`).
+- The local store is the read model for every view, and only the sync engine writes synchronized data; a user's change goes to Google first and comes back through synchronization.
+- Times are stored as UTC instants plus an IANA time zone; recurrence expansion and time-zone arithmetic go through a tested library, never hand-written code.
+- The UI toolkit is isolated behind view models, so a fallback from egui to Iced (`DEC-33`) does not touch the domain, synchronization or adapters.
+- Tokens and event contents never appear in logs or error messages (`NFR-07`).
 
 ## Quality bar
 
 - Lint/format/type-check/tests must be green before every push (enforced by the og gate hook).
-- Test coverage threshold: <e.g. 80% on changed code>
-- Testing approach: <unit-first / TDD required / integration focus — per project tier>
+- Gates: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`.
+- Test coverage threshold: 80% line coverage on the domain, synchronization and Google-adapter code; no threshold for the UI layer.
+- Testing approach: test-first for recurrence, time zones and daylight-saving changes, incremental synchronization, and mapping to and from the Google APIs; unit tests first elsewhere, without a TDD mandate.
 - Required test levels: automated unit and integration tests for synchronization, recurrence, event editing and RSVP; acceptance is manual, by the product owner, against the PRD's §14; no load testing (`DEC-17`, `DEC-07`).
 
 ## Definition of done (per user story)
@@ -41,7 +46,8 @@ status: draft # draft (written at discovery close) | active (confirmed by the te
 ## Review rules
 
 - Every PR reviewed by a human; agent review (code-reviewer + spec-compliance-reviewer) runs first.
-- <Who must approve, e.g. tech lead for schema/API changes>
+- Maciej (tech lead and product owner) approves every PR after the agent review.
+- Changes to the SQLite schema or to the calendar-provider interface are called out explicitly in the PR description.
 
 ## Security & compliance
 

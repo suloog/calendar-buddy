@@ -4,7 +4,7 @@ title: Creating and editing events
 kind: business # business (a functional area — becomes a module at /og:modules) | cross-cutting (roles and access, technology and integrations, non-functional requirements — feeds PROJECT.md, NFR.md and the constitution, never a module)
 status: settled # open (not yet discussed) | discussed (discussed with the analyst, waiting on the client) | settled (no [W] question in this topic is open)
 sources: [SRC-01, SRC-02] # SRC-NN documents whose items this topic gathers, e.g. [SRC-01, SRC-03]
-module: # MOD-NN — filled by /og:modules; empty for cross-cutting topics
+module: MOD-05 # MOD-NN — filled by /og:modules; empty for cross-cutting topics
 sessions: [2026-10-22] # dates of the discovery sessions in which the topic was discussed, YYYY-MM-DD
 ---
 

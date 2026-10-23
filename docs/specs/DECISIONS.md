@@ -600,3 +600,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-49] Module split: one module per business topic, plus a deferred-scope module
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** /og:modules 2026-10-23
+- **Affects:** `MOD-01`…`MOD-08`, `DSC-03`…`DSC-09`
+- **Decision:** Each business topic becomes one module, numbered by dependency: `MOD-01` accounts (`DSC-03`), `MOD-02` calendars and sync (`DSC-04`), `MOD-03` views and navigation (`DSC-05`), `MOD-04` appearance and themes (`DSC-06`, kept separate rather than merged into views and moved before events), `MOD-05` events (`DSC-07`), `MOD-06` guests, RSVP and Meet (`DSC-08`), `MOD-07` reminders and notifications (`DSC-09`). `MOD-08` holds the deferred scope — the items parked in discovery. An item mentioned by two topics belongs to the module that delivers it (`SRC-02-35` → `MOD-03`, `SRC-02-23` → `MOD-05`); partly delivered items stay with the delivering module (`SRC-01-112` → `MOD-06`, `SRC-01-114` → `MOD-05`). The week-view feasibility story of `MOD-03` may start in parallel with `MOD-01`/`MOD-02` on fixture data.
+- **Why:** Merging `DSC-06` into views would exceed the module size limit; dependency order with the UI-toolkit risk addressed early.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-50] No company boilerplate: a Rust desktop stack
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** /og:modules 2026-10-23
+- **Affects:** constitution.md (Stack)
+- **Decision:** The project uses no company boilerplate. The stack is Rust with egui (eframe on wgpu), Iced as the fallback (`DEC-33`), SQLite and the platform secret store, packaged as .deb.
+- **Why:** The company boilerplates are web stacks; this is a native Linux desktop application (`DSC-01-01`), and the PRD prefers Rust.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

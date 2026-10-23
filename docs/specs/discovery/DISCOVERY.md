@@ -38,13 +38,13 @@
 | ----- | ----- | ---- | ------- | -------- | -------------- | ------ | ------ |
 | `DSC-01` | Product, roles, platform and integrations | cross-cutting | `SRC-01`, `SRC-02` | 18 | 0 [W] / 0 [A] | settled | — |
 | `DSC-02` | Non-functional requirements | cross-cutting | `SRC-01`, `SRC-02` | 13 | 0 [W] / 0 [A] | settled | — |
-| `DSC-03` | Google accounts and sign-in | business | `SRC-01`, `SRC-02` | 8 | 0 [W] / 0 [A] | settled | — |
-| `DSC-04` | Calendars, synchronisation and offline cache | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | — |
-| `DSC-05` | Views and navigation | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | — |
-| `DSC-06` | Visual direction and themes | business | `SRC-01`, `SRC-02` | 6 | 0 [W] / 0 [A] | settled | — |
-| `DSC-07` | Creating and editing events | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | — |
-| `DSC-08` | Guests, invitations, RSVP and Google Meet | business | `SRC-01`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | — |
-| `DSC-09` | Reminders and notifications | business | `SRC-01`, `SRC-02`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | — |
+| `DSC-03` | Google accounts and sign-in | business | `SRC-01`, `SRC-02` | 8 | 0 [W] / 0 [A] | settled | `MOD-01` |
+| `DSC-04` | Calendars, synchronisation and offline cache | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-02` |
+| `DSC-05` | Views and navigation | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-03` |
+| `DSC-06` | Visual direction and themes | business | `SRC-01`, `SRC-02` | 6 | 0 [W] / 0 [A] | settled | `MOD-04` |
+| `DSC-07` | Creating and editing events | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-05` |
+| `DSC-08` | Guests, invitations, RSVP and Google Meet | business | `SRC-01`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | `MOD-06` |
+| `DSC-09` | Reminders and notifications | business | `SRC-01`, `SRC-02`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | `MOD-07` |
 
 ## Source items with no topic
 
