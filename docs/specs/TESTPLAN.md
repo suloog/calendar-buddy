@@ -45,12 +45,12 @@ that module. Numbers are never reused or renumbered.
 | ------ | -------------- | ------- | ------------------ | ------- |
 | `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
-| `MOD-03` Views and navigation | 31 | 0 | 0 / 0 | not written |
+| `MOD-03` Views and navigation | 31 | 22 | 10 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 0 | 0 / 0 | not written |
 | `MOD-05` Creating and editing events | 34 | 0 | 0 / 0 | not written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
 | `MOD-07` Reminders and notifications | 24 | 0 | 0 / 0 | not written |
-| **Total** | **177** | **23** | **10 / 3** | 2 / 7 modules written |
+| **Total** | **177** | **45** | **20 / 5** | 3 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -89,3 +89,22 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-02-07` | Without network the cached calendar is shown with an offline indicator and editing is unavailable | `US-02-05` | desktop | happy-path | auto | draft |
 | `TC-02-08` | A synchronization error on one calendar is shown on it while the others stay up to date, with the last-sync time | `US-02-06` | desktop | happy-path | auto | draft |
 | `TC-02-09` | A calendar gets a local colour that Google does not receive, and Reset restores the Google colour | `US-02-07` | desktop | happy-path | auto | draft |
+
+## [MOD-03] Views and navigation
+
+`docs/specs/modules/03-views-navigation/REQUIREMENTS.md` · `docs/specs/modules/03-views-navigation/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-03-01` | The week view shows seven days of events, all-day events in a strip above the hours and free/busy calendars as busy blocks | `US-03-01` | desktop | happy-path | auto | draft |
+| `TC-03-02` | Overlapping events are placed side by side without covering each other | `US-03-01` | desktop | happy-path | auto | draft |
+| `TC-03-03` | The week view adapts to window resizing and to 100%, 150% and 200% scale | `US-03-01` | desktop | happy-path | manual-only | draft |
+| `TC-03-04` | The interface-technology feasibility check is recorded and the NFR-03 thresholds are set from the first measurement | `US-03-01` | desktop | nfr | manual-only | draft |
+| `TC-03-05` | The day and 3-day views show the selected day and three days | `US-03-02` | desktop | happy-path | auto | draft |
+| `TC-03-06` | The month view shows each day's events and "+N more" for a full day, opening its list | `US-03-03` | desktop | happy-path | auto | draft |
+| `TC-03-07` | The agenda lists upcoming events by day without empty days, and says when nothing is ahead | `US-03-04` | desktop | happy-path | auto | draft |
+| `TC-03-08` | Switching views keeps the date, next/previous/today move correctly, and the app restarts in the last view on today | `US-03-05` | desktop | happy-path | auto | draft |
+| `TC-03-09` | The side panel groups calendars by account and the quick toggle hides a calendar's events while keeping it listed | `US-03-06` | desktop | happy-path | auto | draft |
+| `TC-03-10` | A disabled calendar is absent from the side panel, the calendar pickers and the views, and returns when enabled | `US-03-07` | desktop | happy-path | auto | draft |
+| `TC-03-11` | Google Calendar's keys switch views, move between periods and show the shortcut list | `US-03-08` | desktop | happy-path | auto | draft |
+| `TC-03-12` | A Sunday-first locale and a change of system time zone are followed by the views | `US-03-09` | desktop | happy-path | auto | draft |
