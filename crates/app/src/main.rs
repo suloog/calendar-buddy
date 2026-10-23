@@ -4,6 +4,7 @@ mod connect;
 mod grid_view;
 mod mini_calendar;
 mod month_view;
+mod network;
 mod platform;
 mod remove;
 mod sync;
@@ -14,6 +15,7 @@ use calendar_core::details::event_details;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
+use calendar_core::offline;
 use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
@@ -24,6 +26,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use connect::Connect;
 use eframe::egui;
+use network::Online;
+use platform::SystemNetwork;
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
 use sync::Synchronization;
@@ -119,6 +123,8 @@ struct CalendarApp {
     sync: Synchronization,
     /// What the views show, from the cache; empty until it is read.
     events: Vec<Event>,
+    /// Whether the computer is online, as the system says (`MOD-02-F14`).
+    online: Online,
     /// Whether the window had the keyboard at the last frame.
     focused: bool,
     /// The system's regional settings, read at start (`DEC-29`).
@@ -207,6 +213,7 @@ impl CalendarApp {
             removal: Removal::new(),
             sync,
             events,
+            online: Online::watch(&ctx, &SystemNetwork),
             focused: false,
             regional,
             zone,
@@ -298,6 +305,8 @@ impl CalendarApp {
         // Connecting and removing an account never run at once.
         let can_change = self.connect.idle() && self.removal.idle();
         let can_remove = self.connect.idle();
+        // Changes need Google (`MOD-02-F15`).
+        let refused = offline::refused(self.online.get());
         let Some(dialog) = &mut self.dialog else {
             return;
         };
@@ -351,7 +360,7 @@ impl CalendarApp {
                 }
                 Dialog::NewEvent => {
                     ui.label(self.regional.long_date(self.navigation.selected));
-                    ui.label("Creating events is not available yet.");
+                    ui.label(refused.unwrap_or("Creating events is not available yet."));
                 }
                 Dialog::Event(event, _) => {
                     let details = event_details(event, self.zone);
@@ -362,6 +371,8 @@ impl CalendarApp {
                     }
                     if details.read_only {
                         ui.label(grid_view::READ_ONLY);
+                    } else if let Some(reason) = refused {
+                        ui.label(reason);
                     }
                 }
                 Dialog::Settings => {
@@ -576,6 +587,16 @@ impl eframe::App for CalendarApp {
                 });
             });
         });
+        let online = self.online.get();
+        // Everything cached can still be browsed (`MOD-02-U02`, `MOD-02-F15`).
+        if let Some(indicator) = offline::indicator(online) {
+            egui::Panel::top("offline").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(ui.visuals().warn_fg_color, indicator);
+                    ui.label(offline::NO_CHANGES);
+                });
+            });
+        }
         // The calendar keeps showing what it has; only the accounts cannot be reached (`DEC-52`).
         if let Some(problem) = &self.problem {
             let mut again = false;
@@ -671,24 +692,36 @@ impl eframe::App for CalendarApp {
             self.removal.close();
         }
         self.navigated(before);
+        // Days on screen the cache does not hold: fetched online, a note offline (`MOD-02-F12`).
+        let (first, last) = self.navigation.on_screen(self.today(), self.agenda_days);
+        let browsed = offline::browsed(self.window(), first, last, online);
+        self.sync.browse(browsed.fetch);
         let mut opened = None;
-        egui::CentralPanel::default().show(ui, |ui| match &self.built {
-            Built::Grid(view) => {
-                if let Some(change) =
-                    grid_view::show(ui, view, &self.regional, &mut self.view_state, &mut opened)
-                {
-                    grid_view::apply(&mut self.events, change);
-                    self.rebuild();
+        egui::CentralPanel::default().show(ui, |ui| {
+            if let Some(note) = browsed.note {
+                ui.colored_label(ui.visuals().warn_fg_color, note);
+            }
+            match &self.built {
+                Built::Grid(view) => {
+                    // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
+                    let state = &mut self.view_state;
+                    if let Some(change) =
+                        grid_view::show(ui, view, &self.regional, state, online, &mut opened)
+                            .filter(|_| online)
+                    {
+                        grid_view::apply(&mut self.events, change);
+                        self.rebuild();
+                    }
                 }
-            }
-            Built::Month(view) => {
-                month_view::show(ui, view, &self.regional, &mut self.month_state, &mut opened)
-            }
-            Built::Agenda(view) => {
-                if agenda_view::show(ui, view, &self.regional, &mut opened) {
-                    self.agenda_days += AGENDA_DAYS;
-                    self.rebuild();
-                    ui.ctx().request_repaint();
+                Built::Month(view) => {
+                    month_view::show(ui, view, &self.regional, &mut self.month_state, &mut opened)
+                }
+                Built::Agenda(view) => {
+                    if agenda_view::show(ui, view, &self.regional, &mut opened) {
+                        self.agenda_days += AGENDA_DAYS;
+                        self.rebuild();
+                        ui.ctx().request_repaint();
+                    }
                 }
             }
         });

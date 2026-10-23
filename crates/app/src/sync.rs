@@ -6,7 +6,9 @@
 //! round first brings the accounts' calendar lists up to date (`US-02-04`): new calendars are
 //! synchronized, and those gone go with their events, the user being told once. Calendars disabled
 //! in the settings stay listed but are never synchronized. A removed account's data is deleted.
-//! Whenever what the cache holds may have changed, the views get the events to show.
+//! Days on screen that the cache does not hold are fetched from Google while browsed, and shown
+//! without being kept (`US-02-05`). Whenever what the cache holds may have changed, the views get
+//! the events to show.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
@@ -19,7 +21,7 @@ use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{SecretStore, Wakeups};
 use calendar_core::schedule::Schedule;
 use calendar_core::sync::{
-    Provider, SyncError, Window, shown_events, sync_calendar_list, sync_calendars,
+    Provider, SyncError, Window, fetch_events, shown_events, sync_calendar_list, sync_calendars,
 };
 use calendar_google::{Endpoints, Session};
 use eframe::egui;
@@ -40,6 +42,8 @@ enum Job {
     Window(Window),
     /// The calendars disabled in the settings changed.
     Disabled(Disabled),
+    /// The days on screen that the cache does not hold and are to be fetched, if any.
+    Browse(Option<Window>),
 }
 
 enum Update {
@@ -67,6 +71,8 @@ pub struct Synchronization {
     window: Window,
     /// The names of calendars gone from their accounts' lists, not yet taken.
     gone: Vec<String>,
+    /// The days outside the cache to fetch, as last told to the worker.
+    browsed: Option<Window>,
 }
 
 impl Synchronization {
@@ -130,8 +136,12 @@ impl Synchronization {
                         Err(_) => return,
                     },
                 };
-                for update in engine.handle(job, Instant::now()) {
-                    send(update);
+                let mut jobs = vec![job];
+                jobs.extend(received.try_iter().map(Some));
+                for job in latest_browsing(jobs) {
+                    for update in engine.handle(job, Instant::now()) {
+                        send(update);
+                    }
                 }
             }
         });
@@ -142,6 +152,7 @@ impl Synchronization {
             shown: true,
             window,
             gone: Vec::new(),
+            browsed: None,
         }
     }
 
@@ -215,6 +226,15 @@ impl Synchronization {
         let _ = self.jobs.send(Job::Disabled(disabled));
     }
 
+    /// The days on screen that the cache does not hold, to fetch from Google and show without
+    /// keeping them (`MOD-02-F12`); `None` when there are none, or offline. Called every frame.
+    pub fn browse(&mut self, outside: Option<Window>) {
+        if outside != self.browsed {
+            self.browsed = outside;
+            let _ = self.jobs.send(Job::Browse(outside));
+        }
+    }
+
     /// The events to show, when they changed. Called every frame.
     pub fn poll(&mut self) -> Option<Vec<Event>> {
         let mut events = None;
@@ -249,6 +269,9 @@ struct Engine {
     /// The days the cache holds, as the views last gave them.
     window: Window,
     disabled: Disabled,
+    /// The days on screen outside the cache, and their events as fetched; never cached.
+    browsed: Option<Window>,
+    outside: Vec<Event>,
 }
 
 impl Engine {
@@ -261,6 +284,8 @@ impl Engine {
             pending: HashSet::new(),
             window,
             disabled,
+            browsed: None,
+            outside: Vec::new(),
         }
     }
 
@@ -281,6 +306,7 @@ impl Engine {
                 self.window = window;
                 self.stop(&id);
                 let _ = self.cache.forget_account(&id);
+                self.fetch_outside();
                 return vec![self.shown()];
             }
             Some(Job::Refresh) => {
@@ -291,6 +317,10 @@ impl Engine {
                 }
                 let all = self.schedule.all();
                 updates.extend(self.round(&all, now));
+                if self.browsed.is_some() {
+                    self.fetch_outside();
+                    updates.push(self.shown());
+                }
                 return updates;
             }
             Some(Job::Activated) => self.schedule.stale(now),
@@ -307,6 +337,12 @@ impl Engine {
                 self.disabled = disabled;
                 self.clear_disabled();
                 self.enable(now);
+                self.fetch_outside();
+                return vec![self.shown()];
+            }
+            Some(Job::Browse(browsed)) => {
+                self.browsed = browsed;
+                self.fetch_outside();
                 return vec![self.shown()];
             }
         };
@@ -331,6 +367,7 @@ impl Engine {
                 let _ = sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
                 self.schedule.set_account(id, &calendars, now);
                 self.sessions.insert(id.to_string(), session);
+                self.fetch_outside();
             }
             Err(_) => {
                 self.pending.insert(id.to_string());
@@ -407,6 +444,27 @@ impl Engine {
         }
     }
 
+    /// Fetches the events of the browsed days outside the cache from every signed-in account's
+    /// enabled calendars, in place of those fetched before (`MOD-02-F12`).
+    fn fetch_outside(&mut self) {
+        self.outside.clear();
+        let Some(span) = self.browsed else {
+            return;
+        };
+        // An unreadable cache knows no calendars to fetch.
+        let known = self.cache.calendar_list().unwrap_or_default();
+        for (account, session) in &self.sessions {
+            let of_account: Vec<Calendar> = known
+                .iter()
+                .filter(|calendar| calendar.account_id == *account)
+                .cloned()
+                .collect();
+            let calendars = enabled(&self.disabled, &of_account);
+            self.outside
+                .extend(fetch_events(session.as_ref(), &calendars, span));
+        }
+    }
+
     fn stop(&mut self, id: &str) {
         self.pending.remove(id);
         self.schedule.forget(id);
@@ -415,13 +473,38 @@ impl Engine {
 
     fn shown(&self) -> Update {
         // An unreadable cache shows nothing until synchronization rewrites it.
-        Update::Events(
-            self.cache
-                .calendars()
-                .map(|cached| shown_events(&cached, self.window))
-                .unwrap_or_default(),
-        )
+        let mut events = self
+            .cache
+            .calendars()
+            .map(|cached| shown_events(&cached, self.window))
+            .unwrap_or_default();
+        // An event crossing the window's edge is cached already, maybe in a newer version.
+        let cached: HashSet<(&str, &str)> = events
+            .iter()
+            .map(|event| (event.calendar_id.as_str(), event.id.as_str()))
+            .collect();
+        let outside: Vec<Event> = self
+            .outside
+            .iter()
+            .filter(|event| !cached.contains(&(event.calendar_id.as_str(), event.id.as_str())))
+            .cloned()
+            .collect();
+        events.extend(outside);
+        Update::Events(events)
     }
+}
+
+/// The jobs waiting, with only the last of the browsing among them: days left behind while the
+/// worker was busy are not fetched.
+fn latest_browsing(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
+    let last = jobs
+        .iter()
+        .rposition(|job| matches!(job, Some(Job::Browse(_))));
+    jobs.into_iter()
+        .enumerate()
+        .filter(|(i, job)| !matches!(job, Some(Job::Browse(_))) || Some(*i) == last)
+        .map(|(_, job)| job)
+        .collect()
 }
 
 /// The calendars not disabled in the settings.
@@ -454,12 +537,16 @@ mod tests {
 
     use calendar_core::fixtures::d;
     use calendar_core::model::{Access, Calendar, Rgb, Timing};
+    use calendar_core::offline;
+    use calendar_core::platform::Network;
     use calendar_core::sync::SyncedEvent;
     use calendar_google::CLIENT_FILE;
     use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, FakeGoogle, FakeStore};
     use chrono::{TimeZone, Utc};
     use chrono_tz::Europe::Warsaw;
     use serde_json::{Value, json};
+
+    use crate::network::Online;
 
     fn window() -> Window {
         Window::around(d(2026, 11, 11), Warsaw)
@@ -535,6 +622,43 @@ mod tests {
         let mut shown = next_events(&mut sync);
         shown.sort();
         assert_eq!(shown, ["1", "2"]);
+    }
+
+    /// The system's network, faked: offline from the start.
+    struct NoNetwork;
+
+    impl Network for NoNetwork {
+        fn watch(&self, changed: Box<dyn Fn(bool) + Send + Sync>) {
+            changed(false);
+        }
+    }
+
+    #[test]
+    fn tc_02_07_offline_the_cached_calendar_is_shown_at_once_with_the_indicator_and_changes_refused()
+     {
+        let ctx = egui::Context::default();
+        let ids = vec!["1".to_string()];
+
+        // 1. The app starts without network: the cached events come before any synchronization
+        //    (none is asked for: no account check has got through), and the indicator is on.
+        let online = Online::watch(&ctx, &NoNetwork);
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            unreachable_google(),
+            ids,
+            window(),
+            Disabled::new(),
+        );
+
+        assert_eq!(next_events(&mut sync), ["1"]);
+        assert_eq!(offline::indicator(online.get()), Some(offline::OFFLINE));
+
+        // 2. Creating, editing and deleting an event and answering an invitation are refused,
+        //    the reason saying the app is offline.
+        let reason = offline::refused(online.get()).unwrap();
+        assert!(reason.contains("Creating, editing and deleting events and answering invitations"));
+        assert!(reason.contains("not available offline"));
     }
 
     #[test]
@@ -1071,6 +1195,185 @@ mod tests {
 
         assert_eq!(engine.schedule.next(), None);
         assert!(engine.sessions.is_empty());
+    }
+
+    /// The event, in Google, on Sunday 10 March 2030 at 9:00: past the cache window.
+    fn far_event(google: &Google, calendar: &str, id: &str, title: &str) {
+        google.fake.add_event(
+            ACCOUNT_ID,
+            calendar,
+            json!({
+                "id": id,
+                "status": "confirmed",
+                "summary": title,
+                "start": {"dateTime": "2030-03-10T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2030-03-10T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+    }
+
+    /// March 2030, past the cache window.
+    fn march_2030() -> Window {
+        window().outside(d(2030, 3, 1), d(2030, 3, 31)).unwrap()
+    }
+
+    #[test]
+    fn online_a_period_outside_the_cache_window_is_fetched_when_browsed_and_not_kept() {
+        let google = Google::start("outside");
+        google.calendar("work", "owner");
+        google.calendar("holidays", "reader");
+        google.event("work", "standup", "Standup");
+        far_event(&google, "work", "trip", "Trip");
+        far_event(&google, "holidays", "spring", "Spring day");
+        let start = Instant::now();
+        let disabled = Disabled::from([(ACCOUNT_ID.to_string(), "holidays".to_string())]);
+        let mut engine = first_sync_with(&google, Cache::in_memory(), disabled, start);
+        assert_eq!(told(vec![engine.shown()]).unwrap(), ["Standup"]);
+
+        let updates = engine.handle(Some(Job::Browse(Some(march_2030()))), start);
+
+        // A disabled calendar is not fetched for it either.
+        assert_eq!(told(updates).unwrap(), ["Standup", "Trip"]);
+        let cached = engine.cache.calendars().unwrap();
+        assert!(
+            cached
+                .iter()
+                .all(|c| c.events.iter().all(|e| e.id != "trip"))
+        );
+        assert!(!fetched(&google, "holidays"));
+
+        // Browsing away, it is no longer shown.
+        let updates = engine.handle(Some(Job::Browse(None)), start);
+        assert_eq!(told(updates).unwrap(), ["Standup"]);
+    }
+
+    #[test]
+    fn a_period_browsed_before_the_first_synchronization_is_fetched_once_signed_in() {
+        let google = Google::start("outside-first");
+        google.calendar("work", "owner");
+        far_event(&google, "work", "trip", "Trip");
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            google.sign_in(),
+            window(),
+            Disabled::new(),
+        );
+        let start = Instant::now();
+
+        assert_eq!(
+            told(engine.handle(Some(Job::Browse(Some(march_2030()))), start)).unwrap(),
+            Vec::<String>::new()
+        );
+        let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+
+        assert_eq!(told(updates).unwrap(), ["Trip"]);
+    }
+
+    #[test]
+    fn refresh_fetches_the_browsed_period_again() {
+        let google = Google::start("outside-refresh");
+        google.calendar("work", "owner");
+        far_event(&google, "work", "trip", "Trip");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        engine.handle(Some(Job::Browse(Some(march_2030()))), start);
+
+        far_event(&google, "work", "trip", "Trip moved");
+
+        assert_eq!(
+            told(engine.handle(Some(Job::Refresh), start)).unwrap(),
+            ["Trip moved"]
+        );
+    }
+
+    #[test]
+    fn an_occurrence_moved_out_of_the_browsed_days_is_not_shown_at_its_old_time() {
+        let google = Google::start("outside-moved");
+        google.calendar("work", "owner");
+        // Every Tuesday at 9:00; the one of 12 March 2030 moved to Monday 18 March.
+        google.fake.add_event(
+            ACCOUNT_ID,
+            "work",
+            json!({
+                "id": "weekly",
+                "status": "confirmed",
+                "summary": "Weekly",
+                "start": {"dateTime": "2030-03-05T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2030-03-05T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=4"],
+            }),
+        );
+        google.fake.add_event(
+            ACCOUNT_ID,
+            "work",
+            json!({
+                "id": "weekly_20300312T080000Z",
+                "status": "confirmed",
+                "summary": "Weekly",
+                "recurringEventId": "weekly",
+                "originalStartTime": {"dateTime": "2030-03-12T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "start": {"dateTime": "2030-03-18T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2030-03-18T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let week = window().outside(d(2030, 3, 11), d(2030, 3, 17)).unwrap();
+
+        assert_eq!(
+            told(engine.handle(Some(Job::Browse(Some(week))), start)).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn of_the_browsing_waiting_only_the_last_is_done() {
+        let week = |day| {
+            Some(
+                window()
+                    .outside(d(2030, 3, day), d(2030, 3, day + 6))
+                    .unwrap(),
+            )
+        };
+        let jobs = vec![
+            Some(Job::Browse(week(4))),
+            None,
+            Some(Job::Browse(week(11))),
+            Some(Job::Refresh),
+            Some(Job::Browse(week(18))),
+        ];
+
+        let done = latest_browsing(jobs);
+
+        assert_eq!(done.len(), 3);
+        assert!(done[0].is_none());
+        assert!(matches!(done[1], Some(Job::Refresh)));
+        assert!(matches!(&done[2], Some(Job::Browse(span)) if *span == week(18)));
+    }
+
+    #[test]
+    fn an_event_crossing_the_window_edge_is_shown_once() {
+        let google = Google::start("outside-edge");
+        google.calendar("work", "owner");
+        google.fake.add_event(
+            ACCOUNT_ID,
+            "work",
+            json!({
+                "id": "holiday",
+                "status": "confirmed",
+                "summary": "Holiday",
+                "start": {"date": "2028-11-09"},
+                "end": {"date": "2028-11-14"},
+            }),
+        );
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let edge = window().outside(d(2028, 11, 6), d(2028, 11, 12)).unwrap();
+
+        assert_eq!(
+            told(engine.handle(Some(Job::Browse(Some(edge))), start)).unwrap(),
+            ["Holiday"]
+        );
     }
 
     /// The system's wake-ups, faked: the test says when the computer woke.
