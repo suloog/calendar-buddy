@@ -24,21 +24,44 @@
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-F01` | `US-NN-01` |
+| `MOD-05-F01` | `US-05-01` |
+| `MOD-05-F02` | `US-05-01` |
+| `MOD-05-F03` | `US-05-02` |
+| `MOD-05-F04` | `US-05-02` |
+| `MOD-05-F05` | `US-05-02` |
+| `MOD-05-F06` | `US-05-02` |
+| `MOD-05-F07` | `US-05-02` |
+| `MOD-05-F08` | `US-05-02` |
+| `MOD-05-F09` | `US-05-01` |
+| `MOD-05-F10` | `US-05-01` |
+| `MOD-05-F11` | `US-05-02` |
+| `MOD-05-F12` | `US-05-04` |
+| `MOD-05-F13` | `US-05-03` |
+| `MOD-05-F14` | `US-05-03` |
+| `MOD-05-F15` | `US-05-02` |
+| `MOD-05-F16` | `US-05-01` |
+| `MOD-05-F17` | `US-05-05` |
+| `MOD-05-F18` | `US-05-06` |
+| `MOD-05-F19` | `US-05-06` |
+| `MOD-05-F20` | `US-05-07` |
+| `MOD-05-F21` | `US-05-07` |
+| `MOD-05-F22` | `US-05-05` |
+| `MOD-05-F23` | `US-05-08` |
+| `MOD-05-F24` | `US-05-08` |
+| `MOD-05-F25` | `US-05-09` |
+| `MOD-05-F26` | `US-05-10` |
+| `MOD-05-F27` | `US-05-04` |
+| `MOD-05-F28` | `US-05-04` |
+| `MOD-05-F29` | `US-05-07` |
 
 ### UI/UX requirements
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-U01` | `US-NN-01`, `US-NN-02` |
-
-### Non-functional requirements
-
-<Module NFRs only. Global NFR-nn are delivered across modules and are not tracked per module.>
-
-| Requirement | Covered by |
-| ----------- | ---------- |
-| `MOD-NN-NFR-01` | `US-NN-03` |
+| `MOD-05-U01` | `US-05-08` |
+| `MOD-05-U02` | `US-05-03` |
+| `MOD-05-U03` | `US-05-01` |
+| `MOD-05-U04` | `US-05-04` |
 
 <!-- og:part tests -->
 
