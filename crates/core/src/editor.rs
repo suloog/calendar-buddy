@@ -118,7 +118,7 @@ impl Edit {
 }
 
 /// The text of a title as the editor shows it: an untitled event has an empty one.
-fn own_title(event: &Event) -> &str {
+pub(crate) fn own_title(event: &Event) -> &str {
     if event.title == NO_TITLE {
         ""
     } else {

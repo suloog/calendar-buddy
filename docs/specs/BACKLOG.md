@@ -102,7 +102,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-05-01` | As a User, I can create an event by clicking or selecting a time and typing a title, so that adding a meeting takes seconds | F01, F02, F09, F10, F16, U03 | must | review | `US-03-01`, `US-02-01` | — |
 | `US-05-02` | As a User, I can set all the details of an event in a full editor, so that the event says everything it needs to | F03, F04, F05, F06, F07, F08, F11, F15, F16, U03 | must | review | `US-05-01` | — |
 | `US-05-03` | As a User, I can drag an event to another time and stretch it to change its length, so that rescheduling is one gesture | F13, F14, F16, U02, U03 | must | review | `US-05-01` | — |
-| `US-05-04` | As a User, I can delete an event and undo my last change, so that mistakes cost nothing | F12, F16, F27, F28, U04 | must | ready | `US-05-01` | — |
+| `US-05-04` | As a User, I can delete an event and undo my last change, so that mistakes cost nothing | F12, F16, F27, F28, U04 | must | review | `US-05-01` | — |
 | `US-05-05` | As a User, I am stopped from changing what I may not change and told why when Google refuses, so that I never break someone else's event | F17, F22 | must | ready | `US-05-03` | — |
 | `US-05-06` | As a User, I can make an event repeat daily, on weekdays, weekly, monthly or yearly, so that regular meetings are set once | F18, F19 | must | ready | `US-05-02` | — |
 | `US-05-07` | As a User, I can change or delete one occurrence, the following ones or the whole series, so that I handle exceptions the way Google does | F20, F21, F29 | must | ready | `US-05-06`, `US-05-03` | — |

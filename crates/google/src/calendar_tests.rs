@@ -1193,3 +1193,77 @@ fn an_event_moved_to_another_calendar_of_the_account_leaves_the_first_for_the_ot
     assert_eq!(moved.etag, etag);
     assert_ne!(etag, opened.etag);
 }
+
+#[test]
+fn a_deleted_event_leaves_the_calendar_and_restoring_it_brings_it_back_whole() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("delete");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let opened = cached(&cache, "work", "review").unwrap();
+
+    session.delete(&work, "review", &opened.etag).unwrap();
+
+    assert!(
+        google
+            .requests()
+            .contains(&"DELETE /calendar/v3/calendars/work/events/review".to_string())
+    );
+    assert_eq!(
+        google.event(ACCOUNT_ID, "work", "review").unwrap()["status"],
+        "cancelled"
+    );
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    assert_eq!(synced, Ok(()));
+    assert!(cached(&cache, "work", "review").is_none());
+
+    let etag = session.restore(&work, "review").unwrap();
+
+    assert_eq!(
+        google.patched().last().unwrap().1,
+        json!({"status": "confirmed"})
+    );
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let restored = cached(&cache, "work", "review").unwrap();
+    assert_eq!(restored.title, opened.title);
+    assert_eq!(restored.timing, opened.timing);
+    assert_eq!(restored.etag, etag);
+}
+
+#[test]
+fn a_deletion_of_an_event_changed_elsewhere_meanwhile_is_refused_as_such() {
+    let (google, store, dir, client_file, cache) = synchronized_once("delete-conflict");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let opened = cached(&cache, "work", "review").unwrap();
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        timed(
+            "review",
+            "Review (moved)",
+            "2026-11-11T12:00:00+01:00",
+            "2026-11-11T13:00:00+01:00",
+        ),
+    );
+
+    let refused = session.delete(&work, "review", &opened.etag);
+    // Nor can the account delete from a calendar it may only read.
+    google.set_access_role("work", "reader");
+    let current = google.event(ACCOUNT_ID, "work", "review").unwrap()["etag"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let read_only = session.delete(&work, "review", &current);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(refused.unwrap_err().is_changed_elsewhere());
+    let error = read_only.unwrap_err();
+    assert!(error.0.starts_with("Google refused"), "{}", error.0);
+    assert_eq!(
+        google.event(ACCOUNT_ID, "work", "review").unwrap()["status"],
+        "confirmed"
+    );
+}

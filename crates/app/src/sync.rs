@@ -11,8 +11,9 @@
 //! the events to show. The views are told when synchronization runs, when it last got through,
 //! and which calendars are not up to date and why; a calendar that fails waits longer before each
 //! retry, and the others go on (`US-02-06`). A new event goes to Google first and comes back
-//! through synchronizing its calendar (`US-05-01`), and so does a changed one (`US-05-02`); each
-//! account's default event length is read with its first synchronization.
+//! through synchronizing its calendar (`US-05-01`), and so does a changed one (`US-05-02`), a
+//! deleted one and one restored (`US-05-04`); each account's default event length is read with
+//! its first synchronization.
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -60,6 +61,11 @@ enum Job {
     Create(u64, Calendar, NewEvent),
     /// A change to an event, by the number the views know it by.
     Change(u64, Box<Edit>),
+    /// An event to delete from the calendar, by the number the views know it by.
+    Delete(u64, Calendar, Event),
+    /// An event deleted just now to bring back to the calendar, by the number the views know it
+    /// by.
+    Restore(u64, Calendar, Event),
 }
 
 enum Update {
@@ -81,6 +87,10 @@ enum Update {
     Changed(u64, String),
     /// Google did not change the event, and why; never holds the event's contents.
     NotChanged(u64, String),
+    /// Google deleted the event.
+    Deleted(u64),
+    /// Google did not delete the event, and why; never holds the event's contents.
+    NotDeleted(u64, String),
     /// The account's default event length, in minutes (`MOD-05-F09`).
     DefaultLength(String, u32),
 }
@@ -114,7 +124,7 @@ pub struct Synchronization {
     saved: Vec<Saved>,
 }
 
-/// What became of a new or changed event at Google.
+/// What became of a new, changed or deleted event at Google.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Saved {
     Created(u64, String),
@@ -124,6 +134,9 @@ pub enum Saved {
     Changed(u64, String),
     /// Why it was not changed.
     NotChanged(u64, String),
+    Deleted(u64),
+    /// Why it was not deleted.
+    NotDeleted(u64, String),
 }
 
 impl Synchronization {
@@ -311,6 +324,18 @@ impl Synchronization {
         let _ = self.jobs.send(Job::Change(local, edit));
     }
 
+    /// Deletes the event from the calendar at Google, then synchronizes the calendar
+    /// (`MOD-05-F12`); `poll` tells what became of it by `local`.
+    pub fn delete(&self, local: u64, calendar: Calendar, event: Event) {
+        let _ = self.jobs.send(Job::Delete(local, calendar, event));
+    }
+
+    /// Brings back the event deleted just now at Google, then synchronizes the calendar
+    /// (`MOD-05-F27`); `poll` tells what became of it by `local`, as of a change.
+    pub fn restore(&self, local: u64, calendar: Calendar, event: Event) {
+        let _ = self.jobs.send(Job::Restore(local, calendar, event));
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
@@ -343,6 +368,10 @@ impl Synchronization {
                 Update::NotChanged(local, reason) => {
                     self.saved.push(Saved::NotChanged(local, reason))
                 }
+                Update::Deleted(local) => self.saved.push(Saved::Deleted(local)),
+                Update::NotDeleted(local, reason) => {
+                    self.saved.push(Saved::NotDeleted(local, reason))
+                }
                 Update::DefaultLength(account, minutes) => {
                     self.lengths.insert(account, minutes);
                 }
@@ -361,8 +390,8 @@ impl Synchronization {
         &self.status
     }
 
-    /// What became of new and changed events at Google since last asked, in the order Google
-    /// answered; each is given once.
+    /// What became of new, changed and deleted events at Google since last asked, in the order
+    /// Google answered; each is given once.
     pub fn take_saved(&mut self) -> Vec<Saved> {
         std::mem::take(&mut self.saved)
     }
@@ -485,6 +514,12 @@ impl Engine {
                 return self.create(local, calendar, &event, now);
             }
             Some(Job::Change(local, edit)) => return self.change(local, &edit, now),
+            Some(Job::Delete(local, calendar, event)) => {
+                return self.delete(local, calendar, &event, now);
+            }
+            Some(Job::Restore(local, calendar, event)) => {
+                return self.restore(local, calendar, &event, now);
+            }
         };
         self.round(&calendars, now)
     }
@@ -581,18 +616,12 @@ impl Engine {
         now: Instant,
     ) -> Vec<Update> {
         let Some(session) = self.sessions.get(&calendar.account_id) else {
-            let reason = "its account is not signed in yet; try again in a moment".to_string();
-            return vec![Update::NotCreated(local, reason)];
+            return vec![Update::NotCreated(local, NOT_SIGNED_IN.to_string())];
         };
         match session.create(&calendar, event) {
             Ok(id) => {
                 let mut updates = vec![Update::Created(local, id)];
-                updates.extend(self.round(&[calendar], now));
-                // An event on browsed days outside the cache comes back from there.
-                if self.browsed.is_some() {
-                    self.fetch_outside();
-                    updates.push(self.shown());
-                }
+                updates.extend(self.synchronize(&[calendar], now));
                 updates
             }
             Err(error) => vec![Update::NotCreated(local, error.0)],
@@ -604,8 +633,7 @@ impl Engine {
     /// changed elsewhere meanwhile is brought up to date with them, for the user to change again.
     fn change(&mut self, local: u64, edit: &Edit, now: Instant) -> Vec<Update> {
         let Some(session) = self.sessions.get(&edit.calendar.account_id) else {
-            let reason = "its account is not signed in yet; try again in a moment".to_string();
-            return vec![Update::NotChanged(local, reason)];
+            return vec![Update::NotChanged(local, NOT_SIGNED_IN.to_string())];
         };
         let (calendar, id) = (&edit.calendar, &edit.event.id);
         let mut changed = Ok(edit.event.etag.clone());
@@ -613,14 +641,7 @@ impl Engine {
             changed = session.update(calendar, id, &edit.event.etag, &edit.patch);
         }
         let mut updates = vec![match (changed, &edit.to) {
-            (Err(error), _) if error.is_changed_elsewhere() => Update::NotChanged(
-                local,
-                format!(
-                    "{}; it is shown as it is now, make your change again",
-                    error.0
-                ),
-            ),
-            (Err(error), _) => Update::NotChanged(local, error.0),
+            (Err(error), _) => Update::NotChanged(local, refusal(error)),
             (Ok(etag), None) => Update::Changed(local, etag),
             (Ok(_), Some(to)) => match session.move_to(calendar, id, to) {
                 Ok(etag) => Update::Changed(local, etag),
@@ -639,8 +660,53 @@ impl Engine {
         let calendars: Vec<Calendar> = std::iter::once(calendar.clone())
             .chain(edit.to.clone())
             .collect();
-        updates.extend(self.round(&calendars, now));
-        // An event on browsed days outside the cache comes back from there.
+        updates.extend(self.synchronize(&calendars, now));
+        updates
+    }
+
+    /// Deletes the event at Google, against the version shown, then synchronizes its calendar,
+    /// so the deletion reaches the cache the way every change does (`MOD-05-F16`).
+    fn delete(
+        &mut self,
+        local: u64,
+        calendar: Calendar,
+        event: &Event,
+        now: Instant,
+    ) -> Vec<Update> {
+        let Some(session) = self.sessions.get(&calendar.account_id) else {
+            return vec![Update::NotDeleted(local, NOT_SIGNED_IN.to_string())];
+        };
+        let mut updates = vec![match session.delete(&calendar, &event.id, &event.etag) {
+            Ok(()) => Update::Deleted(local),
+            Err(error) => Update::NotDeleted(local, refusal(error)),
+        }];
+        updates.extend(self.synchronize(&[calendar], now));
+        updates
+    }
+
+    /// Brings back the event deleted just now at Google, then synchronizes its calendar.
+    fn restore(
+        &mut self,
+        local: u64,
+        calendar: Calendar,
+        event: &Event,
+        now: Instant,
+    ) -> Vec<Update> {
+        let Some(session) = self.sessions.get(&calendar.account_id) else {
+            return vec![Update::NotChanged(local, NOT_SIGNED_IN.to_string())];
+        };
+        let mut updates = vec![match session.restore(&calendar, &event.id) {
+            Ok(etag) => Update::Changed(local, etag),
+            Err(error) => Update::NotChanged(local, refusal(error)),
+        }];
+        updates.extend(self.synchronize(&[calendar], now));
+        updates
+    }
+
+    /// Synchronizes the calendars after a change to one of their events; an event on browsed
+    /// days outside the cache comes back from there.
+    fn synchronize(&mut self, calendars: &[Calendar], now: Instant) -> Vec<Update> {
+        let mut updates = self.round(calendars, now);
         if self.browsed.is_some() {
             self.fetch_outside();
             updates.push(self.shown());
@@ -798,6 +864,22 @@ impl Engine {
     }
 }
 
+/// Why a change was not sent: the event's account has not signed in in this run yet.
+const NOT_SIGNED_IN: &str = "its account is not signed in yet; try again in a moment";
+
+/// Why Google did not take a change; one made to an event changed elsewhere meanwhile is shown as
+/// it is now, for the user to make again.
+fn refusal(error: SyncError) -> String {
+    if error.is_changed_elsewhere() {
+        format!(
+            "{}; it is shown as it is now, make your change again",
+            error.0
+        )
+    } else {
+        error.0
+    }
+}
+
 /// The jobs waiting, with only the last of the browsing among them: days left behind while the
 /// worker was busy are not fetched.
 fn latest_browsing(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
@@ -869,6 +951,7 @@ mod tests {
     use calendar_core::settings::Settings;
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
+    use calendar_core::undo::{self, LastChange, Undo};
     use calendar_google::CLIENT_FILE;
     use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore};
     use chrono::{TimeZone, Utc};
@@ -2790,6 +2873,292 @@ mod tests {
         assert_eq!(kept["end"]["dateTime"], "2026-11-12T14:30:00+01:00");
     }
 
+    /// "Personal" with one event, 12 November in Warsaw from `from` to `until`, synchronized once.
+    fn personal_with(
+        name: &str,
+        id: &str,
+        title: &str,
+        from: &str,
+        until: &str,
+    ) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": id,
+                "status": "confirmed",
+                "summary": title,
+                "start": {"dateTime": format!("2026-11-12T{from}:00+01:00"), "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": format!("2026-11-12T{until}:00+01:00"), "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    /// The events shown, by title, start and end in Warsaw.
+    fn times(events: Vec<Event>) -> Vec<(String, String, String)> {
+        events
+            .into_iter()
+            .map(|e| {
+                let Timing::Timed { start, end, .. } = e.timing else {
+                    panic!("timed");
+                };
+                (e.title, self::local(start), self::local(end))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn tc_05_04_deleting_gym_asks_nothing_and_undo_brings_it_back_also_in_google() {
+        let (google, mut engine, start) = personal_with("tc-05-04", "gym", "Gym", "18:00", "19:00");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let gym = now_shown(&engine).remove(0);
+        let mut saving = Saving::default();
+        let mut last = LastChange::default();
+
+        // 1. "Gym" is deleted with no question: it is gone, and the Undo notice stays 5 seconds.
+        let local = saving.delete(&gym);
+        last.deleting(local, &calendar, &gym);
+        assert!(saving.shown(&now_shown(&engine)).is_empty());
+        let updates = engine.handle(Some(Job::Delete(local, calendar, gym.clone())), start);
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(local)]);
+        let deleted_at = Instant::now();
+        saving.deleted(local);
+        last.deleted(local, deleted_at);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert!(saving.shown(&events).is_empty());
+        assert_eq!(
+            google.fake.event(ACCOUNT_ID, EMAIL, "gym").unwrap()["status"],
+            "cancelled"
+        );
+        assert_eq!(last.notice(deleted_at), Some((undo::DELETED, undo::NOTICE)));
+        assert_eq!(last.notice(deleted_at + undo::NOTICE), None);
+
+        // 2. Undo within the 5 seconds: "Gym" is back at 18:00–19:00, also in Google.
+        assert!(last.notice(deleted_at + Duration::from_secs(3)).is_some());
+        let Some(Undo::Restore(deleted)) = last.undo() else {
+            panic!("the deletion is undone");
+        };
+        let (calendar, event) = *deleted;
+        let local = saving.change(&event, event.clone());
+        last.undoing(local);
+        assert_eq!(
+            times(saving.shown(&events)),
+            [(
+                "Gym".to_string(),
+                "2026-11-12 18:00".to_string(),
+                "2026-11-12 19:00".to_string()
+            )]
+        );
+        let updates = engine.handle(Some(Job::Restore(local, calendar, event)), start);
+        let changes = saved_changes(&updates);
+        let [Saved::Changed(confirmed, etag)] = changes.as_slice() else {
+            panic!("Google did not restore the event");
+        };
+        assert_eq!(*confirmed, local);
+        saving.changed(local, etag);
+        last.changed(local, etag, Instant::now());
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert_eq!(
+            times(saving.shown(&events)),
+            [(
+                "Gym".to_string(),
+                "2026-11-12 18:00".to_string(),
+                "2026-11-12 19:00".to_string()
+            )]
+        );
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "gym").unwrap();
+        assert_eq!(kept["status"], "confirmed");
+        assert_eq!(kept["summary"], "Gym");
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T18:00:00+01:00");
+        // The undo itself is not a change to undo.
+        assert_eq!(last.undo(), None);
+    }
+
+    #[test]
+    fn tc_05_05_ctrl_z_after_dragging_call_restores_its_time_also_in_google() {
+        let (google, mut engine, start) =
+            personal_with("tc-05-05", "call", "Call", "10:00", "11:00");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let call = now_shown(&engine).remove(0);
+        let mut saving = Saving::default();
+        let mut last = LastChange::default();
+
+        // 1. "Call" dragged to 14:00–15:00: Google holds 14:00–15:00.
+        let drop = Target::Moved {
+            days: 0,
+            minutes: 4 * 60,
+        };
+        let timing = drag::dropped(&call, drop, Warsaw, 60).unwrap();
+        let edit = drag::edit(&call, calendar, timing);
+        let local = saving.change(&edit.event, edit.changed());
+        last.changing(local, &edit);
+        let updates = engine.handle(Some(Job::Change(local, Box::new(edit))), start);
+        let [Saved::Changed(_, dragged)] = <[Saved; 1]>::try_from(saved_changes(&updates)).unwrap()
+        else {
+            panic!("Google did not change the event");
+        };
+        saving.changed(local, &dragged);
+        last.changed(local, &dragged, Instant::now());
+        saving.synced(&shown(&updates).unwrap());
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T14:00:00+01:00");
+        assert_eq!(kept["end"]["dateTime"], "2026-11-12T15:00:00+01:00");
+
+        // 2. Ctrl+Z: the app and Google hold 10:00–11:00 again.
+        assert!(crate::undo_pressed(&mut ctrl_z()));
+        let Some(Undo::Revert(undo)) = last.undo() else {
+            panic!("the change is undone");
+        };
+        let local = saving.change(&undo.event, undo.changed());
+        last.undoing(local);
+        let updates = engine.handle(Some(Job::Change(local, undo)), start);
+        let [Saved::Changed(_, etag)] = <[Saved; 1]>::try_from(saved_changes(&updates)).unwrap()
+        else {
+            panic!("Google did not undo the change");
+        };
+        saving.changed(local, &etag);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert_eq!(
+            times(saving.shown(&events)),
+            [(
+                "Call".to_string(),
+                "2026-11-12 10:00".to_string(),
+                "2026-11-12 11:00".to_string()
+            )]
+        );
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T10:00:00+01:00");
+        assert_eq!(kept["end"]["dateTime"], "2026-11-12T11:00:00+01:00");
+        // Patched back against the version the drag gave it.
+        let (sent_against, patch) = google.fake.patched().pop().unwrap();
+        assert_eq!(sent_against, dragged);
+        assert!(patch.get("summary").is_none());
+    }
+
+    /// Ctrl+Z pressed, as egui reads it.
+    fn ctrl_z() -> egui::InputState {
+        let raw = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+            ..Default::default()
+        };
+        egui::InputState::default().begin_pass(raw, false, 1.0, egui::InputOptions::default())
+    }
+
+    #[test]
+    fn an_undo_of_an_event_changed_elsewhere_meanwhile_is_refused_and_the_event_reloaded() {
+        let (google, mut engine, start) =
+            personal_with("undo-conflict", "call", "Call", "10:00", "11:00");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let call = now_shown(&engine).remove(0);
+        let mut last = LastChange::default();
+        let timing = drag::dropped(
+            &call,
+            Target::Moved {
+                days: 0,
+                minutes: 60,
+            },
+            Warsaw,
+            60,
+        );
+        let edit = drag::edit(&call, calendar, timing.unwrap());
+        last.changing(1, &edit);
+        let updates = engine.handle(Some(Job::Change(1, Box::new(edit))), start);
+        let [Saved::Changed(_, etag)] = <[Saved; 1]>::try_from(saved_changes(&updates)).unwrap()
+        else {
+            panic!("Google did not change the event");
+        };
+        last.changed(1, &etag, Instant::now());
+        // Someone renames it in Google Calendar.
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "call",
+                "status": "confirmed",
+                "summary": "Call (renamed)",
+                "start": {"dateTime": "2026-11-12T11:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-12T12:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+
+        let Some(Undo::Revert(undo)) = last.undo() else {
+            panic!("the change is undone");
+        };
+        last.undoing(2);
+        let updates = engine.handle(Some(Job::Change(2, undo)), start);
+
+        let changes = saved_changes(&updates);
+        let [Saved::NotChanged(2, reason)] = changes.as_slice() else {
+            panic!("the undo was not refused");
+        };
+        assert!(last.is_undo(2));
+        assert!(reason.contains("changed elsewhere"), "{reason}");
+        assert_eq!(
+            times(shown(&updates).unwrap()),
+            [(
+                "Call (renamed)".to_string(),
+                "2026-11-12 11:00".to_string(),
+                "2026-11-12 12:00".to_string()
+            )]
+        );
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T11:00:00+01:00");
+    }
+
+    #[test]
+    fn a_deletion_of_an_event_changed_elsewhere_meanwhile_is_refused_and_the_event_shown_again() {
+        let (google, mut engine, start) =
+            personal_with("delete-conflict", "gym", "Gym", "18:00", "19:00");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let gym = now_shown(&engine).remove(0);
+        google.event(EMAIL, "gym", "Gym (moved)");
+        let mut saving = Saving::default();
+        let local = saving.delete(&gym);
+
+        let updates = engine.handle(
+            Some(Job::Delete(local, calendar.clone(), gym.clone())),
+            start,
+        );
+
+        let changes = saved_changes(&updates);
+        let [Saved::NotDeleted(_, reason)] = changes.as_slice() else {
+            panic!("the deletion was not refused");
+        };
+        assert!(reason.contains("changed elsewhere"), "{reason}");
+        saving.refused(local);
+        let events = shown(&updates).unwrap();
+        let titles: Vec<String> = saving.shown(&events).into_iter().map(|e| e.title).collect();
+        assert_eq!(titles, ["Gym (moved)"]);
+        assert_eq!(
+            google.fake.event(ACCOUNT_ID, EMAIL, "gym").unwrap()["status"],
+            "confirmed"
+        );
+        // An account not signed in in this run deletes nothing either.
+        engine.stop(ACCOUNT_ID);
+        let updates = engine.handle(Some(Job::Delete(2, calendar, gym)), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::NotDeleted(2, _)]
+        ));
+    }
+
     /// What Google answered about changed events, in order.
     fn saved_changes(updates: &[Update]) -> Vec<Saved> {
         updates
@@ -2798,6 +3167,10 @@ mod tests {
                 Update::Changed(local, etag) => Some(Saved::Changed(*local, etag.clone())),
                 Update::NotChanged(local, reason) => {
                     Some(Saved::NotChanged(*local, reason.clone()))
+                }
+                Update::Deleted(local) => Some(Saved::Deleted(*local)),
+                Update::NotDeleted(local, reason) => {
+                    Some(Saved::NotDeleted(*local, reason.clone()))
                 }
                 _ => None,
             })

@@ -95,12 +95,17 @@ impl State {
         event
     }
 
-    /// The event of the account's calendar with the ID, unless deleted.
-    fn find_event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
+    /// The event of the account's calendar with the ID, deleted ones included.
+    fn kept_event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
         self.events
             .iter()
             .find(|(owner, c, e, _)| *owner == account && c == calendar && e["id"] == id)
             .map(|(_, _, event, _)| event.clone())
+    }
+
+    /// The event of the account's calendar with the ID, unless deleted.
+    fn find_event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
+        self.kept_event(account, calendar, id)
             .filter(|event| !deleted(event))
     }
 
@@ -261,12 +266,7 @@ impl FakeGoogle {
 
     /// The event as Google keeps it, e.g. one the app created.
     pub fn event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
-        let state = self.state.lock().unwrap();
-        state
-            .events
-            .iter()
-            .find(|(owner, c, e, _)| *owner == account && c == calendar && e["id"] == id)
-            .map(|(_, _, event, _)| event.clone())
+        self.state.lock().unwrap().kept_event(account, calendar, id)
     }
 
     /// The user sets the length of new events in the account's Google Calendar settings.
@@ -446,7 +446,8 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         .and_then(|(_, token)| state.access.get(token.trim()).copied());
     let insert = head.starts_with("POST /calendar/v3/");
     let patch = head.starts_with("PATCH /calendar/v3/");
-    if head.starts_with("GET /calendar/v3/") || insert || patch {
+    let delete = head.starts_with("DELETE /calendar/v3/");
+    if head.starts_with("GET /calendar/v3/") || insert || patch || delete {
         let if_match = head.lines().find_map(|line| {
             let (name, value) = line.split_once(':')?;
             name.eq_ignore_ascii_case("if-match")
@@ -454,6 +455,7 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         });
         let answer = match bearer {
             Some(account) if patch => patch_event(&mut state, account, request[1], if_match, &body),
+            Some(account) if delete => delete_event(&mut state, account, request[1], if_match),
             Some(account) if insert && request[1].contains("/move?") => {
                 move_event(&mut state, account, request[1])
             }
@@ -709,7 +711,8 @@ fn insert_event(
 }
 
 /// The Calendar API's `events.patch`: the fields sent replace those kept, a null one goes; only
-/// when the version sent in `If-Match` is the one kept.
+/// when the version sent in `If-Match` is the one kept. A deleted event is kept cancelled, and
+/// patching its status to confirmed brings it back.
 fn patch_event(
     state: &mut State,
     account: &'static str,
@@ -725,14 +728,11 @@ fn patch_event(
     if let Some(refusal) = state.refuses_changes(account, &calendar) {
         return refusal;
     }
-    let Some(mut event) = state.find_event(account, &calendar, &id) else {
+    let Some(mut event) = state.kept_event(account, &calendar, &id) else {
         return not_found();
     };
     if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
-        return (
-            "412 Precondition Failed",
-            r#"{"error": {"code": 412, "message": "Precondition Failed"}}"#.to_string(),
-        );
+        return precondition_failed();
     }
     let patch: Value = serde_json::from_str(body).unwrap();
     state
@@ -741,6 +741,46 @@ fn patch_event(
     merge(&mut event, &patch);
     let event = state.put_event(account, &calendar, event);
     ("200 OK", event.to_string())
+}
+
+/// The Calendar API's `events.delete`: the event stays, cancelled, with everything it had; only
+/// when the version sent in `If-Match` is the one kept.
+fn delete_event(
+    state: &mut State,
+    account: &'static str,
+    target: &str,
+    if_match: Option<String>,
+) -> (&'static str, String) {
+    let url = Url::parse(&format!("http://127.0.0.1{target}")).unwrap();
+    let [_, _, calendars, calendar, events, id] = segments(&url).try_into().unwrap_or_default();
+    if calendars != "calendars" || events != "events" {
+        return not_found();
+    }
+    if let Some(refusal) = state.refuses_changes(account, &calendar) {
+        return refusal;
+    }
+    let Some(mut event) = state.kept_event(account, &calendar, &id) else {
+        return not_found();
+    };
+    if deleted(&event) {
+        return (
+            "410 Gone",
+            r#"{"error": {"code": 410, "message": "Resource has been deleted"}}"#.to_string(),
+        );
+    }
+    if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
+        return precondition_failed();
+    }
+    event["status"] = json!("cancelled");
+    state.put_event(account, &calendar, event);
+    ("204 No Content", String::new())
+}
+
+fn precondition_failed() -> (&'static str, String) {
+    (
+        "412 Precondition Failed",
+        r#"{"error": {"code": 412, "message": "Precondition Failed"}}"#.to_string(),
+    )
 }
 
 /// JSON merge patch: objects merged field by field, null removing a field.

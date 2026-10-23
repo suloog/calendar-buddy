@@ -18,7 +18,7 @@ use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Editor, Save};
-use calendar_core::model::Event;
+use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::offline;
@@ -28,6 +28,7 @@ use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::side_panel::{self, Panel};
 use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
+use calendar_core::undo::{LastChange, Undo};
 use calendar_core::view_model::{GridViewModel, grid_view};
 use checks::Checks;
 use chrono::{DateTime, NaiveDate, Utc};
@@ -38,6 +39,7 @@ use network::Online;
 use platform::SystemNetwork;
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::time::Instant;
 use sync::{Saved, Synchronization};
 
 fn system_zone() -> Tz {
@@ -94,6 +96,11 @@ enum Dialog {
 /// Why an occurrence of a series cannot be edited yet: the three-way question comes with
 /// `US-05-07`.
 const REPEATING: &str = "Changing a repeating event is not available yet.";
+
+/// Ctrl+Z: undoes the last change to an event (`MOD-05-F28`); not Ctrl+Shift+Z, there is no redo.
+fn undo_pressed(input: &mut egui::InputState) -> bool {
+    !input.modifiers.shift && input.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)
+}
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
@@ -164,9 +171,12 @@ struct CalendarApp {
     events: Vec<Event>,
     /// The events from the cache.
     cached: Vec<Event>,
-    /// New and changed events sent to Google and not synchronized back yet (`MOD-05-U03`).
+    /// New, changed and deleted events sent to Google and not synchronized back yet
+    /// (`MOD-05-U03`).
     saving: Saving,
-    /// Why new or changed events could not be saved, until the user closes the notice.
+    /// The last change to an event, and what undoes it (`MOD-05-F28`).
+    last: LastChange,
+    /// What could not be saved, deleted or undone, and why, until the user closes the notice.
     not_saved: Vec<String>,
     /// Whether the computer is online, as the system says (`MOD-02-F14`).
     online: Online,
@@ -273,6 +283,7 @@ impl CalendarApp {
             events,
             cached: Vec::new(),
             saving: Saving::default(),
+            last: LastChange::default(),
             not_saved: Vec::new(),
             online: Online::watch(&ctx, &SystemNetwork),
             focused: false,
@@ -335,7 +346,38 @@ impl CalendarApp {
         };
         let edit = drag::edit(event, calendar.clone(), timing);
         let local = self.saving.change(&edit.event, edit.changed());
+        self.last.changing(local, &edit);
         self.sync.change(local, Box::new(edit));
+        self.show_events(None);
+    }
+
+    /// Deletes the event from its calendar, without a question (`MOD-05-F12`, `MOD-05-F27`): gone
+    /// at once, and back if Google refuses.
+    fn delete(&mut self, event: &Event, calendar: Calendar) {
+        let local = self.saving.delete(event);
+        self.last.deleting(local, &calendar, event);
+        self.sync.delete(local, calendar, event.clone());
+        self.show_events(None);
+    }
+
+    /// Ctrl+Z or the notice's Undo: the last change is undone at Google, shown at once, marked
+    /// "saving" until Google confirms it (`MOD-05-F28`).
+    fn undo(&mut self) {
+        let local = match self.last.undo() {
+            Some(Undo::Restore(deleted)) => {
+                let (calendar, event) = *deleted;
+                let local = self.saving.change(&event, event.clone());
+                self.sync.restore(local, calendar, event);
+                local
+            }
+            Some(Undo::Revert(edit)) => {
+                let local = self.saving.change(&edit.event, edit.changed());
+                self.sync.change(local, edit);
+                local
+            }
+            None => return,
+        };
+        self.last.undoing(local);
         self.show_events(None);
     }
 
@@ -371,6 +413,10 @@ impl CalendarApp {
         // Google ignores its keys pressed with a modifier; egui already drops Ctrl's text.
         if ctx.text_edit_focused() || ctx.input(|i| i.modifiers.alt) {
             return;
+        }
+        // Offline the undo waits, as changes need Google (`MOD-02-F15`).
+        if self.online.get() && ctx.input_mut(undo_pressed) {
+            self.undo();
         }
         let typed: Vec<char> = ctx.input(|i| {
             i.events
@@ -430,6 +476,7 @@ impl CalendarApp {
         let mut toggled = None;
         let mut save = None;
         let mut edit = None;
+        let mut delete = None;
         let mut default_calendar = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
@@ -556,11 +603,26 @@ impl CalendarApp {
                         None
                     };
                     if let (false, Some(calendar)) = (details.read_only, calendar) {
-                        let button = egui::Button::new("Edit");
                         let can_edit = refused.is_none() && not_yet.is_none();
-                        if ui.add_enabled(can_edit, button).clicked() {
-                            edit = Some(Editor::of(event, calendar.clone(), &self.regional));
-                        }
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add_enabled(can_edit, egui::Button::new("Edit"))
+                                .clicked()
+                            {
+                                edit = Some(Editor::of(event, calendar.clone(), &self.regional));
+                            }
+                            // Also Delete or Backspace, as in Google Calendar.
+                            let keyed = ui.input(|i| {
+                                i.key_pressed(egui::Key::Delete)
+                                    || i.key_pressed(egui::Key::Backspace)
+                            });
+                            let clicked = ui
+                                .add_enabled(can_edit, egui::Button::new("Delete"))
+                                .clicked();
+                            if can_edit && (clicked || keyed) {
+                                delete = Some((event.clone(), calendar.clone()));
+                            }
+                        });
                         if let Some(why) = not_yet {
                             ui.label(why);
                         }
@@ -635,6 +697,7 @@ impl CalendarApp {
             Some(Save::Create(calendar, event)) => {
                 // Shown at once, marked "saving" until Google confirms it (`MOD-05-U03`).
                 let local = self.saving.add(&calendar, &event);
+                self.last.creating();
                 self.sync.create(local, calendar, event);
                 self.show_events(None);
                 open = false;
@@ -643,6 +706,7 @@ impl CalendarApp {
                 // Shown changed at once, marked "saving" until Google confirms it (`MOD-05-U03`).
                 if !change.is_empty() {
                     let local = self.saving.change(&change.event, change.changed());
+                    self.last.changing(local, &change);
                     self.sync.change(local, change);
                     self.show_events(None);
                 }
@@ -652,6 +716,10 @@ impl CalendarApp {
         }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
+        }
+        if let Some((event, calendar)) = delete {
+            self.delete(&event, calendar);
+            open = false;
         }
         if let Some(calendar) = toggled {
             // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
@@ -688,6 +756,8 @@ impl CalendarApp {
         self.accounts.remove(id);
         self.save_accounts();
         self.saving.forget_account(id);
+        // Its events can no longer be changed back.
+        self.last = LastChange::default();
         self.show_events(None);
         let disabled = self.settings.disabled.clone();
         if self.settings.forget_account(id) {
@@ -763,13 +833,32 @@ impl eframe::App for CalendarApp {
         self.checks.tick(ui.ctx(), &self.accounts);
         let cached = self.sync.poll();
         let saved = self.sync.take_saved();
+        let now = Instant::now();
         for saved in &saved {
             match saved {
                 Saved::Created(local, id) => self.saving.confirmed(*local, id),
-                Saved::Changed(local, etag) => self.saving.changed(*local, etag),
+                Saved::Changed(local, etag) => {
+                    self.saving.changed(*local, etag);
+                    self.last.changed(*local, etag, now);
+                }
+                Saved::Deleted(local) => {
+                    self.saving.deleted(*local);
+                    self.last.deleted(*local, now);
+                }
                 Saved::NotCreated(local, reason) | Saved::NotChanged(local, reason) => {
                     self.saving.refused(*local);
-                    self.not_saved.push(reason.clone());
+                    self.last.refused(*local);
+                    self.not_saved.push(if self.last.is_undo(*local) {
+                        format!("The change could not be undone: {reason}.")
+                    } else {
+                        format!("The event could not be saved: {reason}.")
+                    });
+                }
+                Saved::NotDeleted(local, reason) => {
+                    self.saving.refused(*local);
+                    self.last.refused(*local);
+                    self.not_saved
+                        .push(format!("The event could not be deleted: {reason}."));
                 }
             }
         }
@@ -948,15 +1037,29 @@ impl eframe::App for CalendarApp {
                 self.connected = None;
             }
         }
-        // A new event Google did not create is gone from the views, and one it did not change is
-        // shown as it was; the user is told why.
+        // The notice that follows a change, with its Undo, for 5 seconds (`MOD-05-U04`).
+        if let Some((says, left)) = self.last.notice(Instant::now()) {
+            let mut undo = false;
+            egui::Panel::top("undo").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(says);
+                    undo = ui.add_enabled(online, egui::Button::new("Undo")).clicked();
+                });
+            });
+            ui.ctx().request_repaint_after(left);
+            if undo {
+                self.undo();
+            }
+        }
+        // A new event Google did not create is gone from the views, and one it did not change or
+        // delete is shown as it was; the user is told why.
         if !self.not_saved.is_empty() {
             let mut close = false;
             egui::Panel::top("not-saved").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    for reason in &self.not_saved {
+                    for message in &self.not_saved {
                         let warn = ui.visuals().warn_fg_color;
-                        ui.colored_label(warn, format!("The event could not be saved: {reason}."));
+                        ui.colored_label(warn, message);
                     }
                     close = ui.small_button("✕").clicked();
                 });
