@@ -20,3 +20,6 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking "All day" label on timed events of 24 h+; with the next event years away the list loads 30 days per frame until it appears (terminates, not reachable with the fixture); scroll trigger wiring in `main.rs` proven only manually.
 - Manual checks: TC-03-07, US-03-04#2, US-03-04#4
 - Commits on main: one squash commit — 95ce4e7 feat(views): add agenda view
+
+## Manual checks — 2026-10-23
+- The owner went through every open manual check (US-03-02, US-03-03, US-03-04, busy blocks and today in all views): all passed. US-03-01…US-03-04 set to done.

@@ -3,7 +3,7 @@ id: US-03-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-03
 covers: [MOD-03-F02, MOD-03-F14, MOD-03-F19, MOD-03-F21, MOD-03-F22, MOD-03-U01, MOD-03-U02, MOD-03-U05, MOD-03-NFR-01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: review # draft | ready | in-progress | review | done | blocked
+status: done # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [] # story IDs that must be done first
 | **Module** | `[MOD-03]` Views and navigation — `docs/specs/modules/03-views-navigation/REQUIREMENTS.md` |
 | **Covers** | `MOD-03-F02`, `F14`, `F19`, `F21`, `F22`, `U01`, `U02`, `U05`, `NFR-01` |
 | **Priority** | must |
-| **Status** | review |
+| **Status** | done |
 | **Depends on** | — |
 | **YouTrack** | — |
 | **Open questions** | — |
