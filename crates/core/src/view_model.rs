@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, timed_placements};
-use crate::model::{Event, Rgb, Timing};
+use crate::model::{Event, Kind, Rgb, Timing};
 use crate::week::wall_minute;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,6 +25,8 @@ pub struct Block {
     pub saving: bool,
     /// The event can be dragged and resized (`MOD-05-F13`, `MOD-05-F14`).
     pub movable: bool,
+    /// An out-of-office event, drawn hatched (`MOD-05-U01`).
+    pub hatched: bool,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -39,6 +41,10 @@ pub struct Bar {
     pub movable: bool,
     /// An all-day event, not a timed one lasting a day or longer.
     pub all_day: bool,
+    /// An out-of-office event, drawn hatched (`MOD-05-U01`).
+    pub hatched: bool,
+    /// A working location or a birthday, drawn as a label rather than a bar (`MOD-05-U01`).
+    pub label: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,8 +65,13 @@ pub struct GridViewModel {
     pub initial_scroll_minute: u32,
 }
 
-fn shown_title(event: &Event) -> Option<String> {
-    (!event.busy_only).then(|| event.title.clone())
+/// The title the views show, after the mark of a special type (`MOD-05-U01`); `None` for events
+/// of calendars shared as free/busy only.
+pub(crate) fn shown_title(event: &Event) -> Option<String> {
+    (!event.busy_only).then(|| match event.about.kind.icon() {
+        Some(icon) => format!("{icon} {}", event.title),
+        None => event.title.clone(),
+    })
 }
 
 /// Whether an event can be dragged: the user may change it (`MOD-05-F17`) and Google has
@@ -100,6 +111,7 @@ pub fn grid_view(
                 read_only: event.read_only,
                 saving: event.saving,
                 movable: movable(event),
+                hatched: event.about.kind == Kind::OutOfOffice,
                 start,
                 end,
             }
@@ -118,6 +130,8 @@ pub fn grid_view(
                 saving: event.saving,
                 movable: movable(event),
                 all_day: matches!(event.timing, Timing::AllDay { .. }),
+                hatched: event.about.kind == Kind::OutOfOffice,
+                label: event.about.kind.display_only(),
             }
         })
         .collect();
@@ -181,6 +195,61 @@ mod tests {
             (standup.placement.start_min, standup.placement.end_min),
             (540, 600)
         );
+    }
+
+    #[test]
+    fn special_types_are_hatched_marked_or_labels_in_the_strip() {
+        let typed = |id: &str, hours: ((u32, u32), (u32, u32)), kind| Event {
+            about: crate::model::About {
+                kind,
+                ..Default::default()
+            },
+            ..timed(id, d(2026, 11, 12), hours.0, hours.1)
+        };
+        let events = [
+            typed("Away", ((0, 0), (24, 0)), Kind::OutOfOffice),
+            typed("Trip", ((9, 0), (12, 0)), Kind::OutOfOffice),
+            typed("Writing", ((13, 0), (15, 0)), Kind::FocusTime),
+            typed("Home", ((9, 0), (17, 0)), Kind::WorkingLocation),
+            typed("Anna", ((0, 0), (24, 0)), Kind::Birthday),
+            typed("Review", ((15, 0), (16, 0)), Kind::Ordinary),
+        ];
+        let vm = grid_view(
+            &events,
+            &Week::containing(d(2026, 11, 11), Weekday::Mon).days(),
+            Warsaw,
+            clock(),
+        );
+        let block = |title: &str| vm.blocks.iter().find(|b| b.title.as_deref() == Some(title));
+        let bar = |title: &str| vm.bars.iter().find(|b| b.title.as_deref() == Some(title));
+
+        // Out of office hatched, in the hours or in the strip.
+        assert!(block("🌴 Trip").unwrap().hatched);
+        let away = bar("🌴 Away").unwrap();
+        assert!(away.hatched && !away.label);
+        // Focus time with its icon.
+        let writing = block("🎧 Writing").unwrap();
+        assert!(!writing.hatched);
+        // Working location and birthdays as labels in the strip, also a timed working location,
+        // and not movable: the app only shows them.
+        for label in ["📍 Home", "🎂 Anna"] {
+            let label = bar(label).unwrap();
+            assert!(label.label && !label.hatched && !label.movable);
+        }
+        assert!(block("📍 Home").is_none());
+        let review = block("Review").unwrap();
+        assert!(!review.hatched);
+    }
+
+    #[test]
+    fn working_locations_and_birthdays_cannot_be_changed_in_the_app() {
+        let mut home = timed("Home", d(2026, 11, 12), (9, 0), (17, 0));
+        home.about.kind = Kind::WorkingLocation;
+        assert_eq!(home.protected(), Some(Protected::DisplayOnly));
+        home.about.kind = Kind::Birthday;
+        assert_eq!(home.protected(), Some(Protected::DisplayOnly));
+        home.about.kind = Kind::OutOfOffice;
+        assert_eq!(home.protected(), None);
     }
 
     #[test]

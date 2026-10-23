@@ -186,6 +186,7 @@ pub fn change(
                         .unwrap_or_else(|| about.location.clone()),
                     show: patch.show.unwrap_or(about.show),
                     visibility: patch.visibility.unwrap_or(about.visibility),
+                    kind: about.kind,
                 },
                 recurrence: following(master, first, original, timing, exceptions),
             };

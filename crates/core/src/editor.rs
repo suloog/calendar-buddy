@@ -4,13 +4,15 @@
 //! (`MOD-05-F03`); opened on an existing event, it shows it in its own time zone and saves only
 //! what changed, as a patch against the version opened (`MOD-05-F11`), moving it to another
 //! calendar of the same account when another is picked (`MOD-05-F15`). A new event can be made to
-//! repeat (`US-05-06`, `MOD-05-F18`, `F19`).
+//! repeat (`US-05-06`, `MOD-05-F18`, `F19`), and made out of office or focus time where the
+//! account allows it (`US-05-08`, `MOD-05-F24`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
 
+use crate::accounts::Entry;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
-use crate::model::{About, Calendar, Event, Show, Timing, Visibility};
+use crate::model::{About, Access, Calendar, Event, Kind, Show, Timing, Visibility};
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
 
@@ -47,6 +49,9 @@ pub struct Editor {
     pub calendar: Option<Calendar>,
     pub show: Show,
     pub visibility: Visibility,
+    /// The event's type: picked for a new one where offered (`MOD-05-F24`), kept for an existing
+    /// one.
+    pub kind: Kind,
     /// How a new event repeats; `None` when it does not (`MOD-05-F18`).
     pub repeat: Option<Pattern>,
     /// How the series ends (`MOD-05-F19`).
@@ -175,6 +180,7 @@ impl Editor {
             calendar,
             show: Show::default(),
             visibility: Visibility::default(),
+            kind: Kind::default(),
             repeat: None,
             ends: Ending::default(),
             last_date: regional.numeric_date(start.date()),
@@ -229,20 +235,55 @@ impl Editor {
             all_day,
             show: event.about.show,
             visibility: event.about.visibility,
+            kind: event.about.kind,
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
     }
 
     /// The calendars the event can be saved to, under their accounts: any of `choices` for a new
-    /// event, those of its own account for an existing one (`MOD-05-F15`).
+    /// event, those of its own account for an existing one (`MOD-05-F15`), only its own for an
+    /// existing one of a special type, which Google does not move.
     pub fn choices(&self, choices: Vec<(String, Vec<Calendar>)>) -> Vec<(String, Vec<Calendar>)> {
-        match &self.opened {
-            None => choices,
-            Some((event, _)) => choices
-                .into_iter()
-                .filter(|(_, calendars)| calendars.iter().any(|c| c.account_id == event.account_id))
-                .collect(),
+        let Some((event, own)) = &self.opened else {
+            return choices;
+        };
+        let movable = event.about.kind == Kind::Ordinary;
+        choices
+            .into_iter()
+            .filter(|(_, calendars)| calendars.iter().any(|c| c.account_id == event.account_id))
+            .map(|(email, calendars)| {
+                let calendars = calendars.into_iter();
+                (
+                    email,
+                    calendars.filter(|c| movable || c.id == own.id).collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// The types a new event can be given in the calendar picked (`MOD-05-F24`): out of office
+    /// and focus time besides an ordinary event on the primary calendar of a Workspace account,
+    /// as Google allows them; none to pick from elsewhere or for an existing event. A type picked
+    /// that the calendar now picked does not allow goes back to an ordinary event.
+    pub fn kinds(&mut self, accounts: &[Entry]) -> Vec<Kind> {
+        // Google names an account's primary calendar by the account's e-mail address.
+        let allowed = self.opened.is_none()
+            && self.calendar.as_ref().is_some_and(|calendar| {
+                calendar.access == Access::Owner
+                    && accounts.iter().any(|entry| {
+                        entry.account.id == calendar.account_id
+                            && entry.account.workspace
+                            && entry.account.email == calendar.id
+                    })
+            });
+        if allowed {
+            vec![Kind::Ordinary, Kind::OutOfOffice, Kind::FocusTime]
+        } else {
+            if self.opened.is_none() {
+                self.kind = Kind::Ordinary;
+            }
+            Vec::new()
         }
     }
 
@@ -342,6 +383,15 @@ impl Editor {
             if last < first {
                 return Err(ENDS_BEFORE_STARTS.to_string());
             }
+            // Google keeps out of office and focus time only as timed events: all day is from
+            // midnight to midnight, as Google Calendar makes it.
+            if self.kind.timed_only() {
+                return Ok(Timing::Timed {
+                    start: wall(first, 0, self.zone),
+                    end: wall(last + Duration::days(1), 0, self.zone),
+                    zone: self.zone,
+                });
+            }
             return Ok(Timing::AllDay {
                 start: first,
                 end_exclusive: last + Duration::days(1),
@@ -381,8 +431,14 @@ impl Editor {
         let about = About {
             description: self.description.clone(),
             location: self.location.trim().to_string(),
-            show: self.show,
+            // Google keeps out of office and focus time busy.
+            show: if self.kind.timed_only() {
+                Show::Busy
+            } else {
+                self.show
+            },
             visibility: self.visibility,
+            kind: self.kind,
         };
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
@@ -526,10 +582,87 @@ mod tests {
                     location: "Room 2".to_string(),
                     show: Show::Free,
                     visibility: Visibility::Private,
+                    kind: Kind::Ordinary,
                 },
                 recurrence: Vec::new(),
             }
         );
+    }
+
+    fn account(id: &str, email: &str, workspace: bool) -> Entry {
+        Entry {
+            account: crate::accounts::Account {
+                id: id.to_string(),
+                email: email.to_string(),
+                workspace,
+                contacts: true,
+                directory: false,
+            },
+            state: crate::accounts::AccountState::Connected,
+        }
+    }
+
+    #[test]
+    fn out_of_office_and_focus_time_are_offered_only_on_the_primary_calendar_of_a_workspace_account()
+     {
+        let accounts = [
+            account("1", "a@example.com", true),
+            account("2", "b@gmail.com", false),
+        ];
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        assert_eq!(
+            editor.kinds(&accounts),
+            [Kind::Ordinary, Kind::OutOfOffice, Kind::FocusTime]
+        );
+        editor.kind = Kind::OutOfOffice;
+
+        // Another calendar of the Workspace account: nothing to pick, and the event is ordinary.
+        editor.calendar = Some(calendar("1", "team"));
+        assert_eq!(editor.kinds(&accounts), []);
+        assert_eq!(editor.kind, Kind::Ordinary);
+        // The primary calendar of a personal account.
+        editor.calendar = Some(calendar("2", "b@gmail.com"));
+        assert_eq!(editor.kinds(&accounts), []);
+        // A primary calendar of the Workspace account shared with the personal one.
+        editor.calendar = Some(Calendar {
+            access: Access::Writer,
+            ..calendar("2", "a@example.com")
+        });
+        assert_eq!(editor.kinds(&accounts), []);
+
+        // An existing event keeps its type and is not offered another.
+        let mut opened = Editor::from_quick(&quick(), &regional());
+        opened.kind = Kind::FocusTime;
+        opened.opened = Some((
+            timed("focus", d(2026, 11, 12), (9, 0), (10, 0)),
+            calendar("1", "a@example.com"),
+        ));
+        assert_eq!(opened.kinds(&accounts), []);
+        assert_eq!(opened.kind, Kind::FocusTime);
+    }
+
+    #[test]
+    fn an_all_day_out_of_office_is_sent_from_midnight_to_midnight_and_busy() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.kind = Kind::OutOfOffice;
+        editor.all_day = true;
+        editor.start_date = "13.11.2026".to_string();
+        editor.end_date = "14.11.2026".to_string();
+        editor.show = Show::Free;
+
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert_eq!(
+            event.timing,
+            Timing::Timed {
+                start: at(Warsaw, d(2026, 11, 13), 0, 0),
+                end: at(Warsaw, d(2026, 11, 15), 0, 0),
+                zone: Warsaw,
+            }
+        );
+        assert_eq!(event.about.kind, Kind::OutOfOffice);
+        assert_eq!(event.about.show, Show::Busy);
     }
 
     #[test]
@@ -947,5 +1080,17 @@ mod tests {
         assert_eq!(edit.calendar.id, "a@example.com");
         assert_eq!(edit.to.as_ref().unwrap().id, "team");
         assert_eq!(edit.changed().calendar_id, "team");
+
+        // An out-of-office event stays in its calendar, as Google moves only ordinary events.
+        let mut away = standup();
+        away.about.kind = Kind::OutOfOffice;
+        let editor = Editor::of(&away, calendar("1", "a@example.com"), &regional());
+        assert_eq!(
+            editor.choices(choices),
+            [(
+                "a@example.com".to_string(),
+                vec![calendar("1", "a@example.com")]
+            )]
+        );
     }
 }

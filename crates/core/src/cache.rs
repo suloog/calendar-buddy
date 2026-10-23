@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, NaiveDate, Utc};
 use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
-use crate::model::{About, Access, Calendar, Rgb, Show, Timing, Visibility};
+use crate::model::{About, Access, Calendar, Kind, Rgb, Show, Timing, Visibility};
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
 /// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 2;
+const VERSION: i64 = 3;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -43,6 +43,7 @@ const SCHEMA: &str = "
         visibility TEXT NOT NULL,
         etag TEXT NOT NULL,
         organizer_only INTEGER NOT NULL,
+        kind TEXT NOT NULL,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -372,7 +373,7 @@ impl Cache {
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
                  series_id, original_start, description, location, show, visibility, etag, \
-                 organizer_only FROM events",
+                 organizer_only, kind FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -393,6 +394,7 @@ impl Cache {
                         location: row.get(11)?,
                         show: parse_show(&row.get::<_, String>(12)?),
                         visibility: parse_visibility(&row.get::<_, String>(13)?),
+                        kind: parse_kind(&row.get::<_, String>(16)?),
                     },
                     row.get::<_, String>(14)?,
                     row.get::<_, bool>(15)?,
@@ -454,7 +456,7 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         )
         .map_err(failed)?;
     for event in events {
@@ -496,6 +498,7 @@ fn insert(
                 visibility_key(event.about.visibility),
                 event.etag,
                 event.organizer_only,
+                kind_key(event.about.kind),
             ])
             .map_err(failed)?;
     }
@@ -572,6 +575,26 @@ fn parse_visibility(key: &str) -> Visibility {
         "public" => Visibility::Public,
         "private" => Visibility::Private,
         _ => Visibility::Default,
+    }
+}
+
+fn kind_key(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Ordinary => "ordinary",
+        Kind::OutOfOffice => "out-of-office",
+        Kind::FocusTime => "focus-time",
+        Kind::WorkingLocation => "working-location",
+        Kind::Birthday => "birthday",
+    }
+}
+
+fn parse_kind(key: &str) -> Kind {
+    match key {
+        "out-of-office" => Kind::OutOfOffice,
+        "focus-time" => Kind::FocusTime,
+        "working-location" => Kind::WorkingLocation,
+        "birthday" => Kind::Birthday,
+        _ => Kind::Ordinary,
     }
 }
 
@@ -678,6 +701,7 @@ mod tests {
                     location: "Lisbon".into(),
                     show: Show::Free,
                     visibility: Visibility::Private,
+                    kind: Kind::OutOfOffice,
                 },
                 etag: "\"3\"".into(),
                 organizer_only: true,

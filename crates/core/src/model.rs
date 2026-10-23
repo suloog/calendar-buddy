@@ -58,6 +58,8 @@ pub enum Protected {
     ReadOnlyCalendar,
     /// A guest's copy of someone else's event, who does not let guests change it.
     OrganizerOnly,
+    /// A working location or a birthday, which the app only shows (`DEC-34`).
+    DisplayOnly,
 }
 
 impl Protected {
@@ -70,6 +72,10 @@ impl Protected {
             Protected::OrganizerOnly => {
                 "This event can't be changed: only its organizer can change it."
             }
+            Protected::DisplayOnly => {
+                "This event can't be changed here: working locations and birthdays are changed in \
+                 Google."
+            }
         }
     }
 }
@@ -81,6 +87,8 @@ impl Event {
             Some(Protected::ReadOnlyCalendar)
         } else if self.organizer_only {
             Some(Protected::OrganizerOnly)
+        } else if self.about.kind.display_only() {
+            Some(Protected::DisplayOnly)
         } else {
             None
         }
@@ -105,6 +113,51 @@ pub enum Visibility {
     Private,
 }
 
+/// Google's special event types (`MOD-05-F23`), or an ordinary event.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Kind {
+    #[default]
+    Ordinary,
+    OutOfOffice,
+    FocusTime,
+    WorkingLocation,
+    Birthday,
+}
+
+impl Kind {
+    /// What the type is called where the user picks it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Ordinary => "Event",
+            Kind::OutOfOffice => "Out of office",
+            Kind::FocusTime => "Focus time",
+            Kind::WorkingLocation => "Working location",
+            Kind::Birthday => "Birthday",
+        }
+    }
+
+    /// The mark the views put before the title of an event of the type (`MOD-05-U01`).
+    pub fn icon(self) -> Option<&'static str> {
+        match self {
+            Kind::Ordinary => None,
+            Kind::OutOfOffice => Some("🌴"),
+            Kind::FocusTime => Some("🎧"),
+            Kind::WorkingLocation => Some("📍"),
+            Kind::Birthday => Some("🎂"),
+        }
+    }
+
+    /// A type the app only shows: working locations and birthdays are made in Google (`DEC-34`).
+    pub fn display_only(self) -> bool {
+        matches!(self, Kind::WorkingLocation | Kind::Birthday)
+    }
+
+    /// A type Google keeps only as timed events, and always busy: out of office and focus time.
+    pub fn timed_only(self) -> bool {
+        matches!(self, Kind::OutOfOffice | Kind::FocusTime)
+    }
+}
+
 /// What an event says besides its title and times.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct About {
@@ -112,6 +165,8 @@ pub struct About {
     pub location: String,
     pub show: Show,
     pub visibility: Visibility,
+    /// Its type; set when it is created, never changed afterwards (as in Google).
+    pub kind: Kind,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).

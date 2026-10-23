@@ -1392,3 +1392,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-115] How special event types look, and that working locations and birthdays are not changed in the app
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-08
+- **Affects:** `US-05-08`, `MOD-05-F23`, `MOD-05-U01`, `MOD-05-F17`, `DEC-34`, `DEC-60`
+- **Decision:** Every special type carries a mark before its title in every view (day, 3-day, week, month, agenda): out of office 🌴, focus time 🎧, working location 📍, birthday 🎂. In the hour grid, out-of-office events are also drawn hatched (diagonal stripes over their colour), in the hours or in the all-day strip. Working-location and birthday events always go to the all-day strip, also a timed working location (e.g. 9:00–17:00), drawn as a label: outlined in their colour, not filled. Google's other types (`default`, `fromGmail`) are ordinary events. Working-location and birthday events cannot be dragged, resized, edited or deleted in the app; trying says "This event can't be changed here: working locations and birthdays are changed in Google."
+- **Why:** `MOD-05-U01` names hatching for out of office and an icon for focus time but not how the month and agenda views make the types stand out (`MOD-05-F23`); one mark per type, in all views, is the simplest consistent answer. Google Calendar shows working locations as labels at the top of the day whatever their hours. The technical notes make working location and birthday read-only (`DEC-34`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-116] Creating out of office and focus time: where, all day, busy, and Google Calendar's auto-decline defaults
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-08
+- **Affects:** `US-05-08`, `MOD-05-F24`, `DEC-34`
+- **Decision:** The editor of a new event shows "Type: Event | Out of office | Focus time" only when the calendar picked is the primary calendar of a Workspace account (its ID is the account's e-mail address, the account owns it, and the account signed in with Google's `hd` claim); with another calendar picked, the row is gone and the type goes back to an ordinary event. An existing event keeps its type, shown in the editor but not changeable (Google does not change an event's type). As Google takes these types only as timed events, "All day" makes them run from midnight of the first day to midnight after the last in the editor's time zone, as Google Calendar does; they are always busy, so "Show as" is not offered. They are sent with `eventType` and Google Calendar's defaults: out of office with `autoDeclineMode: declineOnlyNewConflictingInvitations` and the message "Declined because I am out of office"; focus time with the same mode, the message "Declined because I am in focus time" and chat set to do not disturb. Declining and chat settings are not editable in the app.
+- **Why:** `MOD-05-F24` limits the types to Workspace primary calendars without saying how the app knows one or what the other required fields are; Google's API refuses all-day and transparent out-of-office and focus-time events and needs their properties. Declining only new invitations is the gentler of Google's options and leaves existing meetings alone; editing these settings is not asked for (`DEC-62`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-117] Out of office and focus time stay timed when dragged, and stay in their calendar
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-08
+- **Affects:** `US-05-08`, `MOD-05-F13`, `MOD-05-F15`, `DEC-116`
+- **Decision:** An out-of-office or focus-time event dragged into the all-day strip runs from midnight to midnight of that day in the views' time zone, instead of becoming an all-day event. The editor of an existing out-of-office, focus-time, working-location or birthday event offers only its own calendar.
+- **Why:** Google keeps out of office and focus time only as timed events (`DEC-116`), and moves only ordinary events between calendars (`events.move`); offering either would end in Google's refusal.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

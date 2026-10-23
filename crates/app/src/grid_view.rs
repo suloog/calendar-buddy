@@ -46,6 +46,27 @@ pub fn event_label(title: Option<&str>, read_only: bool, saving: bool) -> String
     }
 }
 
+/// How far apart the stripes of a hatched event are.
+const HATCH_SPACING: f32 = 8.0;
+
+/// Diagonal stripes over an out-of-office event (`MOD-05-U01`), in a faint shade of its text's
+/// colour `ink`.
+pub fn hatch(painter: &egui::Painter, rect: Rect, ink: Color32) {
+    let painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+    let stroke = Stroke::new(1.5, ink.gamma_multiply(0.35));
+    let mut x = rect.left() - rect.height();
+    while x < rect.right() {
+        painter.line_segment(
+            [
+                Pos2::new(x, rect.bottom()),
+                Pos2::new(x + rect.height(), rect.top()),
+            ],
+            stroke,
+        );
+        x += HATCH_SPACING;
+    }
+}
+
 /// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
 /// keeps it in sight and rings it; Enter or a click opens it into `opened`.
 pub fn openable(
@@ -278,13 +299,24 @@ pub fn show(
                 }
             }
         }
-        painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
+        // Working locations and birthdays are labels, outlined in their colour (`MOD-05-U01`).
+        let ink = if bar.label {
+            let outline = Stroke::new(1.0, color(bar.color));
+            painter.rect_stroke(rect, CornerRadius::same(3), outline, StrokeKind::Inside);
+            visuals.text_color()
+        } else {
+            painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
+            text_on(bar.color)
+        };
+        if bar.hatched {
+            hatch(&painter, rect, ink);
+        }
         painter.with_clip_rect(rect).text(
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
             event_label(bar.title.as_deref(), bar.read_only, bar.saving),
             FontId::proportional(12.0),
-            text_on(bar.color),
+            ink,
         );
         openable(ui, &response, rect, bar.bar.event, opened);
     }
@@ -514,6 +546,9 @@ pub fn show(
             }
             painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
             let ink = text_on(block.color);
+            if block.hatched {
+                hatch(&painter, rect, ink);
+            }
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
             let name = event_label(block.title.as_deref(), block.read_only, block.saving);
             let time = match times {
@@ -588,6 +623,25 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use calendar_core::model::Kind;
+
+    #[test]
+    fn the_marks_of_special_event_types_are_in_the_apps_fonts() {
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |_| {})
+            .textures_delta
+            .clear();
+        let font = FontId::proportional(12.0);
+        for kind in [
+            Kind::OutOfOffice,
+            Kind::FocusTime,
+            Kind::WorkingLocation,
+            Kind::Birthday,
+        ] {
+            let mark = kind.icon().unwrap();
+            assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, mark)), "{mark}");
+        }
+    }
 
     #[test]
     fn events_of_calendars_that_cannot_be_changed_carry_a_lock() {

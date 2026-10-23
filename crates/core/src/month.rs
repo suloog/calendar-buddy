@@ -6,6 +6,7 @@ use chrono_tz::Tz;
 
 use crate::layout::{is_strip_event, strip_dates};
 use crate::model::{Event, Rgb, Timing};
+use crate::view_model::shown_title;
 use crate::week::Week;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -132,7 +133,7 @@ pub fn month_view(
                     let event = &events[i];
                     MonthItem {
                         event: i,
-                        title: (!event.busy_only).then(|| event.title.clone()),
+                        title: shown_title(event),
                         color: event.color,
                         read_only: event.read_only,
                         saving: event.saving,
