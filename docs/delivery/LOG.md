@@ -228,3 +228,14 @@
   - One squash commit: one logical change.
 - Manual checks: US-05-09#1, TC-05-10 (US-05-09#2 against real Google)
 - Commits on main: 172fa69 feat(events): show and change an event's own colour [US-05-09]
+
+## US-05-10 — review — 2026-10-23 21:35
+- What: Google's event attachments are read (title, `fileUrl`), cached (new `attachments` column) and listed in the event's details as 📎 links that open in the default browser through the `Browser` platform interface.
+- Decisions: DEC-119
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - Code review found nothing blocking. Fixed anyway: a comment that said Google, not the app's copy of the event, carries attachments to a split series.
+  - Spec review compliant. The SQLite cache schema changed (`attachments` column, VERSION 5: the cache refetches in full); `calendar-core` now depends on `serde_json` to store them. The calendar-provider interface is unchanged.
+  - The owner should ratify DEC-119 (untitled attachments listed by their link; only `https://` links listed and opened).
+  - One squash commit: one logical change.
+- Manual checks: TC-05-11 (US-05-10#1, US-05-10#2 against real Google)
+- Commits on main: 944ce00 feat(events): list an event's attachments as links [US-05-10]
