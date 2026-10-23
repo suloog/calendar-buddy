@@ -172,6 +172,12 @@ pub trait Provider {
         id: &str,
         destination: &Calendar,
     ) -> Result<String, SyncError>;
+    /// Deletes the calendar's event, unless it changed at the provider since the version `etag`
+    /// (`SyncError::changed_elsewhere`) (`MOD-05-F12`).
+    fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError>;
+    /// Brings back the calendar's event deleted just now, whole, and returns its new version
+    /// (`MOD-05-F27`).
+    fn restore(&self, calendar: &Calendar, id: &str) -> Result<String, SyncError>;
     /// How long, in minutes, a new event started without a range is, as the account's settings at
     /// the provider say (`MOD-05-F09`).
     fn default_length(&self) -> Result<u32, SyncError>;
@@ -406,6 +412,14 @@ mod tests {
 
         fn create(&self, _: &Calendar, _: &NewEvent) -> Result<String, SyncError> {
             unreachable!("synchronization creates nothing")
+        }
+
+        fn delete(&self, _: &Calendar, _: &str, _: &str) -> Result<(), SyncError> {
+            unreachable!("synchronization deletes nothing")
+        }
+
+        fn restore(&self, _: &Calendar, _: &str) -> Result<String, SyncError> {
+            unreachable!("synchronization restores nothing")
         }
 
         fn default_length(&self) -> Result<u32, SyncError> {

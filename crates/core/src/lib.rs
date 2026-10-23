@@ -23,5 +23,6 @@ pub mod shortcuts;
 pub mod side_panel;
 pub mod status;
 pub mod sync;
+pub mod undo;
 pub mod view_model;
 pub mod week;

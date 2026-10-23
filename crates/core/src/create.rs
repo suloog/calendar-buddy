@@ -206,6 +206,8 @@ struct Pending {
     event: Event,
     /// For a change, the event as it was: not shown meanwhile.
     replaces: Option<Event>,
+    /// A deletion: `event` is not shown either.
+    deletes: bool,
 }
 
 /// Whether two events are the same event of the same calendar.
@@ -215,7 +217,8 @@ fn same(a: &Event, b: &Event) -> bool {
 
 /// The new and changed events sent to Google and not yet synchronized back: each is shown marked
 /// "saving" until Google confirms it, then without the mark until synchronization brings it
-/// (`MOD-05-U03`); one Google refused goes, and a changed one is shown as it was again.
+/// (`MOD-05-U03`); one Google refused goes, and a changed one is shown as it was again. A deleted
+/// event is not shown until synchronization takes it away, unless Google refuses.
 #[derive(Clone, Debug, Default)]
 pub struct Saving {
     pending: Vec<Pending>,
@@ -244,25 +247,38 @@ impl Saving {
             about: event.about.clone(),
             etag: String::new(),
         };
-        self.push(event, None)
+        self.push(event, None, false)
     }
 
     /// Shows the changed event as saving in place of `before`, and returns the number it is told
-    /// by.
+    /// by. An earlier change or deletion of it that Google took gives way to this one, as when
+    /// it is undone (`MOD-05-F28`).
     pub fn change(&mut self, before: &Event, after: Event) -> u64 {
+        self.pending
+            .retain(|p| p.event.saving || !same(&p.event, before));
         let after = Event {
             saving: true,
             ..after
         };
-        self.push(after, Some(before.clone()))
+        self.push(after, Some(before.clone()), false)
     }
 
-    fn push(&mut self, event: Event, replaces: Option<Event>) -> u64 {
+    /// Hides the deleted event, and returns the number it is told by (`MOD-05-F12`).
+    pub fn delete(&mut self, event: &Event) -> u64 {
+        let event = Event {
+            saving: true,
+            ..event.clone()
+        };
+        self.push(event.clone(), Some(event), true)
+    }
+
+    fn push(&mut self, event: Event, replaces: Option<Event>, deletes: bool) -> u64 {
         self.next += 1;
         self.pending.push(Pending {
             local: self.next,
             event,
             replaces,
+            deletes,
         });
         self.next
     }
@@ -283,16 +299,27 @@ impl Saving {
         }
     }
 
-    /// Google did not create or change the event: a new one goes, a changed one is shown as it
-    /// was.
+    /// Google deleted the event.
+    pub fn deleted(&mut self, local: u64) {
+        if let Some(pending) = self.pending.iter_mut().find(|p| p.local == local) {
+            pending.event.saving = false;
+        }
+    }
+
+    /// Google did not create, change or delete the event: a new one goes, a changed or deleted
+    /// one is shown as it was.
     pub fn refused(&mut self, local: u64) {
         self.pending.retain(|p| p.local != local);
     }
 
     /// Synchronization brought these events: the saved ones among them, in a version other than
-    /// the one changed or in the calendar moved to, are no longer pending.
+    /// the one changed or in the calendar moved to, are no longer pending, nor the deleted ones
+    /// missing from them.
     pub fn synced(&mut self, events: &[Event]) {
         self.pending.retain(|p| {
+            if p.deletes {
+                return p.event.saving || events.iter().any(|e| same(e, &p.event));
+            }
             p.event.saving
                 || !events.iter().any(|e| {
                     same(e, &p.event)
@@ -329,8 +356,9 @@ impl Saving {
         self.pending.retain(|p| p.event.account_id != account_id);
     }
 
+    /// The new and changed events to show.
     pub fn events(&self) -> impl Iterator<Item = &Event> {
-        self.pending.iter().map(|p| &p.event)
+        self.pending.iter().filter(|p| !p.deletes).map(|p| &p.event)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -706,5 +734,60 @@ mod tests {
         // Even if the provider kept its version.
         saving.synced(std::slice::from_ref(&moved));
         assert!(saving.is_empty());
+    }
+
+    #[test]
+    fn a_deleted_event_is_gone_at_once_and_comes_back_when_google_refuses() {
+        let gym = crate::fixtures::timed("Gym", d(2026, 11, 12), (18, 0), (19, 0));
+        let other = crate::fixtures::timed("Review", d(2026, 11, 12), (11, 0), (12, 0));
+        let cached = vec![gym.clone(), other.clone()];
+        let mut saving = Saving::default();
+        let local = saving.delete(&gym);
+        assert_eq!(saving.shown(&cached), std::slice::from_ref(&other));
+        assert!(saving.holds(&gym));
+
+        saving.refused(local);
+        assert_eq!(saving.shown(&cached), cached);
+    }
+
+    #[test]
+    fn a_deleted_event_stays_gone_until_synchronization_takes_it_away() {
+        let gym = crate::fixtures::timed("Gym", d(2026, 11, 12), (18, 0), (19, 0));
+        let mut saving = Saving::default();
+        let local = saving.delete(&gym);
+        // Synchronized before Google answered: still there, still hidden.
+        saving.synced(std::slice::from_ref(&gym));
+        saving.deleted(local);
+        saving.synced(std::slice::from_ref(&gym));
+        assert!(saving.shown(std::slice::from_ref(&gym)).is_empty());
+
+        saving.synced(&[]);
+        assert!(saving.is_empty());
+    }
+
+    #[test]
+    fn a_restored_event_is_shown_saving_until_synchronized_back_in_a_new_version() {
+        let gym = crate::fixtures::timed("Gym", d(2026, 11, 12), (18, 0), (19, 0));
+        let mut saving = Saving::default();
+        let deleting = saving.delete(&gym);
+        saving.deleted(deleting);
+        // Restored before synchronization took it away: the deletion no longer hides it.
+        let local = saving.change(&gym, gym.clone());
+        let titles = |events: Vec<Event>| -> Vec<(String, bool)> {
+            events.into_iter().map(|e| (e.title, e.saving)).collect()
+        };
+        assert_eq!(
+            titles(saving.shown(std::slice::from_ref(&gym))),
+            [("Gym".to_string(), true)]
+        );
+
+        saving.changed(local, "\"9\"");
+        let back = Event {
+            etag: "\"9\"".to_string(),
+            ..gym.clone()
+        };
+        saving.synced(std::slice::from_ref(&back));
+        assert!(saving.is_empty());
+        assert_eq!(saving.shown(std::slice::from_ref(&back)), [back]);
     }
 }

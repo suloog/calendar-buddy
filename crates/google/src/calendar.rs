@@ -157,13 +157,14 @@ impl Session {
             .ok_or_else(|| SyncError("Google refused (gone)".into()))
     }
 
-    /// Google's answer to a patch of what it keeps in the version `etag`, as `get` handles
-    /// answers; `SyncError::changed_elsewhere` when that is no longer the version kept.
+    /// Google's answer to a patch of what it keeps in the version `etag`, or in any version
+    /// without one, as `get` handles answers; `SyncError::changed_elsewhere` when that is no
+    /// longer the version kept.
     fn patch<T: DeserializeOwned>(
         &self,
         url: Url,
         change: &Value,
-        etag: &str,
+        etag: Option<&str>,
     ) -> Result<T, SyncError> {
         self.send(url, Request::Patch(change, etag))?
             .ok_or_else(|| SyncError("Google refused (gone)".into()))
@@ -193,7 +194,9 @@ impl Session {
             let reason = google_reason(&body).unwrap_or_else(|| status.to_string());
             return Err(SyncError(format!("Google refused ({reason})")));
         }
-        serde_json::from_str(&body)
+        // A deletion is answered without a body.
+        let body = if body.is_empty() { "null" } else { &body };
+        serde_json::from_str(body)
             .map(Some)
             .map_err(|_| SyncError("Google's answer could not be read".into()))
     }
@@ -219,12 +222,22 @@ impl Session {
                 .header("Authorization", bearer)
                 .header("Content-Type", "application/json")
                 .send(change.to_string()),
-            Request::Patch(change, etag) => agent
-                .patch(url.as_str())
+            Request::Patch(change, etag) => {
+                let request = agent
+                    .patch(url.as_str())
+                    .header("Authorization", bearer)
+                    .header("Content-Type", "application/json");
+                match etag {
+                    Some(etag) => request.header("If-Match", etag),
+                    None => request,
+                }
+                .send(change.to_string())
+            }
+            Request::Delete(etag) => agent
+                .delete(url.as_str())
                 .header("Authorization", bearer)
-                .header("Content-Type", "application/json")
                 .header("If-Match", etag)
-                .send(change.to_string()),
+                .call(),
         };
         let mut response = response
             .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
@@ -261,8 +274,10 @@ enum Request<'a> {
     Get,
     /// With the change to send, if any.
     Post(Option<&'a Value>),
-    /// The change, made to the version (ETag).
-    Patch(&'a Value, &'a str),
+    /// The change, made to the version (ETag) if one is given.
+    Patch(&'a Value, Option<&'a str>),
+    /// Deleting, the version (ETag).
+    Delete(&'a str),
 }
 
 /// An event's version, as Google answers a change.
@@ -418,7 +433,7 @@ impl Provider for Session {
         }
         let url = self.url(&["calendars", &calendar.id, "events", id]);
         Ok(self
-            .patch::<Version>(url, &Value::Object(change), etag)?
+            .patch::<Version>(url, &Value::Object(change), Some(etag))?
             .etag)
     }
 
@@ -432,6 +447,20 @@ impl Provider for Session {
         url.query_pairs_mut()
             .append_pair("destination", &destination.id);
         Ok(self.post::<Version>(url, None)?.etag)
+    }
+
+    /// Google answers a deletion of an event already deleted with 410 Gone: it is deleted.
+    fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError> {
+        let url = self.url(&["calendars", &calendar.id, "events", id]);
+        self.send::<()>(url, Request::Delete(etag)).map(|_| ())
+    }
+
+    /// Google keeps a deleted event, cancelled, for a while: confirming it again brings it back
+    /// with everything it had.
+    fn restore(&self, calendar: &Calendar, id: &str) -> Result<String, SyncError> {
+        let url = self.url(&["calendars", &calendar.id, "events", id]);
+        let change = json!({"status": "confirmed"});
+        Ok(self.patch::<Version>(url, &change, None)?.etag)
     }
 
     fn default_length(&self) -> Result<u32, SyncError> {
