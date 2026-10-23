@@ -24,21 +24,28 @@
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-F01` | `US-NN-01` |
+| `MOD-04-F01` | `US-04-01` |
+| `MOD-04-F02` | `US-04-01` |
+| `MOD-04-F03` | `US-04-01` |
+| `MOD-04-F04` | `US-04-03` |
 
 ### UI/UX requirements
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-U01` | `US-NN-01`, `US-NN-02` |
+| `MOD-04-U01` | `US-04-02` |
+| `MOD-04-U02` | `US-04-02` |
+| `MOD-04-U03` | `US-04-03` |
+| `MOD-04-U04` | `US-04-02` |
+| `MOD-04-U05` | `US-04-03` |
 
 ### Non-functional requirements
 
-<Module NFRs only. Global NFR-nn are delivered across modules and are not tracked per module.>
+Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not tracked per module.
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-NN-NFR-01` | `US-NN-03` |
+| `MOD-04-NFR-01` | `US-04-02` |
 
 <!-- og:part tests -->
 
