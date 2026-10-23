@@ -5,7 +5,7 @@ covers: [MOD-02-F01, MOD-02-F02, MOD-02-F03, MOD-02-F11, MOD-02-F22, MOD-02-NFR-
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
 status: draft # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
-depends_on: [US-01-01] # story IDs that must be done first
+depends_on: [US-01-01, US-03-01] # story IDs that must be done first
 ---
 
 # As a User, I can see the calendars of all my accounts together, in their Google colours, so that I have one calendar instead of several browser tabs
@@ -16,13 +16,13 @@ depends_on: [US-01-01] # story IDs that must be done first
 | **Covers** | `MOD-02-F01`, `F02`, `F03`, `F11`, `F22`, `NFR-02` |
 | **Priority** | must |
 | **Status** | draft |
-| **Depends on** | blocked by `US-01-01` |
+| **Depends on** | blocked by `US-01-01`, blocked by `US-03-01` |
 | **YouTrack** | — |
 | **Open questions** | — |
 
 ## Description
 
-The first full synchronization: every calendar the connected accounts can access, their events within the cache window, shown together in Google's colours and at the right local times. Keeping them current afterwards is `US-02-03`; read-only marking is `US-02-02`. The events are displayed by `MOD-03`'s views; the week view of `MOD-03`'s first story is enough to check this story.
+The first full synchronization: every calendar the connected accounts can access, their events within the cache window, shown together in Google's colours and at the right local times. Keeping them current afterwards is `US-02-03`; read-only marking is `US-02-02`. The events are displayed by `MOD-03`'s views; the week view of `US-03-01` is enough to check this story.
 
 ## Acceptance criteria
 

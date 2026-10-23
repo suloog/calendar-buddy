@@ -22,7 +22,7 @@ depends_on: [] # story IDs that must be done first
 
 ## Description
 
-A light and a dark theme, following the desktop's light or dark setting by default and switching live, with a System / Light / Dark choice in the settings. The look is checked on `MOD-03`'s views, starting with the week view of its first story.
+A light and a dark theme, following the desktop's light or dark setting by default and switching live, with a System / Light / Dark choice in the settings. The look is checked on `MOD-03`'s views, starting with the week view of `US-03-01`.
 
 ## Acceptance criteria
 

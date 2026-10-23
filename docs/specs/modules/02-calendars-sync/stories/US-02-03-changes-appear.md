@@ -22,7 +22,7 @@ depends_on: [US-02-01] # story IDs that must be done first
 
 ## Description
 
-Ongoing synchronization after the first one: an adaptive cadence by calendar type, immediate synchronization when the user looks or after the computer wakes, manual refresh, and fetching only what changed. The events are displayed by `MOD-03`'s views; the week view of `MOD-03`'s first story is enough to check this story.
+Ongoing synchronization after the first one: an adaptive cadence by calendar type, immediate synchronization when the user looks or after the computer wakes, manual refresh, and fetching only what changed. The events are displayed by `MOD-03`'s views; the week view of `US-03-01` is enough to check this story.
 
 ## Acceptance criteria
 
