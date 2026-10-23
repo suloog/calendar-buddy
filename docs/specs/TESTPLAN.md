@@ -46,11 +46,11 @@ that module. Numbers are never reused or renumbered.
 | `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
 | `MOD-03` Views and navigation | 31 | 22 | 10 / 2 | written |
-| `MOD-04` Appearance and themes | 10 | 0 | 0 / 0 | not written |
+| `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 34 | 0 | 0 / 0 | not written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 0 | 0 / 0 | not written |
 | `MOD-07` Reminders and notifications | 24 | 0 | 0 / 0 | not written |
-| **Total** | **177** | **45** | **20 / 5** | 3 / 7 modules written |
+| **Total** | **177** | **52** | **24 / 6** | 4 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -108,3 +108,15 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-03-10` | A disabled calendar is absent from the side panel, the calendar pickers and the views, and returns when enabled | `US-03-07` | desktop | happy-path | auto | draft |
 | `TC-03-11` | Google Calendar's keys switch views, move between periods and show the shortcut list | `US-03-08` | desktop | happy-path | auto | draft |
 | `TC-03-12` | A Sunday-first locale and a change of system time zone are followed by the views | `US-03-09` | desktop | happy-path | auto | draft |
+
+## [MOD-04] Appearance and themes
+
+`docs/specs/modules/04-appearance-themes/REQUIREMENTS.md` · `docs/specs/modules/04-appearance-themes/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-04-01` | With "System", the app starts dark on a dark desktop and turns light at once when the desktop switches | `US-04-01` | desktop | happy-path | auto | draft |
+| `TC-04-02` | Choosing Light or Dark overrides the desktop and is kept after a restart | `US-04-01` | desktop | happy-path | auto | draft |
+| `TC-04-03` | At 100% scale in a 1080-pixel-high window the week view shows 8:00–18:00 without scrolling | `US-04-02` | desktop | happy-path | auto | draft |
+| `TC-04-04` | Event text on very light and very dark calendar colours reaches 4.5:1 contrast in both themes | `US-04-02` | desktop | nfr | auto | draft |
+| `TC-04-05` | Apart from calendar colours the interface uses neutral tones and one accent, and changing views has no transition animation | `US-04-03` | desktop | happy-path | manual-only | draft |

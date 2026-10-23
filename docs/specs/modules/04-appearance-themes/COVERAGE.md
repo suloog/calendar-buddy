@@ -53,30 +53,26 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 
 ### User story acceptance criteria
 
-<One row per criterion of every story in the module, in story order. `#n` is the criterion's
-position in the story file — counted from 1, with a Given/When/Then scenario counting as one.>
+`#n` is the criterion's position in the story file, counted from 1, with a Given/When/Then scenario counting as one.
 
 | Criterion | Text (short) | Covered by | Automation | Note |
 | --------- | ------------ | ---------- | ---------- | ---- |
-| `US-NN-01#1` | … | `TC-NN-01` | auto | — |
-| `US-NN-01#2` | … | `TC-NN-02`, `TC-NN-03` | auto | — |
-| `US-NN-02#1` | … | — | manual-only | email delivery — out of the executor's reach |
+| `US-04-01#1` | following the system | `TC-04-01` | auto | — |
+| `US-04-01#2` | The settings offer System, Light and Dark. | `TC-04-02` | auto | — |
+| `US-04-01#3` | Choosing Light or Dark overrides the desktop setting and is kept af… | `TC-04-02` | auto | — |
+| `US-04-02#1` | At 100% scale, in a window 1080 pixels high, the week view shows 8:… | `TC-04-03` | auto | — |
+| `US-04-02#2` | Event blocks in the day, 3-day and week views show only the title a… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-04-02#3` | Text inside events of a very light and a very dark calendar colour… | `TC-04-04` | auto | — |
+| `US-04-02#4` | All interface text has a contrast of at least 4.5:1 against its bac… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-04-03#1` | Apart from calendar and event colours, the interface uses only neut… | `TC-04-05` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-04-03#2` | Changing views and periods happens without transition animations. | `TC-04-05` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-04-03#3` | All interface texts are in English. | — | — | smoke depth — not tested yet (`DEC-65`) |
 
 ### Module constraints and edge cases
 
-<Items from the "Constraints and edge cases" section of REQUIREMENTS.md. This is where `type: edge`
-and `type: negative` tests come from — the module states them once, the tests prove them one by one.>
-
 | Constraint | Covered by | Note |
 | ---------- | ---------- | ---- |
-| … | `TC-NN-04` | — |
-
-### Non-functional requirements under test
-
-<Only the `NFR-nn` and `MOD-NN-NFR-nn` that can be checked against this module. The "How" column
-says what the evidence is measured with — response time from the network log, query count,
-contrast, touch target size. An NFR with no measurable evidence is `manual-only`, not green.>
-
-| Requirement | Covered by | How | Note |
-| ----------- | ---------- | --- | ---- |
-| `NFR-03` | `TC-NN-05` | response time from the network log | — |
+| A calendar colour is very light or very dark → the event text switc… | — | smoke depth — not tested yet (`DEC-65`) |
+| The system changes between light and dark while the app runs → the… | — | smoke depth — not tested yet (`DEC-65`) |
+| The desktop does not report a light or dark preference → the app us… | — | smoke depth — not tested yet (`DEC-65`) |
+| The screen scale is 150% or 200% → the compact grid scales with it… | — | smoke depth — not tested yet (`DEC-65`) |
