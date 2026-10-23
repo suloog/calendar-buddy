@@ -205,3 +205,15 @@
   - One squash commit: one logical change.
 - Manual checks: TC-05-08, US-05-07#2, US-05-07#3, US-05-07#4, edge case (copy keeps guests, no e-mail)
 - Commits on main: e7b3aa4 feat(events): change or delete occurrences by scope [US-05-07]
+
+## US-05-08 — review — 2026-10-23 21:16
+- What: Google's event types read, cached and shown (out of office hatched, a mark per type, working locations and birthdays as read-only labels in the all-day strip); out of office and focus time creatable on a Workspace primary calendar, all day as midnight to midnight, with Google Calendar's auto-decline defaults.
+- Decisions: DEC-115, DEC-116, DEC-117
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - Code review found nothing blocking. Fixed: dragging out of office/focus time into the strip stays timed; the editor no longer offers to move a special event to another calendar (DEC-117).
+  - Not fixed: `Editor::kinds(&mut self)` also resets the type (a getter with a side effect); an all-day out of office on a spring-forward day (23 h) is drawn in the hours, not the strip; "always busy" is enforced both in the editor and in the Google adapter.
+  - Spec review compliant. The SQLite cache schema changed (`kind` column, VERSION 3: the cache refetches in full).
+  - The owner should ratify DEC-115 (hatching only in the hour grid) and DEC-116 (auto-decline only new invitations).
+  - One squash commit: one logical change.
+- Manual checks: US-05-08#1, TC-05-09 (US-05-08#2 against real Google), US-05-08#3
+- Commits on main: 2fbf2ce feat(events): show and create special event types [US-05-08]
