@@ -864,3 +864,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-71] Agenda: events not yet ended, from today, 30 more days at a time
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-04
+- **Affects:** `US-03-04`, `MOD-03-F05`, `MOD-03-F14`, `MOD-03-F22`
+- **Decision:** "From now on" means every event that has not ended yet: a timed event whose end is after now (so one in progress stays), an all-day event that still covers today. Each event is listed on every day from today it covers, like the month view (`DEC-70`); within a day all-day and multi-day events come first, then timed ones by start with their start and end time. The agenda opens with the next 30 days and loads 30 more each time scrolling comes near the end of the list (or while the list is shorter than the window), until no event lies further ahead; only then does an empty agenda say "No upcoming events". Today's date is highlighted as in the other views; free/busy events read "Busy" with their time. Until `US-03-05`, "Agenda" joins the plain view picker of `DEC-69`; ‹ › are disabled in it, since the agenda always starts now.
+- **Why:** The simplest reading of `MOD-03-F05` and `TC-03-07`; listing an ongoing meeting and showing multi-day events per day follows Google Calendar's schedule view (`DEC-62`). Loading by a day horizon keeps each step cheap on the ~20,000-event profile.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

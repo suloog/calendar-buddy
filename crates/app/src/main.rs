@@ -1,6 +1,8 @@
+mod agenda_view;
 mod grid_view;
 mod month_view;
 
+use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::fixtures;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
@@ -21,17 +23,30 @@ fn system_zone() -> Tz {
 enum View {
     Grid(GridView),
     Month,
+    Agenda,
 }
 
 enum Built {
     Grid(GridViewModel),
     Month(MonthViewModel),
+    Agenda(AgendaViewModel),
 }
 
-fn build(events: &[Event], view: View, selected: NaiveDate, zone: Tz, now: DateTime<Utc>) -> Built {
+/// Days the agenda shows when opened, and how many more each step of scrolling loads.
+const AGENDA_DAYS: i64 = 30;
+
+fn build(
+    events: &[Event],
+    view: View,
+    selected: NaiveDate,
+    agenda_days: i64,
+    zone: Tz,
+    now: DateTime<Utc>,
+) -> Built {
     match view {
         View::Grid(grid) => Built::Grid(grid_view(events, &grid.days(selected), zone, now)),
         View::Month => Built::Month(month_view(events, selected, zone, now)),
+        View::Agenda => Built::Agenda(agenda_view(events, zone, now, agenda_days)),
     }
 }
 
@@ -40,6 +55,8 @@ struct CalendarApp {
     zone: Tz,
     view: View,
     selected: NaiveDate,
+    /// Days from today the agenda covers; grows as the user scrolls down.
+    agenda_days: i64,
     built: Built,
     built_at: DateTime<Utc>,
     view_state: grid_view::State,
@@ -54,12 +71,13 @@ impl CalendarApp {
         let events = fixtures::profile(today);
         let view = View::Grid(GridView::Week);
         let built_at = Utc::now();
-        let built = build(&events, view, today, zone, built_at);
+        let built = build(&events, view, today, AGENDA_DAYS, zone, built_at);
         CalendarApp {
             events,
             zone,
             view,
             selected: today,
+            agenda_days: AGENDA_DAYS,
             built,
             built_at,
             view_state: grid_view::State::default(),
@@ -73,6 +91,7 @@ impl CalendarApp {
             &self.events,
             self.view,
             self.selected,
+            self.agenda_days,
             self.zone,
             self.built_at,
         );
@@ -95,16 +114,20 @@ impl eframe::App for CalendarApp {
                     (View::Grid(GridView::ThreeDays), "3 days"),
                     (View::Grid(GridView::Week), "Week"),
                     (View::Month, "Month"),
+                    (View::Agenda, "Agenda"),
                 ] {
                     if ui.selectable_label(self.view == view, name).clicked() && self.view != view {
                         self.view = view;
                         self.month_state = month_view::State::default();
+                        self.agenda_days = AGENDA_DAYS;
                         self.rebuild();
                     }
                 }
                 ui.separator();
-                let previous = ui.button("‹").clicked();
-                let next = ui.button("›").clicked();
+                // The agenda always starts now; there is no period to step through.
+                let periods = self.view != View::Agenda;
+                let previous = ui.add_enabled(periods, egui::Button::new("‹")).clicked();
+                let next = ui.add_enabled(periods, egui::Button::new("›")).clicked();
                 match self.view {
                     View::Grid(grid) => {
                         let step = Duration::days(grid.days(self.selected).len() as i64);
@@ -115,6 +138,7 @@ impl eframe::App for CalendarApp {
                             self.selected += step;
                         }
                     }
+                    View::Agenda => {}
                     View::Month => {
                         if previous {
                             self.selected = self.selected - Months::new(1);
@@ -139,6 +163,7 @@ impl eframe::App for CalendarApp {
                         }
                     }
                     View::Month => self.selected.format("%B %Y").to_string(),
+                    View::Agenda => "Upcoming".to_string(),
                 });
             });
         });
@@ -150,6 +175,13 @@ impl eframe::App for CalendarApp {
                 }
             }
             Built::Month(view) => month_view::show(ui, view, &mut self.month_state),
+            Built::Agenda(view) => {
+                if agenda_view::show(ui, view) {
+                    self.agenda_days += AGENDA_DAYS;
+                    self.rebuild();
+                    ui.ctx().request_repaint();
+                }
+            }
         });
     }
 }

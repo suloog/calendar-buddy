@@ -10,3 +10,9 @@ What only a person can verify, collected by the delivery loop per story.
 
 - [ ] `TC-03-06` / `US-03-03#1`, `#2` (content and "+N more" count proven by `tc_03_06_*` view-model tests; the drawing and the click are not) — run `cargo run -p calendar-buddy`, pick **Month**: the month's whole weeks are drawn, the neighbouring months' days dimmed, each day with its events (all-day chips first, then "HH:MM title" with the calendar's dot); a full day ends in "+N more", and clicking it opens a window listing all of that day's events, which closes with its ×; ‹ › move by one month.
 - [ ] `US-03-03#3` (no test case; proven by `today_is_highlighted_and_free_busy_events_are_busy_without_details`) — in **Month**, today's date has a highlighted circle, and events of the free/busy calendar read "Busy" with no title.
+
+## US-03-04
+
+- [ ] `TC-03-07` / `US-03-04#1`, `#3` (content proven by `tc_03_07_*` view-model tests; the drawing is not) — run `cargo run -p calendar-buddy`, pick **Agenda**: the list starts at today, one group per day with events (date on the left, then each event's dot, "HH:MM – HH:MM" or "All day", and title), with no empty days; ‹ › are disabled. The "No upcoming events" text needs a store with nothing ahead (not reachable with the fixture profile until sync exists).
+- [ ] `US-03-04#2` (no test case; proven by `events_past_the_horizon_load_with_a_longer_horizon` and `more_days_load_only_when_scrolled_near_the_end`) — in **Agenda**, scroll down past the first month: more days keep appearing near the end, and scrolling stays smooth on the ~20,000-event profile.
+- [ ] `US-03-04#4` (no test case; proven by `today_is_highlighted_and_free_busy_events_are_busy_without_details`) — in **Agenda**, today's date has a highlighted circle, and events of the free/busy calendar read "Busy" with their time and no title.
