@@ -174,7 +174,7 @@ fn with_until(rule: &str, rewrite: impl Fn(&str) -> Option<String>) -> String {
 
 /// The library takes a timed series' `UNTIL` only in UTC; Google also keeps a date (the series
 /// ends on that day) or a local time, both read in the series' zone.
-fn until_in_utc(until: &str, zone: Tz) -> Option<String> {
+pub(crate) fn until_in_utc(until: &str, zone: Tz) -> Option<String> {
     if until.ends_with('Z') {
         return None;
     }

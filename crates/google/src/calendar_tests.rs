@@ -886,6 +886,7 @@ fn planning() -> NewEvent {
             zone: Warsaw,
         },
         about: About::default(),
+        recurrence: Vec::new(),
     }
 }
 
@@ -1090,6 +1091,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             show: Show::Free,
             visibility: Visibility::Public,
         },
+        recurrence: Vec::new(),
     };
 
     let id = session.create(&work, &trip).unwrap();
@@ -1103,6 +1105,32 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
     assert_eq!(sent["location"], "Lisbon");
     assert_eq!(sent["transparency"], "transparent");
     assert_eq!(sent["visibility"], "public");
+}
+
+#[test]
+fn tc_05_07_a_new_series_is_sent_with_its_rule_in_its_own_time_zone() {
+    let (google, store, dir, client_file, cache) = synchronized_once("create-series");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let training = NewEvent {
+        recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10".into()],
+        ..planning()
+    };
+
+    let id = session.create(&work, &training).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let sent = google.event(ACCOUNT_ID, "work", &id).unwrap();
+    assert_eq!(
+        sent["recurrence"],
+        json!(["RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10"])
+    );
+    // Google expands a series in the zone of its start.
+    assert_eq!(sent["start"]["timeZone"], "Europe/Warsaw");
+    // An event that does not repeat is sent without a rule.
+    let planning = session.create(&work, &planning()).unwrap();
+    let sent = google.event(ACCOUNT_ID, "work", &planning).unwrap();
+    assert_eq!(sent.get("recurrence"), None);
 }
 
 #[test]

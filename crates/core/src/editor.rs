@@ -3,17 +3,26 @@
 //! (`MOD-05-F04`…`F08`). Opened from the quick-entry box, it keeps what was typed there
 //! (`MOD-05-F03`); opened on an existing event, it shows it in its own time zone and saves only
 //! what changed, as a patch against the version opened (`MOD-05-F11`), moving it to another
-//! calendar of the same account when another is picked (`MOD-05-F15`).
+//! calendar of the same account when another is picked (`MOD-05-F15`). A new event can be made to
+//! repeat (`US-05-06`, `MOD-05-F18`, `F19`).
 
-use chrono::{Duration, NaiveDate, NaiveDateTime, Timelike};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
 
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
 use crate::model::{About, Calendar, Event, Show, Timing, Visibility};
 use crate::regional::Regional;
+use crate::repeat::{Ends, Pattern, rule};
 
 /// What the editor says when the end is set before the start.
 pub const ENDS_BEFORE_STARTS: &str = "The event ends before it starts.";
+
+/// What the editor says when a series is set to end before its first occurrence.
+pub const SERIES_ENDS_BEFORE_IT_STARTS: &str = "The series ends before it starts.";
+
+/// How many occurrences a series ending after a number of them has until another is typed:
+/// Google Calendar's default.
+const DEFAULT_COUNT: u32 = 13;
 
 /// The times an all-day event gets when it is made a timed one.
 const ALL_DAY_TIMES: (u32, u32) = (9, 10);
@@ -38,14 +47,31 @@ pub struct Editor {
     pub calendar: Option<Calendar>,
     pub show: Show,
     pub visibility: Visibility,
+    /// How a new event repeats; `None` when it does not (`MOD-05-F18`).
+    pub repeat: Option<Pattern>,
+    /// How the series ends (`MOD-05-F19`).
+    pub ends: Ending,
+    /// The last day of a series ending on a date, as typed.
+    pub last_date: String,
+    /// The number of occurrences of a series ending after them, as typed.
+    pub count: String,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
+}
+
+/// How the series of a new event ends, as chosen in the editor.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Ending {
+    #[default]
+    Never,
+    OnDate,
+    AfterCount,
 }
 
 /// What saving the editor does.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Save {
-    Create(Calendar, NewEvent),
+    Create(Calendar, Box<NewEvent>),
     Change(Box<Edit>),
 }
 
@@ -147,6 +173,10 @@ impl Editor {
             calendar,
             show: Show::default(),
             visibility: Visibility::default(),
+            repeat: None,
+            ends: Ending::default(),
+            last_date: regional.numeric_date(start.date()),
+            count: DEFAULT_COUNT.to_string(),
             start: Some(start),
         }
     }
@@ -225,19 +255,78 @@ impl Editor {
     }
 
     /// After the start fields changed: the end moves with the start, so the event keeps its
-    /// length, as in Google Calendar.
+    /// length, as in Google Calendar; so do the last day of a series and a weekly one's day
+    /// when it repeats on the start's day alone.
     pub fn follow_start(&mut self, regional: &Regional) {
         let Some(start) = self.start_at(regional) else {
             return;
         };
         let before = self.start.replace(start);
+        if let Some(Pattern::Weekly(days)) = &mut self.repeat
+            && before.is_some_and(|before| *days == [before.weekday()])
+        {
+            *days = vec![start.weekday()];
+        }
         if let (Some(before), Some(end)) = (before, self.end_at(regional))
             && before != start
         {
             let end = end + (start - before);
             self.end_date = regional.numeric_date(end.date());
             self.end_time = regional.time(end.time());
+            if let Some(last) = regional.parse_date(&self.last_date) {
+                let last = last + (start.date() - before.date());
+                self.last_date = regional.numeric_date(last);
+            }
         }
+    }
+
+    /// Weekly on the day of the week the event starts, as Google Calendar offers it first.
+    pub fn weekly(&self) -> Pattern {
+        Pattern::Weekly(
+            self.start
+                .map(|start| start.weekday())
+                .into_iter()
+                .collect(),
+        )
+    }
+
+    /// Adds the day to the days a weekly series repeats on, or takes it away; the last one stays.
+    pub fn toggle_day(&mut self, day: Weekday) {
+        if let Some(Pattern::Weekly(days)) = &mut self.repeat {
+            if !days.contains(&day) {
+                days.push(day);
+            } else if days.len() > 1 {
+                days.retain(|d| *d != day);
+            }
+        }
+    }
+
+    /// The rule of the series the new event starts, as the repeat fields say; none when it does
+    /// not repeat; why it cannot be saved otherwise.
+    fn recurrence(&self, regional: &Regional, timing: &Timing) -> Result<Vec<String>, String> {
+        let Some(pattern) = &self.repeat else {
+            return Ok(Vec::new());
+        };
+        let ends = match self.ends {
+            Ending::Never => Ends::Never,
+            Ending::OnDate => {
+                let last = (regional.parse_date(&self.last_date))
+                    .ok_or("The end date of the series can't be read.")?;
+                let first = match *timing {
+                    Timing::Timed { start, zone, .. } => start.with_timezone(&zone).date_naive(),
+                    Timing::AllDay { start, .. } => start,
+                };
+                if last < first {
+                    return Err(SERIES_ENDS_BEFORE_IT_STARTS.to_string());
+                }
+                Ends::On(last)
+            }
+            Ending::AfterCount => match self.count.trim().parse() {
+                Ok(count) if count > 0 => Ends::After(count),
+                _ => return Err("The number of occurrences can't be read.".to_string()),
+            },
+        };
+        Ok(vec![rule(pattern, ends, timing)])
     }
 
     /// When the event happens, as the fields say; why it cannot be saved otherwise.
@@ -296,11 +385,12 @@ impl Editor {
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
                 calendar,
-                NewEvent {
+                Box::new(NewEvent {
                     title,
+                    recurrence: self.recurrence(regional, &timing)?,
                     timing,
                     about,
-                },
+                }),
             ));
         };
         // Times left as opened keep the event's own: the fields hold neither seconds nor which
@@ -348,6 +438,7 @@ mod tests {
     use crate::create::selected;
     use crate::fixtures::{all_day, d, timed, timed_in};
     use crate::model::{Access, Rgb};
+    use crate::repeat::Pattern;
     use chrono::{DateTime, Utc};
     use chrono_tz::America::New_York;
     use chrono_tz::Europe::Warsaw;
@@ -419,7 +510,7 @@ mod tests {
         };
         assert_eq!(calendar.id, "a@example.com");
         assert_eq!(
-            event,
+            *event,
             NewEvent {
                 title: "Review".to_string(),
                 timing: Timing::Timed {
@@ -433,6 +524,7 @@ mod tests {
                     show: Show::Free,
                     visibility: Visibility::Private,
                 },
+                recurrence: Vec::new(),
             }
         );
     }
@@ -551,6 +643,132 @@ mod tests {
         editor.end_time = "1:00".to_string();
         editor.follow_start(&regional());
         assert_eq!(editor.end_time, "1:00");
+    }
+
+    fn created(editor: &Editor) -> NewEvent {
+        match editor.save(&regional()) {
+            Ok(Save::Create(_, event)) => *event,
+            other => panic!("not a new event: {other:?}"),
+        }
+    }
+
+    /// "Training" on Monday 16 November 2026, 18:00–19:00.
+    fn training() -> Editor {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.title = "Training".to_string();
+        editor.start_date = "16.11.2026".to_string();
+        editor.start_time = "18:00".to_string();
+        editor.follow_start(&regional());
+        editor.end_time = "19:00".to_string();
+        editor
+    }
+
+    #[test]
+    fn tc_05_07_a_new_event_repeats_weekly_on_monday_and_wednesday_ending_after_10() {
+        let mut editor = training();
+        assert_eq!(editor.repeat, None);
+        assert!(created(&editor).recurrence.is_empty());
+
+        // Weekly starts on the day the event starts.
+        editor.repeat = Some(editor.weekly());
+        assert_eq!(editor.repeat, Some(Pattern::Weekly(vec![Weekday::Mon])));
+        editor.toggle_day(Weekday::Wed);
+        editor.ends = Ending::AfterCount;
+        editor.count = "10".to_string();
+
+        assert_eq!(
+            created(&editor).recurrence,
+            ["RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=10"]
+        );
+    }
+
+    #[test]
+    fn a_new_event_repeats_with_each_preset_and_ends_on_a_date_or_never() {
+        let mut editor = training();
+        let presets = [
+            (Pattern::Daily, "RRULE:FREQ=DAILY"),
+            (Pattern::Weekdays, "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"),
+            (Pattern::Monthly, "RRULE:FREQ=MONTHLY"),
+            (Pattern::Yearly, "RRULE:FREQ=YEARLY"),
+        ];
+        for (pattern, expected) in presets {
+            editor.repeat = Some(pattern);
+            assert_eq!(created(&editor).recurrence, [expected]);
+        }
+        editor.ends = Ending::OnDate;
+        // The series ends on the day it starts until another is typed; it moves with the start.
+        assert_eq!(editor.last_date, "16.11.2026");
+        editor.last_date = "16.12.2026".to_string();
+        assert_eq!(
+            created(&editor).recurrence,
+            ["RRULE:FREQ=YEARLY;UNTIL=20261216T225959Z"]
+        );
+    }
+
+    #[test]
+    fn the_last_day_of_a_weekly_series_stays_chosen() {
+        let mut editor = training();
+        editor.repeat = Some(editor.weekly());
+        editor.toggle_day(Weekday::Mon);
+        assert_eq!(editor.repeat, Some(Pattern::Weekly(vec![Weekday::Mon])));
+        editor.toggle_day(Weekday::Fri);
+        editor.toggle_day(Weekday::Mon);
+        assert_eq!(editor.repeat, Some(Pattern::Weekly(vec![Weekday::Fri])));
+    }
+
+    #[test]
+    fn weekly_on_the_start_day_follows_the_start_to_another_day() {
+        let mut editor = training();
+        editor.repeat = Some(editor.weekly());
+        editor.start_date = "19.11.2026".to_string();
+        editor.follow_start(&regional());
+        assert_eq!(editor.repeat, Some(Pattern::Weekly(vec![Weekday::Thu])));
+        // Days the user chose stay as chosen.
+        editor.toggle_day(Weekday::Sat);
+        editor.start_date = "20.11.2026".to_string();
+        editor.follow_start(&regional());
+        assert_eq!(
+            editor.repeat,
+            Some(Pattern::Weekly(vec![Weekday::Thu, Weekday::Sat]))
+        );
+    }
+
+    #[test]
+    fn weekly_chosen_while_the_start_could_not_be_read_repeats_on_the_start_day() {
+        let mut editor = training();
+        editor.start_date = "16.11.".to_string();
+        editor.repeat = Some(editor.weekly());
+        editor.start_date = "16.11.2026".to_string();
+        assert_eq!(created(&editor).recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=MO"]);
+    }
+
+    #[test]
+    fn a_series_ending_before_it_starts_or_after_no_occurrences_cannot_be_saved() {
+        let mut editor = training();
+        editor.repeat = Some(Pattern::Daily);
+        editor.ends = Ending::OnDate;
+        editor.last_date = "15.11.2026".to_string();
+        assert_eq!(
+            editor.save(&regional()),
+            Err(SERIES_ENDS_BEFORE_IT_STARTS.to_string())
+        );
+        editor.last_date = "31.11.2026".to_string();
+        assert_eq!(
+            editor.save(&regional()),
+            Err("The end date of the series can't be read.".to_string())
+        );
+        editor.ends = Ending::AfterCount;
+        assert_eq!(editor.count, "13");
+        for count in ["0", "ten", ""] {
+            editor.count = count.to_string();
+            assert_eq!(
+                editor.save(&regional()),
+                Err("The number of occurrences can't be read.".to_string())
+            );
+        }
+        // A series that does not repeat is not held back by its end.
+        editor.repeat = None;
+        assert!(editor.save(&regional()).is_ok());
     }
 
     fn standup() -> Event {

@@ -395,7 +395,7 @@ impl Provider for Session {
             id: String,
         }
         let (start, end) = times(&event.timing, false);
-        let change = json!({
+        let mut change = json!({
             "summary": event.title,
             "description": event.about.description,
             "location": event.about.location,
@@ -404,6 +404,9 @@ impl Provider for Session {
             "start": start,
             "end": end,
         });
+        if !event.recurrence.is_empty() {
+            change["recurrence"] = json!(event.recurrence);
+        }
         let url = self.url(&["calendars", &calendar.id, "events"]);
         Ok(self.post::<Created>(url, Some(&change))?.id)
     }
