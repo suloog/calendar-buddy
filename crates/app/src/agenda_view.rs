@@ -2,30 +2,33 @@
 //! upcoming and on which days is decided in `calendar_core::agenda`.
 
 use calendar_core::agenda::{AgendaItem, AgendaViewModel};
+use calendar_core::regional::Regional;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
 use crate::grid_view::{color, openable};
 
 const DATE_WIDTH: f32 = 96.0;
-const TIME_WIDTH: f32 = 110.0;
+const TIME_WIDTH: f32 = 140.0;
 const ITEM_HEIGHT: f32 = 24.0;
 const DAY_GAP: f32 = 8.0;
 /// How close to the end of the list scrolling has to get before more days load.
 const LOAD_MARGIN: f32 = 200.0;
 
-fn time_label(item: &AgendaItem, view: &AgendaViewModel) -> String {
+fn time_label(item: &AgendaItem, view: &AgendaViewModel, regional: &Regional) -> String {
+    let time = |t: chrono::DateTime<chrono::Utc>| regional.time(t.with_timezone(&view.zone).time());
     match item.time {
-        Some((start, end)) => format!(
-            "{} – {}",
-            start.with_timezone(&view.zone).format("%H:%M"),
-            end.with_timezone(&view.zone).format("%H:%M")
-        ),
+        Some((start, end)) => format!("{} – {}", time(start), time(end)),
         None => "All day".to_string(),
     }
 }
 
 /// Returns true when the user has scrolled near the end and more days should be loaded.
-pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel, opened: &mut Option<usize>) -> bool {
+pub fn show(
+    ui: &mut egui::Ui,
+    view: &AgendaViewModel,
+    regional: &Regional,
+    opened: &mut Option<usize>,
+) -> bool {
     if view.is_empty() {
         ui.centered_and_justified(|ui| ui.label("No upcoming events"));
         return false;
@@ -86,7 +89,7 @@ pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel, opened: &mut Option<usize
             painter.text(
                 date_center + Vec2::new(18.0, 0.0),
                 Align2::LEFT_CENTER,
-                day.date.format("%b, %a").to_string().to_uppercase(),
+                regional.month_weekday(day.date),
                 FontId::proportional(11.0),
                 if day.is_today {
                     visuals.strong_text_color()
@@ -102,7 +105,7 @@ pub fn show(ui: &mut egui::Ui, view: &AgendaViewModel, opened: &mut Option<usize
                 painter.text(
                     Pos2::new(x + 20.0, y),
                     Align2::LEFT_CENTER,
-                    time_label(item, view),
+                    time_label(item, view, regional),
                     FontId::proportional(13.0),
                     visuals.text_color(),
                 );

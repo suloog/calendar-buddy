@@ -912,3 +912,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-75] Regional settings: the locale's `LC_TIME` data, read at start
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-09
+- **Affects:** `US-03-09`, `MOD-03-F16`
+- **Decision:** The locale of dates and times is the one the system sets for them, `LC_ALL`, else `LC_TIME`, else `LANG` (Plasma's Formats settings set `LC_TIME`); an unset or unknown locale is POSIX. Its data is glibc's, built into the app (`pure-rust-locales`): the first day of the week as glibc counts it (`week` and `first_weekday`), a 12-hour clock when the locale's time format is one (`3:00 PM`, otherwise `15:00`), always without seconds, the month before the day when the locale's numeric date runs month, day, year (`Thu, Nov 12, 2026`), the day first otherwise, also for locales writing the year first (`Thursday 12 November 2026`), and the locale's names of days and months, with a month on its own written in its standalone form (`listopad 2026`). The `g` dialog pre-fills and reads the locale's numeric date (`11/12/2026`) and still takes `YYYY-MM-DD` (`DEC-73`); a locale whose numeric date cannot be read back (written with names, or in forms the date library does not know) uses `YYYY-MM-DD` there. The settings are read when the app starts; a change of locale shows after a restart, as Plasma asks for a new session for it.
+- **Why:** `DEC-29` gives no app settings, so the system locale is the only source; glibc's data is what the rest of the desktop uses, and reading it at start is the simplest correct behaviour.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-76] A change of time zone is noticed within seconds; another zone is a second line
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-09
+- **Affects:** `US-03-09`, `MOD-03-F17`, `MOD-03-F18`
+- **Decision:** The app looks up the system's time zone every 5 seconds off the UI thread and redraws the views in the new zone when it changes, keeping the selected date. An event's details show its time in the system's zone and, when the event is stored in another IANA zone (even one with the same offset), a second line with its time in that zone followed by the zone's name, as `3:00 PM – 4:00 PM (Europe/Warsaw)`. All-day events have no zone and show no second line.
+- **Why:** The system does not tell an app that its zone changed, so it is looked up; 5 seconds is quick enough to follow and costs nothing when idle (`NFR-02`). Naming the zone by its IANA name is the simplest unambiguous label.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

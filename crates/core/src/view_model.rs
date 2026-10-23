@@ -117,7 +117,7 @@ mod tests {
     use super::*;
     use crate::fixtures::{d, tc_03_01_week, timed};
     use crate::week::{GridView, Week};
-    use chrono::TimeZone;
+    use chrono::{TimeZone, Weekday};
     use chrono_tz::Europe::Warsaw;
 
     fn clock() -> DateTime<Utc> {
@@ -130,7 +130,7 @@ mod tests {
     fn vm() -> GridViewModel {
         grid_view(
             &tc_03_01_week(),
-            &Week::containing(d(2026, 11, 11)).days(),
+            &Week::containing(d(2026, 11, 11), Weekday::Mon).days(),
             Warsaw,
             clock(),
         )
@@ -212,7 +212,7 @@ mod tests {
     fn another_week_has_no_now_line_but_still_opens_at_the_current_time() {
         let vm = grid_view(
             &[],
-            &Week::containing(d(2026, 11, 20)).days(),
+            &Week::containing(d(2026, 11, 20), Weekday::Mon).days(),
             Warsaw,
             clock(),
         );
@@ -222,7 +222,12 @@ mod tests {
     }
 
     fn placed(event: crate::model::Event, date: NaiveDate) -> (u32, u32) {
-        let vm = grid_view(&[event], &Week::containing(date).days(), Warsaw, clock());
+        let vm = grid_view(
+            &[event],
+            &Week::containing(date, Weekday::Mon).days(),
+            Warsaw,
+            clock(),
+        );
         let p = vm.blocks[0].placement;
         (p.start_min, p.end_min)
     }
@@ -265,7 +270,7 @@ mod tests {
     fn shown(view: GridView) -> GridViewModel {
         grid_view(
             &tc_03_05_events(),
-            &view.days(d(2026, 11, 11)),
+            &view.days(d(2026, 11, 11), Weekday::Mon),
             Warsaw,
             clock(),
         )
@@ -298,7 +303,7 @@ mod tests {
         let events = tc_03_01_week();
         let day = grid_view(
             &events,
-            &GridView::Day.days(d(2026, 11, 12)),
+            &GridView::Day.days(d(2026, 11, 12), Weekday::Mon),
             Warsaw,
             clock(),
         );
@@ -315,7 +320,7 @@ mod tests {
 
         let three = grid_view(
             &events,
-            &GridView::ThreeDays.days(d(2026, 11, 10)),
+            &GridView::ThreeDays.days(d(2026, 11, 10), Weekday::Mon),
             Warsaw,
             clock(),
         );
@@ -343,7 +348,7 @@ mod tests {
         ];
         let vm = grid_view(
             &events,
-            &GridView::Day.days(d(2026, 11, 11)),
+            &GridView::Day.days(d(2026, 11, 11), Weekday::Mon),
             Warsaw,
             clock(),
         );
@@ -360,7 +365,12 @@ mod tests {
     fn day_and_three_day_views_highlight_today_and_show_free_busy_as_busy_blocks() {
         let events = tc_03_01_week();
         for view in [GridView::Day, GridView::ThreeDays] {
-            let vm = grid_view(&events, &view.days(d(2026, 11, 11)), Warsaw, clock());
+            let vm = grid_view(
+                &events,
+                &view.days(d(2026, 11, 11), Weekday::Mon),
+                Warsaw,
+                clock(),
+            );
             assert!(vm.days[0].is_today);
             assert!(vm.days[1..].iter().all(|c| !c.is_today));
             assert_eq!(
@@ -373,12 +383,61 @@ mod tests {
         }
         let friday = grid_view(
             &events,
-            &GridView::Day.days(d(2026, 11, 13)),
+            &GridView::Day.days(d(2026, 11, 13), Weekday::Mon),
             Warsaw,
             clock(),
         );
         assert_eq!(friday.blocks.len(), 1);
         assert_eq!(friday.blocks[0].title, None);
         assert!(friday.days.iter().all(|c| !c.is_today));
+    }
+
+    #[test]
+    fn tc_03_12_a_sunday_first_locale_and_a_new_system_zone_are_followed() {
+        use crate::navigation::{Navigation, View};
+        use crate::regional::Regional;
+        use chrono_tz::America::New_York;
+
+        let us = Regional::from_env(|key| (key == "LANG").then(|| "en_US.UTF-8".to_string()));
+        let events = [timed("Thursday", d(2026, 11, 12), (15, 0), (16, 0))];
+        let nav = Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 11),
+            us.week_start,
+        );
+        let (first, last) = nav.period().unwrap();
+        assert_eq!((first, last), (d(2026, 11, 8), d(2026, 11, 14)));
+        assert_eq!(us.date_range(first, last), "Nov 8 – Nov 14, 2026");
+
+        let shown = |zone: Tz| {
+            let vm = grid_view(
+                &events,
+                &GridView::Week.days(nav.selected, nav.week_start),
+                zone,
+                clock(),
+            );
+            let block = &vm.blocks[0];
+            let time = |t: DateTime<Utc>| us.time(t.with_timezone(&zone).time());
+            let heads: Vec<String> = vm.days.iter().map(|c| us.weekday_day(c.date)).collect();
+            (
+                heads,
+                block.placement.day,
+                time(block.start),
+                time(block.end),
+            )
+        };
+        let (heads, day, start, end) = shown(Warsaw);
+        assert_eq!(heads[0], "Sun 8");
+        assert_eq!(heads[6], "Sat 14");
+        assert_eq!(
+            (day, start.as_str(), end.as_str()),
+            (4, "3:00 PM", "4:00 PM")
+        );
+        // The system's time zone changes to America/New_York.
+        let (_, day, start, end) = shown(New_York);
+        assert_eq!(
+            (day, start.as_str(), end.as_str()),
+            (4, "9:00 AM", "10:00 AM")
+        );
     }
 }

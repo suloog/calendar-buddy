@@ -4,24 +4,47 @@ mod mini_calendar;
 mod month_view;
 
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
-use calendar_core::details::{When, event_details};
+use calendar_core::details::event_details;
 use calendar_core::fixtures;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
+use calendar_core::regional::Regional;
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::view_model::{GridViewModel, grid_view};
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use eframe::egui;
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
         .ok()
         .and_then(|name| name.parse().ok())
         .unwrap_or(Tz::UTC)
+}
+
+/// How often the system's time zone is looked up, to follow a change of it.
+const ZONE_CHECK: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Looks up the system's time zone off the UI thread and sends every change of it.
+fn watch_zone(mut zone: Tz, ctx: egui::Context) -> Receiver<Tz> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(ZONE_CHECK);
+            let now = system_zone();
+            if now != zone {
+                zone = now;
+                if sender.send(zone).is_err() {
+                    return;
+                }
+                ctx.request_repaint();
+            }
+        }
+    });
+    receiver
 }
 
 enum Built {
@@ -52,16 +75,26 @@ fn build(
     now: DateTime<Utc>,
 ) -> Built {
     let selected = navigation.selected;
+    let week_start = navigation.week_start;
     match navigation.view {
-        View::Grid(grid) => Built::Grid(grid_view(events, &grid.days(selected), zone, now)),
-        View::Month => Built::Month(month_view(events, selected, zone, now)),
+        View::Grid(grid) => Built::Grid(grid_view(
+            events,
+            &grid.days(selected, week_start),
+            zone,
+            now,
+        )),
+        View::Month => Built::Month(month_view(events, selected, zone, now, week_start)),
         View::Agenda => Built::Agenda(agenda_view(events, zone, now, agenda_days)),
     }
 }
 
 struct CalendarApp {
     events: Vec<Event>,
+    /// The system's regional settings, read at start (`DEC-29`).
+    regional: Regional,
+    /// The system's time zone; followed when it changes.
     zone: Tz,
+    zone_changes: Receiver<Tz>,
     navigation: Navigation,
     /// Any day of the month the mini calendar shows; follows the view, browsed on its own.
     mini_month: NaiveDate,
@@ -77,8 +110,10 @@ struct CalendarApp {
 }
 
 impl CalendarApp {
-    fn new() -> Self {
+    fn new(ctx: egui::Context) -> Self {
+        let regional = Regional::from_env(|key| std::env::var(key).ok());
         let zone = system_zone();
+        let zone_changes = watch_zone(zone, ctx);
         let today = Utc::now().with_timezone(&zone).date_naive();
         // Test data until synchronization exists (`US-02-01`).
         let events = fixtures::profile(today);
@@ -97,12 +132,14 @@ impl CalendarApp {
             });
             sender
         });
-        let navigation = Navigation::start(last_view, today);
+        let navigation = Navigation::start(last_view, today, regional.week_start);
         let built_at = Utc::now();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
             events,
+            regional,
             zone,
+            zone_changes,
             navigation,
             mini_month: today,
             settings_writer,
@@ -153,7 +190,7 @@ impl CalendarApp {
         for command in typed.into_iter().filter_map(shortcuts::command) {
             match command {
                 Command::GoToDate => {
-                    let date = self.navigation.selected.format("%Y-%m-%d").to_string();
+                    let date = self.regional.numeric_date(self.navigation.selected);
                     self.dialog = Some(Dialog::GoToDate(date, false));
                 }
                 Command::NewEvent => self.dialog = Some(Dialog::NewEvent),
@@ -207,9 +244,12 @@ impl CalendarApp {
                     });
                 }
                 Dialog::GoToDate(text, focused) => {
-                    ui.label("Date (YYYY-MM-DD)");
+                    ui.label(format!(
+                        "Date (as {})",
+                        self.regional.numeric_date(self.navigation.selected)
+                    ));
                     let field = ui.text_edit_singleline(text);
-                    let date = shortcuts::parse_date(text);
+                    let date = self.regional.parse_date(text);
                     let entered =
                         field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     // The field takes the keyboard when the dialog opens and after a wrong date.
@@ -226,41 +266,16 @@ impl CalendarApp {
                     }
                 }
                 Dialog::NewEvent => {
-                    ui.label(self.navigation.selected.format("%A %-d %B %Y").to_string());
+                    ui.label(self.regional.long_date(self.navigation.selected));
                     ui.label("Creating events is not available yet.");
                 }
                 Dialog::Event(index, _) => {
                     let details = event_details(&self.events[*index], self.zone);
                     ui.heading(details.title.as_deref().unwrap_or("Busy"));
-                    ui.label(match details.when {
-                        // An event ending at midnight stays on its day: 23:00 – 00:00.
-                        When::Timed { start, end }
-                            if start.date_naive()
-                                == (end - chrono::Duration::seconds(1)).max(start).date_naive() =>
-                        {
-                            format!(
-                                "{} – {}",
-                                start.format("%A %-d %B %Y, %H:%M"),
-                                end.format("%H:%M")
-                            )
-                        }
-                        When::Timed { start, end } => format!(
-                            "{} – {}",
-                            start.format("%-d %B %Y, %H:%M"),
-                            end.format("%-d %B %Y, %H:%M")
-                        ),
-                        When::AllDay { first, last } if first == last => {
-                            first.format("%A %-d %B %Y").to_string()
-                        }
-                        When::AllDay { first, last } => {
-                            let from = if first.year() == last.year() {
-                                "%-d %B"
-                            } else {
-                                "%-d %B %Y"
-                            };
-                            format!("{} – {}", first.format(from), last.format("%-d %B %Y"))
-                        }
-                    });
+                    ui.label(details.when.describe(&self.regional));
+                    if let Some(own) = details.in_own_zone(&self.regional) {
+                        ui.label(own);
+                    }
                 }
             });
         if let Some(date) = go_to {
@@ -295,6 +310,11 @@ impl CalendarApp {
 
 impl eframe::App for CalendarApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Events move to their new local times when the system's time zone changes.
+        if let Some(zone) = self.zone_changes.try_iter().last() {
+            self.zone = zone;
+            self.rebuild();
+        }
         // The now line and today move; nothing else changes on its own.
         if Utc::now() - self.built_at >= chrono::Duration::minutes(1) {
             self.rebuild();
@@ -318,14 +338,11 @@ impl eframe::App for CalendarApp {
                 if ui.add_enabled(periods, egui::Button::new("›")).clicked() {
                     self.navigation.next();
                 }
+                let regional = &self.regional;
                 ui.label(match (self.navigation.view, self.navigation.period()) {
-                    (View::Month, _) => self.navigation.selected.format("%B %Y").to_string(),
-                    (_, Some((first, last))) if first == last => {
-                        first.format("%a %-d %b %Y").to_string()
-                    }
-                    (_, Some((first, last))) => {
-                        format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
-                    }
+                    (View::Month, _) => regional.month_year(self.navigation.selected),
+                    (_, Some((first, last))) if first == last => regional.short_date(first),
+                    (_, Some((first, last))) => regional.date_range(first, last),
                     (_, None) => "Upcoming".to_string(),
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -345,7 +362,7 @@ impl eframe::App for CalendarApp {
             .show(ui, |ui| {
                 let today = self.today();
                 let mini = mini_calendar(self.mini_month, &self.navigation, today);
-                match mini_calendar::show(ui, &mini) {
+                match mini_calendar::show(ui, &mini, &self.regional) {
                     Some(mini_calendar::Action::Browse(month)) => self.mini_month = month,
                     Some(mini_calendar::Action::GoTo(date)) => {
                         self.navigation.go_to(date);
@@ -359,14 +376,18 @@ impl eframe::App for CalendarApp {
         let mut opened = None;
         egui::CentralPanel::default().show(ui, |ui| match &self.built {
             Built::Grid(view) => {
-                if let Some(change) = grid_view::show(ui, view, &mut self.view_state, &mut opened) {
+                if let Some(change) =
+                    grid_view::show(ui, view, &self.regional, &mut self.view_state, &mut opened)
+                {
                     grid_view::apply(&mut self.events, change);
                     self.rebuild();
                 }
             }
-            Built::Month(view) => month_view::show(ui, view, &mut self.month_state, &mut opened),
+            Built::Month(view) => {
+                month_view::show(ui, view, &self.regional, &mut self.month_state, &mut opened)
+            }
             Built::Agenda(view) => {
-                if agenda_view::show(ui, view, &mut opened) {
+                if agenda_view::show(ui, view, &self.regional, &mut opened) {
                     self.agenda_days += AGENDA_DAYS;
                     self.rebuild();
                     ui.ctx().request_repaint();
@@ -392,6 +413,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "calendar-buddy",
         options,
-        Box::new(|_cc| Ok(Box::new(CalendarApp::new()))),
+        Box::new(|cc| Ok(Box::new(CalendarApp::new(cc.egui_ctx.clone())))),
     )
 }

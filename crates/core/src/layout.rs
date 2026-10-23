@@ -165,10 +165,11 @@ mod tests {
     use super::*;
     use crate::fixtures::{d, timed};
     use crate::week::Week;
+    use chrono::Weekday;
     use chrono_tz::Europe::Warsaw;
 
     fn week() -> [NaiveDate; 7] {
-        Week::containing(d(2026, 11, 11)).days()
+        Week::containing(d(2026, 11, 11), Weekday::Mon).days()
     }
 
     #[test]

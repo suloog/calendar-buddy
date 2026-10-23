@@ -6,5 +6,6 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-chrono = "0.4.45"
+chrono = { version = "0.4.45", features = ["unstable-locales"] }
 chrono-tz = "0.10.4"
+pure-rust-locales = "0.8.2"

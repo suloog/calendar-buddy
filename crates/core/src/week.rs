@@ -1,15 +1,17 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc, Weekday,
+};
 use chrono_tz::Tz;
 
-/// Seven consecutive days starting on Monday. The locale-driven first day is `US-03-09`.
+/// Seven consecutive days starting on the first day of the week of the system's locale.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Week {
     pub first: NaiveDate,
 }
 
 impl Week {
-    pub fn containing(date: NaiveDate) -> Self {
-        let offset = date.weekday().num_days_from_monday() as i64;
+    pub fn containing(date: NaiveDate, start: Weekday) -> Self {
+        let offset = date.weekday().days_since(start) as i64;
         Week {
             first: date - Duration::days(offset),
         }
@@ -43,11 +45,11 @@ pub enum GridView {
 impl GridView {
     /// The days shown for the selected date: that day, three days from it (as Google Calendar's
     /// custom view of 3 days), or the week containing it.
-    pub fn days(self, selected: NaiveDate) -> Vec<NaiveDate> {
+    pub fn days(self, selected: NaiveDate, week_start: Weekday) -> Vec<NaiveDate> {
         match self {
             GridView::Day => vec![selected],
             GridView::ThreeDays => (0..3).map(|i| selected + Duration::days(i)).collect(),
-            GridView::Week => Week::containing(selected).days().to_vec(),
+            GridView::Week => Week::containing(selected, week_start).days().to_vec(),
         }
     }
 }
@@ -88,7 +90,7 @@ mod tests {
 
     #[test]
     fn week_starts_on_monday() {
-        let w = Week::containing(d(2026, 11, 11));
+        let w = Week::containing(d(2026, 11, 11), Weekday::Mon);
         assert_eq!(w.first, d(2026, 11, 9));
         assert_eq!(w.days()[6], d(2026, 11, 15));
         assert_eq!(w.next().first, d(2026, 11, 16));
@@ -98,14 +100,34 @@ mod tests {
     #[test]
     fn tc_03_05_day_shows_the_selected_day_and_three_days_start_from_it() {
         let selected = d(2026, 11, 11);
-        assert_eq!(GridView::Day.days(selected), vec![selected]);
+        assert_eq!(GridView::Day.days(selected, Weekday::Mon), vec![selected]);
         assert_eq!(
-            GridView::ThreeDays.days(selected),
+            GridView::ThreeDays.days(selected, Weekday::Sun),
             vec![d(2026, 11, 11), d(2026, 11, 12), d(2026, 11, 13)]
         );
         assert_eq!(
-            GridView::Week.days(selected),
-            Week::containing(selected).days()
+            GridView::Week.days(selected, Weekday::Mon),
+            Week::containing(selected, Weekday::Mon).days()
+        );
+    }
+
+    #[test]
+    fn a_week_can_start_on_any_day() {
+        let sunday = Week::containing(d(2026, 11, 11), Weekday::Sun);
+        assert_eq!(sunday.first, d(2026, 11, 8));
+        assert_eq!(sunday.days()[6], d(2026, 11, 14));
+        // A Sunday starts its own week, and is the last day of a week starting on Monday.
+        assert_eq!(
+            Week::containing(d(2026, 11, 8), Weekday::Sun).first,
+            d(2026, 11, 8)
+        );
+        assert_eq!(
+            Week::containing(d(2026, 11, 8), Weekday::Mon).first,
+            d(2026, 11, 2)
+        );
+        assert_eq!(
+            Week::containing(d(2026, 11, 11), Weekday::Sat).first,
+            d(2026, 11, 7)
         );
     }
 

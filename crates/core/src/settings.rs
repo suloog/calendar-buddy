@@ -67,7 +67,11 @@ mod tests {
         let dir =
             std::env::temp_dir().join(format!("calendar-buddy-tc-03-08-{}", std::process::id()));
         let path = dir.join("settings");
-        let mut nav = Navigation::start(Settings::load(&path).last_view, d(2026, 11, 11));
+        let mut nav = Navigation::start(
+            Settings::load(&path).last_view,
+            d(2026, 11, 11),
+            chrono::Weekday::Mon,
+        );
         nav.switch(View::Grid(GridView::ThreeDays));
         nav.next();
         nav.next();
@@ -77,7 +81,11 @@ mod tests {
         .save(&path)
         .unwrap();
 
-        let restarted = Navigation::start(Settings::load(&path).last_view, d(2026, 11, 11));
+        let restarted = Navigation::start(
+            Settings::load(&path).last_view,
+            d(2026, 11, 11),
+            chrono::Weekday::Mon,
+        );
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(restarted.view, View::Grid(GridView::ThreeDays));
         assert_eq!(restarted.selected, d(2026, 11, 11));

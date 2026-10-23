@@ -37,3 +37,10 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: resumed session (earlier fixes committed as found); fixed non-blocking focus return after details, "+N more" list closing on Escape, Alt-modified keys, mini calendar reset only on `t`, all-day range year; not fixed: focus drops after dragging an event to another day; app-side key wiring has no automated test.
 - Manual checks: TC-03-11, US-03-08#3, US-03-08#5
 - Commits on main: one squash commit — feat(views): add keyboard shortcuts and keyboard navigation
+
+## US-03-09 — done — 2026-10-23 15:01
+- What: the week start, date and time formats come from the system locale (`calendar_core::regional`, glibc `LC_TIME` data) in every view, the mini calendar and the dialogs; the views follow a change of system time zone (checked every 5 s off the UI thread); event details add the time in the event's own zone.
+- Decisions: DEC-75, DEC-76
+- Reviews: code 2 round(s), spec 1 round(s); open notes: fixed a crash on `g` in locales with chrono-unsupported date formats, unreadable pre-filled dates and year-first locales written month first; not fixed: zone aliases (e.g. `Poland`) count as another zone; the app-side zone watcher has no automated test; AC1's "day and 3-day views start on Sunday" read as the week start (they start on the selected date).
+- Manual checks: none
+- Commits on main: one squash commit — feat(views): follow the system locale and time zone
