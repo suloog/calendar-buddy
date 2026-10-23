@@ -34,11 +34,11 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-01` Google accounts and sign-in | 14 / 3 | 4 | 0 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
 | `MOD-03` Views and navigation | 24 / 5 | 0 | 0 | not sliced |
-| `MOD-04` Appearance and themes | 4 / 5 | 0 | 0 | not sliced |
+| `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 29 / 4 | 0 | 0 | not sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 0 | 0 | not sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 0 | 0 | not sliced |
-| **Total** | **136 / 28** | **11** | **0** | 2 / 7 modules sliced |
+| **Total** | **136 / 28** | **14** | **0** | 3 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -66,3 +66,13 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-02-05` | As a User, I can open the app and browse my calendars without network, so that I can check my schedule anywhere | F12, F13, F14, U02, F15 | must | draft | `US-02-01` | — |
 | `US-02-06` | As a User, I can see whether my calendars are up to date and the app recovers from errors on its own, so that I can trust what I see | F16, F17, F18, U03 | must | draft | `US-02-03` | — |
 | `US-02-07` | As a User, I can give a calendar my own colour without changing it in Google, so that my calendars are easy to tell apart | F04, U04 | must | draft | `US-02-01` | — |
+
+## [MOD-04] Appearance and themes
+
+`docs/specs/modules/04-appearance-themes/REQUIREMENTS.md` · `docs/specs/modules/04-appearance-themes/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-04-01` | As a User, I can use the app in a light or dark theme that follows my system, so that it fits my desktop day and night | F01, F02, F03 | must | draft | — | — |
+| `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | draft | `US-04-01` | — |
+| `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05 | must | draft | `US-04-01` | — |
