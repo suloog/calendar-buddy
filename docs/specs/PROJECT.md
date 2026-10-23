@@ -14,7 +14,7 @@ analyst: Maciej
 
 ## Overview
 
-calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache. (`SRC-01-01`, `SRC-01-04`, `DEC-01`, `DSC-01-04`)
+calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache.
 
 ## Sources
 
