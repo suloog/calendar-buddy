@@ -33,12 +33,12 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | ------ | ------------------ | ------- | ---- | ------- |
 | `MOD-01` Google accounts and sign-in | 14 / 3 | 4 | 0 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
-| `MOD-03` Views and navigation | 24 / 5 | 9 | 4 | sliced |
+| `MOD-03` Views and navigation | 24 / 5 | 9 | 7 | sliced |
 | `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 29 / 4 | 10 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 8 | 0 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| **Total** | **136 / 28** | **47** | **4** | 7 / 7 modules sliced |
+| **Total** | **136 / 28** | **47** | **7** | 7 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -77,10 +77,10 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-03-02` | As a User, I can look at a single day or three days, so that I can focus on today or use a smaller screen | F01, F04, F14, F22 | must | done | `US-03-01` | — |
 | `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20, F14, F22 | must | done | `US-03-01` | — |
 | `US-03-04` | As a User, I can see my upcoming events as a list, so that I know what is next without reading a grid | F05, F14, F22 | must | done | `US-03-01` | — |
-| `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15 | must | review | `US-03-01` | — |
+| `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15 | must | done | `US-03-01` | — |
 | `US-03-06` | As a User, I can see my calendars grouped by account in a side panel and hide any of them quickly, so that I see only what matters now | F10, F11, F12, U03 | must | ready | `US-03-01`, `US-02-01` | — |
 | `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | ready | `US-03-06` | — |
-| `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04 | must | review | `US-03-05` | — |
+| `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
 
 ## [MOD-04] Appearance and themes
