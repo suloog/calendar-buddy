@@ -56,3 +56,6 @@
 - **Q05** Should the app keep running in the background (tray, autostart) to deliver reminders when its window is closed, or only while it is running? — tray + optional autostart; reminders while the window is closed, 2026-10-23 (`DEC-44`)
 - **Q21** Notification behaviour: default reminders for new events, snooze/dismiss, which Google reminder types are honoured (popup only, or e-mail too), and on/off per account or per calendar as well as globally? — defaults from Google, per-event changes synced, both forms; Dismiss + Snooze 5/10; global switch + per-calendar mute, 2026-10-23 (`DEC-43`, `DEC-45`)
 - **Q27** Are auto-updates, single-instance behaviour and deep links (e.g. from notifications or `webcal:`/`mailto:` handlers) expected? — single instance; webcal: handled via the browser; no mailto:, no update checking, 2026-10-23 (`DEC-46`)
+- **Q37** How are accounts managed in the app? — confirmed as proposed: settings list, confirmation on removal, unverified-app heads-up, 2026-10-23 (`DEC-51`)
+- **Q38** How do account edge cases behave? — confirmed as proposed, 2026-10-23 (`DEC-52`)
+- **Q39** How do the calendar and cache details behave? — confirmed as proposed, 2026-10-23 (`DEC-54`)

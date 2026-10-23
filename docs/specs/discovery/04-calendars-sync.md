@@ -3,7 +3,7 @@ id: DSC-04
 title: Calendars, synchronisation and offline cache
 kind: business # business (a functional area — becomes a module at /og:modules) | cross-cutting (roles and access, technology and integrations, non-functional requirements — feeds PROJECT.md, NFR.md and the constitution, never a module)
 status: settled # open (not yet discussed) | discussed (discussed with the analyst, waiting on the client) | settled (no [W] question in this topic is open)
-sources: [SRC-01, SRC-02] # SRC-NN documents whose items this topic gathers, e.g. [SRC-01, SRC-03]
+sources: [SRC-01, SRC-02, SRC-03] # SRC-NN documents whose items this topic gathers, e.g. [SRC-01, SRC-03]
 module: MOD-02 # MOD-NN — filled by /og:modules; empty for cross-cutting topics
 sessions: [2026-10-22] # dates of the discovery sessions in which the topic was discussed, YYYY-MM-DD
 ---
@@ -55,6 +55,7 @@ contract and the kick-off note is visible in one place, not in two files.>
 | `SRC-02-31` | informal | Calendar losing access: removed, user told once. |
 | `SRC-02-32` | informal | Offline = browsing only. |
 | `SRC-02-33` | informal | Changes from elsewhere within ~1 minute. |
+| `SRC-03-15` | informal | Adaptive sync: editable ~1 min, read-only ~15 min, sync on focus. |
 
 ## Key findings
 
@@ -71,7 +72,8 @@ contract and the kick-off note is visible in one place, not in two files.>
 - [DSC-04-11] The cache holds events from one year back to two years ahead; older or later periods browsed online are fetched from Google as needed. (`SRC-02-30`) — *source: `DEC-23`*
 - [DSC-04-12] When a calendar stops being accessible while its account still works, it disappears from the app with its cached events, and the user is told once. (`SRC-02-31`) — *source: `DEC-24`*
 - [DSC-04-13] Without network the user can only browse; creating, editing and responding to invitations are unavailable, and the app says why. (`SRC-01-35`, `SRC-02-32`) — *source: `DEC-25`*
-- [DSC-04-14] While the app is open, changes made elsewhere appear within about a minute, and right after the computer wakes or the network returns. (`SRC-02-33`) — *source: `DEC-26`*
+- ~~[DSC-04-14] While the app is open, changes made elsewhere appear within about a minute, and right after the computer wakes or the network returns. (`SRC-02-33`) — *source: `DEC-26`*~~ — withdrawn, `DEC-53`
+- [DSC-04-15] While the app runs, changes made elsewhere to calendars the user can edit appear within about a minute, read-only and subscribed calendars are refreshed about every 15 minutes, and the app synchronizes at once when its window becomes active or an event is opened for editing. (`SRC-03-15`) — *source: `DEC-53`*
 
 ## Contradictions
 
@@ -99,4 +101,4 @@ None open — `Q04`, `Q13`, `Q14`, `Q22`, `Q36` resolved on 2026-10-22.
 - Calendar sharing and administration (`SRC-01-118`) — outside the MVP per the PRD.
 - Creating, renaming and deleting calendars — done in the browser, `DEC-21`.
 - Offline editing with a change queue and conflict resolution (`SRC-01-111`) — after the MVP, `DEC-25`.
-- Push notifications from Google (changes within seconds) — would need a server of ours, `DEC-26`.
+- Push notifications from Google (changes within seconds) — would need a server of ours, `DEC-26`, `DEC-53`.
