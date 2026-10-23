@@ -1440,3 +1440,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-119] Attachments: listed by Google's title, opened only when they are web pages
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-10
+- **Affects:** `US-05-10`, `MOD-05-F26`, `DEC-37`
+- **Decision:** An event's details list each of Google's `attachments` by its `title`, in Google's order, and choosing one opens its `fileUrl` in the default browser. An attachment without a title is listed by its link. Only `https://` links are listed: an attachment without one, or with a link of another kind, is left out. An occurrence of a series shows its series' attachments unless it was changed on its own, in which case it shows its own, as Google keeps them.
+- **Why:** Google Calendar shows attachments by their file name and opens them in the browser (`DEC-62`). The link is set by whoever made the event, possibly someone else, and the desktop's URL handler would also start other programs for other kinds of links; Google Drive links are always `https://`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

@@ -1,11 +1,12 @@
 //! What opening an event shows, independent of how it is drawn: its title and when it happens in
 //! the system's time zone (`DEC-73`), and also in its own zone when that is another one
-//! (`DEC-29`). Guests, responses and the rest come with `MOD-06`.
+//! (`DEC-29`), and its attachments as links (`MOD-05-F26`). Guests, responses and the rest come
+//! with `MOD-06`.
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate};
 use chrono_tz::Tz;
 
-use crate::model::{Event, Timing};
+use crate::model::{Attachment, Event, Timing};
 use crate::regional::Regional;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -28,12 +29,15 @@ pub struct EventDetails {
     pub when: When,
     /// A timed event stored in another time zone, in that zone.
     pub own_zone: Option<When>,
+    /// Listed by name, each opened in the browser (`MOD-05-F26`).
+    pub attachments: Vec<Attachment>,
 }
 
 pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
     EventDetails {
         title: (!event.busy_only).then(|| event.title.clone()),
         read_only: event.read_only,
+        attachments: event.about.attachments.clone(),
         own_zone: match event.timing {
             Timing::Timed {
                 start,
@@ -144,6 +148,18 @@ mod tests {
                 last: d(2026, 11, 14)
             }
         );
+    }
+
+    #[test]
+    fn an_event_opens_with_its_attachments() {
+        let mut event = timed("Review", d(2026, 11, 12), (9, 0), (10, 0));
+        assert_eq!(event_details(&event, Warsaw).attachments, []);
+        let numbers = Attachment {
+            title: "Q4 numbers".into(),
+            url: "https://docs.google.com/document/d/1abc/edit".into(),
+        };
+        event.about.attachments = vec![numbers.clone()];
+        assert_eq!(event_details(&event, Warsaw).attachments, [numbers]);
     }
 
     #[test]

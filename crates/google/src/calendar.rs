@@ -13,7 +13,7 @@ use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
-use calendar_core::model::{About, Calendar, Kind, Show, Timing, Visibility};
+use calendar_core::model::{About, Attachment, Calendar, Kind, Show, Timing, Visibility};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
@@ -663,6 +663,31 @@ struct GoogleEvent {
     guests_can_modify: bool,
     event_type: Option<String>,
     color_id: Option<String>,
+    #[serde(default)]
+    attachments: Vec<GoogleAttachment>,
+}
+
+/// One of Google's `attachments` of an event: a file, mostly on Google Drive.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleAttachment {
+    file_url: Option<String>,
+    title: Option<String>,
+}
+
+impl GoogleAttachment {
+    /// The attachment as the app lists it; `None` without a web page to open, as only web pages
+    /// are handed to the desktop's URL handler.
+    fn into_attachment(self) -> Option<Attachment> {
+        let url = self.file_url.filter(|url| url.starts_with("https://"))?;
+        Some(Attachment {
+            title: self
+                .title
+                .filter(|title| !title.trim().is_empty())
+                .unwrap_or_else(|| url.clone()),
+            url,
+        })
+    }
 }
 
 /// Google's `organizer` of an event; `self` when it is the calendar the copy is on.
@@ -757,6 +782,9 @@ impl GoogleEvent {
                     _ => Kind::Ordinary,
                 },
                 color: self.color_id.as_deref().and_then(event_color),
+                attachments: (self.attachments.into_iter())
+                    .filter_map(GoogleAttachment::into_attachment)
+                    .collect(),
             },
             etag: self.etag,
             // A guest's copy, with the organizer's event elsewhere, as Google tells them apart.

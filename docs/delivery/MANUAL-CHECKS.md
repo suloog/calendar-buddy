@@ -255,3 +255,14 @@ Real Google and what the colours look like are not. A choice to ratify: `DEC-118
 
 - [ ] `US-05-09#1` (real Google, a person's eyes) — in the browser, give one event each of a few colours (e.g. Flamingo, Banana, Graphite) in a calendar of another colour. Run `cargo run -p calendar-buddy`: the week, month and agenda views show each in the same shade as the browser. Give its calendar a local colour in the side panel: those events keep their own colour, the others take the local one.
 - [ ] `TC-05-10` / `US-05-09#2` (real Google) — open "Dentist" (no colour of its own) in the app's editor, the **Colour** row: pick Tomato (hover shows the names; Tab reaches the swatches with a visible focus ring) and **Save**. Reload Google Calendar in the browser: "Dentist" is Tomato. Then pick "Calendar colour" (the empty circle) and **Save**: in the browser it is back in its calendar's colour.
+
+## US-05-10
+
+Needs a connected real Google account with a Drive file attached to an event, the KDE session, a browser and a person's eyes. Against the fake Google, these tests prove that Google's `attachments` are read (title and `fileUrl`, untitled ones by their link, only `https://` links), cached and handed to the event's details:
+- core: `an_event_opens_with_its_attachments`, `calendars_and_events_come_back_as_they_were_written`;
+- google: `events_come_with_their_attachments_as_links`.
+
+Real Google, the drawn links and the browser opening are not. A choice to ratify: `DEC-119` (listed by Google's title, untitled by their link; only `https://` links listed and opened).
+
+- [ ] `TC-05-11` / `US-05-10#1` (real Google, a person's eyes) — in the browser, attach a Google Drive document to an event this week. Run `cargo run -p calendar-buddy` and open the event: its details list the attachment by its name, as a 📎 link.
+- [ ] `TC-05-11` / `US-05-10#2` (real Google, KDE session) — choose the attachment: the document opens in the default browser. Delete the test event afterwards.

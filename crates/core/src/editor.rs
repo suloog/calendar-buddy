@@ -451,6 +451,8 @@ impl Editor {
             visibility: self.visibility,
             kind: self.kind,
             color: self.color,
+            // Attachments are added in Google (`DEC-37`).
+            attachments: Vec::new(),
         };
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
@@ -597,6 +599,7 @@ mod tests {
                     visibility: Visibility::Private,
                     kind: Kind::Ordinary,
                     color: None,
+                    attachments: Vec::new(),
                 },
                 recurrence: Vec::new(),
             }

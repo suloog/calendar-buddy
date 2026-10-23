@@ -420,6 +420,7 @@ dependencies = [
  "pure-rust-locales",
  "rrule",
  "rusqlite",
+ "serde_json",
 ]
 
 [[package]]

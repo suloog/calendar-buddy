@@ -176,6 +176,16 @@ pub struct About {
     pub kind: Kind,
     /// Its own colour, shown instead of its calendar's (`MOD-05-F25`); `None` when it has none.
     pub color: Option<EventColor>,
+    /// The files attached to it, which the app only shows; they are added in Google (`DEC-37`).
+    pub attachments: Vec<Attachment>,
+}
+
+/// A file attached to an event, listed by name and opened in the browser (`MOD-05-F26`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attachment {
+    pub title: String,
+    /// Where the browser opens it; always a web page.
+    pub url: String,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).

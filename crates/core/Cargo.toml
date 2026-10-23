@@ -11,3 +11,4 @@ chrono-tz = "0.10.4"
 pure-rust-locales = "0.8.2"
 rrule = "0.14"
 rusqlite = { version = "0.40", features = ["bundled"] }
+serde_json = "1.0.154"
