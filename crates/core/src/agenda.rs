@@ -11,6 +11,8 @@ use crate::model::{Event, Rgb, Timing};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AgendaItem {
+    /// Index of the event in the store, to open it.
+    pub event: usize,
     /// `None` for events of calendars shared as free/busy only.
     pub title: Option<String>,
     pub color: Rgb,
@@ -96,6 +98,7 @@ pub fn agenda_view(
                     .map(|i| {
                         let event = &events[i];
                         AgendaItem {
+                            event: i,
                             title: (!event.busy_only).then(|| event.title.clone()),
                             color: event.color,
                             time: event_time(event),

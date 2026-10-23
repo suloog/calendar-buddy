@@ -10,6 +10,8 @@ use crate::week::Week;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MonthItem {
+    /// Index of the event in the store, to open it.
+    pub event: usize,
     /// `None` for events of calendars shared as free/busy only.
     pub title: Option<String>,
     pub color: Rgb,
@@ -123,6 +125,7 @@ pub fn month_view(
                 .map(|i| {
                     let event = &events[i];
                     MonthItem {
+                        event: i,
                         title: (!event.busy_only).then(|| event.title.clone()),
                         color: event.color,
                         start: timed_start(event),

@@ -888,3 +888,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-73] Keyboard: Google's single keys, one dialog at a time, Tab through panel and events
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-08
+- **Affects:** `US-03-08`, `MOD-03-F23`, `MOD-03-F24`, `MOD-03-U04`
+- **Decision:** The shortcuts are the typed characters of `MOD-03` *Technical notes*, exactly as typed (`d` but not `D`), ignored while a text field has the keyboard. `t` also brings back a browsed mini calendar, like the Today button. Like Google Calendar, one dialog is open at a time over the view and Escape closes it: `?` lists every key with what it does, one row per key; `g` asks for a date in a field pre-filled with the selected date as `YYYY-MM-DD` (other formats wait for `US-03-09`), Enter or "Go" shows it as a date picked in the mini calendar does (`DEC-72`); `c` opens a "New event" dialog naming the selected day and saying creating events is not available yet, until `MOD-05`'s editor replaces it. Without a mouse, Tab and Shift+Tab (and egui's arrow-key focus moves) go through the bar, the side panel and the events on screen in every view, the focused one ringed and scrolled into sight; Enter or Space opens an event (as a click does) into a minimal details dialog with its title ("Busy" for free/busy calendars) and its time in the system's zone, which `US-03-09` and `MOD-06` extend. The agenda lets the keyboard reach the events within a screen of the visible part, so Tab scrolls on through the list.
+- **Why:** Follows Google Calendar (`DEC-62`) where the spec is silent; opening an event needs something to open before `US-03-09`, and the smallest details dialog is enough for `MOD-03-F24`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-74] Keyboard details: modifiers, Escape and the "+N more" list
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-08
+- **Affects:** `US-03-08`, `MOD-03-F23`, `MOD-03-F24`
+- **Decision:** Shortcut keys pressed with Alt (or Ctrl) do nothing. Closing an event's details gives the keyboard back to the event it was opened from. The month view's "+N more" list closes on Escape and when one of its events is opened, so one thing is open at a time (`DEC-73`). Only `t` brings back a browsed mini calendar; the other keys move it only when the date changes, as their buttons do.
+- **Why:** Follows Google Calendar (`DEC-62`); keeps the user's place when moving without a mouse.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
