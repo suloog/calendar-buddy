@@ -34,6 +34,9 @@ pub struct SyncedEvent {
     pub about: About,
     /// The version of the event at the provider (its ETag).
     pub etag: String,
+    /// A guest's copy of someone else's event, who does not let guests change it: only the
+    /// organizer can (`MOD-05-F17`).
+    pub organizer_only: bool,
 }
 
 /// The days the cache holds: one year back to two years ahead of today (`MOD-02-F11`, `DEC-23`).
@@ -450,6 +453,7 @@ mod tests {
             instance_of: None,
             about: Default::default(),
             etag: String::new(),
+            organizer_only: false,
         }
     }
 

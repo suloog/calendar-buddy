@@ -63,10 +63,10 @@ fn shown_title(event: &Event) -> Option<String> {
     (!event.busy_only).then(|| event.title.clone())
 }
 
-/// Whether an event can be dragged: its calendar can be changed, Google has confirmed its last
-/// change, and it is not an occurrence of a series, whose scope `US-05-07` asks for.
+/// Whether an event can be dragged: the user may change it (`MOD-05-F17`), Google has confirmed
+/// its last change, and it is not an occurrence of a series, whose scope `US-05-07` asks for.
 fn movable(event: &Event) -> bool {
-    !event.read_only && !event.saving && !event.recurring
+    event.protected().is_none() && !event.saving && !event.recurring
 }
 
 /// The hour grid over `dates`: one day, three days or a week.
@@ -143,6 +143,7 @@ pub fn grid_view(
 mod tests {
     use super::*;
     use crate::fixtures::{d, tc_03_01_week, timed};
+    use crate::model::Protected;
     use crate::week::{GridView, Week};
     use chrono::{TimeZone, Weekday};
     use chrono_tz::Europe::Warsaw;
@@ -244,6 +245,41 @@ mod tests {
             .iter()
             .find(|b| b.title.as_deref() == Some("Offsite"));
         assert!(offsite.is_some_and(|b| b.saving && b.all_day));
+    }
+
+    #[test]
+    fn a_guests_copy_only_its_organizer_may_change_cannot_be_dragged_and_says_why() {
+        let mut events = tc_03_01_week();
+        let conference = events
+            .iter_mut()
+            .find(|e| e.title == "Conference day")
+            .unwrap();
+        conference.organizer_only = true;
+        let vm = grid_view(
+            &events,
+            &Week::containing(d(2026, 11, 11), Weekday::Mon).days(),
+            Warsaw,
+            clock(),
+        );
+
+        let bar = vm
+            .bars
+            .iter()
+            .find(|b| b.title.as_deref() == Some("Conference day"));
+        assert!(bar.is_some_and(|b| !b.movable && !b.read_only));
+        let why = |title: &str| {
+            let event = events.iter().find(|e| e.title == title).unwrap();
+            event.protected().map(Protected::why)
+        };
+        assert_eq!(
+            why("Conference day"),
+            Some("This event can't be changed: only its organizer can change it.")
+        );
+        assert_eq!(
+            why("Room booking"),
+            Some("🔒 This event can't be changed: its calendar is read-only.")
+        );
+        assert_eq!(why("Standup"), None);
     }
 
     #[test]

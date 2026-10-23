@@ -13,7 +13,7 @@ use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
 /// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 1;
+const VERSION: i64 = 2;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -42,6 +42,7 @@ const SCHEMA: &str = "
         show TEXT NOT NULL,
         visibility TEXT NOT NULL,
         etag TEXT NOT NULL,
+        organizer_only INTEGER NOT NULL,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -370,8 +371,8 @@ impl Cache {
             .connection
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
-                 series_id, original_start, description, location, show, visibility, etag \
-                 FROM events",
+                 series_id, original_start, description, location, show, visibility, etag, \
+                 organizer_only FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -394,6 +395,7 @@ impl Cache {
                         visibility: parse_visibility(&row.get::<_, String>(13)?),
                     },
                     row.get::<_, String>(14)?,
+                    row.get::<_, bool>(15)?,
                 ))
             })
             .map_err(failed)?;
@@ -411,6 +413,7 @@ impl Cache {
                 original,
                 about,
                 etag,
+                organizer_only,
             ) = row.map_err(failed)?;
             let timing = match (start, end, zone) {
                 (Some(start), Some(end), zone) => {
@@ -432,6 +435,7 @@ impl Cache {
                 instance_of,
                 about,
                 etag,
+                organizer_only,
             };
             if let Some(&index) = index.get(&(account_id, calendar_id)) {
                 calendars[index].events.push(event);
@@ -450,7 +454,7 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         )
         .map_err(failed)?;
     for event in events {
@@ -491,6 +495,7 @@ fn insert(
                 show_key(event.about.show),
                 visibility_key(event.about.visibility),
                 event.etag,
+                event.organizer_only,
             ])
             .map_err(failed)?;
     }
@@ -644,6 +649,7 @@ mod tests {
                 instance_of: None,
                 about: About::default(),
                 etag: "\"1\"".into(),
+                organizer_only: false,
             },
             SyncedEvent {
                 id: "series_20261116T080000Z".into(),
@@ -656,6 +662,7 @@ mod tests {
                 )),
                 about: About::default(),
                 etag: "\"2\"".into(),
+                organizer_only: false,
             },
             SyncedEvent {
                 id: "trip".into(),
@@ -673,6 +680,7 @@ mod tests {
                     visibility: Visibility::Private,
                 },
                 etag: "\"3\"".into(),
+                organizer_only: true,
             },
         ]
     }

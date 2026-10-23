@@ -937,13 +937,13 @@ mod tests {
     use std::time::Duration;
 
     use crate::calendar_list::Picked;
-    use crate::{Built, build, grid_view, pick};
+    use crate::{Built, build, grid_view, pick, tell_unmovable};
     use calendar_core::colors;
     use calendar_core::create::{self, QuickEntry, Saving};
     use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
-    use calendar_core::model::{Access, Calendar, Rgb, Show, Timing, Visibility};
+    use calendar_core::model::{Access, Calendar, Protected, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
     use calendar_core::offline;
     use calendar_core::platform::Network;
@@ -996,6 +996,7 @@ mod tests {
                     instance_of: None,
                     about: Default::default(),
                     etag: String::new(),
+                    organizer_only: false,
                 };
                 cache
                     .set_calendars(account, std::slice::from_ref(&calendar))
@@ -3157,6 +3158,224 @@ mod tests {
             saved_changes(&updates).as_slice(),
             [Saved::NotDeleted(2, _)]
         ));
+    }
+
+    /// Presses the mouse on the week view's only hour-long event and drags it down by `dy`, frame
+    /// by frame, as egui gets it from the window; returns what the view reported.
+    fn mouse_drag(
+        view: &calendar_core::view_model::GridViewModel,
+        dy: f32,
+    ) -> Vec<grid_view::Action> {
+        let ctx = egui::Context::default();
+        let regional = polish();
+        let mut state = grid_view::State::default();
+        let mut actions = Vec::new();
+        let mut frame = |events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(1200.0, 1000.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            ctx.run_ui(input, |ui| {
+                let mut opened = None;
+                actions.extend(grid_view::show(
+                    ui,
+                    view,
+                    &regional,
+                    &mut state,
+                    true,
+                    &mut opened,
+                ));
+            })
+            .textures_delta
+            .clear();
+        };
+        frame(Vec::new());
+        frame(Vec::new());
+        let block = ctx.viewport(|viewport| {
+            viewport
+                .prev_pass
+                .widgets
+                .layers()
+                .flat_map(|(_, widgets)| widgets)
+                .find(|w| {
+                    w.sense.senses_drag()
+                        && (w.rect.height() - (grid_view::HOUR_HEIGHT - 2.0)).abs() < 0.5
+                })
+                .map(|w| w.rect)
+        });
+        let from = block.expect("the event is drawn").center();
+        let button = |pressed| egui::Event::PointerButton {
+            pos: from + egui::vec2(0.0, if pressed { 0.0 } else { dy }),
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(vec![egui::Event::PointerMoved(from)]);
+        frame(vec![button(true)]);
+        frame(vec![egui::Event::PointerMoved(
+            from + egui::vec2(0.0, 10.0),
+        )]);
+        frame(vec![egui::Event::PointerMoved(from + egui::vec2(0.0, dy))]);
+        frame(vec![button(false)]);
+        actions
+    }
+
+    #[test]
+    fn tc_05_06_an_event_of_a_read_only_calendar_cannot_be_dragged_or_edited_and_says_why() {
+        let google = Google::start("tc-05-06");
+        personal(&google);
+        google.calendar("colleague", "reader");
+        google.fake.add_event(
+            ACCOUNT_ID,
+            "colleague",
+            json!({
+                "id": "theirs",
+                "status": "confirmed",
+                "summary": "Their meeting",
+                "start": {"dateTime": "2026-11-12T12:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-12T13:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        // Wednesday 2026-11-11 10:00 in Warsaw, the week view.
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+        let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
+        let events = now_shown(&engine);
+        let (Built::Grid(week), places) =
+            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
+        else {
+            panic!("the week view is built");
+        };
+
+        // 1. Dragged to 14:00, the event stays at 12:00–13:00, and the app says why.
+        let actions = mouse_drag(&week, grid_view::HOUR_HEIGHT * 2.0);
+        let [grid_view::Action::Unmovable { event }] = actions.as_slice() else {
+            panic!("the drag was not refused: {actions:?}");
+        };
+        let theirs = &events[places[*event]];
+        assert_eq!(theirs.title, "Their meeting");
+        let mut notices = Vec::new();
+        tell_unmovable(&mut notices, theirs);
+        tell_unmovable(&mut notices, theirs);
+        assert_eq!(
+            notices,
+            ["🔒 This event can't be changed: its calendar is read-only."]
+        );
+        assert_eq!(
+            times(now_shown(&engine)),
+            [(
+                "Their meeting".to_string(),
+                "2026-11-12 12:00".to_string(),
+                "2026-11-12 13:00".to_string()
+            )]
+        );
+
+        // 2. Editing is not offered, with the same reason; Google received no change.
+        assert_eq!(
+            theirs.protected().map(Protected::why),
+            Some(notices[0].as_str())
+        );
+        assert!(google.fake.patched().is_empty());
+        let kept = google
+            .fake
+            .event(ACCOUNT_ID, "colleague", "theirs")
+            .unwrap();
+        assert_eq!(kept["summary"], "Their meeting");
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T12:00:00+01:00");
+    }
+
+    #[test]
+    fn a_guests_copy_only_its_organizer_may_change_cannot_be_dragged_and_says_why() {
+        let google = Google::start("organizer-only");
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "invited",
+                "status": "confirmed",
+                "summary": "Board meeting",
+                "organizer": {"email": "boss@example.com"},
+                "start": {"dateTime": "2026-11-12T12:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-12T13:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+        let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
+        let events = now_shown(&engine);
+        let (Built::Grid(week), places) =
+            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
+        else {
+            panic!("the week view is built");
+        };
+
+        let actions = mouse_drag(&week, grid_view::HOUR_HEIGHT * 2.0);
+
+        let [grid_view::Action::Unmovable { event }] = actions.as_slice() else {
+            panic!("the drag was not refused: {actions:?}");
+        };
+        let invited = &events[places[*event]];
+        // Its calendar is the user's own, so it carries no lock.
+        assert!(!invited.read_only);
+        let mut notices = Vec::new();
+        tell_unmovable(&mut notices, invited);
+        assert_eq!(
+            notices,
+            ["This event can't be changed: only its organizer can change it."]
+        );
+        assert!(invited.protected().is_some());
+        assert!(google.fake.patched().is_empty());
+    }
+
+    #[test]
+    fn a_change_google_refuses_is_told_clearly_and_the_event_returns_to_how_it_was() {
+        let (google, mut engine, start) =
+            personal_with("change-refused", "call", "Call", "10:00", "11:00");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let call = now_shown(&engine).remove(0);
+        let drop = Target::Moved {
+            days: 0,
+            minutes: 60,
+        };
+        let timing = drag::dropped(&call, drop, Warsaw, 60).unwrap();
+        let edit = drag::edit(&call, calendar, timing);
+        let mut saving = Saving::default();
+        let local = saving.change(&call, edit.changed());
+        // Its owner stops letting the account change the calendar before the app learns of it.
+        google.fake.set_access_role(EMAIL, "reader");
+
+        let updates = engine.handle(Some(Job::Change(local, Box::new(edit))), start);
+
+        let changes = saved_changes(&updates);
+        let [Saved::NotChanged(1, reason)] = changes.as_slice() else {
+            panic!("the change was not refused");
+        };
+        assert_eq!(
+            reason,
+            "Google refused (You need to have writer access to this calendar.)"
+        );
+        assert!(!reason.contains("Call"));
+        saving.refused(local);
+        let shown = shown(&updates).unwrap();
+        assert_eq!(
+            times(saving.shown(&shown)),
+            [(
+                "Call".to_string(),
+                "2026-11-12 10:00".to_string(),
+                "2026-11-12 11:00".to_string()
+            )]
+        );
+        // And from then on it is protected, with the reason why.
+        assert!(saving.shown(&shown)[0].protected().is_some());
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T10:00:00+01:00");
     }
 
     /// What Google answered about changed events, in order.

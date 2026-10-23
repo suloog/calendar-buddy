@@ -1332,3 +1332,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-110] Protected events: read-only calendars and guests' copies, the reason on trying, Google's refusal as it says it
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-05
+- **Affects:** `US-05-05`, `MOD-05-F17`, `MOD-05-F22`, `DEC-22`, `DEC-89`, `DEC-106`, `DEC-108`, `DEC-109`, the SQLite cache, the calendar-provider interface
+- **Decision:** An event the user may not change is one of a calendar the account cannot change (not owner or writer, `DEC-22`), or a guest's copy of someone else's event whose organizer does not let guests change it: Google gives it an `organizer` that is not the calendar itself (`self`) and no `guestsCanModify`. Such an event cannot be dragged, resized, edited or deleted, a guest's copy included, although Google lets a guest take an invitation off their calendar: what a guest may still do comes with `MOD-06`. A drag started on it leaves it where it is and the notice bar says why, once however often it is tried: "🔒 This event can't be changed: its calendar is read-only." or "This event can't be changed: only its organizer can change it." Its details say the same, in place of the "🔒 Read-only: this event can't be changed" of `DEC-89`, and offer neither **Edit** nor **Delete**, and Delete or Backspace do nothing there. Only an event of a read-only calendar carries the lock in the views (`MOD-02-U01`); a guest's copy looks like the user's other events, as in Google Calendar. A change Google refuses anyway, because the calendar or the event changed before the app learned of it, is told as Google words it — "The event could not be saved: Google refused (You need to have writer access to this calendar.)" or "(Shared properties can only be changed by the organizer of the event.)" — and the event is shown as it was; the synchronization after it brings the new rights, so it is protected from then on. One changed elsewhere meanwhile is reloaded as `DEC-106` says. **SQLite schema change:** the `events` table gets `organizer_only`; the schema version goes to 2, so an earlier cache drops its events and fetches them again (`DEC-107`). **Calendar-provider interface change:** `SyncedEvent::organizer_only`.
+- **Why:** The spec names guests without edit rights (`US-05-05`) but not how they are told apart; `organizer.self` and `guestsCanModify` are how Google tells a guest's copy from the organizer's event, and Google Calendar does not let a guest move or edit such a copy (`DEC-62`). The acceptance criterion forbids deleting as well, and responding or removing an invitation belongs to `MOD-06`. Google's own message names the reason, contains no event contents (`NFR-07`), and needs no table of Google's error codes.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

@@ -35,6 +35,7 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         timing,
         busy_only: calendar.access == Access::FreeBusyReader,
         read_only: !calendar.access.can_edit(),
+        organizer_only: event.organizer_only,
         saving: false,
         recurring: !event.recurrence.is_empty() || event.instance_of.is_some(),
         about: event.about.clone(),
@@ -254,6 +255,7 @@ mod tests {
             instance_of: None,
             about: Default::default(),
             etag: String::new(),
+            organizer_only: false,
         }
     }
 

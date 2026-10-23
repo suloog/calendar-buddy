@@ -1017,6 +1017,63 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
 }
 
 #[test]
+fn a_guests_copy_the_organizer_does_not_let_guests_change_is_for_the_organizer_only() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("organizer-only");
+    let copy = |id: &str, title: &str, guests_can_modify: Option<bool>| {
+        let mut event = timed(
+            id,
+            title,
+            "2026-11-12T12:00:00+01:00",
+            "2026-11-12T13:00:00+01:00",
+        );
+        event["organizer"] = json!({"email": "boss@example.com"});
+        if let Some(can) = guests_can_modify {
+            event["guestsCanModify"] = json!(can);
+        }
+        event
+    };
+    google.add_event(ACCOUNT_ID, "work", copy("theirs", "Their meeting", None));
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        copy("shared", "Open meeting", Some(true)),
+    );
+    let mut own = timed(
+        "own",
+        "Own meeting",
+        "2026-11-12T14:00:00+01:00",
+        "2026-11-12T15:00:00+01:00",
+    );
+    own["organizer"] = json!({"email": "user@example.com", "self": true});
+    google.add_event(ACCOUNT_ID, "work", own);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let theirs = cached(&cache, "work", "theirs").unwrap();
+    let patch = Patch {
+        title: Some("Mine now".into()),
+        ..Patch::default()
+    };
+    let refused = session.update(&work, "theirs", &theirs.etag, &patch);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let organizer_only = |id| cached(&cache, "work", id).unwrap().organizer_only;
+    assert!(organizer_only("theirs"));
+    assert!(!organizer_only("shared"));
+    assert!(!organizer_only("own"));
+    // Without an organizer, as in the events Google keeps for the calendar itself.
+    assert!(!organizer_only("standup"));
+    // Google refuses the organizer's fields to a guest, and says so.
+    let error = refused.unwrap_err();
+    assert!(error.0.starts_with("Google refused"), "{}", error.0);
+    assert!(error.0.contains("organizer"), "{}", error.0);
+    let kept = google.event(ACCOUNT_ID, "work", "theirs").unwrap();
+    assert_eq!(kept["summary"], "Their meeting");
+}
+
+#[test]
 fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
     let (google, store, dir, client_file, cache) = synchronized_once("create-all-day");
     let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
