@@ -109,6 +109,12 @@ pub fn dropped(event: &Event, drop: Target, zone: Tz, length: u32) -> Option<Tim
             let (start, end) = clicked(date, minute, length, zone);
             Timing::Timed { start, end, zone }
         }
+        // Out of office and focus time stay timed, as Google keeps them: midnight to midnight.
+        (Target::AllDay { date }, _) if event.about.kind.timed_only() => Timing::Timed {
+            start: wall(date, 0, zone),
+            end: wall(date + Duration::days(1), 0, zone),
+            zone,
+        },
         (Target::AllDay { date }, _) => Timing::AllDay {
             start: date,
             end_exclusive: date + Duration::days(1),
@@ -378,6 +384,19 @@ mod tests {
                 start: d(2026, 11, 14),
                 end_exclusive: d(2026, 11, 15),
             })
+        );
+    }
+
+    #[test]
+    fn focus_time_dropped_into_the_all_day_strip_lasts_from_midnight_to_midnight() {
+        let mut focus = timed("Focus", d(2026, 11, 12), (10, 0), (11, 0));
+        focus.about.kind = crate::model::Kind::FocusTime;
+        let drop = Target::AllDay {
+            date: d(2026, 11, 14),
+        };
+        assert_eq!(
+            times(dropped(&focus, drop, Warsaw, 60), Warsaw),
+            pair("2026-11-14 00:00", "2026-11-15 00:00")
         );
     }
 

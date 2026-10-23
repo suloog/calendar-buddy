@@ -12,7 +12,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
-use calendar_core::model::{About, Calendar, Show, Timing, Visibility};
+use calendar_core::model::{About, Calendar, Kind, Show, Timing, Visibility};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
@@ -317,6 +317,29 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
     if !event.recurrence.is_empty() {
         fields["recurrence"] = json!(event.recurrence);
     }
+    // Out of office and focus time with what Google Calendar sets them up with: new invitations
+    // that clash are declined, and chat is set to do not disturb during focus time; both busy.
+    match event.about.kind {
+        Kind::OutOfOffice => {
+            fields["eventType"] = json!("outOfOffice");
+            fields["outOfOfficeProperties"] = json!({
+                "autoDeclineMode": "declineOnlyNewConflictingInvitations",
+                "declineMessage": "Declined because I am out of office",
+            });
+            fields["transparency"] = json!("opaque");
+        }
+        Kind::FocusTime => {
+            fields["eventType"] = json!("focusTime");
+            fields["focusTimeProperties"] = json!({
+                "autoDeclineMode": "declineOnlyNewConflictingInvitations",
+                "declineMessage": "Declined because I am in focus time",
+                "chatStatus": "doNotDisturb",
+            });
+            fields["transparency"] = json!("opaque");
+        }
+        // Not made by the app (`DEC-34`).
+        Kind::Ordinary | Kind::WorkingLocation | Kind::Birthday => {}
+    }
     let Value::Object(fields) = fields else {
         unreachable!("an object");
     };
@@ -598,6 +621,7 @@ struct GoogleEvent {
     organizer: Option<Organizer>,
     #[serde(default)]
     guests_can_modify: bool,
+    event_type: Option<String>,
 }
 
 /// Google's `organizer` of an event; `self` when it is the calendar the copy is on.
@@ -682,6 +706,14 @@ impl GoogleEvent {
                     Some("public") => Visibility::Public,
                     Some("private" | "confidential") => Visibility::Private,
                     _ => Visibility::Default,
+                },
+                // Other types (`default`, `fromGmail`) are ordinary events to the app.
+                kind: match self.event_type.as_deref() {
+                    Some("outOfOffice") => Kind::OutOfOffice,
+                    Some("focusTime") => Kind::FocusTime,
+                    Some("workingLocation") => Kind::WorkingLocation,
+                    Some("birthday") => Kind::Birthday,
+                    _ => Kind::Ordinary,
                 },
             },
             etag: self.etag,

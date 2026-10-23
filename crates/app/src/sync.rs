@@ -1093,7 +1093,7 @@ mod tests {
     use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
-    use calendar_core::model::{Access, Calendar, Protected, Rgb, Show, Timing, Visibility};
+    use calendar_core::model::{Access, Calendar, Kind, Protected, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
     use calendar_core::offline;
     use calendar_core::platform::Network;
@@ -1104,7 +1104,9 @@ mod tests {
     use calendar_core::sync::SyncedEvent;
     use calendar_core::undo::{self, LastChange, Undo};
     use calendar_google::CLIENT_FILE;
-    use calendar_google::fake::{ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore};
+    use calendar_google::fake::{
+        ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore, OTHER_EMAIL, OTHER_ID,
+    };
     use chrono::{TimeZone, Utc};
     use chrono_tz::Europe::Warsaw;
     use serde_json::{Value, json};
@@ -2722,6 +2724,104 @@ mod tests {
             .find(|e| e.id == *id)
             .unwrap();
         assert_eq!(review.about.location, "Room 2");
+    }
+
+    #[test]
+    fn tc_05_09_out_of_office_is_created_on_a_workspace_primary_calendar_and_not_offered_on_a_personal_account()
+     {
+        // Account B (Workspace), whose primary calendar is "B"; account A (personal) with
+        // "Personal", the default calendar, connected first.
+        let google = Google::start("tc-05-09");
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": EMAIL,
+                "summary": "B",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#9fe1e7",
+                "accessRole": "owner",
+                "primary": true,
+            }),
+        );
+        google.fake.add_calendar(
+            OTHER_ID,
+            json!({
+                "id": OTHER_EMAIL,
+                "summary": "Personal",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#7986cb",
+                "accessRole": "owner",
+                "primary": true,
+            }),
+        );
+        let token = google.fake.signed_in(OTHER_ID);
+        (google.store.saved.lock().unwrap()).push((OTHER_ID.to_string(), token));
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        engine.handle(Some(Job::Sync(OTHER_ID.into(), window())), start);
+        let calendars = engine.cache.calendar_list().unwrap();
+        let entry = |id: &str, email: &str, workspace| calendar_core::accounts::Entry {
+            account: calendar_core::accounts::Account {
+                id: id.to_string(),
+                email: email.to_string(),
+                workspace,
+                contacts: true,
+                directory: workspace,
+            },
+            state: calendar_core::accounts::AccountState::Connected,
+        };
+        let accounts = [
+            entry(OTHER_ID, OTHER_EMAIL, false),
+            entry(ACCOUNT_ID, EMAIL, true),
+        ];
+        let regional = polish();
+        let calendar = |name: &str| calendars.iter().find(|c| c.name == name).cloned();
+        let new_event = |calendar| {
+            let entry = QuickEntry::new(
+                create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+                Warsaw,
+                calendar,
+            );
+            Editor::from_quick(&entry, &regional)
+        };
+
+        // 1. A new event in "B": out of office and focus time are offered.
+        let mut editor = new_event(calendar("B"));
+        assert_eq!(
+            editor.kinds(&accounts),
+            [Kind::Ordinary, Kind::OutOfOffice, Kind::FocusTime]
+        );
+
+        // 2. Out of office on 13 November, all day: the fake Google receives an out-of-office
+        //    event in "B", and it comes back as one.
+        editor.kind = Kind::OutOfOffice;
+        editor.title = "Out of office".to_string();
+        editor.all_day = true;
+        let Ok(Save::Create(to, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        assert_eq!(to.name, "B");
+        let updates = engine.handle(Some(Job::Create(1, to, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the event: {saved:?}");
+        };
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(sent["eventType"], "outOfOffice");
+        assert_eq!(sent["start"]["dateTime"], "2026-11-13T00:00:00+01:00");
+        assert_eq!(sent["end"]["dateTime"], "2026-11-14T00:00:00+01:00");
+        let away = shown(&updates)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.id == *id)
+            .unwrap();
+        assert_eq!(away.about.kind, Kind::OutOfOffice);
+
+        // 3. A new event in "Personal" (account A), the default calendar: neither is offered.
+        let default = create::default_calendar(&accounts, &calendars, &Settings::default());
+        assert_eq!(default.as_ref().unwrap().name, "Personal");
+        let mut editor = new_event(default);
+        assert_eq!(editor.kinds(&accounts), []);
     }
 
     #[test]

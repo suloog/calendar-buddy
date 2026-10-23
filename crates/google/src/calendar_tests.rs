@@ -7,7 +7,7 @@ use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
-use calendar_core::model::{About, Access, Event, Rgb, Show, Visibility};
+use calendar_core::model::{About, Access, Event, Kind, Rgb, Show, Visibility};
 use calendar_core::sync::shown_events;
 use calendar_core::view_model::grid_view;
 use calendar_core::week::Week;
@@ -1007,6 +1007,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             show: Show::Free,
             // Google keeps "confidential" for compatibility; it means private.
             visibility: Visibility::Private,
+            kind: Kind::Ordinary,
         }
     );
     assert_eq!(
@@ -1015,6 +1016,92 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
     );
     let standup = cached(&cache, "work", "standup").unwrap();
     assert_eq!(standup.about, About::default());
+}
+
+#[test]
+fn events_come_with_their_google_type() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("types");
+    for (id, kind) in [
+        ("away", "outOfOffice"),
+        ("focus", "focusTime"),
+        ("office", "workingLocation"),
+        ("anna", "birthday"),
+        ("mail", "fromGmail"),
+    ] {
+        let mut event = timed(
+            id,
+            id,
+            "2026-11-12T09:00:00+01:00",
+            "2026-11-12T10:00:00+01:00",
+        );
+        event["eventType"] = json!(kind);
+        google.add_event(ACCOUNT_ID, "work", event);
+    }
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let kind = |id| cached(&cache, "work", id).unwrap().about.kind;
+    assert_eq!(kind("away"), Kind::OutOfOffice);
+    assert_eq!(kind("focus"), Kind::FocusTime);
+    assert_eq!(kind("office"), Kind::WorkingLocation);
+    assert_eq!(kind("anna"), Kind::Birthday);
+    // Other types Google has are shown as ordinary events.
+    assert_eq!(kind("mail"), Kind::Ordinary);
+    assert_eq!(kind("review"), Kind::Ordinary);
+}
+
+#[test]
+fn out_of_office_and_focus_time_are_sent_with_their_type_and_googles_defaults() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("create-types");
+    // Google takes these types only in a primary calendar.
+    google.remove_calendar(ACCOUNT_ID, "work");
+    let mut primary = entry("work", "Work", "#9fe1e7", "owner");
+    primary["primary"] = json!(true);
+    google.add_calendar(ACCOUNT_ID, primary);
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let new = |kind| NewEvent {
+        about: About {
+            kind,
+            ..About::default()
+        },
+        ..planning()
+    };
+
+    let away = session.create(&work, &new(Kind::OutOfOffice)).unwrap();
+    let focus = session.create(&work, &new(Kind::FocusTime)).unwrap();
+    let planning = session.create(&work, &planning()).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let away = google.event(ACCOUNT_ID, "work", &away).unwrap();
+    assert_eq!(away["eventType"], "outOfOffice");
+    assert_eq!(
+        away["outOfOfficeProperties"],
+        json!({
+            "autoDeclineMode": "declineOnlyNewConflictingInvitations",
+            "declineMessage": "Declined because I am out of office",
+        })
+    );
+    assert_eq!(away["transparency"], "opaque");
+    let focus = google.event(ACCOUNT_ID, "work", &focus).unwrap();
+    assert_eq!(focus["eventType"], "focusTime");
+    assert_eq!(
+        focus["focusTimeProperties"],
+        json!({
+            "autoDeclineMode": "declineOnlyNewConflictingInvitations",
+            "declineMessage": "Declined because I am in focus time",
+            "chatStatus": "doNotDisturb",
+        })
+    );
+    // An ordinary event is sent as before, without a type.
+    let planning = google.event(ACCOUNT_ID, "work", &planning).unwrap();
+    assert_eq!(planning.get("eventType"), None);
 }
 
 #[test]
@@ -1090,6 +1177,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             location: "Lisbon".into(),
             show: Show::Free,
             visibility: Visibility::Public,
+            kind: Kind::Ordinary,
         },
         recurrence: Vec::new(),
     };

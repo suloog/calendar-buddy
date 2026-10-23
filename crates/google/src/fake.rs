@@ -736,7 +736,7 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
 }
 
 /// The Calendar API's `events.insert`: the event is kept as a change, with an ID Google gives,
-/// in a calendar the account can change.
+/// in a calendar the account can change; out of office and focus time only as Google takes them.
 fn insert_event(
     state: &mut State,
     account: &'static str,
@@ -758,6 +758,23 @@ fn insert_event(
         return refusal;
     }
     let mut event: Value = serde_json::from_str(body).unwrap();
+    // Out of office and focus time: only in a primary calendar, and only timed.
+    if matches!(
+        event["eventType"].as_str(),
+        Some("outOfOffice" | "focusTime")
+    ) {
+        let primary = state.calendars.iter().any(|(owner, entry)| {
+            *owner == account && entry["id"] == id.as_str() && entry["primary"] == true
+        });
+        if !primary || event["start"].get("date").is_some() {
+            return (
+                "400 Bad Request",
+                r#"{"error": {"code": 400, "message": "Invalid event type for this calendar or times.",
+                    "errors": [{"domain": "calendar", "reason": "invalid"}]}}"#
+                    .to_string(),
+            );
+        }
+    }
     event["kind"] = json!("calendar#event");
     event["id"] = json!(format!("created-{}", state.changes + 1));
     event["status"] = json!("confirmed");

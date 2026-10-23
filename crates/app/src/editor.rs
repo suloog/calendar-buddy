@@ -1,10 +1,12 @@
 //! Draws the full event editor (`US-05-02`): the title, start and end, all-day, time zone,
 //! location, description, calendar, busy or free and visibility of a new or an existing event,
 //! and how a new one repeats (`US-05-06`); a series' repetition opens in Google Calendar
-//! (`US-05-07`). What the fields mean and what saving does is `calendar_core::editor`'s.
+//! (`US-05-07`); out of office and focus time where the account allows them (`US-05-08`). What
+//! the fields mean and what saving does is `calendar_core::editor`'s.
 
+use calendar_core::accounts::Entry;
 use calendar_core::editor::{Editor, Ending, Save};
-use calendar_core::model::{Calendar, Show, Visibility};
+use calendar_core::model::{Calendar, Kind, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
 use eframe::egui;
@@ -129,22 +131,40 @@ pub enum Edited {
     OpenSeries,
 }
 
-/// Draws the editor with the calendars it can save to, under their accounts, and why changes are
-/// refused now, if they are; what saving does once the user saves. Until the event can be saved,
-/// the editor says why and **Save** is unavailable. An occurrence of a series offers to change
-/// its repetition in Google Calendar, as the app does not (`DEC-111`).
+/// Draws the editor with the calendars it can save to, under their accounts, the types the
+/// accounts allow (`MOD-05-F24`), and why changes are refused now, if they are; what saving
+/// does once the user saves. Until the event can be saved, the editor says why and **Save** is
+/// unavailable. An occurrence of a series offers to change its repetition in Google Calendar, as
+/// the app does not (`DEC-111`).
 pub fn show(
     ui: &mut egui::Ui,
     editor: &mut Editor,
     regional: &Regional,
     choices: &[(String, Vec<Calendar>)],
+    accounts: &[Entry],
     refused: Option<&str>,
 ) -> Option<Edited> {
     let mut open_series = false;
+    let kinds = editor.kinds(accounts);
     egui::Grid::new("editor")
         .num_columns(2)
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
+            // As Google Calendar, where the calendar allows them; an existing event keeps its own.
+            if !kinds.is_empty() {
+                ui.label("Type");
+                ui.horizontal(|ui| {
+                    for kind in kinds {
+                        ui.selectable_value(&mut editor.kind, kind, kind.label());
+                    }
+                });
+                ui.end_row();
+            } else if editor.kind != Kind::Ordinary {
+                ui.label("Type");
+                ui.label(editor.kind.label());
+                ui.end_row();
+            }
+
             ui.label("Title");
             ui.add(
                 egui::TextEdit::singleline(&mut editor.title)
@@ -226,15 +246,18 @@ pub fn show(
             calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
             ui.end_row();
 
-            ui.label("Show as");
-            egui::ComboBox::from_id_salt("editor-show")
-                .selected_text(show_label(editor.show))
-                .show_ui(ui, |ui| {
-                    for show in [Show::Busy, Show::Free] {
-                        ui.selectable_value(&mut editor.show, show, show_label(show));
-                    }
-                });
-            ui.end_row();
+            // Out of office and focus time are always busy.
+            if !editor.kind.timed_only() {
+                ui.label("Show as");
+                egui::ComboBox::from_id_salt("editor-show")
+                    .selected_text(show_label(editor.show))
+                    .show_ui(ui, |ui| {
+                        for show in [Show::Busy, Show::Free] {
+                            ui.selectable_value(&mut editor.show, show, show_label(show));
+                        }
+                    });
+                ui.end_row();
+            }
 
             ui.label("Visibility");
             egui::ComboBox::from_id_salt("editor-visibility")
@@ -248,6 +271,8 @@ pub fn show(
                 });
             ui.end_row();
         });
+    // The calendar picked may no longer allow the type picked.
+    editor.kinds(accounts);
     let saved = editor.save(regional);
     let problem = refused
         .map(str::to_string)

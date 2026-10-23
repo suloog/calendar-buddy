@@ -640,7 +640,8 @@ impl CalendarApp {
                         self.sync.calendars(),
                         &self.settings,
                     ));
-                    match editor::show(ui, editor, &self.regional, &choices, refused) {
+                    let accounts = self.accounts.list();
+                    match editor::show(ui, editor, &self.regional, &choices, accounts, refused) {
                         Some(editor::Edited::Save(saved)) => save = Some(saved),
                         Some(editor::Edited::OpenSeries) => {
                             open_series = editor.opened.as_ref().map(|(event, _)| event.clone());

@@ -28,8 +28,12 @@ pub struct AllDayBar {
     pub lane: u32,
 }
 
-/// Timed events lasting a full day or longer go to the strip, as in Google Calendar.
+/// Timed events lasting a full day or longer go to the strip, as in Google Calendar; so do
+/// working locations and birthdays, as labels (`MOD-05-U01`).
 pub(crate) fn is_strip_event(event: &Event) -> bool {
+    if event.about.kind.display_only() {
+        return true;
+    }
     match event.timing {
         Timing::AllDay { .. } => true,
         Timing::Timed { start, end, .. } => end - start >= Duration::hours(24),
