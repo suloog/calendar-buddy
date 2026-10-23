@@ -239,3 +239,28 @@
   - One squash commit: one logical change.
 - Manual checks: TC-05-11 (US-05-10#1, US-05-10#2 against real Google)
 - Commits on main: 944ce00 feat(events): list an event's attachments as links [US-05-10]
+
+## US-06-01 — review — 2026-10-23 21:56
+- What: Guests can be added to an event in the editor by address or from suggestions, marked optional, and removed. Suggestions come from Google Contacts and other contacts (People API, with a warm-up), from the directory on Workspace accounts that granted it, and from recent guests of the account's cached events. A new event with guests is created with `sendUpdates=all`. A guest change merges into Google's attendee entries.
+- Decisions: DEC-120, DEC-121, DEC-122
+- Reviews: code 2 round(s), spec 1 round(s); open notes:
+  - No blocking findings.
+  - Fixed after round 1:
+    - one occurrence's answers were copied to the whole series;
+    - attendee fields the app does not model (comment, +1s, rooms) were lost;
+    - a failed warm-up was never retried;
+    - the recent-guests dedup grew with the square of the guest count;
+    - a search was not sent again when the editor's account changed.
+  - Fixed after round 2: guests Google has no entry for are sent unanswered; one case rule for addresses.
+  - Left as NITs:
+    - an unchanged occurrence is patched without If-Match;
+    - the warm-up is retried on every search while the People API keeps refusing;
+    - searches share the sync worker with saves.
+  - Spec review: compliant.
+  - Changes the owner should know of:
+    - the SQLite schema has a new `guests` column, and its VERSION went from 5 to 6, so the cache is fetched again in full;
+    - the calendar-provider interface gained an optional `Provider::people`.
+  - Until `US-06-03`, a guest added to an existing event gets no e-mail.
+  - One squash commit: one logical change.
+- Manual checks: TC-06-13, TC-06-01, TC-06-02, US-06-01#4, US-06-01#5
+- Commits on main: cb8807f feat(guests): invite guests with suggestions [US-06-01]
