@@ -2,7 +2,7 @@
 id: MOD-05
 title: Creating and editing events
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | done
+status: ready # draft | ready | in-progress | done
 depends_on: [MOD-02, MOD-03] # other module IDs
 sources: [SRC-01, SRC-02] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---

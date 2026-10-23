@@ -2,7 +2,7 @@
 id: MOD-01
 title: Google accounts and sign-in
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | done
+status: ready # draft | ready | in-progress | done
 depends_on: [] # other module IDs
 sources: [SRC-01, SRC-02] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---

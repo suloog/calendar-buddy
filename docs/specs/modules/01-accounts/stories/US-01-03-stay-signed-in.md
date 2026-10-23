@@ -3,7 +3,7 @@ id: US-01-03 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-01
 covers: [MOD-01-F04, MOD-01-F05, MOD-01-F06, MOD-01-F11] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: draft # draft | ready | in-progress | review | done | blocked
+status: ready # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-01-01] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-01-01] # story IDs that must be done first
 | **Module** | `[MOD-01]` Google accounts and sign-in — `docs/specs/modules/01-accounts/REQUIREMENTS.md` |
 | **Covers** | `MOD-01-F04`, `F05`, `F06`, `F11` |
 | **Priority** | must |
-| **Status** | draft |
+| **Status** | ready |
 | **Depends on** | blocked by `US-01-01` |
 | **YouTrack** | — |
 | **Open questions** | — |
