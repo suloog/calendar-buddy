@@ -59,3 +59,4 @@
 - **Q37** How are accounts managed in the app? — confirmed as proposed: settings list, confirmation on removal, unverified-app heads-up, 2026-10-23 (`DEC-51`)
 - **Q38** How do account edge cases behave? — confirmed as proposed, 2026-10-23 (`DEC-52`)
 - **Q39** How do the calendar and cache details behave? — confirmed as proposed, 2026-10-23 (`DEC-54`)
+- **Q40** How do the remaining view details behave? — confirmed as proposed, 2026-10-23 (`DEC-56`)

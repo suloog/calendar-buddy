@@ -672,3 +672,27 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q39`
 - **Status:** accepted
+
+## [DEC-55] Start view, agenda range and Google-style shortcuts
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** /og:requirements MOD-03 2026-10-23 (`SRC-03-17`, `SRC-03-18`, `SRC-03-19`)
+- **Affects:** `MOD-03-F05`, `MOD-03-F15`, `MOD-03-F23`, `MOD-03-U04`
+- **Decision:** The app starts in the view used last, on today's date. The agenda lists events from now on, grouped by day, skipping empty days and loading more while scrolling. Keyboard shortcuts follow Google Calendar's keys (views, next and previous period, today, go to date, new event, shortcut list).
+- **Why:** Matches how the product owner works and keeps Google Calendar's muscle memory.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-56] View details
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-20`)
+- **Affects:** `MOD-03-F11`, `MOD-03-F20`, `MOD-03-F21`, `MOD-03-U03`, `MOD-03-U05`, MOD-03 Constraints and edge cases
+- **Decision:** The side panel remembers whether it was collapsed and collapses on its own when the window gets too narrow. A month-view day with too many events shows how many more there are and opens the day's list. All-day and multi-day events sit in a strip above the hours. The day, 3-day and week views open scrolled to the current time. With no calendar visible the view is empty and points to the side panel. An agenda with nothing ahead says there are no upcoming events.
+- **Why:** Confirms the defaults proposed for `Q40`.
+- **Scope effect:** within scope
+- **Resolves:** `Q40`
+- **Status:** accepted
