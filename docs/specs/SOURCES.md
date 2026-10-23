@@ -17,7 +17,7 @@
 | -- | -------- | ---- | ------ | ---- | ---------- | ---- |
 | `SRC-01` | Desktop Calendar — Product Requirements Document, v0.1 (129 items) | informal | internal — product owner (Maciej), draft PRD | 2026-10-22 | — | `sources/01-desktop-calendar-prd.md` |
 | `SRC-02` | Analyst notes — discovery session 2026-10-22 (49 items) | informal | analyst — Maciej (product owner), interview | 2026-10-22 | — | `sources/02-analyst-notes-2026-10-22.md` |
-| `SRC-03` | Analyst notes — discovery session 2026-10-23 (29 items) | informal | analyst — Maciej (product owner), interview | 2026-10-23 | — | `sources/03-analyst-notes-2026-10-23.md` |
+| `SRC-03` | Analyst notes — discovery session 2026-10-23 (38 items) | informal | analyst — Maciej (product owner), interview | 2026-10-23 | — | `sources/03-analyst-notes-2026-10-23.md` |
 
 ## Originals
 

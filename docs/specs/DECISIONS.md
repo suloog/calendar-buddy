@@ -744,3 +744,39 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q42`
 - **Status:** accepted
+
+## [DEC-61] Invitations, declined events, Meet switch and RSVP to series
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** /og:requirements MOD-06 2026-10-23 (`SRC-03-30`…`SRC-03-33`)
+- **Affects:** `MOD-06-F09`, `MOD-06-F10`, `MOD-06-F13`, `MOD-06-F14`, `MOD-06-F17`
+- **Decision:** Invitations awaiting a response are marked in the views and counted in the side panel; the counter opens a list to respond from. Declined events stay visible, struck through and faded. The event editor has an "Add Google Meet" switch that turns on by itself when the first guest is added and is off by default without guests. Responding to an occurrence of a recurring invitation asks whether the answer applies to this event or to all events.
+- **Why:** Keeps invitations from being missed and Meet one step away for meetings with guests.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-62] Guiding principle: a comfortable Linux interface to Google Calendar, not a better Google
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-37`)
+- **Affects:** every module; `MOD-06-NFR-01`, `MOD-06-F22`
+- **Decision:** Where a behaviour is open, the app follows what Google Calendar does rather than inventing its own; the goal is a comfortable Linux interface to Google's features, not to improve on them. Performance targets beyond the project-wide NFRs are tuned later, if needed (`MOD-06-NFR-01` withdrawn). Declined events are visible by default and can be shown or hidden with one easy switch.
+- **Why:** The app is a personal/test tool; matching Google keeps it predictable and the scope small.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-63] Guest and invitation details
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-38`)
+- **Affects:** `MOD-06-U01`…`MOD-06-U04`, MOD-06 Constraints and edge cases, Out of scope
+- **Decision:** The guest list shows responses as icons; the availability preview is one horizontal strip per guest with the chosen time highlighted; an invitation's details open with Accept, Maybe and Decline at the top; an invitation awaiting a response has a dashed outline and a light fill; the guest list collapses beyond 10 guests and the preview shows the first 20; guest permissions are left at Google's defaults.
+- **Why:** Confirms the defaults proposed for `Q43` (the suggestion-speed part withdrawn by `DEC-62`).
+- **Scope effect:** within scope
+- **Resolves:** `Q43`
+- **Status:** accepted
