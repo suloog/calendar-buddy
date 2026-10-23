@@ -548,6 +548,7 @@ impl CalendarApp {
         let mut scope = None;
         let mut cancelled = false;
         let mut open_series = None;
+        let mut attachment = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -655,6 +656,12 @@ impl CalendarApp {
                     ui.label(details.when.describe(&self.regional));
                     if let Some(own) = details.in_own_zone(&self.regional) {
                         ui.label(own);
+                    }
+                    // Each attachment opens in the browser (`MOD-05-F26`).
+                    for listed in &details.attachments {
+                        if ui.link(format!("📎 {}", listed.title)).clicked() {
+                            attachment = Some(listed.url.clone());
+                        }
                     }
                     // The event as last synchronized, which may have come since it was opened.
                     let event = self
@@ -823,6 +830,11 @@ impl CalendarApp {
         }
         if let Some(event) = open_series {
             self.open_series(&event);
+        }
+        if let Some(url) = attachment
+            && let Err(error) = SystemBrowser.open(&url)
+        {
+            (self.not_saved).push(format!("The attachment could not be opened: {error}."));
         }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));

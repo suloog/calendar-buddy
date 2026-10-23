@@ -8,7 +8,7 @@ use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
-use calendar_core::model::{About, Access, Event, Kind, Rgb, Show, Visibility};
+use calendar_core::model::{About, Access, Attachment, Event, Kind, Rgb, Show, Visibility};
 use calendar_core::sync::shown_events;
 use calendar_core::view_model::grid_view;
 use calendar_core::week::Week;
@@ -1010,6 +1010,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             visibility: Visibility::Private,
             kind: Kind::Ordinary,
             color: None,
+            attachments: Vec::new(),
         }
     );
     assert_eq!(
@@ -1181,6 +1182,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             visibility: Visibility::Public,
             kind: Kind::Ordinary,
             color: Some(EventColor::Tomato),
+            attachments: Vec::new(),
         },
         recurrence: Vec::new(),
     };
@@ -1239,6 +1241,53 @@ fn events_come_with_their_own_google_colour() {
     // An ID outside Google's event palette, and no colour at all: the calendar's.
     assert_eq!(color("c12"), None);
     assert_eq!(color("standup"), None);
+}
+
+#[test]
+fn events_come_with_their_attachments_as_links() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("attachments");
+    let mut review = timed(
+        "review",
+        "Review",
+        "2026-11-12T09:00:00+01:00",
+        "2026-11-12T10:00:00+01:00",
+    );
+    review["attachments"] = json!([
+        {
+            "fileUrl": "https://docs.google.com/document/d/1abc/edit",
+            "title": "Q4 numbers",
+            "mimeType": "application/vnd.google-apps.document",
+            "fileId": "1abc"
+        },
+        {"fileUrl": "https://drive.google.com/file/d/2def/view", "title": ""},
+        // Only web pages are opened: nothing else is handed to the desktop's URL handler.
+        {"fileUrl": "file:///etc/passwd", "title": "Local file"},
+        {"title": "No link"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", review);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(
+        cached(&cache, "work", "review").unwrap().about.attachments,
+        [
+            Attachment {
+                title: "Q4 numbers".into(),
+                url: "https://docs.google.com/document/d/1abc/edit".into(),
+            },
+            // Without a name, the link itself.
+            Attachment {
+                title: "https://drive.google.com/file/d/2def/view".into(),
+                url: "https://drive.google.com/file/d/2def/view".into(),
+            },
+        ]
+    );
+    assert_eq!(
+        cached(&cache, "work", "standup").unwrap().about.attachments,
+        []
+    );
 }
 
 #[test]

@@ -188,6 +188,8 @@ pub fn change(
                     visibility: patch.visibility.unwrap_or(about.visibility),
                     kind: about.kind,
                     color: patch.color.unwrap_or(about.color),
+                    // Sent with the rest of the series by copying the event at Google.
+                    attachments: about.attachments.clone(),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
             };
