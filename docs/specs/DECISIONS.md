@@ -780,3 +780,15 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q43`
 - **Status:** accepted
+
+## [DEC-64] Notification details
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-39`)
+- **Affects:** `MOD-07-F16`, `MOD-07-F19`, `MOD-07-F20`, `MOD-07-U01`…`MOD-07-U03`, MOD-07 Constraints and edge cases
+- **Decision:** Declined events produce no notifications. Reminders missed while the app was not running are not shown later; those that fell during sleep are shown on waking if the event has not started. Starting at login is off until turned on. A notification shows title, start time and location. Clicking the tray icon shows or hides the window. Muting is in the calendar's side-panel menu. Without notification buttons, Join and Snooze are reached by opening the event.
+- **Why:** Confirms the defaults proposed for `Q44`, which follow Google's behaviour (`DEC-62`).
+- **Scope effect:** within scope
+- **Resolves:** `Q44`
+- **Status:** accepted
