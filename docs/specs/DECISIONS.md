@@ -720,3 +720,27 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q41`
 - **Status:** accepted
+
+## [DEC-59] Quick entry, default length, delete and undo
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** /og:requirements MOD-05 2026-10-23 (`SRC-03-25`…`SRC-03-28`)
+- **Affects:** `MOD-05-F02`, `MOD-05-F03`, `MOD-05-F09`, `MOD-05-F27`, `MOD-05-F28`
+- **Decision:** Clicking or selecting a range opens a small quick-entry box with the title, the time already filled in and the default calendar; Enter saves, "More options" opens the full editor with what was typed. A new event's default length comes from the user's Google Calendar settings. An event without guests that is not part of a series is deleted without a question, with Undo available for a few seconds. The last change to an event can be undone with Ctrl+Z or the notice's Undo; there is no full history.
+- **Why:** Matches Google Calendar's behaviour the product owner is used to; undo replaces confirmation dialogs.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-60] Event-editing details
+
+- **Date:** 2026-10-23
+- **Decided by:** client (product owner — Maciej)
+- **Source:** requirements review 2026-10-23 (`SRC-03-29`)
+- **Affects:** `MOD-05-F10`, `MOD-05-F29`, `MOD-05-U01`…`MOD-05-U04`, MOD-05 Constraints and edge cases
+- **Decision:** Until the user picks one, the default calendar is the primary calendar of the first connected account. For a series with a complex rule the app offers to open it in Google Calendar to change the rule. Out-of-office events are hatched, focus-time events carry an icon, working-location and birthday events are labels in the all-day strip. Dragging and resizing move in 15-minute steps. A changed event is marked "saving" until Google confirms. The Undo notice stays 5 seconds. Dragging between the all-day strip and the hours converts the event. An event changed elsewhere meanwhile is reloaded and the user applies the change again.
+- **Why:** Confirms the defaults proposed for `Q42`.
+- **Scope effect:** within scope
+- **Resolves:** `Q42`
+- **Status:** accepted
