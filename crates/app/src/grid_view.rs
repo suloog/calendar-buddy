@@ -2,6 +2,7 @@
 //! here; what goes where is decided in `calendar_core::view_model`.
 
 use calendar_core::model::{Event, Rgb, Timing};
+use calendar_core::regional::Regional;
 use calendar_core::view_model::GridViewModel;
 use chrono::Duration;
 use eframe::egui::{
@@ -102,6 +103,7 @@ pub fn apply(events: &mut [Event], change: Change) {
 pub fn show(
     ui: &mut egui::Ui,
     view: &GridViewModel,
+    regional: &Regional,
     state: &mut State,
     opened: &mut Option<usize>,
 ) -> Option<Change> {
@@ -131,7 +133,7 @@ pub fn show(
         painter.text(
             rect.center(),
             Align2::CENTER_CENTER,
-            day.date.format("%a %-d").to_string(),
+            regional.weekday_day(day.date),
             FontId::proportional(14.0),
             visuals.text_color(),
         );
@@ -189,7 +191,7 @@ pub fn show(
                 painter.text(
                     Pos2::new(grid.left() + GUTTER - 6.0, y),
                     Align2::RIGHT_CENTER,
-                    format!("{hour:02}:00"),
+                    regional.hour(hour),
                     FontId::proportional(11.0),
                     weak_text,
                 );
@@ -241,11 +243,7 @@ pub fn show(
             painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
             let ink = text_on(block.color);
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
-            let time = block
-                .start
-                .with_timezone(&view.zone)
-                .format("%H:%M")
-                .to_string();
+            let time = regional.time(block.start.with_timezone(&view.zone).time());
             let label = match &block.title {
                 Some(title) => format!("{title}\n{time}"),
                 None => "Busy".to_string(),

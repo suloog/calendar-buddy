@@ -1,7 +1,7 @@
 //! Getting around: the view on screen, the selected date, next, previous and today, and the mini
 //! calendar. Independent of how any of it is drawn.
 
-use chrono::{Datelike, Duration, Months, NaiveDate};
+use chrono::{Datelike, Duration, Months, NaiveDate, Weekday};
 
 use crate::month::weeks_covering;
 use crate::week::GridView;
@@ -54,15 +54,18 @@ impl View {
 pub struct Navigation {
     pub view: View,
     pub selected: NaiveDate,
+    /// The first day of the week of the system's locale (`DEC-29`).
+    pub week_start: Weekday,
 }
 
 impl Navigation {
     /// The app starts in the view used last, on today's date (`DEC-55`); the first time, in the
     /// week view.
-    pub fn start(last_view: Option<View>, today: NaiveDate) -> Self {
+    pub fn start(last_view: Option<View>, today: NaiveDate, week_start: Weekday) -> Self {
         Navigation {
             view: last_view.unwrap_or(View::Grid(GridView::Week)),
             selected: today,
+            week_start,
         }
     }
 
@@ -84,7 +87,8 @@ impl Navigation {
     fn step(&mut self, by: i32) {
         match self.view {
             View::Grid(grid) => {
-                self.selected += Duration::days(by as i64 * grid.days(self.selected).len() as i64)
+                let days = grid.days(self.selected, self.week_start).len() as i64;
+                self.selected += Duration::days(by as i64 * days)
             }
             View::Month if by > 0 => self.selected = self.selected + Months::new(1),
             View::Month => self.selected = self.selected - Months::new(1),
@@ -109,7 +113,7 @@ impl Navigation {
     pub fn period(&self) -> Option<(NaiveDate, NaiveDate)> {
         match self.view {
             View::Grid(grid) => {
-                let days = grid.days(self.selected);
+                let days = grid.days(self.selected, self.week_start);
                 Some((days[0], days[days.len() - 1]))
             }
             View::Month => {
@@ -131,7 +135,8 @@ pub struct MiniDay {
     pub in_period: bool,
 }
 
-/// The mini calendar: one month in whole weeks, Monday first, marking the period on screen.
+/// The mini calendar: one month in whole weeks from the first day of the week, marking the period
+/// on screen.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiniCalendar {
     /// The first day of the month shown.
@@ -142,7 +147,7 @@ pub struct MiniCalendar {
 /// The mini calendar of the month containing `month`, which the user browses on its own.
 pub fn mini_calendar(month: NaiveDate, navigation: &Navigation, today: NaiveDate) -> MiniCalendar {
     let month = month.with_day(1).expect("day 1 exists");
-    let (first_shown, week_count) = weeks_covering(month);
+    let (first_shown, week_count) = weeks_covering(month, navigation.week_start);
     let period = navigation.period();
     let weeks = (0..week_count)
         .map(|week| {
@@ -167,7 +172,11 @@ mod tests {
 
     /// `TC-03-08`: the clock says Wednesday 11 November 2026; the week of 9–15 November is shown.
     fn tc_03_08_start() -> Navigation {
-        Navigation::start(Some(View::Grid(GridView::Week)), d(2026, 11, 11))
+        Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 11),
+            Weekday::Mon,
+        )
     }
 
     #[test]
@@ -202,14 +211,14 @@ mod tests {
         nav.next();
         nav.next();
         assert_eq!(nav.period(), Some((d(2026, 11, 17), d(2026, 11, 19))));
-        let restarted = Navigation::start(Some(nav.view), d(2026, 11, 11));
+        let restarted = Navigation::start(Some(nav.view), d(2026, 11, 11), Weekday::Mon);
         assert_eq!(restarted.view, View::Grid(GridView::ThreeDays));
         assert_eq!(restarted.period(), Some((d(2026, 11, 11), d(2026, 11, 13))));
     }
 
     #[test]
     fn the_first_start_is_the_week_view_on_today() {
-        let nav = Navigation::start(None, d(2026, 11, 11));
+        let nav = Navigation::start(None, d(2026, 11, 11), Weekday::Mon);
         assert_eq!(nav.view, View::Grid(GridView::Week));
         assert_eq!(nav.selected, d(2026, 11, 11));
     }
@@ -228,7 +237,7 @@ mod tests {
             (View::Agenda, d(2026, 11, 11), d(2026, 11, 11)),
         ];
         for (view, after_next, after_previous) in cases {
-            let mut nav = Navigation::start(Some(view), d(2026, 11, 11));
+            let mut nav = Navigation::start(Some(view), d(2026, 11, 11), Weekday::Mon);
             nav.next();
             assert_eq!(nav.selected, after_next, "{view:?} next");
             nav.previous();
@@ -239,7 +248,7 @@ mod tests {
 
     #[test]
     fn a_month_ahead_of_the_31st_is_the_last_day_of_a_shorter_month() {
-        let mut nav = Navigation::start(Some(View::Month), d(2027, 1, 31));
+        let mut nav = Navigation::start(Some(View::Month), d(2027, 1, 31), Weekday::Mon);
         nav.next();
         assert_eq!(nav.selected, d(2027, 2, 28));
     }
@@ -251,7 +260,7 @@ mod tests {
         assert_eq!(nav.view, View::Grid(GridView::Week));
         assert_eq!(nav.period(), Some((d(2027, 3, 1), d(2027, 3, 7))));
 
-        let mut agenda = Navigation::start(Some(View::Agenda), d(2026, 11, 11));
+        let mut agenda = Navigation::start(Some(View::Agenda), d(2026, 11, 11), Weekday::Mon);
         agenda.go_to(d(2026, 12, 24));
         assert_eq!(agenda.view, View::Grid(GridView::Day));
         assert_eq!(agenda.period(), Some((d(2026, 12, 24), d(2026, 12, 24))));
@@ -292,7 +301,11 @@ mod tests {
     #[test]
     fn the_mini_calendar_marks_the_part_of_the_period_in_the_month_it_shows() {
         // The week of 30 November to 6 December, seen from December's mini calendar.
-        let nav = Navigation::start(Some(View::Grid(GridView::Week)), d(2026, 12, 2));
+        let nav = Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 12, 2),
+            Weekday::Mon,
+        );
         let mini = mini_calendar(d(2026, 12, 1), &nav, d(2026, 11, 11));
         assert_eq!(
             marked(&mini),
@@ -301,11 +314,29 @@ mod tests {
                 .chain((1..=6).map(|day| d(2026, 12, day)))
                 .collect::<Vec<_>>()
         );
-        let month = Navigation::start(Some(View::Month), d(2026, 11, 11));
+        let month = Navigation::start(Some(View::Month), d(2026, 11, 11), Weekday::Mon);
         let mini = mini_calendar(d(2026, 11, 1), &month, d(2026, 11, 11));
         assert_eq!(marked(&mini).len(), 30);
-        let agenda = Navigation::start(Some(View::Agenda), d(2026, 11, 11));
+        let agenda = Navigation::start(Some(View::Agenda), d(2026, 11, 11), Weekday::Mon);
         let mini = mini_calendar(d(2026, 11, 1), &agenda, d(2026, 11, 11));
         assert!(marked(&mini).is_empty());
+    }
+
+    #[test]
+    fn with_a_sunday_first_locale_the_week_and_the_mini_calendar_start_on_sunday() {
+        let nav = Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 11),
+            Weekday::Sun,
+        );
+        assert_eq!(nav.period(), Some((d(2026, 11, 8), d(2026, 11, 14))));
+        let mini = mini_calendar(d(2026, 11, 11), &nav, d(2026, 11, 11));
+        // 1 November 2026 is a Sunday: five weeks, 1 November to 5 December.
+        assert_eq!(mini.weeks.len(), 5);
+        assert_eq!(mini.weeks[0][0].date, d(2026, 11, 1));
+        assert_eq!(
+            marked(&mini),
+            (8..=14).map(|day| d(2026, 11, day)).collect::<Vec<_>>()
+        );
     }
 }

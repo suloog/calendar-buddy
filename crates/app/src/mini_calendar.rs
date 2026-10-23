@@ -2,6 +2,7 @@
 //! `calendar_core::navigation`.
 
 use calendar_core::navigation::MiniCalendar;
+use calendar_core::regional::Regional;
 use chrono::{Months, NaiveDate};
 use eframe::egui::{self, RichText};
 
@@ -15,10 +16,10 @@ pub enum Action {
     GoTo(NaiveDate),
 }
 
-pub fn show(ui: &mut egui::Ui, mini: &MiniCalendar) -> Option<Action> {
+pub fn show(ui: &mut egui::Ui, mini: &MiniCalendar, regional: &Regional) -> Option<Action> {
     let mut action = None;
     ui.horizontal(|ui| {
-        ui.strong(mini.month.format("%B %Y").to_string());
+        ui.strong(regional.month_year(mini.month));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.small_button("›").clicked() {
                 action = Some(Action::Browse(mini.month + Months::new(1)));
@@ -31,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, mini: &MiniCalendar) -> Option<Action> {
     egui::Grid::new("mini-calendar")
         .spacing([0.0, 0.0])
         .show(ui, |ui| {
-            for weekday in ["M", "T", "W", "T", "F", "S", "S"] {
+            for weekday in regional.weekday_letters() {
                 ui.add_sized(
                     DAY_SIZE,
                     egui::Label::new(RichText::new(weekday).small().weak()),

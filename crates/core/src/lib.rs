@@ -7,6 +7,7 @@ pub mod layout;
 pub mod model;
 pub mod month;
 pub mod navigation;
+pub mod regional;
 pub mod settings;
 pub mod shortcuts;
 pub mod view_model;

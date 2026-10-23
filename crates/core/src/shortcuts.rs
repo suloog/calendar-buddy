@@ -66,11 +66,6 @@ impl Navigation {
     }
 }
 
-/// The date typed after `g`, as `YYYY-MM-DD` (`DEC-73`).
-pub fn parse_date(text: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(text.trim(), "%Y-%m-%d").ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,7 +73,11 @@ mod tests {
 
     /// `TC-03-11`: the clock says Wednesday 11 November 2026; the week of 9–15 November is shown.
     fn tc_03_11_start() -> Navigation {
-        Navigation::start(Some(View::Grid(GridView::Week)), d(2026, 11, 11))
+        Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 11),
+            chrono::Weekday::Mon,
+        )
     }
 
     fn press(nav: &mut Navigation, key: char) -> Command {
@@ -148,12 +147,5 @@ mod tests {
         for key in ['/', 'D', 'q', ' ', '1'] {
             assert_eq!(command(key), None, "{key:?}");
         }
-    }
-
-    #[test]
-    fn a_typed_date_is_read_as_year_month_day() {
-        assert_eq!(parse_date(" 2027-03-04 "), Some(d(2027, 3, 4)));
-        assert_eq!(parse_date("2027-02-30"), None);
-        assert_eq!(parse_date("tomorrow"), None);
     }
 }

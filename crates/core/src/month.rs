@@ -1,7 +1,7 @@
 //! What the month view shows, independent of how it is drawn: the weeks covering the month, each
 //! day with its events, and how many of them fit.
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc, Weekday};
 use chrono_tz::Tz;
 
 use crate::layout::{is_strip_event, strip_dates};
@@ -48,7 +48,7 @@ pub struct MonthViewModel {
     pub zone: Tz,
     /// The first day of the month shown.
     pub month: NaiveDate,
-    /// Whole weeks covering the month, Monday first.
+    /// Whole weeks covering the month, from the first day of the week.
     pub weeks: Vec<[MonthDay; 7]>,
 }
 
@@ -66,12 +66,13 @@ fn timed_start(event: &Event) -> Option<DateTime<Utc>> {
     }
 }
 
-/// The whole weeks covering the month that starts on `month`, Monday first: the first day shown
-/// and how many weeks there are (four to six).
-pub fn weeks_covering(month: NaiveDate) -> (NaiveDate, usize) {
+/// The whole weeks covering the month that starts on `month`, from `week_start`: the first day
+/// shown and how many weeks there are (four to six).
+pub fn weeks_covering(month: NaiveDate, week_start: Weekday) -> (NaiveDate, usize) {
     let last = month + chrono::Months::new(1) - Duration::days(1);
-    let first_shown = Week::containing(month).first;
-    let week_count = ((Week::containing(last).first - first_shown).num_days() / 7 + 1) as usize;
+    let first_shown = Week::containing(month, week_start).first;
+    let last_week = Week::containing(last, week_start).first;
+    let week_count = ((last_week - first_shown).num_days() / 7 + 1) as usize;
     (first_shown, week_count)
 }
 
@@ -81,9 +82,10 @@ pub fn month_view(
     selected: NaiveDate,
     zone: Tz,
     now: DateTime<Utc>,
+    week_start: Weekday,
 ) -> MonthViewModel {
     let month = selected.with_day(1).expect("day 1 exists");
-    let (first_shown, week_count) = weeks_covering(month);
+    let (first_shown, week_count) = weeks_covering(month, week_start);
     let last_shown = first_shown + Duration::days(7 * week_count as i64 - 1);
 
     let mut per_day: Vec<Vec<usize>> = vec![Vec::new(); 7 * week_count];
@@ -182,7 +184,13 @@ mod tests {
 
     #[test]
     fn tc_03_06_month_view_shows_each_day_of_november_with_its_events() {
-        let vm = month_view(&tc_03_06_events(), d(2026, 11, 11), Warsaw, clock());
+        let vm = month_view(
+            &tc_03_06_events(),
+            d(2026, 11, 11),
+            Warsaw,
+            clock(),
+            Weekday::Mon,
+        );
         assert_eq!(vm.month, d(2026, 11, 1));
         // 1 November 2026 is a Sunday, 30 November a Monday: six weeks, 26 Oct to 6 Dec.
         assert_eq!(vm.weeks.len(), 6);
@@ -198,7 +206,13 @@ mod tests {
 
     #[test]
     fn tc_03_06_a_full_day_shows_what_fits_and_how_many_more() {
-        let vm = month_view(&tc_03_06_events(), d(2026, 11, 11), Warsaw, clock());
+        let vm = month_view(
+            &tc_03_06_events(),
+            d(2026, 11, 11),
+            Warsaw,
+            clock(),
+            Weekday::Mon,
+        );
         let monday = vm.day(d(2026, 11, 16)).unwrap();
         // Four rows fit: three events and "+5 more".
         assert_eq!(monday.fit(4), (3, 5));
@@ -210,7 +224,13 @@ mod tests {
 
     #[test]
     fn tc_03_06_choosing_more_lists_all_eight_events_of_the_day() {
-        let vm = month_view(&tc_03_06_events(), d(2026, 11, 11), Warsaw, clock());
+        let vm = month_view(
+            &tc_03_06_events(),
+            d(2026, 11, 11),
+            Warsaw,
+            clock(),
+            Weekday::Mon,
+        );
         let monday = vm.day(d(2026, 11, 16)).unwrap();
         let expected: Vec<String> = (8..16).map(|h| format!("Monday {h}")).collect();
         assert_eq!(titles(monday), expected);
@@ -220,7 +240,7 @@ mod tests {
     fn today_is_highlighted_and_free_busy_events_are_busy_without_details() {
         let mut busy = timed("Secret", d(2026, 11, 12), (13, 0), (14, 0));
         busy.busy_only = true;
-        let vm = month_view(&[busy], d(2026, 11, 20), Warsaw, clock());
+        let vm = month_view(&[busy], d(2026, 11, 20), Warsaw, clock(), Weekday::Mon);
         let today: Vec<NaiveDate> = vm
             .weeks
             .iter()
@@ -241,7 +261,7 @@ mod tests {
             all_day("Trip", d(2026, 11, 12), 3),
             timed("Late", d(2026, 11, 13), (23, 0), (25, 0)),
         ];
-        let vm = month_view(&events, d(2026, 11, 1), Warsaw, clock());
+        let vm = month_view(&events, d(2026, 11, 1), Warsaw, clock(), Weekday::Mon);
         assert_eq!(titles(vm.day(d(2026, 11, 12)).unwrap()), vec!["Trip"]);
         assert_eq!(
             titles(vm.day(d(2026, 11, 13)).unwrap()),
@@ -258,9 +278,18 @@ mod tests {
     #[test]
     fn a_month_starting_on_monday_has_no_days_of_the_previous_month() {
         // February 2027 starts on a Monday and has four whole weeks.
-        let vm = month_view(&[], d(2027, 2, 14), Warsaw, clock());
+        let vm = month_view(&[], d(2027, 2, 14), Warsaw, clock(), Weekday::Mon);
         assert_eq!(vm.weeks.len(), 4);
         assert!(vm.weeks.iter().flatten().all(|d| d.in_month));
         assert!(vm.weeks.iter().flatten().all(|d| !d.is_today));
+    }
+
+    #[test]
+    fn with_a_sunday_first_locale_the_month_weeks_start_on_sunday() {
+        let vm = month_view(&[], d(2026, 11, 11), Warsaw, clock(), Weekday::Sun);
+        // 1 November 2026 is a Sunday, 30 November a Monday: five weeks, 1 Nov to 5 Dec.
+        assert_eq!(vm.weeks.len(), 5);
+        assert_eq!(vm.weeks[0][0].date, d(2026, 11, 1));
+        assert_eq!(vm.weeks[4][6].date, d(2026, 12, 5));
     }
 }
