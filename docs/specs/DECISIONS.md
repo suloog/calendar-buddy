@@ -936,3 +936,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-77] The Google OAuth client is read from a file in the user's config directory
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** setup before the MOD-01 delivery run
+- **Affects:** `MOD-01-F01`, MOD-01 Constraints and edge cases, MOD-01 Technical notes, `US-01-01`
+- **Decision:** The app reads its Google OAuth client (type Desktop app, in the owner's GCP project — `DEC-10`) from `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json` (default `~/.config/calendar-buddy/google-oauth-client.json`), exactly as downloaded from Google Cloud Console: `{"installed": {"client_id", "client_secret", "redirect_uris", …}}`. The file lives outside the repository; it is neither committed, nor an environment-file entry, nor built into the binary. When it is missing or unreadable, connecting an account stops and the app says which file to put where. Automated tests point the app at a test client file and the fake Google, never at the real one.
+- **Why:** An app installed from a .deb has no environment file to read; Google treats a desktop client's secret as not confidential, but it has no place in git; one file the owner drops in once.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

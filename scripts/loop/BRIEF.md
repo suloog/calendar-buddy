@@ -29,6 +29,13 @@ Stop at once with `RESULT: failed <ID> <reason>` and change nothing if:
 2. Load the `og:principles` skill and follow it.
 3. Set the story to `in-progress`, both in its frontmatter and in its `docs/specs/BACKLOG.md` row.
 4. Implement. Keep to the constitution, and write tests first where it says so (recurrence, time zones, sync, Google mapping). The `auto` test cases become automated tests in `cargo test`, and each test's name carries the test case's ID (`tc_02_04_…`).
+   - **Tests run unattended on the owner's desktop.** No test may touch the real world:
+     - not the real system secret store (it would pop a KWallet prompt and hang the run);
+     - not Google's real servers or the owner's OAuth client file in `~/.config/calendar-buddy/`;
+     - not the system browser, and not desktop notifications.
+
+     Put each of these behind the platform interfaces from the constitution, and use fakes in tests.
+   - Do not run the app itself with real accounts. Whatever needs the real thing goes to `MANUAL-CHECKS.md`.
 5. **Decide alone.** Where the spec does not settle something, choose the simplest option consistent with the spec, the constitution and the code. Prefer what Google Calendar does (`DEC-62`).
    - Record every such choice in `docs/specs/DECISIONS.md` as the next `DEC-nn`, taking the highest number in the file plus one, in the file's format. Use:
      - Decided by: `delivery loop (Claude)`

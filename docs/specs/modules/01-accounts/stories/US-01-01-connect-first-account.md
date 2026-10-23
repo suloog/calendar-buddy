@@ -55,6 +55,7 @@ The first-run path: the welcome screen, signing in to one Google account in the 
 - The user unticks calendar access on the consent screen → the account is not connected, and the app says why.
 - The user unticks contacts or directory access → the account is connected, and the features needing them are shown as unavailable for that account.
 - A Workspace administrator blocks third-party apps, or Google's 100-user cap is reached → the app shows Google's reason and that the account was not connected.
+- The Google OAuth client file is missing or unreadable → connecting stops, and the app says which file to put where (`DEC-77`).
 
 ## Out of scope / what not to worry about
 
@@ -65,4 +66,4 @@ The first-run path: the welcome screen, signing in to one Google account in the 
 ## Technical notes
 
 - See *Technical notes* of `MOD-01`: OAuth installed-app flow with PKCE, loopback redirect, scopes, tokens in the secret store (`NFR-04`, `DEC-47`, `DEC-10`).
-- Decisions: `DEC-19` (first run), `DEC-51` (unverified-app heads-up), `DEC-52` (partial consent).
+- Decisions: `DEC-19` (first run), `DEC-51` (unverified-app heads-up), `DEC-52` (partial consent), `DEC-77` (where the OAuth client file lives).
