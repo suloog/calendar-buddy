@@ -28,6 +28,9 @@ pub struct Event {
     pub timing: Timing,
     /// Event of a calendar shared as free/busy only: no details may be shown.
     pub busy_only: bool,
+    /// Event of a calendar the account cannot change: read-only, subscribed or free/busy
+    /// (`MOD-02-U01`).
+    pub read_only: bool,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).
@@ -38,6 +41,13 @@ pub enum Access {
     Reader,
     /// Only busy blocks, without event details.
     FreeBusyReader,
+}
+
+impl Access {
+    /// Whether the account may change the calendar's events.
+    pub fn can_edit(self) -> bool {
+        matches!(self, Access::Owner | Access::Writer)
+    }
 }
 
 /// A calendar an account can access: its own, shared with it or subscribed (`MOD-02-F01`).

@@ -8,7 +8,7 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{color, openable, text_on};
+use crate::grid_view::{color, event_label, openable, text_on};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -21,13 +21,13 @@ pub struct State {
 }
 
 fn label(item: &MonthItem, view: &MonthViewModel, regional: &Regional) -> String {
-    let title = item.title.as_deref().unwrap_or("Busy");
+    let title = event_label(item.title.as_deref(), item.read_only);
     match item.start {
         Some(start) => format!(
             "{} {title}",
             regional.time(start.with_timezone(&view.zone).time())
         ),
-        None => title.to_string(),
+        None => title,
     }
 }
 

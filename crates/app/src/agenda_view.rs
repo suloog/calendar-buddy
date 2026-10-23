@@ -5,7 +5,7 @@ use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use calendar_core::regional::Regional;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
-use crate::grid_view::{color, openable};
+use crate::grid_view::{color, event_label, openable};
 
 const DATE_WIDTH: f32 = 96.0;
 const TIME_WIDTH: f32 = 140.0;
@@ -112,7 +112,7 @@ pub fn show(
                 painter.text(
                     Pos2::new(x + 20.0 + TIME_WIDTH, y),
                     Align2::LEFT_CENTER,
-                    item.title.as_deref().unwrap_or("Busy"),
+                    event_label(item.title.as_deref(), item.read_only),
                     FontId::proportional(13.0),
                     visuals.text_color(),
                 );

@@ -101,6 +101,7 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-06#2` | A quick toggle next to a calendar hides or shows its events; the ca… | `TC-03-09` | auto | — |
 | `US-03-06#3` | The panel can be collapsed and expanded, and the app remembers whic… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-06#4` | When the window becomes too narrow, the panel collapses on its own. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-06#5` | A calendar the account cannot change (read-only, subscribed or free/… | — | — | not tested yet (added by `DEC-89`) |
 | `US-03-07#1` | In the settings, the user can disable a calendar and enable it again. | `TC-03-10` | auto | — |
 | `US-03-07#2` | A disabled calendar does not appear in the side panel, in the calen… | `TC-03-10` | auto | — |
 | `US-03-08#1` | `d`, `x` (3 days), `w`, `m` and `a` switch to the day, 3-day, week,… | `TC-03-11` | auto | — |

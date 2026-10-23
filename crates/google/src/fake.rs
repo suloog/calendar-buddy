@@ -162,6 +162,15 @@ impl FakeGoogle {
             .push((account, calendar.to_string(), event));
     }
 
+    /// The account's access to the calendar changes, as its owner shares it differently.
+    pub fn set_access_role(&self, calendar: &str, role: &str) {
+        for (_, entry) in &mut self.state.lock().unwrap().calendars {
+            if entry["id"] == calendar {
+                entry["accessRole"] = role.into();
+            }
+        }
+    }
+
     /// Google refuses to send the calendar's events.
     pub fn fail_calendar(&self, calendar: &str) {
         self.state

@@ -1080,3 +1080,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-89] How events that cannot be changed are marked
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-02
+- **Affects:** `US-02-02`, `MOD-02-F19`, `MOD-02-F20`, `MOD-02-U01`, `DEC-22`, `DEC-86`
+- **Decision:** An event is read-only when Google gives the account `reader` or `freeBusyReader` access to its calendar (`owner` and `writer` may change it); the access is taken from the calendar list at every synchronization, so a calendar whose access dropped is marked from the next one on. Read-only events look like the others, in their calendar's colour, with a lock (🔒) before the title (or before "Busy" for a free/busy event) in the day, 3-day, week, month and agenda views; opening one shows "🔒 Read-only: this event can't be changed" under its time. A free/busy event shows "Busy" and nothing of its own, also when opened. Calendars get no mark of their own until a view lists them: the calendars' half of `MOD-02-U01` moves to the side panel (`US-03-06`, which now covers it with its own criterion).
+- **Why:** `MOD-02-U01` asks for a visible mark; Google Calendar shows such events in their colour and only leaves out the edit controls when one is opened, so the app keeps the events as Google draws them and adds the smallest mark that is visible in every view (`DEC-62`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

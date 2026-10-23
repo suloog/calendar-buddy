@@ -52,7 +52,7 @@
 
 | Requirement | Covered by |
 | ----------- | ---------- |
-| `MOD-02-U01` | `US-02-02` |
+| `MOD-02-U01` | `US-02-02` (events), `US-03-06` (calendars, `DEC-89`) |
 | `MOD-02-U02` | `US-02-05` |
 | `MOD-02-U03` | `US-02-06` |
 | `MOD-02-U04` | `US-02-07` |

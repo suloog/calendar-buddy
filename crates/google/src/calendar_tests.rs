@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use calendar_core::cache::CachedCalendar;
+use calendar_core::details::event_details;
 use calendar_core::fixtures::d;
 use calendar_core::model::{Access, Event, Rgb};
 use calendar_core::sync::shown_events;
@@ -310,6 +311,114 @@ fn tc_02_02_other_zones_daylight_saving_and_changed_occurrences_show_at_the_righ
             row("Weekly", "2026-11-30 09:00", "2026-11-30 10:00"),
         ]
     );
+}
+
+#[test]
+fn tc_02_03_read_only_events_are_marked_and_free_busy_ones_are_busy_without_details() {
+    let google = FakeGoogle::start(None, &[]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("tc-02-03");
+    // An own calendar, a colleague's shared read-only and a room shared as free/busy only.
+    let calendars = [
+        ("owner@example.com", "Owner", "#9fe1e7", "owner", "Standup"),
+        (
+            "colleague@example.com",
+            "Colleague",
+            "#16a765",
+            "reader",
+            "1:1",
+        ),
+        (
+            "room@example.com",
+            "Room",
+            "#f83a22",
+            "freeBusyReader",
+            "Board",
+        ),
+    ];
+    for (n, (id, name, color, role, title)) in calendars.into_iter().enumerate() {
+        google.add_calendar(ACCOUNT_ID, entry(id, name, color, role));
+        let day = 9 + n;
+        google.add_event(
+            ACCOUNT_ID,
+            id,
+            timed(
+                &format!("event{n}"),
+                title,
+                &format!("2026-11-{day:02}T10:00:00+01:00"),
+                &format!("2026-11-{day:02}T11:00:00+01:00"),
+            ),
+        );
+    }
+    signed_in(&google, &store, ACCOUNT_ID);
+    let mut cache = Cache::in_memory();
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(synced, Ok(()));
+    let events = shown_events(&cache.calendars().unwrap(), window());
+    let days = Week::containing(today(), Weekday::Mon).days();
+    let now = Utc.with_ymd_and_hms(2026, 11, 11, 12, 0, 0).unwrap();
+    let mut blocks = grid_view(&events, &days, Warsaw, now).blocks;
+    blocks.sort_by_key(|b| b.start);
+    let shown: Vec<(Option<&str>, Rgb, bool)> = blocks
+        .iter()
+        .map(|b| (b.title.as_deref(), b.color, b.read_only))
+        .collect();
+
+    // 1. The colleague's event is shown like the others, and marked as not editable.
+    // 2. The room's event is a "busy" block, without its title, also when it is opened.
+    assert_eq!(
+        shown,
+        [
+            (Some("Standup"), Rgb(0x9f, 0xe1, 0xe7), false),
+            (Some("1:1"), Rgb(0x16, 0xa7, 0x65), true),
+            (None, Rgb(0xf8, 0x3a, 0x22), true),
+        ]
+    );
+    let opened = |id: &str| event_details(events.iter().find(|e| e.id == id).unwrap(), Warsaw);
+    assert!(!opened("event0").read_only);
+    assert!(opened("event1").read_only);
+    assert_eq!(opened("event1").title.as_deref(), Some("1:1"));
+    assert!(opened("event2").read_only);
+    assert_eq!(opened("event2").title, None);
+}
+
+#[test]
+fn a_calendar_that_became_read_only_is_marked_so_at_the_next_synchronization() {
+    let google = FakeGoogle::start(None, &[]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("access-dropped");
+    google.add_calendar(ACCOUNT_ID, entry("team", "Team", "#16a765", "writer"));
+    google.add_event(
+        ACCOUNT_ID,
+        "team",
+        timed(
+            "planning",
+            "Planning",
+            "2026-11-10T10:00:00+01:00",
+            "2026-11-10T11:00:00+01:00",
+        ),
+    );
+    signed_in(&google, &store, ACCOUNT_ID);
+    let mut cache = Cache::in_memory();
+    let read_only = |cache: &Cache| {
+        shown_events(&cache.calendars().unwrap(), window())
+            .iter()
+            .map(|e| e.read_only)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    assert_eq!(read_only(&cache), [false]);
+    google.set_access_role("team", "reader");
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(read_only(&cache), [true]);
 }
 
 #[test]

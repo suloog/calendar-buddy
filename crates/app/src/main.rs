@@ -344,6 +344,9 @@ impl CalendarApp {
                     if let Some(own) = details.in_own_zone(&self.regional) {
                         ui.label(own);
                     }
+                    if details.read_only {
+                        ui.label(grid_view::READ_ONLY);
+                    }
                 }
                 Dialog::Settings => {
                     ui.heading("Accounts");

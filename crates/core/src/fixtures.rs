@@ -46,6 +46,7 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
             zone,
         },
         busy_only: false,
+        read_only: false,
     }
 }
 
@@ -60,6 +61,7 @@ pub fn all_day(id: &str, start: NaiveDate, days: i64) -> Event {
             end_exclusive: start + Duration::days(days),
         },
         busy_only: false,
+        read_only: false,
     }
 }
 
@@ -74,6 +76,7 @@ pub fn all_day_pair() -> Vec<Event> {
 pub fn tc_03_01_week() -> Vec<Event> {
     let mut busy = timed("Room booking", d(2026, 11, 13), (13, 0), (14, 0));
     busy.busy_only = true;
+    busy.read_only = true;
     busy.calendar_id = "room".to_string();
     vec![
         timed("Standup", d(2026, 11, 9), (9, 0), (10, 0)),
