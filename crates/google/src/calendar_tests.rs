@@ -5,8 +5,9 @@ use super::*;
 use calendar_core::cache::CachedCalendar;
 use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
+use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
-use calendar_core::model::{Access, Event, Rgb};
+use calendar_core::model::{About, Access, Event, Rgb, Show, Visibility};
 use calendar_core::sync::shown_events;
 use calendar_core::view_model::grid_view;
 use calendar_core::week::Week;
@@ -873,15 +874,18 @@ fn googles_rate_limits_are_told_from_other_errors() {
 fn planning() -> NewEvent {
     NewEvent {
         title: "Planning".into(),
-        start: Warsaw
-            .with_ymd_and_hms(2026, 11, 12, 10, 0, 0)
-            .unwrap()
-            .with_timezone(&Utc),
-        end: Warsaw
-            .with_ymd_and_hms(2026, 11, 12, 11, 30, 0)
-            .unwrap()
-            .with_timezone(&Utc),
-        zone: Warsaw,
+        timing: Timing::Timed {
+            start: Warsaw
+                .with_ymd_and_hms(2026, 11, 12, 10, 0, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+            end: Warsaw
+                .with_ymd_and_hms(2026, 11, 12, 11, 30, 0)
+                .unwrap()
+                .with_timezone(&Utc),
+            zone: Warsaw,
+        },
+        about: About::default(),
     }
 }
 
@@ -961,4 +965,231 @@ fn the_default_length_of_new_events_comes_from_the_accounts_google_calendar_sett
             .requests()
             .contains(&"GET /calendar/v3/users/me/settings/defaultEventLength".to_string())
     );
+}
+
+/// The cached event of the calendar with the ID.
+fn cached(cache: &Cache, calendar: &str, id: &str) -> Option<SyncedEvent> {
+    cache
+        .calendars()
+        .unwrap()
+        .into_iter()
+        .filter(|cached| cached.calendar.id == calendar)
+        .flat_map(|cached| cached.events)
+        .find(|event| event.id == id)
+}
+
+#[test]
+fn events_come_with_their_description_location_busy_or_free_visibility_and_version() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("about");
+    let mut review = timed(
+        "review",
+        "Review",
+        "2026-11-11T09:00:00+01:00",
+        "2026-11-11T10:00:00+01:00",
+    );
+    review["description"] = json!("Q4 numbers");
+    review["location"] = json!("Room 2");
+    review["transparency"] = json!("transparent");
+    review["visibility"] = json!("confidential");
+    google.add_event(ACCOUNT_ID, "work", review);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let review = cached(&cache, "work", "review").unwrap();
+    assert_eq!(
+        review.about,
+        About {
+            description: "Q4 numbers".into(),
+            location: "Room 2".into(),
+            show: Show::Free,
+            // Google keeps "confidential" for compatibility; it means private.
+            visibility: Visibility::Private,
+        }
+    );
+    assert_eq!(
+        review.etag,
+        google.event(ACCOUNT_ID, "work", "review").unwrap()["etag"]
+    );
+    let standup = cached(&cache, "work", "standup").unwrap();
+    assert_eq!(standup.about, About::default());
+}
+
+#[test]
+fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
+    let (google, store, dir, client_file, cache) = synchronized_once("create-all-day");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let trip = NewEvent {
+        title: "Trip".into(),
+        timing: Timing::AllDay {
+            start: d(2026, 11, 12),
+            end_exclusive: d(2026, 11, 15),
+        },
+        about: About {
+            description: "Flights".into(),
+            location: "Lisbon".into(),
+            show: Show::Free,
+            visibility: Visibility::Public,
+        },
+    };
+
+    let id = session.create(&work, &trip).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let sent = google.event(ACCOUNT_ID, "work", &id).unwrap();
+    assert_eq!(sent["summary"], "Trip");
+    assert_eq!(sent["start"], json!({"date": "2026-11-12"}));
+    assert_eq!(sent["end"], json!({"date": "2026-11-15"}));
+    assert_eq!(sent["description"], "Flights");
+    assert_eq!(sent["location"], "Lisbon");
+    assert_eq!(sent["transparency"], "transparent");
+    assert_eq!(sent["visibility"], "public");
+}
+
+#[test]
+fn a_change_is_sent_as_a_patch_of_what_changed_against_the_version_opened() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("update");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let opened = cached(&cache, "work", "review").unwrap();
+    let patch = Patch {
+        title: Some("Q4 review".into()),
+        location: Some("Room 2".into()),
+        show: Some(Show::Free),
+        visibility: Some(Visibility::Private),
+        // Made an all-day event: Google's times give way to dates.
+        timing: Some(Timing::AllDay {
+            start: d(2026, 11, 12),
+            end_exclusive: d(2026, 11, 13),
+        }),
+        ..Patch::default()
+    };
+
+    let etag = session
+        .update(&work, "review", &opened.etag, &patch)
+        .unwrap();
+
+    let changed = google.event(ACCOUNT_ID, "work", "review").unwrap();
+    assert_eq!(changed["etag"], etag);
+    assert_ne!(etag, opened.etag);
+    assert_eq!(changed["summary"], "Q4 review");
+    assert_eq!(changed["location"], "Room 2");
+    assert_eq!(changed["transparency"], "transparent");
+    assert_eq!(changed["visibility"], "private");
+    assert_eq!(changed["start"], json!({"date": "2026-11-12"}));
+    assert_eq!(changed["end"], json!({"date": "2026-11-13"}));
+    // What was not changed is not sent.
+    assert_eq!(
+        google.patched().last().unwrap().1,
+        json!({
+            "summary": "Q4 review",
+            "location": "Room 2",
+            "transparency": "transparent",
+            "visibility": "private",
+            "start": {"date": "2026-11-12", "dateTime": null, "timeZone": null},
+            "end": {"date": "2026-11-13", "dateTime": null, "timeZone": null},
+        })
+    );
+    assert_eq!(google.patched().last().unwrap().0, opened.etag);
+    assert!(
+        google
+            .requests()
+            .contains(&"PATCH /calendar/v3/calendars/work/events/review".to_string())
+    );
+
+    // And back to a timed event, in another zone.
+    let patch = Patch {
+        timing: Some(Timing::Timed {
+            start: Utc.with_ymd_and_hms(2026, 11, 12, 14, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2026, 11, 12, 15, 0, 0).unwrap(),
+            zone: London,
+        }),
+        description: Some("Agenda".into()),
+        ..Patch::default()
+    };
+    session.update(&work, "review", &etag, &patch).unwrap();
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let changed = google.event(ACCOUNT_ID, "work", "review").unwrap();
+    assert_eq!(
+        changed["start"],
+        json!({"dateTime": "2026-11-12T14:00:00Z", "timeZone": "Europe/London"})
+    );
+    let review = cached(&cache, "work", "review").unwrap();
+    assert_eq!(review.title, "Q4 review");
+    assert_eq!(review.about.description, "Agenda");
+    assert_eq!(review.etag, changed["etag"]);
+    assert_eq!(review.timing, patch.timing);
+}
+
+#[test]
+fn a_change_to_an_event_changed_elsewhere_meanwhile_is_refused_as_such() {
+    let (google, store, dir, client_file, cache) = synchronized_once("update-conflict");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let opened = cached(&cache, "work", "review").unwrap();
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        timed(
+            "review",
+            "Review (moved)",
+            "2026-11-11T12:00:00+01:00",
+            "2026-11-11T13:00:00+01:00",
+        ),
+    );
+    let patch = Patch {
+        location: Some("Room 2".into()),
+        ..Patch::default()
+    };
+
+    let refused = session.update(&work, "review", &opened.etag, &patch);
+    // Nor can the account change a calendar it may only read.
+    google.set_access_role("work", "reader");
+    let current = google.event(ACCOUNT_ID, "work", "review").unwrap()["etag"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let read_only = session.update(&work, "review", &current, &patch);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(refused.unwrap_err().is_changed_elsewhere());
+    let error = read_only.unwrap_err();
+    assert!(error.0.starts_with("Google refused"), "{}", error.0);
+    let kept = google.event(ACCOUNT_ID, "work", "review").unwrap();
+    assert_eq!(kept["summary"], "Review (moved)");
+    assert!(kept.get("location").is_none());
+}
+
+#[test]
+fn an_event_moved_to_another_calendar_of_the_account_leaves_the_first_for_the_other() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("move");
+    google.add_calendar(ACCOUNT_ID, entry("team", "Team", "#7bd148", "writer"));
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let calendars = cache.calendar_list().unwrap();
+    let (work, team) = (&calendars[0], &calendars[1]);
+    let opened = cached(&cache, "work", "review").unwrap();
+
+    let etag = session.move_to(work, "review", team).unwrap();
+
+    assert!(google.requests().contains(
+        &"POST /calendar/v3/calendars/work/events/review/move?destination=team".to_string()
+    ));
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert!(cached(&cache, "work", "review").is_none());
+    let moved = cached(&cache, "team", "review").unwrap();
+    assert_eq!(moved.title, "Review");
+    assert_eq!(moved.etag, etag);
+    assert_ne!(etag, opened.etag);
 }

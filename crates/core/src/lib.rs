@@ -6,6 +6,7 @@ pub mod cache;
 pub mod colors;
 pub mod create;
 pub mod details;
+pub mod editor;
 pub mod fixtures;
 pub mod layout;
 pub mod model;

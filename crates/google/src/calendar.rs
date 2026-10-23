@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 
 use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::create::NewEvent;
-use calendar_core::model::{Calendar, Timing};
+use calendar_core::editor::Patch;
+use calendar_core::model::{About, Calendar, Show, Timing, Visibility};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
@@ -147,28 +148,43 @@ impl Session {
     /// is renewed once. Google's rate limits, 429 and 403 for `rateLimitExceeded` or
     /// `userRateLimitExceeded`, are told apart from other refusals (`MOD-02-F16`).
     fn get<T: DeserializeOwned>(&self, url: Url) -> Result<Option<T>, SyncError> {
-        self.send(url, None)
+        self.send(url, Request::Get)
     }
 
     /// Google's answer to a change sent to it, as `get` handles answers.
-    fn post<T: DeserializeOwned>(&self, url: Url, change: &Value) -> Result<T, SyncError> {
-        self.send(url, Some(change))?
+    fn post<T: DeserializeOwned>(&self, url: Url, change: Option<&Value>) -> Result<T, SyncError> {
+        self.send(url, Request::Post(change))?
             .ok_or_else(|| SyncError("Google refused (gone)".into()))
     }
 
-    /// Asks Google, with the change to send if any, as `get` says.
+    /// Google's answer to a patch of what it keeps in the version `etag`, as `get` handles
+    /// answers; `SyncError::changed_elsewhere` when that is no longer the version kept.
+    fn patch<T: DeserializeOwned>(
+        &self,
+        url: Url,
+        change: &Value,
+        etag: &str,
+    ) -> Result<T, SyncError> {
+        self.send(url, Request::Patch(change, etag))?
+            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+    }
+
+    /// Asks Google, as `get` says.
     fn send<T: DeserializeOwned>(
         &self,
         url: Url,
-        change: Option<&Value>,
+        request: Request,
     ) -> Result<Option<T>, SyncError> {
-        let (mut status, mut body) = self.call(&url, change)?;
+        let (mut status, mut body) = self.call(&url, request)?;
         if status == 401 {
             self.access.replace(None);
-            (status, body) = self.call(&url, change)?;
+            (status, body) = self.call(&url, request)?;
         }
         if status == 410 {
             return Ok(None);
+        }
+        if status == 412 {
+            return Err(SyncError::changed_elsewhere());
         }
         if status == 429 || (status == 403 && rate_limited(&body)) {
             return Err(SyncError::rate_limited());
@@ -185,19 +201,29 @@ impl Session {
     fn call(
         &self,
         url: &Url,
-        change: Option<&Value>,
+        request: Request,
     ) -> Result<(ureq::http::StatusCode, String), SyncError> {
         let bearer = format!("Bearer {}", self.access_token()?);
         let agent = agent(HTTP_TIMEOUT);
-        let response = match change {
-            None => agent
+        let response = match request {
+            Request::Get => agent
                 .get(url.as_str())
                 .header("Authorization", bearer)
                 .call(),
-            Some(change) => agent
+            Request::Post(None) => agent
+                .post(url.as_str())
+                .header("Authorization", bearer)
+                .send_empty(),
+            Request::Post(Some(change)) => agent
                 .post(url.as_str())
                 .header("Authorization", bearer)
                 .header("Content-Type", "application/json")
+                .send(change.to_string()),
+            Request::Patch(change, etag) => agent
+                .patch(url.as_str())
+                .header("Authorization", bearer)
+                .header("Content-Type", "application/json")
+                .header("If-Match", etag)
                 .send(change.to_string()),
         };
         let mut response = response
@@ -226,6 +252,73 @@ impl Session {
             }
         }
         Ok(Some(fetched))
+    }
+}
+
+/// What is asked of Google.
+#[derive(Clone, Copy)]
+enum Request<'a> {
+    Get,
+    /// With the change to send, if any.
+    Post(Option<&'a Value>),
+    /// The change, made to the version (ETag).
+    Patch(&'a Value, &'a str),
+}
+
+/// An event's version, as Google answers a change.
+#[derive(Deserialize)]
+struct Version {
+    etag: String,
+}
+
+/// Google's `start` and `end` of an event: dates for an all-day one, otherwise times on the
+/// event's own clock with its zone, as Google Calendar sends them. `clear` sets the fields of the
+/// other kind to null, as a patch must to change the kind.
+fn times(timing: &Timing, clear: bool) -> (Value, Value) {
+    let (mut start, mut end) = match *timing {
+        Timing::Timed { start, end, zone } => {
+            let when = |at: DateTime<Utc>| {
+                json!({
+                    "dateTime": at.with_timezone(&zone).to_rfc3339_opts(SecondsFormat::Secs, true),
+                    "timeZone": zone.name(),
+                })
+            };
+            (when(start), when(end))
+        }
+        Timing::AllDay {
+            start,
+            end_exclusive,
+        } => (
+            json!({"date": start.to_string()}),
+            json!({"date": end_exclusive.to_string()}),
+        ),
+    };
+    if clear {
+        for when in [&mut start, &mut end] {
+            for field in ["date", "dateTime", "timeZone"] {
+                if when.get(field).is_none() {
+                    when[field] = Value::Null;
+                }
+            }
+        }
+    }
+    (start, end)
+}
+
+/// Google's `transparency`.
+fn transparency(show: Show) -> &'static str {
+    match show {
+        Show::Busy => "opaque",
+        Show::Free => "transparent",
+    }
+}
+
+/// Google's `visibility`.
+fn visibility(visibility: Visibility) -> &'static str {
+    match visibility {
+        Visibility::Default => "default",
+        Visibility::Public => "public",
+        Visibility::Private => "private",
     }
 }
 
@@ -286,20 +379,59 @@ impl Provider for Session {
         struct Created {
             id: String,
         }
-        // The times on the event's own clock, with its zone, as Google Calendar sends them.
-        let when = |at: DateTime<Utc>| {
-            json!({
-                "dateTime": at.with_timezone(&event.zone).to_rfc3339_opts(SecondsFormat::Secs, true),
-                "timeZone": event.zone.name(),
-            })
-        };
+        let (start, end) = times(&event.timing, false);
         let change = json!({
             "summary": event.title,
-            "start": when(event.start),
-            "end": when(event.end),
+            "description": event.about.description,
+            "location": event.about.location,
+            "transparency": transparency(event.about.show),
+            "visibility": visibility(event.about.visibility),
+            "start": start,
+            "end": end,
         });
         let url = self.url(&["calendars", &calendar.id, "events"]);
-        Ok(self.post::<Created>(url, &change)?.id)
+        Ok(self.post::<Created>(url, Some(&change))?.id)
+    }
+
+    fn update(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        etag: &str,
+        patch: &Patch,
+    ) -> Result<String, SyncError> {
+        let mut change = serde_json::Map::new();
+        let mut set = |field: &str, value: Option<Value>| {
+            if let Some(value) = value {
+                change.insert(field.to_string(), value);
+            }
+        };
+        set("summary", patch.title.clone().map(Value::from));
+        set("description", patch.description.clone().map(Value::from));
+        set("location", patch.location.clone().map(Value::from));
+        set("transparency", patch.show.map(|s| transparency(s).into()));
+        set("visibility", patch.visibility.map(|v| visibility(v).into()));
+        if let Some(timing) = &patch.timing {
+            let (start, end) = times(timing, true);
+            set("start", Some(start));
+            set("end", Some(end));
+        }
+        let url = self.url(&["calendars", &calendar.id, "events", id]);
+        Ok(self
+            .patch::<Version>(url, &Value::Object(change), etag)?
+            .etag)
+    }
+
+    fn move_to(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        destination: &Calendar,
+    ) -> Result<String, SyncError> {
+        let mut url = self.url(&["calendars", &calendar.id, "events", id, "move"]);
+        url.query_pairs_mut()
+            .append_pair("destination", &destination.id);
+        Ok(self.post::<Version>(url, None)?.etag)
     }
 
     fn default_length(&self) -> Result<u32, SyncError> {
@@ -360,6 +492,12 @@ struct GoogleEvent {
     recurrence: Vec<String>,
     recurring_event_id: Option<String>,
     original_start_time: Option<When>,
+    description: Option<String>,
+    location: Option<String>,
+    transparency: Option<String>,
+    visibility: Option<String>,
+    #[serde(default)]
+    etag: String,
 }
 
 /// Google's `start`, `end` and `originalStartTime`: a date for all-day events, otherwise an
@@ -425,6 +563,21 @@ impl GoogleEvent {
             timing,
             recurrence: self.recurrence,
             instance_of,
+            about: About {
+                description: self.description.unwrap_or_default(),
+                location: self.location.unwrap_or_default(),
+                show: match self.transparency.as_deref() {
+                    Some("transparent") => Show::Free,
+                    _ => Show::Busy,
+                },
+                // Google keeps "confidential" for compatibility; it means private.
+                visibility: match self.visibility.as_deref() {
+                    Some("public") => Visibility::Public,
+                    Some("private" | "confidential") => Visibility::Private,
+                    _ => Visibility::Default,
+                },
+            },
+            etag: self.etag,
         })
     }
 }

@@ -2,6 +2,7 @@ mod agenda_view;
 mod calendar_list;
 mod checks;
 mod connect;
+mod editor;
 mod grid_view;
 mod mini_calendar;
 mod month_view;
@@ -15,6 +16,7 @@ use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
+use calendar_core::editor::{Editor, Save};
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
@@ -80,11 +82,17 @@ enum Dialog {
     /// The quick-entry box of a new event (`MOD-05-F02`), and whether its title has had the
     /// keyboard yet.
     QuickEntry(QuickEntry, bool),
+    /// The full editor of a new or an existing event (`MOD-05-F04`).
+    Editor(Box<Editor>),
     /// The event whose details are open, and what had the keyboard when it opened.
     Event(Event, Option<egui::Id>),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
 }
+
+/// Why an occurrence of a series cannot be edited yet: the three-way question comes with
+/// `US-05-07`.
+const REPEATING: &str = "Changing a repeating event is not available yet.";
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
@@ -149,14 +157,15 @@ struct CalendarApp {
     removal: Removal,
     /// Synchronizing with Google and reading the cache, off the UI thread.
     sync: Synchronization,
-    /// What the views show: the events from the cache, empty until it is read, followed by the
-    /// new events not synchronized yet.
+    /// What the views show: the events from the cache, empty until it is read, but those changed
+    /// and not synchronized back yet, followed by the new and changed events not synchronized
+    /// yet.
     events: Vec<Event>,
-    /// How many of `events` come from the cache.
-    cached: usize,
-    /// New events sent to Google and not synchronized back yet (`MOD-05-U03`).
+    /// The events from the cache.
+    cached: Vec<Event>,
+    /// New and changed events sent to Google and not synchronized back yet (`MOD-05-U03`).
     saving: Saving,
-    /// Why new events could not be saved, until the user closes the notice.
+    /// Why new or changed events could not be saved, until the user closes the notice.
     not_saved: Vec<String>,
     /// Whether the computer is online, as the system says (`MOD-02-F14`).
     online: Online,
@@ -261,7 +270,7 @@ impl CalendarApp {
             removal: Removal::new(),
             sync,
             events,
-            cached: 0,
+            cached: Vec::new(),
             saving: Saving::default(),
             not_saved: Vec::new(),
             online: Online::watch(&ctx, &SystemNetwork),
@@ -297,17 +306,14 @@ impl CalendarApp {
         );
     }
 
-    /// The cached events, followed by the new events not synchronized yet.
+    /// The cached events but those changed meanwhile, followed by the new and changed events not
+    /// synchronized yet; `cached` when the cache changed.
     fn show_events(&mut self, cached: Option<Vec<Event>>) {
-        match cached {
-            Some(events) => {
-                self.saving.synced(&events);
-                self.cached = events.len();
-                self.events = events;
-            }
-            None => self.events.truncate(self.cached),
+        if let Some(events) = cached {
+            self.saving.synced(&events);
+            self.cached = events;
         }
-        self.events.extend(self.saving.events().cloned());
+        self.events = self.saving.shown(&self.cached);
         self.rebuild();
     }
 
@@ -401,11 +407,14 @@ impl CalendarApp {
         let mut remove = None;
         let mut toggled = None;
         let mut save = None;
+        let mut edit = None;
         let mut default_calendar = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
             Dialog::QuickEntry(..) => "New event",
+            Dialog::Editor(editor) if editor.opened.is_none() => "New event",
+            Dialog::Editor(_) => "Edit event",
             Dialog::Event(..) => "Event",
             Dialog::Settings => "Settings",
         };
@@ -468,11 +477,29 @@ impl CalendarApp {
                     }
                     let entered =
                         field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let button = egui::Button::new("Save");
-                    let clicked = ui.add_enabled(unavailable.is_none(), button).clicked();
+                    let clicked = ui
+                        .horizontal(|ui| {
+                            // The full editor, keeping what was typed (`MOD-05-F03`).
+                            if ui.button("More options").clicked() {
+                                edit = Some(Editor::from_quick(entry, &self.regional));
+                            }
+                            let button = egui::Button::new("Save");
+                            ui.add_enabled(unavailable.is_none(), button).clicked()
+                        })
+                        .inner;
                     if (clicked || entered) && unavailable.is_none() {
-                        save = entry.new_event();
+                        save = entry
+                            .new_event()
+                            .map(|(calendar, event)| Save::Create(calendar, event));
                     }
+                }
+                Dialog::Editor(editor) => {
+                    let choices = editor.choices(create::choices(
+                        self.accounts.list(),
+                        self.sync.calendars(),
+                        &self.settings,
+                    ));
+                    save = editor::show(ui, editor, &self.regional, &choices, refused);
                 }
                 Dialog::Event(event, _) => {
                     let details = event_details(event, self.zone);
@@ -485,6 +512,36 @@ impl CalendarApp {
                         ui.label(grid_view::READ_ONLY);
                     } else if let Some(reason) = refused {
                         ui.label(reason);
+                    }
+                    // The event as last synchronized, which may have come since it was opened.
+                    let event = self
+                        .events
+                        .iter()
+                        .find(|e| {
+                            e.id == event.id
+                                && e.calendar_id == event.calendar_id
+                                && e.account_id == event.account_id
+                        })
+                        .unwrap_or(event);
+                    let calendar = self.sync.calendars().iter().find(|calendar| {
+                        calendar.account_id == event.account_id && calendar.id == event.calendar_id
+                    });
+                    let not_yet = if event.recurring {
+                        Some(REPEATING)
+                    } else if self.saving.holds(event) {
+                        Some(create::SAVING)
+                    } else {
+                        None
+                    };
+                    if let (false, Some(calendar)) = (details.read_only, calendar) {
+                        let button = egui::Button::new("Edit");
+                        let can_edit = refused.is_none() && not_yet.is_none();
+                        if ui.add_enabled(can_edit, button).clicked() {
+                            edit = Some(Editor::of(event, calendar.clone(), &self.regional));
+                        }
+                        if let Some(why) = not_yet {
+                            ui.label(why);
+                        }
                     }
                 }
                 Dialog::Settings => {
@@ -552,12 +609,27 @@ impl CalendarApp {
             self.settings.default_calendar = Some((calendar.account_id, calendar.id));
             self.save_settings();
         }
-        if let Some((calendar, event)) = save {
-            // Shown at once, marked "saving" until Google confirms it (`MOD-05-U03`).
-            let local = self.saving.add(&calendar, &event);
-            self.sync.create(local, calendar, event);
-            self.show_events(None);
-            open = false;
+        match save {
+            Some(Save::Create(calendar, event)) => {
+                // Shown at once, marked "saving" until Google confirms it (`MOD-05-U03`).
+                let local = self.saving.add(&calendar, &event);
+                self.sync.create(local, calendar, event);
+                self.show_events(None);
+                open = false;
+            }
+            Some(Save::Change(change)) => {
+                // Shown changed at once, marked "saving" until Google confirms it (`MOD-05-U03`).
+                if !change.is_empty() {
+                    let local = self.saving.change(&change.event, change.changed());
+                    self.sync.change(local, change);
+                    self.show_events(None);
+                }
+                open = false;
+            }
+            None => {}
+        }
+        if let Some(editor) = edit {
+            self.dialog = Some(Dialog::Editor(Box::new(editor)));
         }
         if let Some(calendar) = toggled {
             // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
@@ -672,7 +744,8 @@ impl eframe::App for CalendarApp {
         for saved in &saved {
             match saved {
                 Saved::Created(local, id) => self.saving.confirmed(*local, id),
-                Saved::NotCreated(local, reason) => {
+                Saved::Changed(local, etag) => self.saving.changed(*local, etag),
+                Saved::NotCreated(local, reason) | Saved::NotChanged(local, reason) => {
                     self.saving.refused(*local);
                     self.not_saved.push(reason.clone());
                 }
@@ -853,7 +926,8 @@ impl eframe::App for CalendarApp {
                 self.connected = None;
             }
         }
-        // A new event Google did not create is gone from the views; the user is told why.
+        // A new event Google did not create is gone from the views, and one it did not change is
+        // shown as it was; the user is told why.
         if !self.not_saved.is_empty() {
             let mut close = false;
             egui::Panel::top("not-saved").show(ui, |ui| {
@@ -989,7 +1063,7 @@ impl eframe::App for CalendarApp {
         }
         if let Some(event) = opened {
             let event = self.places[event];
-            // The editor opens from here in `MOD-05`; the event is brought up to date first.
+            // The event is brought up to date first, as the editor opens from its details.
             self.sync.opening(&self.events[event].calendar_id);
             let focused = ui.ctx().memory(|m| m.focused());
             self.dialog = Some(Dialog::Event(self.events[event].clone(), focused));

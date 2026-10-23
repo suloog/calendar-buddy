@@ -8,7 +8,7 @@ use chrono_tz::Tz;
 
 use crate::accounts::Entry;
 use crate::details::When;
-use crate::model::{Calendar, Event, Timing};
+use crate::model::{About, Calendar, Event, Timing};
 use crate::settings::Settings;
 use crate::side_panel::pickable;
 
@@ -25,19 +25,20 @@ pub const SAVING: &str = "Saving…";
 /// What the quick-entry box says when the user has no calendar to add events to.
 pub const NO_CALENDAR: &str = "No calendar you can add events to.";
 
+/// What Google Calendar names an event without a title.
+pub const NO_TITLE: &str = "(No title)";
+
 /// A new event as the user made it, to be created at the provider.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NewEvent {
     pub title: String,
-    pub start: DateTime<Utc>,
-    pub end: DateTime<Utc>,
-    /// The zone the event is made in: the system's.
-    pub zone: Tz,
+    pub timing: Timing,
+    pub about: About,
 }
 
 /// The instant `minute` minutes after midnight of `date` on the wall clock in `zone`; a time the
 /// zone skips (daylight saving) moves to the first one that exists after it.
-fn wall(date: NaiveDate, minute: u32, zone: Tz) -> DateTime<Utc> {
+pub(crate) fn wall(date: NaiveDate, minute: u32, zone: Tz) -> DateTime<Utc> {
     let mut local = date.and_time(NaiveTime::MIN) + Duration::minutes(minute.into());
     loop {
         if let Some(at) = zone.from_local_datetime(&local).earliest() {
@@ -187,24 +188,34 @@ impl QuickEntry {
     pub fn new_event(&self) -> Option<(Calendar, NewEvent)> {
         let event = NewEvent {
             title: self.title.trim().to_string(),
-            start: self.start,
-            end: self.end,
-            zone: self.zone,
+            timing: Timing::Timed {
+                start: self.start,
+                end: self.end,
+                zone: self.zone,
+            },
+            about: About::default(),
         };
         Some((self.calendar.clone()?, event))
     }
 }
 
-/// A new event shown before it comes back through synchronization.
+/// A new or changed event shown before it comes back through synchronization.
 #[derive(Clone, Debug)]
 struct Pending {
     local: u64,
     event: Event,
+    /// For a change, the event as it was: not shown meanwhile.
+    replaces: Option<Event>,
 }
 
-/// The new events sent to Google and not yet synchronized back: each is shown marked "saving"
-/// until Google confirms it, then without the mark until synchronization brings it
-/// (`MOD-05-U03`); one Google refused goes.
+/// Whether two events are the same event of the same calendar.
+fn same(a: &Event, b: &Event) -> bool {
+    a.id == b.id && a.calendar_id == b.calendar_id && a.account_id == b.account_id
+}
+
+/// The new and changed events sent to Google and not yet synchronized back: each is shown marked
+/// "saving" until Google confirms it, then without the mark until synchronization brings it
+/// (`MOD-05-U03`); one Google refused goes, and a changed one is shown as it was again.
 #[derive(Clone, Debug, Default)]
 pub struct Saving {
     pending: Vec<Pending>,
@@ -212,31 +223,46 @@ pub struct Saving {
 }
 
 impl Saving {
-    /// Shows the event as saving and returns the number it is told by.
+    /// Shows the new event as saving and returns the number it is told by.
     pub fn add(&mut self, calendar: &Calendar, event: &NewEvent) -> u64 {
-        self.next += 1;
         let title = if event.title.is_empty() {
-            "(No title)"
+            NO_TITLE
         } else {
             &event.title
         };
+        let event = Event {
+            id: String::new(),
+            account_id: calendar.account_id.clone(),
+            calendar_id: calendar.id.clone(),
+            title: title.to_string(),
+            color: calendar.color,
+            timing: event.timing,
+            busy_only: false,
+            read_only: false,
+            saving: true,
+            recurring: false,
+            about: event.about.clone(),
+            etag: String::new(),
+        };
+        self.push(event, None)
+    }
+
+    /// Shows the changed event as saving in place of `before`, and returns the number it is told
+    /// by.
+    pub fn change(&mut self, before: &Event, after: Event) -> u64 {
+        let after = Event {
+            saving: true,
+            ..after
+        };
+        self.push(after, Some(before.clone()))
+    }
+
+    fn push(&mut self, event: Event, replaces: Option<Event>) -> u64 {
+        self.next += 1;
         self.pending.push(Pending {
             local: self.next,
-            event: Event {
-                id: String::new(),
-                account_id: calendar.account_id.clone(),
-                calendar_id: calendar.id.clone(),
-                title: title.to_string(),
-                color: calendar.color,
-                timing: Timing::Timed {
-                    start: event.start,
-                    end: event.end,
-                    zone: event.zone,
-                },
-                busy_only: false,
-                read_only: false,
-                saving: true,
-            },
+            event,
+            replaces,
         });
         self.next
     }
@@ -249,21 +275,53 @@ impl Saving {
         }
     }
 
-    /// Google did not create the event: it goes.
+    /// Google took the change, and the event's version is now `etag`: it is saved.
+    pub fn changed(&mut self, local: u64, etag: &str) {
+        if let Some(pending) = self.pending.iter_mut().find(|p| p.local == local) {
+            pending.event.etag = etag.to_string();
+            pending.event.saving = false;
+        }
+    }
+
+    /// Google did not create or change the event: a new one goes, a changed one is shown as it
+    /// was.
     pub fn refused(&mut self, local: u64) {
         self.pending.retain(|p| p.local != local);
     }
 
-    /// Synchronization brought these events: the saved ones among them are no longer pending.
+    /// Synchronization brought these events: the saved ones among them, in a version other than
+    /// the one changed or in the calendar moved to, are no longer pending.
     pub fn synced(&mut self, events: &[Event]) {
         self.pending.retain(|p| {
             p.event.saving
                 || !events.iter().any(|e| {
-                    e.id == p.event.id
-                        && e.calendar_id == p.event.calendar_id
-                        && e.account_id == p.event.account_id
+                    same(e, &p.event)
+                        && p.replaces.as_ref().is_none_or(|old| {
+                            e.etag != old.etag || e.calendar_id != old.calendar_id
+                        })
                 })
         });
+    }
+
+    /// The events to show: `cached` without those changed meanwhile, followed by the pending ones.
+    pub fn shown(&self, cached: &[Event]) -> Vec<Event> {
+        let replaced = |event: &Event| {
+            self.pending
+                .iter()
+                .filter_map(|p| p.replaces.as_ref())
+                .any(|old| same(old, event))
+        };
+        cached
+            .iter()
+            .filter(|event| !replaced(event))
+            .chain(self.events())
+            .cloned()
+            .collect()
+    }
+
+    /// Whether the event is one of these, not synchronized back yet.
+    pub fn holds(&self, event: &Event) -> bool {
+        self.pending.iter().any(|p| same(&p.event, event))
     }
 
     /// The account was removed: its new events go with it.
@@ -515,12 +573,16 @@ mod tests {
         let (calendar, event) = planning();
         assert_eq!(calendar.id, "a@example.com");
         assert_eq!(event.title, "Planning");
+        let Timing::Timed { start, end, zone } = event.timing else {
+            panic!("a timed event");
+        };
         assert_eq!(
-            span((event.start, event.end)),
+            span((start, end)),
             s("2026-11-12 10:00", "2026-11-12 11:30")
         );
-        assert_eq!(event.zone, Warsaw);
-        let without = QuickEntry::new((event.start, event.end), Warsaw, None);
+        assert_eq!(zone, Warsaw);
+        assert_eq!(event.about, About::default());
+        let without = QuickEntry::new((start, end), Warsaw, None);
         assert_eq!(without.new_event(), None);
     }
 
@@ -571,5 +633,78 @@ mod tests {
         saving.forget_account("1");
         assert!(saving.is_empty());
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn a_changed_event_is_shown_changed_and_saving_in_place_of_the_original_until_synchronized() {
+        let before = crate::fixtures::timed("Standup", d(2026, 11, 13), (9, 0), (9, 30));
+        let other = crate::fixtures::timed("Review", d(2026, 11, 13), (11, 0), (12, 0));
+        let cached = vec![before.clone(), other.clone()];
+        let after = Event {
+            title: "Daily".to_string(),
+            ..before.clone()
+        };
+        let mut saving = Saving::default();
+        let local = saving.change(&before, after);
+        let titles = |events: Vec<Event>| -> Vec<(String, bool)> {
+            events.into_iter().map(|e| (e.title, e.saving)).collect()
+        };
+        assert_eq!(
+            titles(saving.shown(&cached)),
+            [("Review".to_string(), false), ("Daily".to_string(), true)]
+        );
+        assert!(saving.holds(&before));
+        assert!(!saving.holds(&other));
+
+        saving.changed(local, "\"2\"");
+        // The version changed comes back first: still shown as changed.
+        saving.synced(&cached);
+        assert_eq!(
+            titles(saving.shown(&cached)),
+            [("Review".to_string(), false), ("Daily".to_string(), false)]
+        );
+        let synced = vec![
+            Event {
+                title: "Daily".to_string(),
+                etag: "\"2\"".to_string(),
+                ..before.clone()
+            },
+            other,
+        ];
+        saving.synced(&synced);
+        assert!(saving.is_empty());
+        assert_eq!(saving.shown(&synced), synced);
+    }
+
+    #[test]
+    fn a_change_google_refused_shows_the_event_as_it_was() {
+        let before = crate::fixtures::timed("Standup", d(2026, 11, 13), (9, 0), (9, 30));
+        let mut saving = Saving::default();
+        let local = saving.change(
+            &before,
+            Event {
+                title: "Daily".to_string(),
+                ..before.clone()
+            },
+        );
+        saving.refused(local);
+        assert_eq!(saving.shown(std::slice::from_ref(&before)), [before]);
+    }
+
+    #[test]
+    fn a_moved_event_is_synchronized_back_once_it_is_in_the_calendar_moved_to() {
+        let before = crate::fixtures::timed("Standup", d(2026, 11, 13), (9, 0), (9, 30));
+        let moved = Event {
+            calendar_id: "team".to_string(),
+            ..before.clone()
+        };
+        let mut saving = Saving::default();
+        let local = saving.change(&before, moved.clone());
+        saving.changed(local, &before.etag);
+        saving.synced(std::slice::from_ref(&before));
+        assert!(!saving.is_empty());
+        // Even if the provider kept its version.
+        saving.synced(std::slice::from_ref(&moved));
+        assert!(saving.is_empty());
     }
 }

@@ -1284,3 +1284,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-106] The full editor: how its fields are typed and what it opens from
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-02
+- **Affects:** `US-05-02`, `MOD-05-F03`…`MOD-05-F08`, `MOD-05-F11`, `MOD-05-F15`
+- **Decision:** The quick-entry box gets **More options**, which opens the full editor with the title, times and calendar typed there. An event's details get **Edit** for events the account can change. Dates and times are typed in the system's numeric date format (or `YYYY-MM-DD`) and on its clock (`15:00`, or `3:00 PM` with the locale's AM/PM). Changing the start moves the end with it, so the event keeps its length. Changing the time zone keeps the times on the clock. An event may end when it starts, as in Google Calendar; one ending before it starts cannot be saved, and the editor says why. A time the zone skips at a daylight-saving change moves to the first time that exists. An all-day event made timed starts at 9:00 and ends at 10:00 on its first and last days. A timed event made all-day keeps its days. The description is edited as plain text. An existing event offers only its own account's calendars (`MOD-05-F15`). Saving sends only the fields that changed, as a patch against the version opened (its ETag), and then a move when another calendar was picked. Times left as they were opened keep the event's own, so a twice-shown hour of a daylight-saving change or seconds are not lost. A move Google refuses after the other changes were saved says "it could not be moved to the other calendar (…); its other changes were saved". An event changed elsewhere meanwhile is refused with the notice "The event could not be saved: it was changed elsewhere in the meantime; it is shown as it is now, make your change again." Its calendars are synchronized with that. **Edit** is unavailable for an event still being saved, and for an occurrence of a series until `US-05-07` brings the three-way question.
+- **Why:** The spec names the fields but not how they are typed. These are the simplest choices that follow Google Calendar (`DEC-62`) and the regional formats the app already uses (`DEC-29`). Changing an occurrence without the "this / following / all" question of `MOD-05-F20` would guess the scope, so it waits for the story that asks it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-107] The cache keeps an event's description, location, busy or free, visibility and version
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-02
+- **Affects:** `US-05-02`, `MOD-05-F11`, `DEC-23`, the SQLite cache, the calendar-provider interface
+- **Decision:** **SQLite schema change:** the `events` table gets `description`, `location`, `show`, `visibility` and `etag`. The schema is versioned with SQLite's `user_version`. A cache made by an earlier version drops its events and synchronization states when opened, and they are fetched again in full; its calendars stay. **Calendar-provider interface change:** `Provider::update` (a patch sent against the event's version, refused as "changed elsewhere" on Google's 412) and `Provider::move_to`. Google's `confidential` visibility is read as private.
+- **Why:** The editor opens on what the views already hold, without waiting for Google (`NFR-01`), and a change is sent against the version it was made to (MOD-05 *Technical notes*). The cache is rebuilt from Google anyway (`NFR-17`), so dropping an old one's events is the simplest migration.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

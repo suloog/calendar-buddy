@@ -3,7 +3,7 @@
 use chrono::{Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use chrono_tz::{Europe::Warsaw, Tz};
 
-use crate::model::{Event, Rgb, Timing};
+use crate::model::{About, Event, Rgb, Timing};
 
 pub const PALETTE: [Rgb; 10] = [
     Rgb(0x79, 0x86, 0xCB),
@@ -49,6 +49,9 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
         busy_only: false,
         read_only: false,
         saving: false,
+        recurring: false,
+        about: About::default(),
+        etag: "\"1\"".to_string(),
     }
 }
 
@@ -66,6 +69,9 @@ pub fn all_day(id: &str, start: NaiveDate, days: i64) -> Event {
         busy_only: false,
         read_only: false,
         saving: false,
+        recurring: false,
+        about: About::default(),
+        etag: "\"1\"".to_string(),
     }
 }
 
