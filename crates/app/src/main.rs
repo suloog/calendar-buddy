@@ -1,29 +1,25 @@
 mod agenda_view;
 mod grid_view;
+mod mini_calendar;
 mod month_view;
 
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::fixtures;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
+use calendar_core::navigation::{Navigation, View, mini_calendar};
+use calendar_core::settings::{self, Settings};
 use calendar_core::view_model::{GridViewModel, grid_view};
-use calendar_core::week::GridView;
-use chrono::{DateTime, Duration, Months, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use eframe::egui;
+use std::sync::mpsc::{self, Sender};
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
         .ok()
         .and_then(|name| name.parse().ok())
         .unwrap_or(Tz::UTC)
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum View {
-    Grid(GridView),
-    Month,
-    Agenda,
 }
 
 enum Built {
@@ -37,13 +33,13 @@ const AGENDA_DAYS: i64 = 30;
 
 fn build(
     events: &[Event],
-    view: View,
-    selected: NaiveDate,
+    navigation: Navigation,
     agenda_days: i64,
     zone: Tz,
     now: DateTime<Utc>,
 ) -> Built {
-    match view {
+    let selected = navigation.selected;
+    match navigation.view {
         View::Grid(grid) => Built::Grid(grid_view(events, &grid.days(selected), zone, now)),
         View::Month => Built::Month(month_view(events, selected, zone, now)),
         View::Agenda => Built::Agenda(agenda_view(events, zone, now, agenda_days)),
@@ -53,8 +49,11 @@ fn build(
 struct CalendarApp {
     events: Vec<Event>,
     zone: Tz,
-    view: View,
-    selected: NaiveDate,
+    navigation: Navigation,
+    /// Any day of the month the mini calendar shows; follows the view, browsed on its own.
+    mini_month: NaiveDate,
+    /// Saves the settings off the UI thread; `None` when there is no home directory.
+    settings_writer: Option<Sender<Settings>>,
     /// Days from today the agenda covers; grows as the user scrolls down.
     agenda_days: i64,
     built: Built,
@@ -69,14 +68,30 @@ impl CalendarApp {
         let today = Utc::now().with_timezone(&zone).date_naive();
         // Test data until synchronization exists (`US-02-01`).
         let events = fixtures::profile(today);
-        let view = View::Grid(GridView::Week);
+        let settings_path = settings::default_path();
+        let last_view = settings_path
+            .as_deref()
+            .and_then(|path| Settings::load(path).last_view);
+        let settings_writer = settings_path.map(|path| {
+            let (sender, receiver) = mpsc::channel::<Settings>();
+            // The UI never waits on disk.
+            std::thread::spawn(move || {
+                for settings in receiver {
+                    // Losing the last view is acceptable (`DEC-15`); the app still works.
+                    let _ = settings.save(&path);
+                }
+            });
+            sender
+        });
+        let navigation = Navigation::start(last_view, today);
         let built_at = Utc::now();
-        let built = build(&events, view, today, AGENDA_DAYS, zone, built_at);
+        let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
             events,
             zone,
-            view,
-            selected: today,
+            navigation,
+            mini_month: today,
+            settings_writer,
             agenda_days: AGENDA_DAYS,
             built,
             built_at,
@@ -89,12 +104,34 @@ impl CalendarApp {
         self.built_at = Utc::now();
         self.built = build(
             &self.events,
-            self.view,
-            self.selected,
+            self.navigation,
             self.agenda_days,
             self.zone,
             self.built_at,
         );
+    }
+
+    fn today(&self) -> NaiveDate {
+        Utc::now().with_timezone(&self.zone).date_naive()
+    }
+
+    /// Shows what `navigation` now points at: the mini calendar follows it, and a new view is
+    /// remembered for the next start.
+    fn navigated(&mut self, before: Navigation) {
+        if self.navigation == before {
+            return;
+        }
+        if self.navigation.view != before.view {
+            self.agenda_days = AGENDA_DAYS;
+            if let Some(writer) = &self.settings_writer {
+                let _ = writer.send(Settings {
+                    last_view: Some(self.navigation.view),
+                });
+            }
+        }
+        self.mini_month = self.navigation.selected;
+        self.month_state = month_view::State::default();
+        self.rebuild();
     }
 }
 
@@ -106,67 +143,60 @@ impl eframe::App for CalendarApp {
         }
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs(30));
+        let before = self.navigation;
         egui::Panel::top("view-bar").show(ui, |ui| {
             ui.horizontal(|ui| {
-                // A plain picker and period buttons; full navigation and shortcuts are `US-03-05`.
-                for (view, name) in [
-                    (View::Grid(GridView::Day), "Day"),
-                    (View::Grid(GridView::ThreeDays), "3 days"),
-                    (View::Grid(GridView::Week), "Week"),
-                    (View::Month, "Month"),
-                    (View::Agenda, "Agenda"),
-                ] {
-                    if ui.selectable_label(self.view == view, name).clicked() && self.view != view {
-                        self.view = view;
-                        self.month_state = month_view::State::default();
-                        self.agenda_days = AGENDA_DAYS;
-                        self.rebuild();
-                    }
+                // Keyboard shortcuts for all of this are `US-03-08`.
+                if ui.button("Today").clicked() {
+                    self.navigation.today(self.today());
+                    // Brings back a mini calendar browsed away, even when the view stays put.
+                    self.mini_month = self.navigation.selected;
                 }
-                ui.separator();
                 // The agenda always starts now; there is no period to step through.
-                let periods = self.view != View::Agenda;
-                let previous = ui.add_enabled(periods, egui::Button::new("‹")).clicked();
-                let next = ui.add_enabled(periods, egui::Button::new("›")).clicked();
-                match self.view {
-                    View::Grid(grid) => {
-                        let step = Duration::days(grid.days(self.selected).len() as i64);
-                        if previous {
-                            self.selected -= step;
-                        }
-                        if next {
-                            self.selected += step;
-                        }
-                    }
-                    View::Agenda => {}
-                    View::Month => {
-                        if previous {
-                            self.selected = self.selected - Months::new(1);
-                        }
-                        if next {
-                            self.selected = self.selected + Months::new(1);
-                        }
-                    }
+                let periods = self.navigation.view != View::Agenda;
+                if ui.add_enabled(periods, egui::Button::new("‹")).clicked() {
+                    self.navigation.previous();
                 }
-                if previous || next {
-                    self.month_state = month_view::State::default();
-                    self.rebuild();
+                if ui.add_enabled(periods, egui::Button::new("›")).clicked() {
+                    self.navigation.next();
                 }
-                ui.label(match self.view {
-                    View::Grid(grid) => {
-                        let days = grid.days(self.selected);
-                        let (first, last) = (days[0], days[days.len() - 1]);
-                        if first == last {
-                            first.format("%a %-d %b %Y").to_string()
-                        } else {
-                            format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
+                ui.label(match (self.navigation.view, self.navigation.period()) {
+                    (View::Month, _) => self.navigation.selected.format("%B %Y").to_string(),
+                    (_, Some((first, last))) if first == last => {
+                        first.format("%a %-d %b %Y").to_string()
+                    }
+                    (_, Some((first, last))) => {
+                        format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
+                    }
+                    (_, None) => "Upcoming".to_string(),
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    for view in View::ALL.into_iter().rev() {
+                        if ui
+                            .selectable_label(self.navigation.view == view, view.name())
+                            .clicked()
+                        {
+                            self.navigation.switch(view);
                         }
                     }
-                    View::Month => self.selected.format("%B %Y").to_string(),
-                    View::Agenda => "Upcoming".to_string(),
                 });
             });
         });
+        egui::Panel::left("side-panel")
+            .resizable(false)
+            .show(ui, |ui| {
+                let today = self.today();
+                let mini = mini_calendar(self.mini_month, &self.navigation, today);
+                match mini_calendar::show(ui, &mini) {
+                    Some(mini_calendar::Action::Browse(month)) => self.mini_month = month,
+                    Some(mini_calendar::Action::GoTo(date)) => {
+                        self.navigation.go_to(date);
+                        self.mini_month = date;
+                    }
+                    None => {}
+                }
+            });
+        self.navigated(before);
         egui::CentralPanel::default().show(ui, |ui| match &self.built {
             Built::Grid(view) => {
                 if let Some(change) = grid_view::show(ui, view, &mut self.view_state) {

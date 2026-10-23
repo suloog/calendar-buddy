@@ -64,6 +64,15 @@ fn timed_start(event: &Event) -> Option<DateTime<Utc>> {
     }
 }
 
+/// The whole weeks covering the month that starts on `month`, Monday first: the first day shown
+/// and how many weeks there are (four to six).
+pub fn weeks_covering(month: NaiveDate) -> (NaiveDate, usize) {
+    let last = month + chrono::Months::new(1) - Duration::days(1);
+    let first_shown = Week::containing(month).first;
+    let week_count = ((Week::containing(last).first - first_shown).num_days() / 7 + 1) as usize;
+    (first_shown, week_count)
+}
+
 /// The month containing `selected`. An event is listed on every day it covers.
 pub fn month_view(
     events: &[Event],
@@ -72,9 +81,7 @@ pub fn month_view(
     now: DateTime<Utc>,
 ) -> MonthViewModel {
     let month = selected.with_day(1).expect("day 1 exists");
-    let last = month + chrono::Months::new(1) - Duration::days(1);
-    let first_shown = Week::containing(month).first;
-    let week_count = ((Week::containing(last).first - first_shown).num_days() / 7 + 1) as usize;
+    let (first_shown, week_count) = weeks_covering(month);
     let last_shown = first_shown + Duration::days(7 * week_count as i64 - 1);
 
     let mut per_day: Vec<Vec<usize>> = vec![Vec::new(); 7 * week_count];
