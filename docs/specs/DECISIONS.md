@@ -1308,3 +1308,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-108] Dragging and resizing: the distance in 15-minute steps, the end's edge, the strip and the hours
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-03
+- **Affects:** `US-05-03`, `MOD-05-F13`, `MOD-05-F14`, `MOD-05-F16`, `MOD-05-U02`, `MOD-05-U03`, `DEC-60`, `DEC-103`, `DEC-106`
+- **Decision:** In the day, 3-day and week views, an event moves by the distance dragged, rounded to the nearest 15 minutes and to whole days among the days shown; an event starting off the step (10:07) keeps its offset. Times move on the clock of the system's time zone the views show, so across a daylight-saving change the event keeps the hour it was shown at; it keeps its length and its own time zone. The end is grabbed at the bottom 5 points of the block where the event ends, and moves in 15-minute steps, leaving the event a step long at least and ending by midnight of that day. While a block is dragged it shows its new times as "start – end". An all-day event moves by whole days in the strip; dropped in the hours it becomes timed from the 15-minute step under the pointer, of the default length of its account (`DEC-103`), in the system's time zone, and while it is dragged there a one-step block with its start time shows where. A timed event dropped above the hours, over the strip or the day header, becomes an all-day event of the day under the pointer; while it is dragged there, it is drawn over the strip's last lane in that day, the layout staying still. An all-day event shown from before the first day can be dragged until its last day shown reaches the first. A timed event lasting a day or longer, shown in the strip, moves by whole days only. An event dropped where it was is not sent. A drag under way ends when synchronization changes the events shown, so it cannot pass to another event. Events of calendars the account cannot change, events being saved and occurrences of a series cannot be dragged (the explanation is `US-05-05`, the scope question `US-05-07`); offline nothing can (`MOD-02-F15`). A drop is saved like the editor's change (`DEC-106`): the times as a patch against the event's version, shown at once with "· Saving…", which all-day bars now show too, and refused with the same notice when the event was changed elsewhere.
+- **Why:** The spec fixes the 15-minute steps and the conversions (`DEC-60`) but not how far a drop goes, where the end is grabbed or how long a converted event is. These follow Google Calendar (`DEC-62`), which moves an event by the distance dragged and converts between the strip and the hours the same way; reusing the editor's change keeps one path to Google.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

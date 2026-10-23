@@ -855,9 +855,10 @@ mod tests {
     use std::time::Duration;
 
     use crate::calendar_list::Picked;
-    use crate::{Built, build, pick};
+    use crate::{Built, build, grid_view, pick};
     use calendar_core::colors;
     use calendar_core::create::{self, QuickEntry, Saving};
+    use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
     use calendar_core::model::{Access, Calendar, Rgb, Show, Timing, Visibility};
@@ -2673,6 +2674,120 @@ mod tests {
             saved_changes(&updates).as_slice(),
             [Saved::NotChanged(2, _)]
         ));
+    }
+
+    #[test]
+    fn tc_05_03_dragging_call_down_by_40_minutes_lands_at_10_45_and_is_saved_to_google() {
+        let google = Google::start("tc-05-03");
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "call",
+                "status": "confirmed",
+                "summary": "Call",
+                "start": {"dateTime": "2026-11-12T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-12T11:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendars = engine.cache.calendar_list().unwrap();
+        // Wednesday 2026-11-11 10:00 in Warsaw, the week view.
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+        let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
+        let events = now_shown(&engine);
+        let (Built::Grid(week), places) =
+            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
+        else {
+            panic!("the week view is built");
+        };
+        let block = &week.blocks[0];
+        assert!(block.movable);
+
+        // 1. "Call" dragged down by 40 minutes snaps to 45 and keeps its length.
+        let down = grid_view::HOUR_HEIGHT * 40.0 / 60.0;
+        let drop = grid_view::moved(egui::Vec2::new(0.0, down), 100.0, block.placement.day, 7);
+        assert_eq!(
+            drop,
+            Target::Moved {
+                days: 0,
+                minutes: 45
+            }
+        );
+        let call = &events[places[block.placement.event]];
+        let timing = drag::dropped(call, drop, Warsaw, 60).unwrap();
+        let edit = drag::edit(call, calendars[0].clone(), timing);
+        let mut saving = Saving::default();
+        let local = saving.change(call, edit.changed());
+        let dropped: Vec<(String, String, String, bool)> = saving
+            .shown(&events)
+            .into_iter()
+            .map(|e| {
+                let Timing::Timed { start, end, .. } = e.timing else {
+                    panic!("timed");
+                };
+                (e.title, self::local(start), self::local(end), e.saving)
+            })
+            .collect();
+        assert_eq!(
+            dropped,
+            [(
+                "Call".to_string(),
+                "2026-11-12 10:45".to_string(),
+                "2026-11-12 11:45".to_string(),
+                true
+            )]
+        );
+
+        // 2. The fake Google received the new time.
+        let updates = engine.handle(Some(Job::Change(local, Box::new(edit))), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "call").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T10:45:00+01:00");
+        assert_eq!(kept["end"]["dateTime"], "2026-11-12T11:45:00+01:00");
+        let (sent_against, patch) = google.fake.patched().pop().unwrap();
+        assert_eq!(sent_against, call.etag);
+        assert!(patch.get("summary").is_none());
+    }
+
+    #[test]
+    fn an_all_day_event_dragged_into_the_hours_is_saved_timed_and_back_all_day() {
+        let (google, mut engine, start) = standup_and_team("drag-convert");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let standup = now_shown(&engine).remove(0);
+        let date = d(2026, 11, 12);
+        let timing = drag::dropped(&standup, Target::AllDay { date }, Warsaw, 60).unwrap();
+        let edit = drag::edit(&standup, calendar.clone(), timing);
+        engine.handle(Some(Job::Change(1, Box::new(edit))), start);
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap();
+        assert_eq!(
+            (&kept["start"], &kept["end"]),
+            (
+                &json!({"date": "2026-11-12"}),
+                &json!({"date": "2026-11-13"})
+            )
+        );
+
+        let trip = now_shown(&engine).remove(0);
+        let drop = Target::Timed {
+            date,
+            minute: 14 * 60,
+        };
+        let timing = drag::dropped(&trip, drop, Warsaw, 30).unwrap();
+        let edit = drag::edit(&trip, calendar, timing);
+        let updates = engine.handle(Some(Job::Change(2, Box::new(edit))), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(2, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T14:00:00+01:00");
+        assert_eq!(kept["end"]["dateTime"], "2026-11-12T14:30:00+01:00");
     }
 
     /// What Google answered about changed events, in order.

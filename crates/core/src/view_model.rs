@@ -23,6 +23,8 @@ pub struct Block {
     pub read_only: bool,
     /// Google has not confirmed the new event yet (`MOD-05-U03`).
     pub saving: bool,
+    /// The event can be dragged and resized (`MOD-05-F13`, `MOD-05-F14`).
+    pub movable: bool,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -33,6 +35,10 @@ pub struct Bar {
     pub title: Option<String>,
     pub color: Rgb,
     pub read_only: bool,
+    pub saving: bool,
+    pub movable: bool,
+    /// An all-day event, not a timed one lasting a day or longer.
+    pub all_day: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,6 +61,12 @@ pub struct GridViewModel {
 
 fn shown_title(event: &Event) -> Option<String> {
     (!event.busy_only).then(|| event.title.clone())
+}
+
+/// Whether an event can be dragged: its calendar can be changed, Google has confirmed its last
+/// change, and it is not an occurrence of a series, whose scope `US-05-07` asks for.
+fn movable(event: &Event) -> bool {
+    !event.read_only && !event.saving && !event.recurring
 }
 
 /// The hour grid over `dates`: one day, three days or a week.
@@ -86,6 +98,7 @@ pub fn grid_view(
                 color: event.color,
                 read_only: event.read_only,
                 saving: event.saving,
+                movable: movable(event),
                 start,
                 end,
             }
@@ -94,11 +107,17 @@ pub fn grid_view(
 
     let bars: Vec<Bar> = all_day_bars(events, dates, zone)
         .into_iter()
-        .map(|bar| Bar {
-            bar,
-            title: shown_title(&events[bar.event]),
-            color: events[bar.event].color,
-            read_only: events[bar.event].read_only,
+        .map(|bar| {
+            let event = &events[bar.event];
+            Bar {
+                bar,
+                title: shown_title(event),
+                color: event.color,
+                read_only: event.read_only,
+                saving: event.saving,
+                movable: movable(event),
+                all_day: matches!(event.timing, Timing::AllDay { .. }),
+            }
         })
         .collect();
     let lanes = bars.iter().map(|b| b.bar.lane + 1).max().unwrap_or(0);
@@ -193,6 +212,38 @@ mod tests {
             (friday[0].placement.start_min, friday[0].placement.end_min),
             (780, 840)
         );
+    }
+
+    #[test]
+    fn only_events_that_can_be_changed_now_can_be_dragged() {
+        let mut events = tc_03_01_week();
+        events[0].recurring = true;
+        events[2].saving = true;
+        let vm = grid_view(
+            &events,
+            &Week::containing(d(2026, 11, 11), Weekday::Mon).days(),
+            Warsaw,
+            clock(),
+        );
+        let movable = |title: &str| {
+            let blocks = vm.blocks.iter().map(|b| (&b.title, b.movable));
+            let bars = vm.bars.iter().map(|b| (&b.title, b.movable));
+            blocks
+                .chain(bars)
+                .find(|(t, _)| t.as_deref().unwrap_or("Busy") == title)
+                .unwrap()
+                .1
+        };
+        // A series' occurrence, an event being saved and one of a read-only calendar stay put.
+        assert!(!movable("Standup"));
+        assert!(!movable("Offsite"));
+        assert!(!movable("Busy"));
+        assert!(movable("Conference day"));
+        let offsite = vm
+            .bars
+            .iter()
+            .find(|b| b.title.as_deref() == Some("Offsite"));
+        assert!(offsite.is_some_and(|b| b.saving && b.all_day));
     }
 
     #[test]

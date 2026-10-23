@@ -16,6 +16,7 @@ use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
+use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Editor, Save};
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
@@ -314,7 +315,28 @@ impl CalendarApp {
             self.cached = events;
         }
         self.events = self.saving.shown(&self.cached);
+        self.view_state.events_changed();
         self.rebuild();
+    }
+
+    /// Saves the event at `event` in `events`, dragged and dropped (`MOD-05-F13`, `MOD-05-F14`):
+    /// shown at once where it was dropped, marked "saving" until Google confirms it
+    /// (`MOD-05-U03`).
+    fn dropped(&mut self, event: usize, drop: Target) {
+        let event = &self.events[event];
+        let calendar = self.sync.calendars().iter().find(|calendar| {
+            calendar.account_id == event.account_id && calendar.id == event.calendar_id
+        });
+        let length = self.sync.default_length(&event.account_id);
+        let (Some(calendar), Some(timing)) =
+            (calendar, drag::dropped(event, drop, self.zone, length))
+        else {
+            return;
+        };
+        let edit = drag::edit(event, calendar.clone(), timing);
+        let local = self.saving.change(&edit.event, edit.changed());
+        self.sync.change(local, Box::new(edit));
+        self.show_events(None);
     }
 
     /// Opens the quick-entry box at the times `times` gives for the default length of the
@@ -1005,6 +1027,7 @@ impl eframe::App for CalendarApp {
         self.sync.browse(browsed.fetch);
         let mut opened = None;
         let mut started = None;
+        let mut dropped = None;
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(note) = browsed.note {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
@@ -1017,13 +1040,8 @@ impl eframe::App for CalendarApp {
                     // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
                     let state = &mut self.view_state;
                     match grid_view::show(ui, view, &self.regional, state, online, &mut opened) {
-                        Some(grid_view::Action::Moved(change)) if online => {
-                            let change = grid_view::Change {
-                                event: self.places[change.event],
-                                ..change
-                            };
-                            grid_view::apply(&mut self.events, change);
-                            self.rebuild();
+                        Some(grid_view::Action::Dropped { event, drop }) if online => {
+                            dropped = Some((self.places[event], drop));
                         }
                         // A click or a selection in the hours starts a new event (`MOD-05-F01`).
                         Some(grid_view::Action::Clicked { day, minute }) => {
@@ -1054,6 +1072,9 @@ impl eframe::App for CalendarApp {
                 }
             }
         });
+        if let Some((event, drop)) = dropped {
+            self.dropped(event, drop);
+        }
         if let Some((date, pressed, released)) = started {
             let zone = self.zone;
             self.start_event(|length| match released {
