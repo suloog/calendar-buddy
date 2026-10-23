@@ -54,3 +54,10 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking: a different account picked on the Workspace directory screen was mixed in, the offline check ignored proxies (now HTTPS through ureq), Cancel during the token exchange still connected, check-order test. Not fixed: closing the directory-only tab leaves a Workspace user waiting up to 5 min (Cancel drops the whole connection); the loopback read has a per-read, not total, deadline; the offline test re-binds a freed port (rare flake). The account isn't remembered across restarts (US-01-03, DEC-80). Spec review flags edge case "admin block / user cap" as at risk if Google never redirects back.
 - Manual checks: TC-01-01, US-01-01#4, US-01-01#5, US-01-01#6, edge cases (cancel, client file, admin block)
 - Commits on main: one squash commit — ad9bcc4 feat(accounts): connect a first Google account from the welcome screen
+
+## US-01-02 — review — 2026-10-23 15:42
+- What: `Accounts` list in core (keyed by Google account ID, refreshed in place on a repeat sign-in, states "Connected" / "Needs sign-in", no cap); a Settings window from the top bar listing accounts with disabled "Sign in again" / "Remove" and "Add account", which reuses the welcome screen's connect flow (`welcome.rs` → `connect.rs`); Google's account chooser on the first consent screen so a second account can be picked. Tests against the fake Google (now with a second, personal account).
+- Decisions: DEC-81, DEC-82
+- Reviews: code 1 round(s), spec 1 round(s); open notes: fixed non-blocking: a stale error or heads-up stayed in Settings after closing it, a wrong test comment, a test name that promised the real store's de-duplication. Not fixed: `Accounts::add`'s return value is used only by tests; the real Secret Service replacing a repeat sign-in's token is checked only by hand. No code sets "Needs sign-in" yet (US-01-03).
+- Manual checks: TC-01-02, US-01-02#3, edge case (repeat sign-in, one KWallet item)
+- Commits on main: one squash commit — 1ec28bb feat(accounts): connect more accounts and list them in the settings
