@@ -75,7 +75,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-03-01` | As a User, I can see my week as a clear, smoothly scrolling grid, so that I see at a glance what my week looks like | F02, F14, F19, F21, F22, U01, U02, U05, NFR-01 | must | review | — | — |
 | `US-03-02` | As a User, I can look at a single day or three days, so that I can focus on today or use a smaller screen | F01, F04, F14, F22 | must | review | `US-03-01` | — |
-| `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20, F14, F22 | must | ready | `US-03-01` | — |
+| `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20, F14, F22 | must | review | `US-03-01` | — |
 | `US-03-04` | As a User, I can see my upcoming events as a list, so that I know what is next without reading a grid | F05, F14, F22 | must | ready | `US-03-01` | — |
 | `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15 | must | ready | `US-03-01` | — |
 | `US-03-06` | As a User, I can see my calendars grouped by account in a side panel and hide any of them quickly, so that I see only what matters now | F10, F11, F12, U03 | must | ready | `US-03-01`, `US-02-01` | — |

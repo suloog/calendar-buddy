@@ -1,10 +1,12 @@
 mod grid_view;
+mod month_view;
 
 use calendar_core::fixtures;
 use calendar_core::model::Event;
+use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::view_model::{GridViewModel, grid_view};
 use calendar_core::week::GridView;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, Months, NaiveDate, Utc};
 use chrono_tz::Tz;
 use eframe::egui;
 
@@ -15,14 +17,33 @@ fn system_zone() -> Tz {
         .unwrap_or(Tz::UTC)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum View {
+    Grid(GridView),
+    Month,
+}
+
+enum Built {
+    Grid(GridViewModel),
+    Month(MonthViewModel),
+}
+
+fn build(events: &[Event], view: View, selected: NaiveDate, zone: Tz, now: DateTime<Utc>) -> Built {
+    match view {
+        View::Grid(grid) => Built::Grid(grid_view(events, &grid.days(selected), zone, now)),
+        View::Month => Built::Month(month_view(events, selected, zone, now)),
+    }
+}
+
 struct CalendarApp {
     events: Vec<Event>,
     zone: Tz,
-    grid: GridView,
+    view: View,
     selected: NaiveDate,
-    view: GridViewModel,
+    built: Built,
     built_at: DateTime<Utc>,
     view_state: grid_view::State,
+    month_state: month_view::State,
 }
 
 impl CalendarApp {
@@ -31,30 +52,36 @@ impl CalendarApp {
         let today = Utc::now().with_timezone(&zone).date_naive();
         // Test data until synchronization exists (`US-02-01`).
         let events = fixtures::profile(today);
-        let grid = GridView::Week;
+        let view = View::Grid(GridView::Week);
         let built_at = Utc::now();
-        let view = grid_view(&events, &grid.days(today), zone, built_at);
+        let built = build(&events, view, today, zone, built_at);
         CalendarApp {
             events,
             zone,
-            grid,
-            selected: today,
             view,
+            selected: today,
+            built,
             built_at,
             view_state: grid_view::State::default(),
+            month_state: month_view::State::default(),
         }
     }
 
     fn rebuild(&mut self) {
         self.built_at = Utc::now();
-        let days = self.grid.days(self.selected);
-        self.view = grid_view(&self.events, &days, self.zone, self.built_at);
+        self.built = build(
+            &self.events,
+            self.view,
+            self.selected,
+            self.zone,
+            self.built_at,
+        );
     }
 }
 
 impl eframe::App for CalendarApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // The now line moves; nothing else changes on its own.
+        // The now line and today move; nothing else changes on its own.
         if Utc::now() - self.built_at >= chrono::Duration::minutes(1) {
             self.rebuild();
         }
@@ -63,40 +90,66 @@ impl eframe::App for CalendarApp {
         egui::Panel::top("view-bar").show(ui, |ui| {
             ui.horizontal(|ui| {
                 // A plain picker and period buttons; full navigation and shortcuts are `US-03-05`.
-                for (grid, name) in [
-                    (GridView::Day, "Day"),
-                    (GridView::ThreeDays, "3 days"),
-                    (GridView::Week, "Week"),
+                for (view, name) in [
+                    (View::Grid(GridView::Day), "Day"),
+                    (View::Grid(GridView::ThreeDays), "3 days"),
+                    (View::Grid(GridView::Week), "Week"),
+                    (View::Month, "Month"),
                 ] {
-                    if ui.selectable_label(self.grid == grid, name).clicked() && self.grid != grid {
-                        self.grid = grid;
+                    if ui.selectable_label(self.view == view, name).clicked() && self.view != view {
+                        self.view = view;
+                        self.month_state = month_view::State::default();
                         self.rebuild();
                     }
                 }
                 ui.separator();
-                let step = Duration::days(self.grid.days(self.selected).len() as i64);
-                if ui.button("‹").clicked() {
-                    self.selected -= step;
+                let previous = ui.button("‹").clicked();
+                let next = ui.button("›").clicked();
+                match self.view {
+                    View::Grid(grid) => {
+                        let step = Duration::days(grid.days(self.selected).len() as i64);
+                        if previous {
+                            self.selected -= step;
+                        }
+                        if next {
+                            self.selected += step;
+                        }
+                    }
+                    View::Month => {
+                        if previous {
+                            self.selected = self.selected - Months::new(1);
+                        }
+                        if next {
+                            self.selected = self.selected + Months::new(1);
+                        }
+                    }
+                }
+                if previous || next {
+                    self.month_state = month_view::State::default();
                     self.rebuild();
                 }
-                if ui.button("›").clicked() {
-                    self.selected += step;
-                    self.rebuild();
-                }
-                let days = self.grid.days(self.selected);
-                let (first, last) = (days[0], days[days.len() - 1]);
-                ui.label(if first == last {
-                    first.format("%a %-d %b %Y").to_string()
-                } else {
-                    format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
+                ui.label(match self.view {
+                    View::Grid(grid) => {
+                        let days = grid.days(self.selected);
+                        let (first, last) = (days[0], days[days.len() - 1]);
+                        if first == last {
+                            first.format("%a %-d %b %Y").to_string()
+                        } else {
+                            format!("{} – {}", first.format("%-d %b"), last.format("%-d %b %Y"))
+                        }
+                    }
+                    View::Month => self.selected.format("%B %Y").to_string(),
                 });
             });
         });
-        egui::CentralPanel::default().show(ui, |ui| {
-            if let Some(change) = grid_view::show(ui, &self.view, &mut self.view_state) {
-                grid_view::apply(&mut self.events, change);
-                self.rebuild();
+        egui::CentralPanel::default().show(ui, |ui| match &self.built {
+            Built::Grid(view) => {
+                if let Some(change) = grid_view::show(ui, view, &mut self.view_state) {
+                    grid_view::apply(&mut self.events, change);
+                    self.rebuild();
+                }
             }
+            Built::Month(view) => month_view::show(ui, view, &mut self.month_state),
         });
     }
 }

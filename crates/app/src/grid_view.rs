@@ -16,11 +16,11 @@ const SNAP_MINUTES: f32 = 15.0;
 /// Narrowest a column of overlapping events may get, so the start of its title stays visible.
 const MIN_BLOCK_WIDTH: f32 = 18.0;
 
-fn color(c: Rgb) -> Color32 {
+pub fn color(c: Rgb) -> Color32 {
     Color32::from_rgb(c.0, c.1, c.2)
 }
 
-fn text_on(c: Rgb) -> Color32 {
+pub fn text_on(c: Rgb) -> Color32 {
     let luminance = 0.299 * c.0 as f32 + 0.587 * c.1 as f32 + 0.114 * c.2 as f32;
     if luminance > 150.0 {
         Color32::BLACK
