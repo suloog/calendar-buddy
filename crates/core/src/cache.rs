@@ -486,7 +486,8 @@ fn window_key(window: Window) -> String {
     format!("{}/{}/{}", window.from, window.until, window.zone.name())
 }
 
-fn color_text(Rgb(r, g, b): Rgb) -> String {
+/// `#rrggbb`, as Google writes colours.
+pub fn color_text(Rgb(r, g, b): Rgb) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 

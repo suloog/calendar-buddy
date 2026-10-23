@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod agenda;
 pub mod cache;
+pub mod colors;
 pub mod details;
 pub mod fixtures;
 pub mod layout;

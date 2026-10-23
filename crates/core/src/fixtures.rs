@@ -37,6 +37,7 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
     };
     Event {
         id: id.to_string(),
+        account_id: "1".to_string(),
         calendar_id: "work".to_string(),
         title: id.to_string(),
         color: PALETTE[0],
@@ -53,6 +54,7 @@ pub fn timed_in(id: &str, date: NaiveDate, start: (u32, u32), end: (u32, u32), z
 pub fn all_day(id: &str, start: NaiveDate, days: i64) -> Event {
     Event {
         id: id.to_string(),
+        account_id: "1".to_string(),
         calendar_id: "work".to_string(),
         title: id.to_string(),
         color: PALETTE[1],

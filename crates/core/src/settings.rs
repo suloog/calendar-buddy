@@ -4,6 +4,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use crate::cache::{color_text, parse_color};
+use crate::colors::LocalColors;
 use crate::navigation::View;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -13,6 +15,8 @@ pub struct Settings {
     /// The calendars disabled in the settings, by account ID and calendar ID: listed, but never
     /// synchronized (`MOD-02-F06`, `MOD-03-F13`).
     pub disabled: BTreeSet<(String, String)>,
+    /// The calendars' local colours, never sent to Google (`MOD-02-F04`).
+    pub colors: LocalColors,
 }
 
 impl Settings {
@@ -31,6 +35,18 @@ impl Settings {
                             .insert((account.to_string(), calendar.trim().to_string()));
                     }
                 }
+                "color" => {
+                    let value = value.trim();
+                    let local = value.split_once(' ').and_then(|(account, rest)| {
+                        let (calendar, color) = rest.trim().rsplit_once(' ')?;
+                        Some((account, calendar.trim(), parse_color(color)?))
+                    });
+                    if let Some((account, calendar, color)) = local {
+                        settings
+                            .colors
+                            .insert((account.to_string(), calendar.to_string()), color);
+                    }
+                }
                 _ => {}
             }
         }
@@ -45,15 +61,20 @@ impl Settings {
         for (account, calendar) in &self.disabled {
             text.push_str(&format!("disabled = {account} {calendar}\n"));
         }
+        for ((account, calendar), color) in &self.colors {
+            let color = color_text(*color);
+            text.push_str(&format!("color = {account} {calendar} {color}\n"));
+        }
         text
     }
 
     /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
     /// anything.
     pub fn forget_account(&mut self, account_id: &str) -> bool {
-        let before = self.disabled.len();
+        let before = self.disabled.len() + self.colors.len();
         self.disabled.retain(|(account, _)| account != account_id);
-        self.disabled.len() != before
+        self.colors.retain(|(account, _), _| account != account_id);
+        self.disabled.len() + self.colors.len() != before
     }
 
     pub fn load(path: &Path) -> Self {
@@ -88,6 +109,7 @@ pub fn config_dir() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::fixtures::d;
+    use crate::model::Rgb;
     use crate::navigation::Navigation;
     use crate::week::GridView;
 
@@ -156,10 +178,47 @@ mod tests {
     }
 
     #[test]
+    fn local_colours_are_saved_read_back_and_forgotten_with_their_account() {
+        let mut settings = Settings::default();
+        for (account, calendar, color) in [
+            (
+                "1",
+                "en.polish#holiday@group.v.calendar.google.com",
+                Rgb(0x0b, 0x80, 0x43),
+            ),
+            ("1", "team@example.com", Rgb(0xad, 0x14, 0x57)),
+            ("2", "team@example.com", Rgb(0x03, 0x9b, 0xe5)),
+        ] {
+            settings
+                .colors
+                .insert((account.to_string(), calendar.to_string()), color);
+        }
+
+        assert!(
+            settings
+                .to_text()
+                .contains("color = 1 en.polish#holiday@group.v.calendar.google.com #0b8043\n")
+        );
+        assert_eq!(Settings::parse(&settings.to_text()), settings);
+
+        assert!(settings.forget_account("1"));
+        assert!(!settings.forget_account("1"));
+        assert_eq!(
+            settings.colors.into_iter().collect::<Vec<_>>(),
+            [(
+                ("2".to_string(), "team@example.com".to_string()),
+                Rgb(0x03, 0x9b, 0xe5)
+            )]
+        );
+    }
+
+    #[test]
     fn a_missing_or_unknown_setting_gives_the_default() {
         assert_eq!(Settings::parse(""), Settings::default());
         assert_eq!(
-            Settings::parse("view = year\nnoise\ndisabled = 1"),
+            Settings::parse(
+                "view = year\nnoise\ndisabled = 1\ncolor = 1 work\ncolor = 1 work green"
+            ),
             Settings::default()
         );
         assert_eq!(

@@ -55,7 +55,8 @@ enum Job {
 }
 
 enum Update {
-    Events(Vec<Event>),
+    /// The calendars listed in the cache, and the events to show.
+    Events(Vec<Calendar>, Vec<Event>),
     /// The account's synchronization did not start; it is tried again after its next check.
     Failed(String),
     /// The names of calendars gone from their accounts' lists (`MOD-02-F21`).
@@ -87,6 +88,8 @@ pub struct Synchronization {
     browsed: Option<Window>,
     /// Where synchronization stands, as the worker last told.
     status: Status,
+    /// The calendars listed in the cache, as the worker last told.
+    calendars: Vec<Calendar>,
 }
 
 impl Synchronization {
@@ -173,6 +176,7 @@ impl Synchronization {
             gone: Vec::new(),
             browsed: None,
             status: Status::default(),
+            calendars: Vec::new(),
         }
     }
 
@@ -264,7 +268,10 @@ impl Synchronization {
         let mut events = None;
         for update in self.updates.try_iter() {
             match update {
-                Update::Events(shown) => events = Some(shown),
+                Update::Events(calendars, shown) => {
+                    self.calendars = calendars;
+                    events = Some(shown);
+                }
                 Update::Failed(id) => {
                     self.synced.remove(&id);
                 }
@@ -274,6 +281,11 @@ impl Synchronization {
             }
         }
         events
+    }
+
+    /// The calendars of the connected accounts, as last read from the cache.
+    pub fn calendars(&self) -> &[Calendar] {
+        &self.calendars
     }
 
     /// Where synchronization stands, for the indicator (`MOD-02-F17`).
@@ -608,11 +620,9 @@ impl Engine {
 
     fn shown(&self) -> Update {
         // An unreadable cache shows nothing until synchronization rewrites it.
-        let mut events = self
-            .cache
-            .calendars()
-            .map(|cached| shown_events(&cached, self.window))
-            .unwrap_or_default();
+        let cached = self.cache.calendars().unwrap_or_default();
+        let calendars = cached.iter().map(|c| c.calendar.clone()).collect();
+        let mut events = shown_events(&cached, self.window);
         // An event crossing the window's edge is cached already, maybe in a newer version.
         let cached: HashSet<(&str, &str)> = events
             .iter()
@@ -625,7 +635,7 @@ impl Engine {
             .cloned()
             .collect();
         events.extend(outside);
-        Update::Events(events)
+        Update::Events(calendars, events)
     }
 }
 
@@ -685,11 +695,16 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
+    use crate::calendar_list::Picked;
+    use crate::{Built, build, pick};
+    use calendar_core::colors;
     use calendar_core::fixtures::d;
     use calendar_core::model::{Access, Calendar, Rgb, Timing};
+    use calendar_core::navigation::Navigation;
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
+    use calendar_core::settings::Settings;
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_google::CLIENT_FILE;
@@ -950,7 +965,7 @@ mod tests {
     fn told(updates: Vec<Update>) -> Option<Vec<String>> {
         let mut titles = None;
         for update in updates {
-            if let Update::Events(events) = update {
+            if let Update::Events(_, events) = update {
                 let mut shown: Vec<String> = events.into_iter().map(|e| e.title).collect();
                 shown.sort();
                 titles = Some(shown);
@@ -1892,5 +1907,68 @@ mod tests {
         }
 
         assert_eq!(next_events(&mut sync), ["Standup 2"]);
+    }
+
+    #[test]
+    fn tc_02_09_a_local_colour_is_shown_without_reaching_google_and_reset_brings_googles_back() {
+        let google = Google::start("tc-02-09");
+        let blue = Rgb(0x03, 0x9b, 0xe5);
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": "Work",
+                "summary": "Work",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#039be5",
+                "accessRole": "owner",
+            }),
+        );
+        google.event("Work", "standup", "Standup");
+        let engine = first_sync(&google, Instant::now());
+        let Update::Events(calendars, events) = engine.shown() else {
+            panic!("the views are told what to show");
+        };
+        // The calendar in the side panel and its event in the week of 10 November.
+        let shown = |settings: &Settings| {
+            let navigation = Navigation::start(None, d(2026, 11, 10), chrono::Weekday::Mon);
+            let now = Utc.with_ymd_and_hms(2026, 11, 10, 8, 0, 0).unwrap();
+            let Built::Grid(week) = build(&events, &settings.colors, navigation, 30, Warsaw, now)
+            else {
+                panic!("the week view is built");
+            };
+            let mut colors = vec![colors::calendar_color(&calendars[0], &settings.colors)];
+            colors.extend(week.blocks.iter().map(|block| block.color));
+            colors
+        };
+        let picked = |color| Picked {
+            account_id: ACCOUNT_ID.to_string(),
+            calendar_id: "Work".to_string(),
+            color,
+        };
+        let mut settings = Settings::default();
+        assert_eq!(shown(&settings), [blue, blue]);
+
+        // 1. A local colour of green, picked from the calendar's menu, kept in the settings.
+        let (_, green) = colors::CALENDAR_COLORS[3];
+        pick(&mut settings.colors, picked(Some(green)));
+        settings = Settings::parse(&settings.to_text());
+        assert_eq!(shown(&settings), [green, green]);
+
+        // 2. Google was only ever asked to read; the calendar's colour was not changed there.
+        let requests = google.fake.requests();
+        let calendar_api: Vec<&String> = requests
+            .iter()
+            .filter(|request| request.contains(" /calendar/v3/"))
+            .collect();
+        assert!(!calendar_api.is_empty());
+        assert!(
+            calendar_api
+                .iter()
+                .all(|request| request.starts_with("GET "))
+        );
+
+        // 3. Reset.
+        pick(&mut settings.colors, picked(None));
+        assert_eq!(shown(&settings), [blue, blue]);
     }
 }

@@ -21,6 +21,7 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         .collect();
     let shown = |id: String, title: &str, timing: Timing| Event {
         id,
+        account_id: calendar.account_id.clone(),
         calendar_id: calendar.id.clone(),
         // As Google Calendar names an untitled event.
         title: if title.is_empty() {

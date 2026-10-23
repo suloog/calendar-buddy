@@ -110,7 +110,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Series are kept as master events plus exceptions (not pre-expanded by Google), so editing scopes in `MOD-05` work on the real series; expansion into occurrences uses a tested recurrence library, with times stored as UTC plus the IANA zone (constitution).
 - Adaptive polling per calendar by access role: `owner`/`writer` about every 60 s, `reader`/`freeBusyReader` about every 15 min; longer intervals while the window is hidden; an immediate round on window activation and before opening the editor. Each calendar of a round is asked for in its own request (`DEC-91`). No push channels (`events.watch` needs a public endpoint — `DEC-53`). Exponential back-off with jitter on 403 rate-limit and 429; per-calendar error state.
 - Network and sleep/wake signals from NetworkManager and systemd-logind over D-Bus, behind the platform interface.
-- Local calendar colours live in the app's settings, keyed by calendar ID, never sent to Google.
+- Local calendar colours live in the app's settings, keyed by account ID and calendar ID (`DEC-99`), never sent to Google.
 - The window is re-evaluated daily; purged events leave no trace in the store.
 
 ## Out of scope / what not to worry about
