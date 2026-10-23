@@ -1588,8 +1588,10 @@ mod tests {
         let status = engine.status();
         assert_eq!(status.state(true), State::Error);
         assert_eq!(
-            status.problems(true),
-            ["“Work” could not be synchronized; trying again."]
+            status
+                .problem(&status.problems[0].0, true)
+                .map(status::on_row),
+            Some("Could not be synchronized; trying again.")
         );
         assert_eq!(status.last_synced, Some(clock_at(1)));
         let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
@@ -1692,9 +1694,12 @@ mod tests {
             problems(&engine),
             [("work".to_string(), Problem::NotSynchronizing)]
         );
+        let status = engine.status();
         assert_eq!(
-            engine.status().problems(false),
-            ["“work” is not synchronizing: its account needs sign-in."]
+            status
+                .problem(&status.problems[0].0, false)
+                .map(status::on_row),
+            Some("Not synchronizing: its account needs sign-in.")
         );
 
         // Signed in again, it synchronizes as before.
@@ -1719,7 +1724,8 @@ mod tests {
         );
         assert_eq!(engine.status().state(true), State::Error);
         assert_eq!(engine.status().state(false), State::Offline);
-        assert_eq!(engine.status().problems(false), Vec::<String>::new());
+        let status = engine.status();
+        assert_eq!(status.problem(&status.problems[0].0, false), None);
     }
 
     #[test]
@@ -1910,6 +1916,36 @@ mod tests {
     }
 
     #[test]
+    fn the_views_of_a_hidden_calendar_point_at_the_events_still_shown() {
+        let mut team =
+            calendar_core::fixtures::timed("Team sync", d(2026, 11, 10), (9, 0), (10, 0));
+        team.calendar_id = "team".to_string();
+        let events = vec![
+            team,
+            calendar_core::fixtures::timed("Standup", d(2026, 11, 11), (9, 0), (10, 0)),
+        ];
+        let mut settings = Settings::default();
+        settings
+            .hidden
+            .insert(("1".to_string(), "team".to_string()));
+        let navigation = Navigation::start(None, d(2026, 11, 10), chrono::Weekday::Mon);
+        let now = Utc.with_ymd_and_hms(2026, 11, 10, 8, 0, 0).unwrap();
+
+        let (Built::Grid(week), places) = build(&events, &settings, navigation, 30, Warsaw, now)
+        else {
+            panic!("the week view is built");
+        };
+
+        // Opening or dragging a block reaches the event it shows.
+        let opened: Vec<&str> = week
+            .blocks
+            .iter()
+            .map(|block| events[places[block.placement.event]].title.as_str())
+            .collect();
+        assert_eq!(opened, ["Standup"]);
+    }
+
+    #[test]
     fn tc_02_09_a_local_colour_is_shown_without_reaching_google_and_reset_brings_googles_back() {
         let google = Google::start("tc-02-09");
         let blue = Rgb(0x03, 0x9b, 0xe5);
@@ -1932,7 +1968,7 @@ mod tests {
         let shown = |settings: &Settings| {
             let navigation = Navigation::start(None, d(2026, 11, 10), chrono::Weekday::Mon);
             let now = Utc.with_ymd_and_hms(2026, 11, 10, 8, 0, 0).unwrap();
-            let Built::Grid(week) = build(&events, &settings.colors, navigation, 30, Warsaw, now)
+            let (Built::Grid(week), _) = build(&events, settings, navigation, 30, Warsaw, now)
             else {
                 panic!("the week view is built");
             };

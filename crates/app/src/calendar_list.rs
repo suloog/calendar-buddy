@@ -1,16 +1,21 @@
-//! Draws the calendars in the side panel, each with its menu, where a local colour is picked or
-//! reset (`MOD-02-U04`). Grouping by account and hiding calendars come with the side panel of
-//! `US-03-06`.
+//! Draws the calendars in the side panel under their accounts (`MOD-03-F10`): each with the quick
+//! toggle that hides its events (`MOD-03-F12`), a lock when it cannot be changed (`MOD-02-U01`),
+//! its synchronization problem (`DEC-97`) and its menu, where a local colour is picked or reset
+//! (`MOD-02-U04`).
 
-use calendar_core::colors::{CALENDAR_COLORS, LocalColors, calendar_color};
+use calendar_core::colors::{CALENDAR_COLORS, LocalColors};
 use calendar_core::model::{Calendar, Rgb};
-use eframe::egui::{self, CornerRadius, Sense, Vec2};
+use calendar_core::side_panel::{Group, Row};
+use eframe::egui::{self, CornerRadius, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::grid_view::{color, text_on};
 
-const SWATCH: f32 = 12.0;
+const TOGGLE: f32 = 14.0;
 const PALETTE_SWATCH: f32 = 20.0;
 const PALETTE_COLUMNS: usize = 6;
+
+/// What a calendar's lock says on hover.
+pub const READ_ONLY: &str = "Read-only: this calendar can't be changed";
 
 /// A local colour picked for a calendar, or `None` to bring back Google's, by account ID and
 /// calendar ID.
@@ -20,34 +25,119 @@ pub struct Picked {
     pub color: Option<Rgb>,
 }
 
-pub fn show(ui: &mut egui::Ui, calendars: &[&Calendar], local: &LocalColors) -> Option<Picked> {
-    let mut picked = None;
-    ui.strong("Calendars");
+pub enum Action {
+    Picked(Picked),
+    /// The calendar's quick toggle was used.
+    Toggled(Calendar),
+}
+
+pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<Action> {
+    let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for calendar in calendars {
-            ui.push_id((&calendar.account_id, &calendar.id), |ui| {
-                ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(SWATCH), Sense::hover());
-                    let shown = calendar_color(calendar, local);
-                    ui.painter()
-                        .rect_filled(rect, CornerRadius::same(2), color(shown));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if let Some(color) = menu(ui, calendar, local) {
-                            picked = Some(Picked {
-                                account_id: calendar.account_id.clone(),
-                                calendar_id: calendar.id.clone(),
-                                color,
-                            });
-                        }
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add(egui::Label::new(&calendar.name).truncate());
-                        });
-                    });
+        for group in groups {
+            ui.add(egui::Label::new(egui::RichText::new(&group.email).strong()).truncate());
+            for row in &group.calendars {
+                let calendar = &row.calendar;
+                ui.push_id((&calendar.account_id, &calendar.id), |ui| {
+                    if let Some(a) = show_row(ui, row, local) {
+                        action = Some(a);
+                    }
                 });
-            });
+            }
+            ui.add_space(6.0);
         }
     });
-    picked
+    action
+}
+
+/// The name with a lock before it when the calendar cannot be changed, as on its events.
+pub fn row_label(name: &str, read_only: bool) -> String {
+    if read_only {
+        format!("🔒 {name}")
+    } else {
+        name.to_string()
+    }
+}
+
+fn show_row(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Action> {
+    let calendar = &row.calendar;
+    let mut action = None;
+    ui.horizontal(|ui| {
+        if toggle(ui, row).clicked() {
+            action = Some(Action::Toggled(calendar.clone()));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if let Some(color) = menu(ui, calendar, local) {
+                action = Some(Action::Picked(Picked {
+                    account_id: calendar.account_id.clone(),
+                    calendar_id: calendar.id.clone(),
+                    color,
+                }));
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                let label = row_label(&calendar.name, row.read_only);
+                let label = ui.add(egui::Label::new(label).truncate());
+                if row.read_only {
+                    label.on_hover_text(READ_ONLY);
+                }
+            });
+        });
+    });
+    if let Some(problem) = row.problem {
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(problem)
+                    .small()
+                    .color(ui.visuals().warn_fg_color),
+            )
+            .wrap(),
+        );
+    }
+    action
+}
+
+/// Google Calendar's checkbox in the calendar's colour: filled and ticked while its events are
+/// shown, an empty box while they are hidden. Reached and used from the keyboard as any button.
+fn toggle(ui: &mut egui::Ui, row: &Row) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(TOGGLE), Sense::click());
+    let name = &row.calendar.name;
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, row.shown, name));
+    let painter = ui.painter();
+    let fill = color(row.color);
+    if row.shown {
+        painter.rect_filled(rect, CornerRadius::same(2), fill);
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "✔",
+            egui::FontId::proportional(11.0),
+            text_on(row.color),
+        );
+    } else {
+        let stroke = Stroke::new(2.0, fill);
+        painter.rect_stroke(
+            rect.shrink(1.0),
+            CornerRadius::same(2),
+            stroke,
+            StrokeKind::Inside,
+        );
+    }
+    if response.has_focus() {
+        let focus = ui.visuals().selection.stroke;
+        painter.rect_stroke(
+            rect.expand(2.0),
+            CornerRadius::same(3),
+            focus,
+            StrokeKind::Outside,
+        );
+    }
+    let hint = if row.shown {
+        "Hide its events"
+    } else {
+        "Show its events"
+    };
+    response.on_hover_text(hint)
 }
 
 /// The calendar's menu: Google Calendar's calendar colours and "Reset". Gives what was picked.
@@ -94,4 +184,31 @@ fn menu(ui: &mut egui::Ui, calendar: &Calendar, local: &LocalColors) -> Option<O
         }
     });
     picked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn calendars_that_cannot_be_changed_carry_a_lock() {
+        assert_eq!(row_label("Work", false), "Work");
+        assert_eq!(
+            row_label("Holidays in Poland", true),
+            "🔒 Holidays in Poland"
+        );
+    }
+
+    #[test]
+    fn the_side_panels_marks_are_in_the_apps_fonts() {
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |_| {})
+            .textures_delta
+            .clear();
+        let font = egui::FontId::proportional(14.0);
+        // The top bar's side panel button, the calendars' locks and the toggles' ticks.
+        for mark in ["☰", "🔒", "✔", "…"] {
+            assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, mark)), "{mark}");
+        }
+    }
 }

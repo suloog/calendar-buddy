@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::cache::{color_text, parse_color};
 use crate::colors::LocalColors;
 use crate::navigation::View;
+use crate::side_panel::Hidden;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -17,6 +18,10 @@ pub struct Settings {
     pub disabled: BTreeSet<(String, String)>,
     /// The calendars' local colours, never sent to Google (`MOD-02-F04`).
     pub colors: LocalColors,
+    /// The calendars whose events the side panel's quick toggle hides (`MOD-03-F12`).
+    pub hidden: Hidden,
+    /// The side panel was collapsed by the user (`MOD-03-F11`).
+    pub side_panel_collapsed: bool,
 }
 
 impl Settings {
@@ -29,12 +34,16 @@ impl Settings {
             match key.trim() {
                 "view" => settings.last_view = View::from_key(value.trim()),
                 "disabled" => {
-                    if let Some((account, calendar)) = value.trim().split_once(' ') {
-                        settings
-                            .disabled
-                            .insert((account.to_string(), calendar.trim().to_string()));
+                    if let Some(calendar) = calendar(value) {
+                        settings.disabled.insert(calendar);
                     }
                 }
+                "hidden" => {
+                    if let Some(calendar) = calendar(value) {
+                        settings.hidden.insert(calendar);
+                    }
+                }
+                "side_panel" => settings.side_panel_collapsed = value.trim() == "collapsed",
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -65,16 +74,23 @@ impl Settings {
             let color = color_text(*color);
             text.push_str(&format!("color = {account} {calendar} {color}\n"));
         }
+        for (account, calendar) in &self.hidden {
+            text.push_str(&format!("hidden = {account} {calendar}\n"));
+        }
+        if self.side_panel_collapsed {
+            text.push_str("side_panel = collapsed\n");
+        }
         text
     }
 
     /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
     /// anything.
     pub fn forget_account(&mut self, account_id: &str) -> bool {
-        let before = self.disabled.len() + self.colors.len();
+        let before = self.disabled.len() + self.colors.len() + self.hidden.len();
         self.disabled.retain(|(account, _)| account != account_id);
         self.colors.retain(|(account, _), _| account != account_id);
-        self.disabled.len() + self.colors.len() != before
+        self.hidden.retain(|(account, _)| account != account_id);
+        self.disabled.len() + self.colors.len() + self.hidden.len() != before
     }
 
     pub fn load(path: &Path) -> Self {
@@ -89,6 +105,12 @@ impl Settings {
         }
         std::fs::write(path, self.to_text())
     }
+}
+
+/// `<account ID> <calendar ID>`.
+fn calendar(value: &str) -> Option<(String, String)> {
+    let (account, calendar) = value.trim().split_once(' ')?;
+    Some((account.to_string(), calendar.trim().to_string()))
 }
 
 /// `$XDG_CONFIG_HOME/calendar-buddy/settings`, or under `~/.config` when that is not set.
@@ -213,11 +235,40 @@ mod tests {
     }
 
     #[test]
+    fn hidden_calendars_and_the_collapsed_side_panel_survive_a_restart() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-us-03-06-{}", std::process::id()));
+        let path = dir.join("settings");
+        let mut settings = Settings::default();
+        for (account, calendar) in [("1", "team@example.com"), ("2", "team@example.com")] {
+            settings
+                .hidden
+                .insert((account.to_string(), calendar.to_string()));
+        }
+        settings.side_panel_collapsed = true;
+        settings.save(&path).unwrap();
+
+        let restarted = Settings::load(&path);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(restarted, settings);
+        assert!(settings.to_text().contains("hidden = 1 team@example.com\n"));
+        assert!(settings.to_text().contains("side_panel = collapsed\n"));
+
+        assert!(settings.forget_account("1"));
+        assert!(!settings.forget_account("1"));
+        assert_eq!(
+            settings.hidden.into_iter().collect::<Vec<_>>(),
+            [("2".to_string(), "team@example.com".to_string())]
+        );
+        assert!(!Settings::parse("side_panel = expanded").side_panel_collapsed);
+    }
+
+    #[test]
     fn a_missing_or_unknown_setting_gives_the_default() {
         assert_eq!(Settings::parse(""), Settings::default());
         assert_eq!(
             Settings::parse(
-                "view = year\nnoise\ndisabled = 1\ncolor = 1 work\ncolor = 1 work green"
+                "view = year\nnoise\ndisabled = 1\nhidden = 1\ncolor = 1 work\ncolor = 1 work green"
             ),
             Settings::default()
         );

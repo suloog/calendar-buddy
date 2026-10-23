@@ -17,6 +17,7 @@ pub mod regional;
 pub mod schedule;
 pub mod settings;
 pub mod shortcuts;
+pub mod side_panel;
 pub mod status;
 pub mod sync;
 pub mod view_model;
