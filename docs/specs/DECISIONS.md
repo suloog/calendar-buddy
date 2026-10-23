@@ -792,3 +792,15 @@
 - **Scope effect:** within scope
 - **Resolves:** `Q44`
 - **Status:** accepted
+
+## [DEC-65] Test cases on a "desktop" layer, smoke depth, without /og:run-tests
+
+- **Date:** 2026-10-23
+- **Decided by:** tech lead (Maciej)
+- **Source:** /og:tests MOD-01 2026-10-23
+- **Affects:** `docs/specs/modules/*/tests/`, `TESTPLAN.md`, `COVERAGE.md` part 2
+- **Decision:** Test cases use `layer: desktop`, outside the template's admin/web/api/mobile set, because the app is a native desktop application that Playwright and Maestro cannot drive. There is no `.claude/og-test-targets.json` and `/og:run-tests` is not used. `automation: auto` means an automated test in the project's own suite (`cargo test`, against a fake Google API and a test secret store); `manual-only` means the product owner checks it by hand as part of acceptance (`DEC-07`) — the real Google consent screen, the browser, desktop notifications, the tray, the look. Depth is smoke (the happy path of every story) for now; criteria without a test carry a note in `COVERAGE.md` and full depth can be added per module later.
+- **Why:** Follows from the desktop delivery form and test levels (`DEC-12`, `DEC-17`) and the web/mobile targets being n/a (`DEC-18`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
