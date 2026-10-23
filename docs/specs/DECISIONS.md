@@ -948,3 +948,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-78] The permissions asked when connecting; the directory in a second step on Workspace accounts
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-01
+- **Affects:** `US-01-01`, `MOD-01-F03`, MOD-01 Technical notes, `NFR-05`
+- **Decision:** Connecting asks every account for `openid`, `email`, `profile`, Google Calendar (`https://www.googleapis.com/auth/calendar`, needed to edit events, RSVP and subscribe to calendars later), contacts (`contacts.readonly`) and other contacts (`contacts.other.readonly`). Whether an account is a Workspace account is known only after it signs in (Google's `hd` claim), so a Workspace account is then sent to Google's consent screen a second time, for the directory (`directory.readonly`) alone, with the account pre-selected and earlier grants kept (`login_hint`, `include_granted_scopes`); a personal account never sees the directory permission. The account connects only when calendar access was granted; contact suggestions count as available only when both contacts permissions were granted. Declining or cancelling the second screen still connects the account, without directory suggestions; "Cancel" in the app cancels the whole connection. Every consent asks for offline access with `prompt=consent`, so Google always returns a refresh token.
+- **Why:** One consent screen cannot differ between personal and Workspace accounts; a second, directory-only screen keeps `MOD-01-F03` ("only … and, on Workspace accounts, the directory") exact. The exact scope set will be narrowed by `MOD-02`, `MOD-05` and `MOD-06` if a smaller one suffices.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-79] Sign-in checks, waiting for the browser and the first-run messages
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-01
+- **Affects:** `US-01-01`, `MOD-01-F10`, `MOD-01-F13`, `MOD-01-U03`, MOD-01 Constraints and edge cases
+- **Decision:** "Connect Google account" first checks, off the UI thread, the OAuth client file, that a secret store runs (a Secret Service session can be opened) and that Google's token service can be reached (no connection within 5 seconds = offline); any failure is explained on the welcome screen with a "Try again" button that runs the checks again. Only then the "unverified app" heads-up is shown, with "Continue in the browser" and "Cancel". While the browser has the sign-in the app listens on the loopback port for up to 5 minutes and offers "Cancel"; a request that does not carry this sign-in's `state` (a favicon, a stray visit) is ignored. Google's `access_denied` counts as the user cancelling; any other error from Google — on the redirect or from its token service — is shown as Google's reason. The refresh token is saved in the secret store's default collection (unlocking it if needed), labelled with the e-mail address and keyed by Google's account ID.
+- **Why:** Checking before the heads-up means the user does not read about Google's warning only to hit an error; 5 minutes leaves time to read Google's screens while not listening forever; Google gives no signal when the browser is closed, so the app's own "Cancel" covers it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-80] Until US-01-02 and US-01-03, a connected account lives for the session and is announced in a notice
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-01-01
+- **Affects:** `US-01-01`, `US-01-02`, `US-01-03`
+- **Decision:** The connected account is kept in memory: the app does not yet remember it across restarts (that is `US-01-03`), so every start shows the welcome screen until then. After connecting, the calendar appears with a closable notice "Connected <e-mail>." that also names the features unavailable for the account because a permission was not granted; the account list in the settings comes with `US-01-02`. The calendar still shows the generated test events until synchronization exists (`MOD-02`).
+- **Why:** Keeps the story to its scope (staying signed in and the account list are separate stories) while the account visibly "appears in the app".
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

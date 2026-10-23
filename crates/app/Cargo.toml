@@ -7,7 +7,9 @@ publish.workspace = true
 
 [dependencies]
 calendar-core = { version = "0.1.0", path = "../core" }
+calendar-google = { version = "0.1.0", path = "../google" }
 chrono = "0.4.45"
 chrono-tz = "0.10.4"
 eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "wgpu", "wayland", "x11"] }
 iana-time-zone = "0.1.65"
+secret-service = { version = "5.2.0", features = ["rt-async-io-crypto-rust"] }

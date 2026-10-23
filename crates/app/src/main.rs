@@ -2,7 +2,10 @@ mod agenda_view;
 mod grid_view;
 mod mini_calendar;
 mod month_view;
+mod platform;
+mod welcome;
 
+use calendar_core::accounts::Account;
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::details::event_details;
 use calendar_core::fixtures;
@@ -17,6 +20,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use eframe::egui;
 use std::sync::mpsc::{self, Receiver, Sender};
+use welcome::Welcome;
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -89,6 +93,11 @@ fn build(
 }
 
 struct CalendarApp {
+    /// The connected Google accounts; none on a first run.
+    accounts: Vec<Account>,
+    welcome: Welcome,
+    /// The account just connected, until the user closes the notice about it.
+    connected: Option<Account>,
     events: Vec<Event>,
     /// The system's regional settings, read at start (`DEC-29`).
     regional: Regional,
@@ -136,6 +145,9 @@ impl CalendarApp {
         let built_at = Utc::now();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
         CalendarApp {
+            accounts: Vec::new(),
+            welcome: Welcome::new(),
+            connected: None,
             events,
             regional,
             zone,
@@ -310,6 +322,15 @@ impl CalendarApp {
 
 impl eframe::App for CalendarApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // With no account connected there is only the welcome screen (`MOD-01-F12`).
+        if self.accounts.is_empty() {
+            if let Some(account) = self.welcome.show(ui) {
+                self.connected = Some(account.clone());
+                self.accounts.push(account);
+                ui.ctx().request_repaint();
+            }
+            return;
+        }
         // Events move to their new local times when the system's time zone changes.
         if let Some(zone) = self.zone_changes.try_iter().last() {
             self.zone = zone;
@@ -357,6 +378,25 @@ impl eframe::App for CalendarApp {
                 });
             });
         });
+        if let Some(account) = &self.connected {
+            let mut close = false;
+            egui::Panel::top("connected-account").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(format!("Connected {}.", account.email));
+                    let unavailable = account.unavailable();
+                    if !unavailable.is_empty() {
+                        ui.label(format!(
+                            "Not available for this account: {}.",
+                            unavailable.join("; ")
+                        ));
+                    }
+                    close = ui.small_button("✕").clicked();
+                });
+            });
+            if close {
+                self.connected = None;
+            }
+        }
         egui::Panel::left("side-panel")
             .resizable(false)
             .show(ui, |ui| {

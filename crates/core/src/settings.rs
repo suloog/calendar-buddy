@@ -48,11 +48,16 @@ impl Settings {
 
 /// `$XDG_CONFIG_HOME/calendar-buddy/settings`, or under `~/.config` when that is not set.
 pub fn default_path() -> Option<PathBuf> {
+    Some(config_dir()?.join("settings"))
+}
+
+/// `$XDG_CONFIG_HOME/calendar-buddy`, or `~/.config/calendar-buddy` when that is not set.
+pub fn config_dir() -> Option<PathBuf> {
     let config = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
-    Some(config.join("calendar-buddy").join("settings"))
+    Some(config.join("calendar-buddy"))
 }
 
 #[cfg(test)]
