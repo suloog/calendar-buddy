@@ -172,4 +172,4 @@
 - Decisions: DEC-110
 - Reviews: code 1 round(s), spec 1 round(s); open notes: no blocking findings, spec review compliant. Fixed after code review: the details decide from the fresh event, and a tested seam (`tell_unmovable`) carries the drag notice. Kept: a guest's copy cannot be edited at all, though Google lets guests change their own busy/free, colour and reminders (story's criterion, DEC-110). The details dialog and resize-by-edge refusal are proven in code, not by a test. The read-only details text changed from DEC-89's (TC-02-03's manual check updated). One squash commit: one logical change.
 - Manual checks: TC-05-06 (drawing, real window), US-05-05#1 (real guest's copy), US-05-05#2 (real Google's refusal)
-- Commits on main: see the commit below — feat(events): guard events the user may not change
+- Commits on main: e6e8b96 feat(events): guard events the user may not change
