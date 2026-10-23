@@ -48,7 +48,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-01-01` | As a User, I can connect my first Google account from the welcome screen, so that the app can show my calendars | F01, F03, F10, F12, F13, U03 | must | ready | — | — |
+| `US-01-01` | As a User, I can connect my first Google account from the welcome screen, so that the app can show my calendars | F01, F03, F10, F12, F13, U03 | must | review | — | — |
 | `US-01-02` | As a User, I can connect more Google accounts and see them all in the settings, so that my personal and work calendars are in one place | F02, U01, NFR-01 | must | ready | `US-01-01` | — |
 | `US-01-03` | As a User, I stay signed in and can sign in again when Google revokes access, so that I don't have to log in every time and a broken account doesn't stop the others | F04, F05, F06, F11 | must | ready | `US-01-01` | — |
 | `US-01-04` | As a User, I can remove an account, so that none of its data stays on my computer | F07, F08, F09, F14, U02 | must | ready | `US-01-02` | — |

@@ -1,0 +1,170 @@
+//! The welcome screen of a first run (`US-01-01`): its one action connects a Google account.
+//! Checking and signing in run off the UI thread.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+
+use calendar_core::accounts::{self, Account, ConnectError};
+use calendar_core::platform::{Browser, SecretStore};
+use calendar_google::{Client, Endpoints, SIGN_IN_WAIT};
+use eframe::egui;
+
+use crate::platform::{SystemBrowser, SystemSecretStore};
+
+enum Stage {
+    /// The one action, after a failure with what went wrong.
+    Start(Option<ConnectError>),
+    /// Checking the client file, the secret store and the network.
+    Checking,
+    /// The heads-up about Google's "unverified app" screen, before the browser opens.
+    HeadsUp(Client),
+    /// The browser has the sign-in; set the flag to cancel it.
+    Waiting(Arc<AtomicBool>),
+}
+
+/// What the user chose on the screen.
+enum Action {
+    Check,
+    SignIn(Client),
+    Back,
+}
+
+enum Outcome {
+    Checked(Result<Client, ConnectError>),
+    Connected(Result<Account, ConnectError>),
+}
+
+pub struct Welcome {
+    stage: Stage,
+    sender: Sender<Outcome>,
+    outcomes: Receiver<Outcome>,
+    store: Arc<dyn SecretStore>,
+    browser: Arc<dyn Browser>,
+}
+
+impl Welcome {
+    pub fn new() -> Self {
+        let (sender, outcomes) = mpsc::channel();
+        Welcome {
+            stage: Stage::Start(None),
+            sender,
+            outcomes,
+            store: Arc::new(SystemSecretStore),
+            browser: Arc::new(SystemBrowser),
+        }
+    }
+
+    /// Runs `work` off the UI thread and wakes the UI with its outcome.
+    fn spawn(&self, ctx: &egui::Context, work: impl FnOnce() -> Outcome + Send + 'static) {
+        let sender = self.sender.clone();
+        let ctx = ctx.clone();
+        std::thread::spawn(move || {
+            let _ = sender.send(work());
+            ctx.request_repaint();
+        });
+    }
+
+    fn check(&mut self, ctx: &egui::Context) {
+        let store = self.store.clone();
+        self.spawn(ctx, move || {
+            let path = calendar_google::client_file_path();
+            Outcome::Checked(calendar_google::prepare(
+                &path,
+                store.as_ref(),
+                &Endpoints::google(),
+            ))
+        });
+        self.stage = Stage::Checking;
+    }
+
+    fn sign_in(&mut self, ctx: &egui::Context, client: Client) {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (store, browser, flag) = (self.store.clone(), self.browser.clone(), cancel.clone());
+        self.spawn(ctx, move || {
+            Outcome::Connected(calendar_google::connect(
+                &client,
+                &Endpoints::google(),
+                browser.as_ref(),
+                store.as_ref(),
+                &flag,
+                SIGN_IN_WAIT,
+            ))
+        });
+        self.stage = Stage::Waiting(cancel);
+    }
+
+    /// Draws the welcome screen; returns the account once one is connected.
+    pub fn show(&mut self, ui: &mut egui::Ui) -> Option<Account> {
+        let mut connected = None;
+        for outcome in self.outcomes.try_iter() {
+            match outcome {
+                Outcome::Checked(Ok(client)) => self.stage = Stage::HeadsUp(client),
+                Outcome::Connected(Ok(account)) => connected = Some(account),
+                Outcome::Checked(Err(error)) | Outcome::Connected(Err(error)) => {
+                    self.stage = Stage::Start(Some(error))
+                }
+            }
+        }
+        if connected.is_some() {
+            return connected;
+        }
+        let mut chosen = None;
+        egui::CentralPanel::default().show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.set_max_width(480.0);
+                ui.add_space(ui.available_height() / 4.0);
+                ui.heading("Welcome to Calendar Buddy");
+                ui.label("Connect a Google account to see your calendars.");
+                ui.add_space(16.0);
+                match &self.stage {
+                    Stage::Start(error) => {
+                        let label = match error {
+                            Some(error) => {
+                                ui.colored_label(ui.visuals().warn_fg_color, error.message());
+                                ui.add_space(8.0);
+                                "Try again"
+                            }
+                            None => accounts::CONNECT,
+                        };
+                        if ui.button(label).clicked() {
+                            chosen = Some(Action::Check);
+                        }
+                    }
+                    Stage::Checking => {
+                        ui.spinner();
+                    }
+                    Stage::HeadsUp(client) => {
+                        ui.label(accounts::UNVERIFIED_HEADS_UP);
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if ui.button("Continue in the browser").clicked() {
+                                chosen = Some(Action::SignIn(client.clone()));
+                            }
+                            if ui.button("Cancel").clicked() {
+                                chosen = Some(Action::Back);
+                            }
+                        });
+                    }
+                    Stage::Waiting(cancel) => {
+                        ui.spinner();
+                        ui.label(accounts::WAITING);
+                        ui.add_space(8.0);
+                        if ui.button("Cancel").clicked() {
+                            // The sign-in then ends as cancelled and says so.
+                            cancel.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+            });
+        });
+        let ctx = ui.ctx().clone();
+        match chosen {
+            Some(Action::Check) => self.check(&ctx),
+            Some(Action::SignIn(client)) => self.sign_in(&ctx, client),
+            Some(Action::Back) => self.stage = Stage::Start(None),
+            None => {}
+        }
+        None
+    }
+}
