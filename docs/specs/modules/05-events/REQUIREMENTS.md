@@ -32,10 +32,10 @@ Creating, changing and deleting events: quick entry and the full editor, the def
 | `SRC-01-64` Handle recurring event instances and entire series; support changes to future occurrenc… | informal | `MOD-05-F20`, `MOD-05-F21` |
 | `SRC-01-65` Warn users when changes affect invited participants or an entire series. | informal | `MOD-05-F20`; guests in `MOD-06-F12` |
 | `SRC-01-66` Display clear failures if an operation is disallowed by Google or the organizer's permi… | informal | `MOD-05-F22` |
-| `SRC-01-100` Create, edit, delete, and reschedule events. | informal | `MOD-05-F11`, `MOD-05-F12`, `MOD-05-F13` |
+| `SRC-01-100` Create, edit, delete, and reschedule events. | informal | `MOD-05-F11`, `MOD-05-F12`, `MOD-05-F13`, `MOD-05-F16` |
 | `SRC-01-101` Basic recurring event management. | informal | `MOD-05-F18`, `MOD-05-F19` |
 | `SRC-01-114` Google Drive attachments. | informal | `MOD-05-F26`; adding attachments not built (`DEC-37`, `MOD-08`) |
-| `SRC-01-124` Reschedule, edit, and cancel events within their permissions. | informal | `MOD-05-F11`, `MOD-05-F12`, `MOD-05-F13` |
+| `SRC-01-124` Reschedule, edit, and cancel events within their permissions. | informal | `MOD-05-F11`, `MOD-05-F12`, `MOD-05-F13`, `MOD-05-F16` |
 | `SRC-01-125` Manage common recurring event cases. | informal | `MOD-05-F18`…`MOD-05-F21` |
 | `SRC-02-23` The user picks which calendar is the default for creating new events. | informal | `MOD-05-F10` |
 | `SRC-02-44` It is important to be able to choose the event type where possible, e.g. out of office,… | informal | `MOD-05-F23`, `MOD-05-F24` |
