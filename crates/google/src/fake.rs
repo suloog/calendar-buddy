@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use calendar_core::accounts::Account;
 use calendar_core::platform::{Browser, SecretStore, SecretStoreError};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -107,6 +107,54 @@ impl State {
     fn find_event(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
         self.kept_event(account, calendar, id)
             .filter(|event| !deleted(event))
+    }
+
+    /// The event of the account's calendar with the ID, or the occurrence of a series Google
+    /// names by it, `<series>_<start>`, as Google makes it when it is first changed: the series'
+    /// fields at the occurrence's times, with the version of the series.
+    fn event_or_occurrence(&self, account: &str, calendar: &str, id: &str) -> Option<Value> {
+        if let Some(event) = self.kept_event(account, calendar, id) {
+            return Some(event);
+        }
+        let (series, start) = id.rsplit_once('_')?;
+        let mut event = self
+            .find_event(account, calendar, series)
+            .filter(|series| series.get("recurrence").is_some())?;
+        let (original, end) = match NaiveDateTime::parse_from_str(start, "%Y%m%dT%H%M%SZ") {
+            Ok(at) => {
+                let instant = |when: &Value| {
+                    DateTime::parse_from_rfc3339(when["dateTime"].as_str().unwrap()).unwrap()
+                };
+                let length = instant(&event["end"]) - instant(&event["start"]);
+                let zone = event["start"]["timeZone"].clone();
+                let when = |at: DateTime<Utc>| {
+                    json!({
+                        "dateTime": at.to_rfc3339_opts(SecondsFormat::Secs, true),
+                        "timeZone": zone,
+                    })
+                };
+                (when(at.and_utc()), when(at.and_utc() + length))
+            }
+            Err(_) => {
+                let date = |when: &Value| {
+                    NaiveDate::parse_from_str(when["date"].as_str().unwrap(), "%Y-%m-%d").unwrap()
+                };
+                let length = date(&event["end"]) - date(&event["start"]);
+                let day = NaiveDate::parse_from_str(start, "%Y%m%d").ok()?;
+                (
+                    json!({"date": day.to_string()}),
+                    json!({"date": (day + length).to_string()}),
+                )
+            }
+        };
+        let fields = event.as_object_mut().unwrap();
+        fields.remove("recurrence");
+        fields.insert("id".into(), json!(id));
+        fields.insert("recurringEventId".into(), json!(series));
+        fields.insert("originalStartTime".into(), original.clone());
+        fields.insert("start".into(), original);
+        fields.insert("end".into(), end);
+        Some(event)
     }
 
     /// Why the account may not change the calendar's events, as Google answers; `None` when it
@@ -595,6 +643,13 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
                 CALENDARS_PER_PAGE,
             )
         }
+        // `events.get`: one event, deleted ones included, as Google keeps them for a while.
+        [_, _, calendars, id, events, event] if calendars == "calendars" && events == "events" => {
+            return match state.kept_event(account, id, event) {
+                Some(event) => ("200 OK", event.to_string()),
+                None => not_found(),
+            };
+        }
         [_, _, calendars, id, events] if calendars == "calendars" && events == "events" => {
             let listed = state
                 .calendars
@@ -710,10 +765,10 @@ fn insert_event(
     ("200 OK", event.to_string())
 }
 
-/// The Calendar API's `events.patch`: the fields sent replace those kept, a null one goes; only
-/// when the version sent in `If-Match` is the one kept, and not in a guest's copy the organizer
-/// does not let guests change. A deleted event is kept cancelled, and patching its status to
-/// confirmed brings it back.
+/// The Calendar API's `events.patch`, also of a series' occurrence: the fields sent replace those
+/// kept, a null one goes; only when the version sent in `If-Match` is the one kept, and not in a
+/// guest's copy the organizer does not let guests change. A deleted event is kept cancelled, and
+/// patching its status to confirmed brings it back.
 fn patch_event(
     state: &mut State,
     account: &'static str,
@@ -729,7 +784,7 @@ fn patch_event(
     if let Some(refusal) = state.refuses_changes(account, &calendar) {
         return refusal;
     }
-    let Some(mut event) = state.kept_event(account, &calendar, &id) else {
+    let Some(mut event) = state.event_or_occurrence(account, &calendar, &id) else {
         return not_found();
     };
     if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
@@ -757,8 +812,9 @@ fn patch_event(
     ("200 OK", event.to_string())
 }
 
-/// The Calendar API's `events.delete`: the event stays, cancelled, with everything it had; only
-/// when the version sent in `If-Match` is the one kept.
+/// The Calendar API's `events.delete`, also of a series' occurrence: the event stays, cancelled,
+/// with everything it had, and so do a series' occurrences; only when the version sent in
+/// `If-Match` is the one kept.
 fn delete_event(
     state: &mut State,
     account: &'static str,
@@ -773,10 +829,10 @@ fn delete_event(
     if let Some(refusal) = state.refuses_changes(account, &calendar) {
         return refusal;
     }
-    let Some(mut event) = state.kept_event(account, &calendar, &id) else {
+    let Some(mut event) = state.event_or_occurrence(account, &calendar, &id) else {
         return not_found();
     };
-    if deleted(&event) {
+    if event["status"] == "cancelled" {
         return (
             "410 Gone",
             r#"{"error": {"code": 410, "message": "Resource has been deleted"}}"#.to_string(),
@@ -787,6 +843,17 @@ fn delete_event(
     }
     event["status"] = json!("cancelled");
     state.put_event(account, &calendar, event);
+    // A series goes with its occurrences changed on their own.
+    let occurrences: Vec<Value> = (state.events.iter())
+        .filter(|(owner, c, e, _)| {
+            *owner == account && *c == calendar && e["recurringEventId"] == id
+        })
+        .map(|(_, _, occurrence, _)| occurrence.clone())
+        .collect();
+    for mut occurrence in occurrences {
+        occurrence["status"] = json!("cancelled");
+        state.put_event(account, &calendar, occurrence);
+    }
     ("204 No Content", String::new())
 }
 

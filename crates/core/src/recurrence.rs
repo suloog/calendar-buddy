@@ -20,8 +20,10 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         .filter_map(|event| event.instance_of.as_ref())
         .map(|(series, original)| (series.as_str(), *original))
         .collect();
-    let shown = |event: &SyncedEvent, id: String, timing: Timing| Event {
-        id,
+    // An occurrence of a series is named by the series' ID and its start, and has no version of
+    // its own until it is changed.
+    let shown = |event: &SyncedEvent, occurrence: Option<Start>, timing: Timing| Event {
+        id: occurrence.map_or_else(|| event.id.clone(), |start| occurrence_id(&event.id, start)),
         account_id: calendar.account_id.clone(),
         calendar_id: calendar.id.clone(),
         // As Google Calendar names an untitled event.
@@ -38,8 +40,15 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         organizer_only: event.organizer_only,
         saving: false,
         recurring: !event.recurrence.is_empty() || event.instance_of.is_some(),
+        series: occurrence
+            .map(|start| (event.id.clone(), start))
+            .or_else(|| event.instance_of.clone()),
         about: event.about.clone(),
-        etag: event.etag.clone(),
+        etag: if occurrence.is_some() {
+            String::new()
+        } else {
+            event.etag.clone()
+        },
     };
     let mut shown_events = Vec::new();
     for event in events {
@@ -49,13 +58,13 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         };
         if event.recurrence.is_empty() || event.instance_of.is_some() {
             if window.overlaps(&timing) {
-                shown_events.push(shown(event, event.id.clone(), timing));
+                shown_events.push(shown(event, None, timing));
             }
             continue;
         }
         for (start, timing) in occurrences(timing, &event.recurrence, window) {
             if !replaced.contains(&(event.id.as_str(), start)) {
-                shown_events.push(shown(event, occurrence_id(&event.id, start), timing));
+                shown_events.push(shown(event, Some(start), timing));
             }
         }
     }
@@ -67,22 +76,11 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
 fn occurrences(first: Timing, rules: &[String], window: Window) -> Vec<(Start, Timing)> {
     let starts = match first {
         Timing::Timed { start, end, zone } => {
-            let first_zone = zone;
             let zone = RuleZone::Tz(zone);
-            let dt_start = format!(
-                "DTSTART;TZID={}:{}",
-                zone.name(),
-                start.with_timezone(&zone).format("%Y%m%dT%H%M%S")
-            );
             let after = (window.start() - (end - start)).with_timezone(&zone);
             let before = window.end().with_timezone(&zone);
-            let rules: Vec<String> = rules
-                .iter()
-                .map(|rule| with_until(rule, |until| until_in_utc(until, first_zone)))
-                .collect();
-            starts(&dt_start, &rules, after, before)
+            starts(&rule_set(first, rules), after, before)
         }
-        // Dates carry no zone; the library reads them in the system's, both the rule's and ours.
         Timing::AllDay {
             start,
             end_exclusive,
@@ -92,15 +90,10 @@ fn occurrences(first: Timing, rules: &[String], window: Window) -> Vec<(Start, T
                     .from_local_datetime(&date.and_time(NaiveTime::from_hms_opt(12, 0, 0).unwrap()))
                     .earliest()
             };
-            let dt_start = format!("DTSTART;VALUE=DATE:{}", start.format("%Y%m%d"));
             let after = noon(window.from - (end_exclusive - start) - Duration::days(1));
             let before = noon(window.until + Duration::days(1));
-            let rules: Vec<String> = rules
-                .iter()
-                .map(|rule| with_until(rule, until_as_date))
-                .collect();
             match (after, before) {
-                (Some(after), Some(before)) => starts(&dt_start, &rules, after, before),
+                (Some(after), Some(before)) => starts(&rule_set(first, rules), after, before),
                 _ => None,
             }
         }
@@ -140,19 +133,92 @@ fn occurrences(first: Timing, rules: &[String], window: Window) -> Vec<(Start, T
         .collect()
 }
 
+/// The series as the library reads it: its first start and its rule lines, with their ends as
+/// the library takes them.
+fn rule_set(first: Timing, rules: &[String]) -> String {
+    let (dt_start, rules): (String, Vec<String>) = match first {
+        Timing::Timed { start, zone, .. } => (
+            format!(
+                "DTSTART;TZID={}:{}",
+                zone.name(),
+                start.with_timezone(&zone).format("%Y%m%dT%H%M%S")
+            ),
+            rules
+                .iter()
+                .map(|rule| with_until(rule, |until| until_in_utc(until, zone)))
+                .collect(),
+        ),
+        // Dates carry no zone; the library reads them in the system's, both the rule's and ours.
+        Timing::AllDay { start, .. } => (
+            format!("DTSTART;VALUE=DATE:{}", start.format("%Y%m%d")),
+            rules
+                .iter()
+                .map(|rule| with_until(rule, until_as_date))
+                .collect(),
+        ),
+    };
+    std::iter::once(dt_start)
+        .chain(rules)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// The starts the rule set gives between the bounds; `None` when the library rejects it.
 fn starts(
-    dt_start: &str,
-    rules: &[String],
+    text: &str,
     after: DateTime<RuleZone>,
     before: DateTime<RuleZone>,
 ) -> Option<Vec<DateTime<RuleZone>>> {
-    let text = std::iter::once(dt_start)
-        .chain(rules.iter().map(String::as_str))
-        .collect::<Vec<_>>()
-        .join("\n");
     let set: RRuleSet = text.parse().ok()?;
     Some(set.after(after).before(before).all(u16::MAX).dates)
+}
+
+/// How many occurrences the series' rules give before `start`, deleted ones included, as a
+/// rule's `COUNT` counts them.
+pub(crate) fn count_before(first: Timing, rules: &[String], start: Start) -> usize {
+    let rules: Vec<String> = (rules.iter())
+        .filter(|rule| rule.starts_with("RRULE:"))
+        .cloned()
+        .collect();
+    // A day more on each side, so that no zone's occurrence falls off it.
+    let span = Window {
+        from: date_of(start_of(first)) - Duration::days(1),
+        until: date_of(start) + Duration::days(2),
+        zone: Tz::UTC,
+    };
+    occurrences(first, &rules, span)
+        .into_iter()
+        .filter(|(at, _)| before(*at, start))
+        .count()
+}
+
+/// The starts the series' `EXDATE` lines take away; none when the library rejects them.
+pub(crate) fn excluded(first: Timing, rules: &[String]) -> Vec<Start> {
+    let Ok(set) = rule_set(first, rules).parse::<RRuleSet>() else {
+        return Vec::new();
+    };
+    (set.get_exdate().iter())
+        .map(|at| match first {
+            Timing::Timed { .. } => Start::At(at.with_timezone(&Utc)),
+            Timing::AllDay { .. } => Start::On(at.date_naive()),
+        })
+        .collect()
+}
+
+/// Whether `a` comes before `b`; a date before a time on a later day.
+pub(crate) fn before(a: Start, b: Start) -> bool {
+    match (a, b) {
+        (Start::At(a), Start::At(b)) => a < b,
+        (a, b) => date_of(a) < date_of(b),
+    }
+}
+
+/// The day a start falls on, in UTC for a time.
+fn date_of(start: Start) -> NaiveDate {
+    match start {
+        Start::At(at) => at.date_naive(),
+        Start::On(date) => date,
+    }
 }
 
 /// The rule with its end (`UNTIL`) rewritten by `rewrite`; other lines and parts stay as they are.
@@ -192,7 +258,7 @@ fn until_as_date(until: &str) -> Option<String> {
     (until.len() > 8).then(|| until[..8].to_string())
 }
 
-fn start_of(timing: Timing) -> Start {
+pub(crate) fn start_of(timing: Timing) -> Start {
     match timing {
         Timing::Timed { start, .. } => Start::At(start),
         Timing::AllDay { start, .. } => Start::On(start),
@@ -434,6 +500,41 @@ mod tests {
         assert_eq!(shown[0].calendar_id, "work@example.com");
         assert_eq!(shown[0].color, Rgb(0x03, 0x9B, 0xE5));
         assert_eq!(shown[0].title, "weekly");
+    }
+
+    #[test]
+    fn occurrences_know_their_series_and_start_by_its_rule_and_only_changed_ones_a_version() {
+        let first = at(Warsaw, d(2026, 11, 2), (9, 0));
+        let master = SyncedEvent {
+            etag: "\"7\"".into(),
+            ..series(
+                "weekly",
+                timed(Warsaw, d(2026, 11, 2), (9, 0), (10, 0)),
+                &["RRULE:FREQ=WEEKLY;COUNT=2"],
+            )
+        };
+        let second = at(Warsaw, d(2026, 11, 9), (9, 0));
+        let moved = SyncedEvent {
+            instance_of: Some(("weekly".into(), Start::At(second))),
+            etag: "\"8\"".into(),
+            ..event(
+                "weekly_20261109T080000Z",
+                timed(Warsaw, d(2026, 11, 9), (11, 0), (12, 0)),
+            )
+        };
+        let single = event("single", timed(Warsaw, d(2026, 11, 3), (9, 0), (10, 0)));
+
+        let shown = expand(&calendar(), &[master, moved, single], window());
+
+        let of = |id: &str| shown.iter().find(|e| e.id == id).unwrap();
+        let unchanged = of("weekly_20261102T080000Z");
+        assert_eq!(unchanged.series, Some(("weekly".into(), Start::At(first))));
+        // Google gives an occurrence a version of its own only once it is changed.
+        assert_eq!(unchanged.etag, "");
+        let changed = of("weekly_20261109T080000Z");
+        assert_eq!(changed.series, Some(("weekly".into(), Start::At(second))));
+        assert_eq!(changed.etag, "\"8\"");
+        assert_eq!(of("single").series, None);
     }
 
     #[test]

@@ -1352,3 +1352,153 @@ fn a_deletion_of_an_event_changed_elsewhere_meanwhile_is_refused_as_such() {
         "confirmed"
     );
 }
+
+/// A weekly series on Monday 09:00 from 16 November, ten times, beside the calendar's events.
+fn with_weekly_series(name: &str) -> (FakeGoogle, FakeStore, PathBuf, PathBuf, Cache) {
+    let (google, store, dir, client_file, mut cache) = synchronized_once(name);
+    let mut weekly = timed(
+        "weekly",
+        "Weekly",
+        "2026-11-16T09:00:00+01:00",
+        "2026-11-16T09:15:00+01:00",
+    );
+    weekly["recurrence"] = json!(["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10"]);
+    google.add_event(ACCOUNT_ID, "work", weekly);
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    (google, store, dir, client_file, cache)
+}
+
+#[test]
+fn an_occurrence_is_changed_and_deleted_alone_by_its_id_without_a_version_of_its_own() {
+    let (google, store, dir, client_file, mut cache) = with_weekly_series("occurrence");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let patch = Patch {
+        title: Some("Weekly (late)".into()),
+        ..Patch::default()
+    };
+
+    let etag = session
+        .update(&work, "weekly_20261123T080000Z", "", &patch)
+        .unwrap();
+    session
+        .delete(&work, "weekly_20261130T080000Z", "")
+        .unwrap();
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    // Sent without `If-Match`: an occurrence Google has not been asked to change has no version.
+    assert_eq!(google.patched().last().unwrap().0, "");
+    let second = Start::At(Utc.with_ymd_and_hms(2026, 11, 23, 8, 0, 0).unwrap());
+    let changed = cached(&cache, "work", "weekly_20261123T080000Z").unwrap();
+    assert_eq!(changed.instance_of, Some(("weekly".into(), second)));
+    assert_eq!(changed.title, "Weekly (late)");
+    assert_eq!(changed.etag, etag);
+    let deleted = cached(&cache, "work", "weekly_20261130T080000Z").unwrap();
+    assert_eq!(deleted.timing, None);
+    let shown = shown_events(&cache.calendars().unwrap(), window());
+    assert_eq!(
+        week_of(&shown, d(2026, 11, 23))[0],
+        (
+            "Weekly (late)".into(),
+            "2026-11-23 09:00".into(),
+            "2026-11-23 09:15".into()
+        )
+    );
+    assert!(week_of(&shown, d(2026, 11, 30)).is_empty());
+}
+
+#[test]
+fn a_series_rule_is_sent_whole_in_a_patch_against_its_version() {
+    let (google, store, dir, client_file, mut cache) = with_weekly_series("rule");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let master = cached(&cache, "work", "weekly").unwrap();
+    let ended = vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261214T075959Z".to_string()];
+    let patch = Patch {
+        recurrence: Some(ended.clone()),
+        ..Patch::default()
+    };
+
+    session
+        .update(&work, "weekly", &master.etag, &patch)
+        .unwrap();
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(
+        google.patched().last().unwrap(),
+        &(master.etag, json!({"recurrence": ended}))
+    );
+    assert_eq!(cached(&cache, "work", "weekly").unwrap().recurrence, ended);
+}
+
+#[test]
+fn the_series_opens_in_google_calendars_editor_as_the_account() {
+    let page = edit_page("work@example.com", "weekly", "owner@example.com");
+
+    let eid = URL_SAFE_NO_PAD.encode("weekly work@example.com");
+    assert_eq!(
+        page,
+        format!(
+            "https://calendar.google.com/calendar/r/eventedit/{eid}?authuser=owner%40example.com"
+        )
+    );
+}
+
+#[test]
+fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fields() {
+    let (google, store, dir, client_file, cache) = synchronized_once("copy");
+    let mut weekly = timed(
+        "weekly",
+        "Weekly",
+        "2026-11-16T09:00:00+01:00",
+        "2026-11-16T09:15:00+01:00",
+    );
+    weekly["recurrence"] = json!(["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10"]);
+    weekly["iCalUID"] = json!("weekly@google.com");
+    weekly["attendees"] = json!([{"email": "guest@example.com", "responseStatus": "accepted"}]);
+    weekly["reminders"] =
+        json!({"useDefault": false, "overrides": [{"method": "popup", "minutes": 5}]});
+    weekly["colorId"] = json!("5");
+    google.add_event(ACCOUNT_ID, "work", weekly);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let at = |h| Utc.with_ymd_and_hms(2026, 12, 14, h, 0, 0).unwrap();
+    let following = NewEvent {
+        title: "Weekly".into(),
+        timing: Timing::Timed {
+            start: at(10),
+            end: at(10) + chrono::Duration::minutes(15),
+            zone: Warsaw,
+        },
+        about: About::default(),
+        recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6".into()],
+    };
+
+    let id = session.copy(&work, "weekly", &following).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let copy = google.event(ACCOUNT_ID, "work", &id).unwrap();
+    assert_ne!(id, "weekly");
+    assert_eq!(copy["attendees"][0]["email"], "guest@example.com");
+    assert_eq!(copy["reminders"]["overrides"][0]["minutes"], 5);
+    assert_eq!(copy["colorId"], "5");
+    assert_eq!(copy["start"]["dateTime"], "2026-12-14T11:00:00+01:00");
+    assert_eq!(
+        copy["recurrence"],
+        json!(["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6"])
+    );
+    assert!(copy.get("iCalUID").is_none());
+    assert!(
+        google
+            .requests()
+            .iter()
+            .any(|r| r.starts_with("POST ") && r.contains("conferenceDataVersion=1"))
+    );
+}

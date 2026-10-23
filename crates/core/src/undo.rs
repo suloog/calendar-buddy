@@ -54,6 +54,7 @@ impl Undo {
                 timing: patch.timing.map(|_| before.timing),
                 show: patch.show.map(|_| before.about.show),
                 visibility: patch.visibility.map(|_| before.about.visibility),
+                recurrence: None,
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
             event,
@@ -223,6 +224,7 @@ mod tests {
                 }),
                 show: Some(Show::Free),
                 visibility: Some(crate::model::Visibility::Private),
+                recurrence: None,
             },
             to: Some(calendar("team")),
         };
@@ -241,6 +243,7 @@ mod tests {
                 timing: Some(call.timing),
                 show: Some(Show::Busy),
                 visibility: Some(crate::model::Visibility::Default),
+                recurrence: None,
             }
         );
         assert_eq!(undo.calendar, calendar("team"));

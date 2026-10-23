@@ -222,6 +222,9 @@ struct Pending {
     replaces: Option<Event>,
     /// A deletion: `event` is not shown either.
     deletes: bool,
+    /// A change to the following or all events of a series: shown until the first
+    /// synchronization after Google took it, as the occurrence may come back under another ID.
+    series: bool,
 }
 
 /// Whether two events are the same event of the same calendar.
@@ -259,6 +262,7 @@ impl Saving {
             organizer_only: false,
             saving: true,
             recurring: !event.recurrence.is_empty(),
+            series: None,
             about: event.about.clone(),
             etag: String::new(),
         };
@@ -278,6 +282,16 @@ impl Saving {
         self.push(after, Some(before.clone()), false)
     }
 
+    /// Shows the occurrence changed with the following or all events of its series as saving in
+    /// place of `before`, and returns the number it is told by (`MOD-05-F20`).
+    pub fn change_series(&mut self, before: &Event, after: Event) -> u64 {
+        let local = self.change(before, after);
+        if let Some(pending) = self.pending.last_mut() {
+            pending.series = true;
+        }
+        local
+    }
+
     /// Hides the deleted event, and returns the number it is told by (`MOD-05-F12`).
     pub fn delete(&mut self, event: &Event) -> u64 {
         let event = Event {
@@ -294,6 +308,7 @@ impl Saving {
             event,
             replaces,
             deletes,
+            series: false,
         });
         self.next
     }
@@ -329,11 +344,14 @@ impl Saving {
 
     /// Synchronization brought these events: the saved ones among them, in a version other than
     /// the one changed or in the calendar moved to, are no longer pending, nor the deleted ones
-    /// missing from them.
+    /// missing from them, nor the saved changes to a series.
     pub fn synced(&mut self, events: &[Event]) {
         self.pending.retain(|p| {
             if p.deletes {
                 return p.event.saving || events.iter().any(|e| same(e, &p.event));
+            }
+            if p.series {
+                return p.event.saving;
             }
             p.event.saving
                 || !events.iter().any(|e| {
@@ -741,6 +759,23 @@ mod tests {
         saving.synced(&synced);
         assert!(saving.is_empty());
         assert_eq!(saving.shown(&synced), synced);
+    }
+
+    #[test]
+    fn a_change_to_following_or_all_events_is_shown_until_the_first_synchronization_after_it() {
+        let before = crate::fixtures::timed("Standup", d(2026, 11, 16), (9, 0), (9, 15));
+        let after = crate::fixtures::timed("Standup", d(2026, 11, 16), (11, 0), (11, 15));
+        let mut saving = Saving::default();
+        let local = saving.change_series(&before, after.clone());
+        // Another synchronization before Google answers keeps it.
+        saving.synced(std::slice::from_ref(&before));
+        assert!(saving.holds(&before));
+
+        saving.changed(local, "\"4\"");
+        // The occurrences may come back under other IDs, or none at all for a new series.
+        saving.synced(&[]);
+
+        assert!(saving.is_empty());
     }
 
     #[test]

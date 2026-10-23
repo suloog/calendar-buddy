@@ -1,7 +1,7 @@
 //! Draws the full event editor (`US-05-02`): the title, start and end, all-day, time zone,
 //! location, description, calendar, busy or free and visibility of a new or an existing event,
-//! and how a new one repeats (`US-05-06`). What the fields mean and what saving does is
-//! `calendar_core::editor`'s.
+//! and how a new one repeats (`US-05-06`); a series' repetition opens in Google Calendar
+//! (`US-05-07`). What the fields mean and what saving does is `calendar_core::editor`'s.
 
 use calendar_core::editor::{Editor, Ending, Save};
 use calendar_core::model::{Calendar, Show, Visibility};
@@ -122,16 +122,25 @@ fn field(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
         .changed()
 }
 
+/// What the user did in the editor.
+pub enum Edited {
+    Save(Save),
+    /// Asked to change the series' repetition in Google Calendar (`MOD-05-F29`).
+    OpenSeries,
+}
+
 /// Draws the editor with the calendars it can save to, under their accounts, and why changes are
 /// refused now, if they are; what saving does once the user saves. Until the event can be saved,
-/// the editor says why and **Save** is unavailable.
+/// the editor says why and **Save** is unavailable. An occurrence of a series offers to change
+/// its repetition in Google Calendar, as the app does not (`DEC-111`).
 pub fn show(
     ui: &mut egui::Ui,
     editor: &mut Editor,
     regional: &Regional,
     choices: &[(String, Vec<Calendar>)],
     refused: Option<&str>,
-) -> Option<Save> {
+) -> Option<Edited> {
+    let mut open_series = false;
     egui::Grid::new("editor")
         .num_columns(2)
         .spacing([8.0, 6.0])
@@ -184,8 +193,17 @@ pub fn show(
             }
 
             // An existing event's repetition is not changed here (`DEC-111`).
-            if editor.opened.is_none() {
-                repeat(ui, editor, regional);
+            match &editor.opened {
+                None => repeat(ui, editor, regional),
+                Some((event, _)) if event.series.is_some() => {
+                    ui.label("Repeats");
+                    ui.horizontal(|ui| {
+                        ui.label("Changed in Google Calendar");
+                        open_series = ui.button("Open in Google Calendar").clicked();
+                    });
+                    ui.end_row();
+                }
+                Some(_) => {}
             }
 
             ui.label("Location");
@@ -240,5 +258,12 @@ pub fn show(
     let clicked = ui
         .add_enabled(problem.is_none(), egui::Button::new("Save"))
         .clicked();
-    if clicked { saved.ok() } else { None }
+    if open_series {
+        return Some(Edited::OpenSeries);
+    }
+    if clicked {
+        saved.ok().map(Edited::Save)
+    } else {
+        None
+    }
 }

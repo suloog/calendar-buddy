@@ -21,7 +21,7 @@ mod calendar;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
 
-pub use calendar::{Session, sync_account};
+pub use calendar::{Session, edit_page, sync_account};
 
 /// The client file's name in the app's config directory (`DEC-77`).
 pub const CLIENT_FILE: &str = "google-oauth-client.json";

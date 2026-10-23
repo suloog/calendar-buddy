@@ -19,6 +19,7 @@ pub mod recurrence;
 pub mod regional;
 pub mod repeat;
 pub mod schedule;
+pub mod series;
 pub mod settings;
 pub mod shortcuts;
 pub mod side_panel;

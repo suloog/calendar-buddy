@@ -17,12 +17,14 @@ use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
-use calendar_core::editor::{Editor, Save};
+use calendar_core::editor::{Edit, Editor, Save};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::offline;
+use calendar_core::platform::Browser;
 use calendar_core::regional::Regional;
+use calendar_core::series::{Question, Scope};
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::side_panel::{self, Panel};
@@ -36,7 +38,7 @@ use chrono_tz::Tz;
 use connect::Connect;
 use eframe::egui;
 use network::Online;
-use platform::SystemNetwork;
+use platform::{SystemBrowser, SystemNetwork};
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Instant;
@@ -91,11 +93,11 @@ enum Dialog {
     Event(Event, Option<egui::Id>),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
+    /// Which events of a series a change or deletion of one of its occurrences applies to
+    /// (`MOD-05-F20`, `MOD-05-F21`), and the editor the change was made in, which Cancel goes
+    /// back to.
+    Scope(Question, Option<Box<Editor>>),
 }
-
-/// Why an occurrence of a series cannot be edited yet: the three-way question comes with
-/// `US-05-07`.
-const REPEATING: &str = "Changing a repeating event is not available yet.";
 
 /// Ctrl+Z: undoes the last change to an event (`MOD-05-F28`); not Ctrl+Shift+Z, there is no redo.
 fn undo_pressed(input: &mut egui::InputState) -> bool {
@@ -356,11 +358,61 @@ impl CalendarApp {
         else {
             return;
         };
-        let edit = drag::edit(event, calendar.clone(), timing);
+        match Question::changing(drag::edit(event, calendar.clone(), timing)) {
+            Ok(edit) => self.change(Box::new(edit)),
+            // An occurrence stays where it was until the user says which events move.
+            Err(question) => self.dialog = Some(Dialog::Scope(question, None)),
+        }
+    }
+
+    /// Saves the change to the event: shown changed at once, marked "saving" until Google
+    /// confirms it (`MOD-05-U03`).
+    fn change(&mut self, edit: Box<Edit>) {
         let local = self.saving.change(&edit.event, edit.changed());
         self.last.changing(local, &edit);
-        self.sync.change(local, Box::new(edit));
+        self.sync.change(local, edit);
         self.show_events(None);
+    }
+
+    /// Saves the change to or deletion of an occurrence for the events the user chose
+    /// (`MOD-05-F20`, `MOD-05-F21`). One of the following or all events cannot be undone: as
+    /// after creating an event, nothing is left to undo.
+    fn answered(&mut self, question: Question, scope: Scope) {
+        match (question, scope) {
+            (Question::Change(edit), Scope::This) => self.change(edit),
+            (Question::Delete(deleted), Scope::This) => {
+                let (calendar, event) = *deleted;
+                self.delete(&event, calendar);
+            }
+            (Question::Change(edit), scope) => {
+                let local = self.saving.change_series(&edit.event, edit.changed());
+                self.last.creating();
+                self.sync.change_series(local, edit, scope);
+                self.show_events(None);
+            }
+            (Question::Delete(deleted), scope) => {
+                let (calendar, event) = *deleted;
+                let local = self.saving.delete(&event);
+                self.last.creating();
+                self.sync.delete_series(local, calendar, event, scope);
+                self.show_events(None);
+            }
+        }
+    }
+
+    /// Opens the series of the occurrence in Google Calendar's editor in the browser, as its
+    /// account, where its repetition is changed (`MOD-05-F29`, `DEC-111`).
+    fn open_series(&mut self, event: &Event) {
+        let (Some((series, _)), Some(entry)) = (
+            &event.series,
+            (self.accounts.list().iter()).find(|entry| entry.account.id == event.account_id),
+        ) else {
+            return;
+        };
+        let page = calendar_google::edit_page(&event.calendar_id, series, &entry.account.email);
+        if let Err(error) = SystemBrowser.open(&page) {
+            (self.not_saved).push(format!("Google Calendar could not be opened: {error}."));
+        }
     }
 
     /// Deletes the event from its calendar, without a question (`MOD-05-F12`, `MOD-05-F27`): gone
@@ -465,10 +517,13 @@ impl CalendarApp {
     }
 
     /// Closes the open dialog; like Google Calendar, an event's details give the keyboard back to
-    /// the event.
+    /// the event, and the scope question goes back to the editor.
     fn close_dialog(&mut self, ctx: &egui::Context) {
-        if let Some(Dialog::Event(_, Some(id))) = self.dialog.take() {
-            ctx.memory_mut(|m| m.request_focus(id));
+        match self.dialog.take() {
+            Some(Dialog::Event(_, Some(id))) => ctx.memory_mut(|m| m.request_focus(id)),
+            // The scope question goes back to the editor the change was made in.
+            Some(Dialog::Scope(_, Some(editor))) => self.dialog = Some(Dialog::Editor(editor)),
+            _ => {}
         }
     }
 
@@ -490,6 +545,9 @@ impl CalendarApp {
         let mut edit = None;
         let mut delete = None;
         let mut default_calendar = None;
+        let mut scope = None;
+        let mut cancelled = false;
+        let mut open_series = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -498,6 +556,8 @@ impl CalendarApp {
             Dialog::Editor(_) => "Edit event",
             Dialog::Event(..) => "Event",
             Dialog::Settings => "Settings",
+            Dialog::Scope(Question::Change(_), _) => "Edit recurring event",
+            Dialog::Scope(Question::Delete(_), _) => "Delete recurring event",
         };
         egui::Window::new(title)
             .open(&mut open)
@@ -580,7 +640,13 @@ impl CalendarApp {
                         self.sync.calendars(),
                         &self.settings,
                     ));
-                    save = editor::show(ui, editor, &self.regional, &choices, refused);
+                    match editor::show(ui, editor, &self.regional, &choices, refused) {
+                        Some(editor::Edited::Save(saved)) => save = Some(saved),
+                        Some(editor::Edited::OpenSeries) => {
+                            open_series = editor.opened.as_ref().map(|(event, _)| event.clone());
+                        }
+                        None => {}
+                    }
                 }
                 Dialog::Event(event, _) => {
                     let details = event_details(event, self.zone);
@@ -609,13 +675,7 @@ impl CalendarApp {
                     let calendar = self.sync.calendars().iter().find(|calendar| {
                         calendar.account_id == event.account_id && calendar.id == event.calendar_id
                     });
-                    let not_yet = if event.recurring {
-                        Some(REPEATING)
-                    } else if self.saving.holds(event) {
-                        Some(create::SAVING)
-                    } else {
-                        None
-                    };
+                    let not_yet = self.saving.holds(event).then_some(create::SAVING);
                     if let (None, Some(calendar)) = (protected, calendar) {
                         let can_edit = refused.is_none() && not_yet.is_none();
                         ui.horizontal(|ui| {
@@ -641,6 +701,25 @@ impl CalendarApp {
                             ui.label(why);
                         }
                     }
+                }
+                Dialog::Scope(question, _) => {
+                    let scopes = question.scopes();
+                    for (choice, why) in &scopes {
+                        let button = egui::Button::new(choice.label());
+                        if ui
+                            .add_enabled(why.is_none() && refused.is_none(), button)
+                            .clicked()
+                        {
+                            scope = Some(*choice);
+                        }
+                    }
+                    let mut reasons: Vec<&str> =
+                        scopes.iter().filter_map(|(_, why)| *why).collect();
+                    reasons.dedup();
+                    for why in reasons.into_iter().chain(refused) {
+                        ui.label(why);
+                    }
+                    cancelled = ui.button("Cancel").clicked();
                 }
                 Dialog::Settings => {
                     ui.heading("Accounts");
@@ -716,24 +795,45 @@ impl CalendarApp {
                 self.show_events(None);
                 open = false;
             }
-            Some(Save::Change(change)) => {
-                // Shown changed at once, marked "saving" until Google confirms it (`MOD-05-U03`).
-                if !change.is_empty() {
-                    let local = self.saving.change(&change.event, change.changed());
-                    self.last.changing(local, &change);
-                    self.sync.change(local, change);
-                    self.show_events(None);
+            Some(Save::Change(change)) if change.is_empty() => open = false,
+            Some(Save::Change(change)) => match Question::changing(*change) {
+                Ok(change) => {
+                    self.change(Box::new(change));
+                    open = false;
                 }
-                open = false;
-            }
+                Err(question) => {
+                    let editor = match self.dialog.take() {
+                        Some(Dialog::Editor(editor)) => Some(editor),
+                        _ => None,
+                    };
+                    self.dialog = Some(Dialog::Scope(question, editor));
+                }
+            },
             None => {}
+        }
+        if cancelled {
+            open = false;
+        }
+        if let Some(chosen) = scope
+            && let Some(Dialog::Scope(question, _)) = self.dialog.take()
+        {
+            self.answered(question, chosen);
+            open = false;
+        }
+        if let Some(event) = open_series {
+            self.open_series(&event);
         }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
         }
         if let Some((event, calendar)) = delete {
-            self.delete(&event, calendar);
-            open = false;
+            match Question::deleting(calendar, event) {
+                Ok((calendar, event)) => {
+                    self.delete(&event, calendar);
+                    open = false;
+                }
+                Err(question) => self.dialog = Some(Dialog::Scope(question, None)),
+            }
         }
         if let Some(calendar) = toggled {
             // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
