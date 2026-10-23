@@ -13,6 +13,7 @@ mod sync;
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::colors::{self, LocalColors};
+use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::model::Event;
 use calendar_core::month::{MonthViewModel, month_view};
@@ -34,7 +35,7 @@ use network::Online;
 use platform::SystemNetwork;
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
-use sync::Synchronization;
+use sync::{Saved, Synchronization};
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -76,8 +77,9 @@ enum Dialog {
     Shortcuts,
     /// The date typed so far, and whether the field has had the keyboard yet.
     GoToDate(String, bool),
-    /// The event editor is `MOD-05`; until then this only says where the event would go.
-    NewEvent,
+    /// The quick-entry box of a new event (`MOD-05-F02`), and whether its title has had the
+    /// keyboard yet.
+    QuickEntry(QuickEntry, bool),
     /// The event whose details are open, and what had the keyboard when it opened.
     Event(Event, Option<egui::Id>),
     /// The settings, where accounts are managed (`MOD-01-U01`).
@@ -147,8 +149,15 @@ struct CalendarApp {
     removal: Removal,
     /// Synchronizing with Google and reading the cache, off the UI thread.
     sync: Synchronization,
-    /// What the views show, from the cache; empty until it is read.
+    /// What the views show: the events from the cache, empty until it is read, followed by the
+    /// new events not synchronized yet.
     events: Vec<Event>,
+    /// How many of `events` come from the cache.
+    cached: usize,
+    /// New events sent to Google and not synchronized back yet (`MOD-05-U03`).
+    saving: Saving,
+    /// Why new events could not be saved, until the user closes the notice.
+    not_saved: Vec<String>,
     /// Whether the computer is online, as the system says (`MOD-02-F14`).
     online: Online,
     /// Whether the window had the keyboard at the last frame.
@@ -252,6 +261,9 @@ impl CalendarApp {
             removal: Removal::new(),
             sync,
             events,
+            cached: 0,
+            saving: Saving::default(),
+            not_saved: Vec::new(),
             online: Online::watch(&ctx, &SystemNetwork),
             focused: false,
             regional,
@@ -283,6 +295,34 @@ impl CalendarApp {
             self.zone,
             self.built_at,
         );
+    }
+
+    /// The cached events, followed by the new events not synchronized yet.
+    fn show_events(&mut self, cached: Option<Vec<Event>>) {
+        match cached {
+            Some(events) => {
+                self.saving.synced(&events);
+                self.cached = events.len();
+                self.events = events;
+            }
+            None => self.events.truncate(self.cached),
+        }
+        self.events.extend(self.saving.events().cloned());
+        self.rebuild();
+    }
+
+    /// Opens the quick-entry box at the times `times` gives for the default length of the
+    /// default calendar's account (`MOD-05-F09`, `MOD-05-F10`).
+    fn start_event(&mut self, times: impl FnOnce(u32) -> (DateTime<Utc>, DateTime<Utc>)) {
+        let calendar =
+            create::default_calendar(self.accounts.list(), self.sync.calendars(), &self.settings);
+        let length = calendar
+            .as_ref()
+            .map_or(create::DEFAULT_LENGTH, |calendar| {
+                self.sync.default_length(&calendar.account_id)
+            });
+        let entry = QuickEntry::new(times(length), self.zone, calendar);
+        self.dialog = Some(Dialog::QuickEntry(entry, false));
     }
 
     fn today(&self) -> NaiveDate {
@@ -320,7 +360,10 @@ impl CalendarApp {
                     let date = self.regional.numeric_date(self.navigation.selected);
                     self.dialog = Some(Dialog::GoToDate(date, false));
                 }
-                Command::NewEvent => self.dialog = Some(Dialog::NewEvent),
+                Command::NewEvent => {
+                    let (date, zone) = (self.navigation.selected, self.zone);
+                    self.start_event(|length| create::keyed(date, Utc::now(), length, zone));
+                }
                 Command::ShowShortcuts => self.dialog = Some(Dialog::Shortcuts),
                 command => {
                     // Like Google Calendar, moving the view closes what is open over it.
@@ -357,10 +400,12 @@ impl CalendarApp {
         let mut again = None;
         let mut remove = None;
         let mut toggled = None;
+        let mut save = None;
+        let mut default_calendar = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
-            Dialog::NewEvent => "New event",
+            Dialog::QuickEntry(..) => "New event",
             Dialog::Event(..) => "Event",
             Dialog::Settings => "Settings",
         };
@@ -401,9 +446,33 @@ impl CalendarApp {
                         go_to = date;
                     }
                 }
-                Dialog::NewEvent => {
-                    ui.label(self.regional.long_date(self.navigation.selected));
-                    ui.label(refused.unwrap_or("Creating events is not available yet."));
+                Dialog::QuickEntry(entry, focused) => {
+                    let field =
+                        ui.add(egui::TextEdit::singleline(&mut entry.title).hint_text("Add title"));
+                    // The title takes the keyboard when the box opens.
+                    if !*focused {
+                        field.request_focus();
+                        *focused = true;
+                    }
+                    ui.label(entry.when().describe(&self.regional));
+                    let choices = create::choices(
+                        self.accounts.list(),
+                        self.sync.calendars(),
+                        &self.settings,
+                    );
+                    calendar_list::picker(ui, "new-event-calendar", &choices, &mut entry.calendar);
+                    // No network, no calendar: creating is unavailable, and the box says why.
+                    let unavailable = refused.or(entry.calendar.is_none().then_some(NO_CALENDAR));
+                    if let Some(reason) = unavailable {
+                        ui.label(reason);
+                    }
+                    let entered =
+                        field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    let button = egui::Button::new("Save");
+                    let clicked = ui.add_enabled(unavailable.is_none(), button).clicked();
+                    if (clicked || entered) && unavailable.is_none() {
+                        save = entry.new_event();
+                    }
                 }
                 Dialog::Event(event, _) => {
                     let details = event_details(event, self.zone);
@@ -460,6 +529,17 @@ impl CalendarApp {
                         &self.settings,
                     );
                     toggled = calendar_list::in_settings(ui, &calendars);
+                    ui.add_space(8.0);
+                    // Where new events go (`MOD-05-F10`).
+                    ui.horizontal(|ui| {
+                        ui.label("Default calendar");
+                        let list = (self.accounts.list(), self.sync.calendars());
+                        let choices = create::choices(list.0, list.1, &self.settings);
+                        let mut picked = create::default_calendar(list.0, list.1, &self.settings);
+                        if calendar_list::picker(ui, "default-calendar", &choices, &mut picked) {
+                            default_calendar = picked;
+                        }
+                    });
                 }
             });
         if let Some(email) = again {
@@ -467,6 +547,17 @@ impl CalendarApp {
         }
         if let Some(account) = remove {
             self.removal.ask(account);
+        }
+        if let Some(calendar) = default_calendar {
+            self.settings.default_calendar = Some((calendar.account_id, calendar.id));
+            self.save_settings();
+        }
+        if let Some((calendar, event)) = save {
+            // Shown at once, marked "saving" until Google confirms it (`MOD-05-U03`).
+            let local = self.saving.add(&calendar, &event);
+            self.sync.create(local, calendar, event);
+            self.show_events(None);
+            open = false;
         }
         if let Some(calendar) = toggled {
             // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
@@ -502,6 +593,8 @@ impl CalendarApp {
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
+        self.saving.forget_account(id);
+        self.show_events(None);
         let disabled = self.settings.disabled.clone();
         if self.settings.forget_account(id) {
             self.save_settings();
@@ -574,9 +667,19 @@ impl eframe::App for CalendarApp {
             None => {}
         }
         self.checks.tick(ui.ctx(), &self.accounts);
-        if let Some(events) = self.sync.poll() {
-            self.events = events;
-            self.rebuild();
+        let cached = self.sync.poll();
+        let saved = self.sync.take_saved();
+        for saved in &saved {
+            match saved {
+                Saved::Created(local, id) => self.saving.confirmed(*local, id),
+                Saved::NotCreated(local, reason) => {
+                    self.saving.refused(*local);
+                    self.not_saved.push(reason.clone());
+                }
+            }
+        }
+        if cached.is_some() || !saved.is_empty() {
+            self.show_events(cached);
         }
         self.gone.extend(self.sync.take_gone());
         // Looking at the app brings it up to date; a minimized window is polled less often.
@@ -750,6 +853,22 @@ impl eframe::App for CalendarApp {
                 self.connected = None;
             }
         }
+        // A new event Google did not create is gone from the views; the user is told why.
+        if !self.not_saved.is_empty() {
+            let mut close = false;
+            egui::Panel::top("not-saved").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for reason in &self.not_saved {
+                        let warn = ui.visuals().warn_fg_color;
+                        ui.colored_label(warn, format!("The event could not be saved: {reason}."));
+                    }
+                    close = ui.small_button("✕").clicked();
+                });
+            });
+            if close {
+                self.not_saved.clear();
+            }
+        }
         // Calendars the user no longer has are told of once (`MOD-02-F21`).
         if !self.gone.is_empty() {
             let mut close = false;
@@ -811,6 +930,7 @@ impl eframe::App for CalendarApp {
         let browsed = offline::browsed(self.window(), first, last, online);
         self.sync.browse(browsed.fetch);
         let mut opened = None;
+        let mut started = None;
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(note) = browsed.note {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
@@ -822,16 +942,30 @@ impl eframe::App for CalendarApp {
                 Built::Grid(view) => {
                     // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
                     let state = &mut self.view_state;
-                    if let Some(change) =
-                        grid_view::show(ui, view, &self.regional, state, online, &mut opened)
-                            .filter(|_| online)
-                    {
-                        let change = grid_view::Change {
-                            event: self.places[change.event],
-                            ..change
-                        };
-                        grid_view::apply(&mut self.events, change);
-                        self.rebuild();
+                    match grid_view::show(ui, view, &self.regional, state, online, &mut opened) {
+                        Some(grid_view::Action::Moved(change)) if online => {
+                            let change = grid_view::Change {
+                                event: self.places[change.event],
+                                ..change
+                            };
+                            grid_view::apply(&mut self.events, change);
+                            self.rebuild();
+                        }
+                        // A click or a selection in the hours starts a new event (`MOD-05-F01`).
+                        Some(grid_view::Action::Clicked { day, minute }) => {
+                            started = view.days.get(day).map(|d| (d.date, minute, None));
+                        }
+                        Some(grid_view::Action::Selected {
+                            day,
+                            pressed,
+                            released,
+                        }) => {
+                            started = view
+                                .days
+                                .get(day)
+                                .map(|d| (d.date, pressed, Some(released)))
+                        }
+                        _ => {}
                     }
                 }
                 Built::Month(view) => {
@@ -846,6 +980,13 @@ impl eframe::App for CalendarApp {
                 }
             }
         });
+        if let Some((date, pressed, released)) = started {
+            let zone = self.zone;
+            self.start_event(|length| match released {
+                Some(released) => create::selected(date, pressed, released, zone),
+                None => create::clicked(date, pressed, length, zone),
+            });
+        }
         if let Some(event) = opened {
             let event = self.places[event];
             // The editor opens from here in `MOD-05`; the event is brought up to date first.

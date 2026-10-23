@@ -21,6 +21,8 @@ pub struct Block {
     pub color: Rgb,
     /// The event's calendar cannot be changed (`MOD-02-U01`).
     pub read_only: bool,
+    /// Google has not confirmed the new event yet (`MOD-05-U03`).
+    pub saving: bool,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -83,6 +85,7 @@ pub fn grid_view(
                 title: shown_title(event),
                 color: event.color,
                 read_only: event.read_only,
+                saving: event.saving,
                 start,
                 end,
             }

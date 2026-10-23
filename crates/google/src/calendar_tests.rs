@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use calendar_core::cache::CachedCalendar;
+use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
 use calendar_core::fixtures::d;
 use calendar_core::model::{Access, Event, Rgb};
@@ -866,4 +867,98 @@ fn googles_rate_limits_are_told_from_other_errors() {
         .collect();
     assert_eq!(rate_limited, [true, true, false]);
     assert_eq!(shown_titles(&cache), ["Standup", "Review"]);
+}
+
+/// "Planning" on Thursday 12 November 2026, 10:00–11:30 in Warsaw.
+fn planning() -> NewEvent {
+    NewEvent {
+        title: "Planning".into(),
+        start: Warsaw
+            .with_ymd_and_hms(2026, 11, 12, 10, 0, 0)
+            .unwrap()
+            .with_timezone(&Utc),
+        end: Warsaw
+            .with_ymd_and_hms(2026, 11, 12, 11, 30, 0)
+            .unwrap()
+            .with_timezone(&Utc),
+        zone: Warsaw,
+    }
+}
+
+#[test]
+fn a_new_event_is_sent_to_google_and_comes_back_through_synchronization() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("create");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    // An access token Google no longer takes is renewed for a change too.
+    google.expire_access_tokens();
+
+    let id = session.create(&work, &planning()).unwrap();
+
+    let sent = google.event(ACCOUNT_ID, "work", &id).unwrap();
+    assert_eq!(sent["summary"], "Planning");
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-11-12T10:00:00+01:00", "timeZone": "Europe/Warsaw"})
+    );
+    assert_eq!(
+        sent["end"],
+        json!({"dateTime": "2026-11-12T11:30:00+01:00", "timeZone": "Europe/Warsaw"})
+    );
+    assert!(
+        google
+            .requests()
+            .contains(&"POST /calendar/v3/calendars/work/events".to_string())
+    );
+    // Nothing is written to the cache but by synchronization.
+    assert_eq!(shown_titles(&cache), ["Standup", "Review"]);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let week = week_of(
+        &shown_events(&cache.calendars().unwrap(), window()),
+        today(),
+    );
+    assert!(week.contains(&(
+        "Planning".to_string(),
+        "2026-11-12 10:00".to_string(),
+        "2026-11-12 11:30".to_string()
+    )));
+}
+
+#[test]
+fn a_new_event_in_a_calendar_google_does_not_let_the_account_change_is_refused() {
+    let (google, store, dir, client_file, cache) = synchronized_once("create-refused");
+    google.set_access_role("work", "reader");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+
+    let created = session.create(&work, &planning());
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let error = created.unwrap_err();
+    assert!(error.0.starts_with("Google refused"), "{}", error.0);
+    assert!(!error.0.contains("Planning"));
+    assert!(!error.is_rate_limited());
+}
+
+#[test]
+fn the_default_length_of_new_events_comes_from_the_accounts_google_calendar_settings() {
+    let (google, store, dir, client_file, _) = synchronized_once("default-length");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+
+    // Google's own default, until the user sets another.
+    let before = session.default_length();
+    google.set_default_length(ACCOUNT_ID, 30);
+    let after = session.default_length();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!((before, after), (Ok(60), Ok(30)));
+    assert!(
+        google
+            .requests()
+            .contains(&"GET /calendar/v3/users/me/settings/defaultEventLength".to_string())
+    );
 }

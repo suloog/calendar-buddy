@@ -17,6 +17,8 @@ pub struct MonthItem {
     pub color: Rgb,
     /// The event's calendar cannot be changed (`MOD-02-U01`).
     pub read_only: bool,
+    /// Google has not confirmed the new event yet (`MOD-05-U03`).
+    pub saving: bool,
     /// Start of a timed event; `None` for all-day and multi-day events.
     pub start: Option<DateTime<Utc>>,
 }
@@ -133,6 +135,7 @@ pub fn month_view(
                         title: (!event.busy_only).then(|| event.title.clone()),
                         color: event.color,
                         read_only: event.read_only,
+                        saving: event.saving,
                         start: timed_start(event),
                     }
                 })

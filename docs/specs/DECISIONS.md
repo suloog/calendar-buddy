@@ -1248,3 +1248,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-103] The quick-entry box: 15-minute steps, the `c` key at the next full hour, the default length read once per run, "Saving…"
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-01
+- **Affects:** `US-05-01`, `MOD-05-F01`, `MOD-05-F02`, `MOD-05-F09`, `MOD-05-F16`, `MOD-05-U03`, `DEC-59`, `DEC-60`
+- **Decision:** A click in the empty hours of the day, 3-day or week view starts the event at the 15-minute step clicked. Dragging over them selects a range in that day in 15-minute steps, at least one step, and the selection is drawn while it is made. The `c` key starts the event on the selected day at the next full hour of the clock, 23:00 at the latest. The quick-entry box is a small dialog titled "New event". It has the title field with the keyboard ("Add title"), the date and times as the event details write them, the calendar picker and **Save**; Enter in the title saves too. An empty title is saved as Google saves one, and shown as "(No title)". The picker offers only the calendars the account can change, under their accounts, those disabled left out (`DEC-102`). The default length is Google's `defaultEventLength` setting of the default calendar's account. It is read with the account's first synchronization of the run, and 60 minutes stands in until then or when it cannot be read. A saved event is shown at once with "· Saving…" after its title until Google answers, then without the mark until synchronization brings it. If Google refuses, the event leaves the views and a notice under the top bar says "The event could not be saved: <Google's reason>." Offline, or with no calendar that can take events, the box says why and **Save** is unavailable. The calendar-provider interface gets `create` and `default_length`.
+- **Why:** 15-minute steps match the drag steps of `DEC-60`. Google Calendar's quick box takes a title, shows the time and has a calendar picker (`DEC-62`). A setting that rarely changes does not need a request every round. Confirmation and synchronization are separate steps, so the event never blinks out between Google's answer and the next synchronization.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-104] The default calendar: chosen in the settings, else the first account's primary, else the first calendar that can take events
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-01
+- **Affects:** `US-05-01`, `MOD-05-F10`, `DEC-60`, `DEC-94`, `DEC-102`
+- **Decision:** The settings get a **Default calendar** picker under **Calendars**, with the same choices as the quick-entry box. The choice is kept as a `default_calendar = <account ID> <calendar ID>` line and forgotten with its account. Until the user chooses, new events go to the primary calendar of the first connected account. That is the calendar whose ID is the account's e-mail address, as Google names it, so the cache needs no new column. A chosen or primary calendar that is disabled, gone or no longer changeable gives way to the next in that order. Failing both, the first calendar that can take events in the pickers' order is used.
+- **Why:** `DEC-60` settles the default until the user chooses; the fallback only keeps creating possible when that calendar cannot take events, instead of refusing it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-105] Saving to Google and the "saving" mark are delivered by every story that changes events
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-01
+- **Affects:** `MOD-05-F16`, `MOD-05-U03`, `US-05-01`, `US-05-02`, `US-05-03`, `US-05-04`, MOD-05 `COVERAGE.md`
+- **Decision:** `US-05-01` delivers `MOD-05-F16` and `MOD-05-U03` for new events. `US-05-02` (editing) and `US-05-03` (dragging and resizing) now also cover both. `US-05-04` (deleting and undo) now also covers `MOD-05-F16`. Their frontmatter, the BACKLOG rows and `COVERAGE.md` say so. The requirements themselves are unchanged.
+- **Why:** The spec-compliance review found that only `US-05-01` covered both requirements, while changes and deletions come in later stories. Without this, nothing would deliver saving changes and deletions to Google. The traceability is fixed without weakening either `must`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

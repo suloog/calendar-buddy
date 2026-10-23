@@ -6,6 +6,7 @@ use chrono::{DateTime, Days, Months, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::cache::{Cache, CachedCalendar};
+use crate::create::NewEvent;
 use crate::model::{Calendar, Event, Timing};
 use crate::recurrence::expand;
 use crate::week::day_start;
@@ -134,6 +135,12 @@ pub trait Provider {
     /// What changed in the calendar since the state, wherever it falls; `None` when the provider
     /// no longer accepts the state.
     fn changes(&self, calendar: &Calendar, sync_token: &str) -> Result<Option<Fetched>, SyncError>;
+    /// Creates the event in the calendar and returns its ID there (`MOD-05-F16`); it reaches the
+    /// cache through synchronization.
+    fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError>;
+    /// How long, in minutes, a new event started without a range is, as the account's settings at
+    /// the provider say (`MOD-05-F09`).
+    fn default_length(&self) -> Result<u32, SyncError>;
 }
 
 /// Fetches every calendar of the account and synchronizes each (`sync_calendars`); calendars no
@@ -353,6 +360,14 @@ mod tests {
                 }
             }
             Ok(Some(fetched))
+        }
+
+        fn create(&self, _: &Calendar, _: &NewEvent) -> Result<String, SyncError> {
+            unreachable!("synchronization creates nothing")
+        }
+
+        fn default_length(&self) -> Result<u32, SyncError> {
+            unreachable!("synchronization reads no settings")
         }
     }
 

@@ -18,6 +18,8 @@ pub struct AgendaItem {
     pub color: Rgb,
     /// The event's calendar cannot be changed (`MOD-02-U01`).
     pub read_only: bool,
+    /// Google has not confirmed the new event yet (`MOD-05-U03`).
+    pub saving: bool,
     /// Start and end of a timed event, also one lasting a day or more; `None` for all-day events.
     pub time: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
@@ -104,6 +106,7 @@ pub fn agenda_view(
                             title: (!event.busy_only).then(|| event.title.clone()),
                             color: event.color,
                             read_only: event.read_only,
+                            saving: event.saving,
                             time: event_time(event),
                         }
                     })

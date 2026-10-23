@@ -8,6 +8,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use calendar_core::cache::{Cache, parse_access, parse_color};
+use calendar_core::create::NewEvent;
 use calendar_core::model::{Calendar, Timing};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
@@ -15,6 +16,7 @@ use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
 use url::Url;
 
 use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, refresh};
@@ -145,10 +147,25 @@ impl Session {
     /// is renewed once. Google's rate limits, 429 and 403 for `rateLimitExceeded` or
     /// `userRateLimitExceeded`, are told apart from other refusals (`MOD-02-F16`).
     fn get<T: DeserializeOwned>(&self, url: Url) -> Result<Option<T>, SyncError> {
-        let (mut status, mut body) = self.call(&url)?;
+        self.send(url, None)
+    }
+
+    /// Google's answer to a change sent to it, as `get` handles answers.
+    fn post<T: DeserializeOwned>(&self, url: Url, change: &Value) -> Result<T, SyncError> {
+        self.send(url, Some(change))?
+            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+    }
+
+    /// Asks Google, with the change to send if any, as `get` says.
+    fn send<T: DeserializeOwned>(
+        &self,
+        url: Url,
+        change: Option<&Value>,
+    ) -> Result<Option<T>, SyncError> {
+        let (mut status, mut body) = self.call(&url, change)?;
         if status == 401 {
             self.access.replace(None);
-            (status, body) = self.call(&url)?;
+            (status, body) = self.call(&url, change)?;
         }
         if status == 410 {
             return Ok(None);
@@ -165,11 +182,25 @@ impl Session {
             .map_err(|_| SyncError("Google's answer could not be read".into()))
     }
 
-    fn call(&self, url: &Url) -> Result<(ureq::http::StatusCode, String), SyncError> {
-        let mut response = agent(HTTP_TIMEOUT)
-            .get(url.as_str())
-            .header("Authorization", format!("Bearer {}", self.access_token()?))
-            .call()
+    fn call(
+        &self,
+        url: &Url,
+        change: Option<&Value>,
+    ) -> Result<(ureq::http::StatusCode, String), SyncError> {
+        let bearer = format!("Bearer {}", self.access_token()?);
+        let agent = agent(HTTP_TIMEOUT);
+        let response = match change {
+            None => agent
+                .get(url.as_str())
+                .header("Authorization", bearer)
+                .call(),
+            Some(change) => agent
+                .post(url.as_str())
+                .header("Authorization", bearer)
+                .header("Content-Type", "application/json")
+                .send(change.to_string()),
+        };
+        let mut response = response
             .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
         let body = response
             .body_mut()
@@ -248,6 +279,42 @@ impl Provider for Session {
             .append_pair("syncToken", sync_token)
             .append_pair("maxResults", EVENTS_PER_PAGE);
         self.fetch(url, calendar)
+    }
+
+    fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
+        #[derive(Deserialize)]
+        struct Created {
+            id: String,
+        }
+        // The times on the event's own clock, with its zone, as Google Calendar sends them.
+        let when = |at: DateTime<Utc>| {
+            json!({
+                "dateTime": at.with_timezone(&event.zone).to_rfc3339_opts(SecondsFormat::Secs, true),
+                "timeZone": event.zone.name(),
+            })
+        };
+        let change = json!({
+            "summary": event.title,
+            "start": when(event.start),
+            "end": when(event.end),
+        });
+        let url = self.url(&["calendars", &calendar.id, "events"]);
+        Ok(self.post::<Created>(url, &change)?.id)
+    }
+
+    fn default_length(&self) -> Result<u32, SyncError> {
+        #[derive(Deserialize)]
+        struct Setting {
+            value: String,
+        }
+        let url = self.url(&["users", "me", "settings", "defaultEventLength"]);
+        let setting: Setting = self
+            .get(url)?
+            .ok_or_else(|| SyncError("Google refused (gone)".into()))?;
+        setting
+            .value
+            .parse()
+            .map_err(|_| SyncError("Google's answer could not be read".into()))
     }
 }
 

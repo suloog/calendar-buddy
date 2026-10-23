@@ -33,6 +33,8 @@ pub struct Event {
     /// Event of a calendar the account cannot change: read-only, subscribed or free/busy
     /// (`MOD-02-U01`).
     pub read_only: bool,
+    /// A new event Google has not confirmed yet (`MOD-05-U03`); view state only, never cached.
+    pub saving: bool,
 }
 
 /// What the account may do with a calendar, as Google says it (`accessRole`).

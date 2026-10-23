@@ -22,6 +22,9 @@ pub struct Settings {
     pub hidden: Hidden,
     /// The side panel was collapsed by the user (`MOD-03-F11`).
     pub side_panel_collapsed: bool,
+    /// The calendar new events go to, by account ID and calendar ID, once the user chose one
+    /// (`MOD-05-F10`).
+    pub default_calendar: Option<(String, String)>,
 }
 
 impl Settings {
@@ -44,6 +47,7 @@ impl Settings {
                     }
                 }
                 "side_panel" => settings.side_panel_collapsed = value.trim() == "collapsed",
+                "default_calendar" => settings.default_calendar = calendar(value),
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -80,17 +84,27 @@ impl Settings {
         if self.side_panel_collapsed {
             text.push_str("side_panel = collapsed\n");
         }
+        if let Some((account, calendar)) = &self.default_calendar {
+            text.push_str(&format!("default_calendar = {account} {calendar}\n"));
+        }
         text
     }
 
     /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
     /// anything.
     pub fn forget_account(&mut self, account_id: &str) -> bool {
-        let before = self.disabled.len() + self.colors.len() + self.hidden.len();
+        let before = self.clone();
         self.disabled.retain(|(account, _)| account != account_id);
         self.colors.retain(|(account, _), _| account != account_id);
         self.hidden.retain(|(account, _)| account != account_id);
-        self.disabled.len() + self.colors.len() + self.hidden.len() != before
+        if self
+            .default_calendar
+            .as_ref()
+            .is_some_and(|(account, _)| account == account_id)
+        {
+            self.default_calendar = None;
+        }
+        *self != before
     }
 
     pub fn load(path: &Path) -> Self {
@@ -232,6 +246,25 @@ mod tests {
                 Rgb(0x03, 0x9b, 0xe5)
             )]
         );
+    }
+
+    #[test]
+    fn the_default_calendar_is_saved_read_back_and_forgotten_with_its_account() {
+        let mut settings = Settings {
+            default_calendar: Some(("1".to_string(), "team@example.com".to_string())),
+            ..Settings::default()
+        };
+
+        assert!(
+            settings
+                .to_text()
+                .contains("default_calendar = 1 team@example.com\n")
+        );
+        assert_eq!(Settings::parse(&settings.to_text()), settings);
+
+        assert!(!settings.forget_account("2"));
+        assert!(settings.forget_account("1"));
+        assert_eq!(settings.default_calendar, None);
     }
 
     #[test]
