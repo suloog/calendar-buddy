@@ -1,6 +1,7 @@
 //! The app's own settings, kept in a small text file of `key = value` lines. Losing them is
 //! acceptable (`DEC-15`): a missing or unreadable file gives the defaults.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::navigation::View;
@@ -9,6 +10,9 @@ use crate::navigation::View;
 pub struct Settings {
     /// The view used last; the app starts in it (`DEC-55`).
     pub last_view: Option<View>,
+    /// The calendars disabled in the settings, by account ID and calendar ID: listed, but never
+    /// synchronized (`MOD-02-F06`, `MOD-03-F13`).
+    pub disabled: BTreeSet<(String, String)>,
 }
 
 impl Settings {
@@ -18,18 +22,38 @@ impl Settings {
             let Some((key, value)) = line.split_once('=') else {
                 continue;
             };
-            if key.trim() == "view" {
-                settings.last_view = View::from_key(value.trim());
+            match key.trim() {
+                "view" => settings.last_view = View::from_key(value.trim()),
+                "disabled" => {
+                    if let Some((account, calendar)) = value.trim().split_once(' ') {
+                        settings
+                            .disabled
+                            .insert((account.to_string(), calendar.trim().to_string()));
+                    }
+                }
+                _ => {}
             }
         }
         settings
     }
 
     pub fn to_text(&self) -> String {
-        match self.last_view {
+        let mut text = match self.last_view {
             Some(view) => format!("view = {}\n", view.key()),
             None => String::new(),
+        };
+        for (account, calendar) in &self.disabled {
+            text.push_str(&format!("disabled = {account} {calendar}\n"));
         }
+        text
+    }
+
+    /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
+    /// anything.
+    pub fn forget_account(&mut self, account_id: &str) -> bool {
+        let before = self.disabled.len();
+        self.disabled.retain(|(account, _)| account != account_id);
+        self.disabled.len() != before
     }
 
     pub fn load(path: &Path) -> Self {
@@ -82,6 +106,7 @@ mod tests {
         nav.next();
         Settings {
             last_view: Some(nav.view),
+            ..Settings::default()
         }
         .save(&path)
         .unwrap();
@@ -101,15 +126,42 @@ mod tests {
         for view in View::ALL {
             let settings = Settings {
                 last_view: Some(view),
+                ..Settings::default()
             };
             assert_eq!(Settings::parse(&settings.to_text()), settings);
         }
     }
 
     #[test]
+    fn disabled_calendars_are_saved_read_back_and_forgotten_with_their_account() {
+        let mut settings = Settings::default();
+        for (account, calendar) in [
+            ("1", "en.polish#holiday@group.v.calendar.google.com"),
+            ("1", "team@example.com"),
+            ("2", "team@example.com"),
+        ] {
+            settings
+                .disabled
+                .insert((account.to_string(), calendar.to_string()));
+        }
+
+        assert_eq!(Settings::parse(&settings.to_text()), settings);
+
+        assert!(settings.forget_account("1"));
+        assert!(!settings.forget_account("1"));
+        assert_eq!(
+            settings.disabled.into_iter().collect::<Vec<_>>(),
+            [("2".to_string(), "team@example.com".to_string())]
+        );
+    }
+
+    #[test]
     fn a_missing_or_unknown_setting_gives_the_default() {
         assert_eq!(Settings::parse(""), Settings::default());
-        assert_eq!(Settings::parse("view = year\nnoise"), Settings::default());
+        assert_eq!(
+            Settings::parse("view = year\nnoise\ndisabled = 1"),
+            Settings::default()
+        );
         assert_eq!(
             Settings::load(Path::new("/nonexistent/calendar-buddy/settings")),
             Settings::default()

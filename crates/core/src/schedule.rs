@@ -1,6 +1,7 @@
 //! When each calendar is synchronized again (`MOD-02-F07`, `MOD-02-F23`, `DEC-53`, `DEC-54`):
 //! adaptive polling by the account's access to the calendar and by whether the window is shown.
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::model::{Access, Calendar};
@@ -52,6 +53,33 @@ impl Schedule {
         self.forget(account_id);
         self.calendars
             .extend(calendars.iter().map(|calendar| (calendar.clone(), now)));
+    }
+
+    /// The account's calendars to poll, as its calendar list now has them: those it had keep
+    /// their turns, those missing are no longer polled, and new ones are returned and taken as
+    /// synchronized at `now`.
+    pub fn update_account(
+        &mut self,
+        account_id: &str,
+        calendars: &[Calendar],
+        now: Instant,
+    ) -> Vec<Calendar> {
+        let turns: HashMap<String, Instant> = self
+            .calendars
+            .iter()
+            .filter(|(calendar, _)| calendar.account_id == account_id)
+            .map(|(calendar, last)| (calendar.id.clone(), *last))
+            .collect();
+        self.forget(account_id);
+        let mut added = Vec::new();
+        for calendar in calendars {
+            let last = turns.get(&calendar.id).copied().unwrap_or_else(|| {
+                added.push(calendar.clone());
+                now
+            });
+            self.calendars.push((calendar.clone(), last));
+        }
+        added
     }
 
     /// The account is no longer polled.
@@ -114,7 +142,6 @@ mod tests {
     use super::*;
     use crate::model::Rgb;
     use chrono_tz::Europe::Warsaw;
-    use std::collections::HashMap;
 
     fn calendar(account_id: &str, id: &str, access: Access) -> Calendar {
         Calendar {
@@ -163,6 +190,32 @@ mod tests {
         assert_eq!(
             ids(schedule.due(start + secs(15 * 60))),
             ["work", "holidays"]
+        );
+    }
+
+    #[test]
+    fn an_updated_calendar_list_keeps_turns_adds_new_calendars_and_drops_those_gone() {
+        let start = Instant::now();
+        let mut schedule = two_calendars(start);
+        schedule.set_account("2", &[calendar("2", "other", Access::Owner)], start);
+
+        // "work" was dropped to read-only, "holidays" is gone and "team" is new.
+        let added = schedule.update_account(
+            "1",
+            &[
+                calendar("1", "work", Access::Reader),
+                calendar("1", "team", Access::Writer),
+            ],
+            start + secs(30),
+        );
+
+        assert_eq!(ids(added), ["team"]);
+        assert_eq!(ids(schedule.all()), ["other", "work", "team"]);
+        assert_eq!(ids(schedule.due(start + secs(60))), ["other"]);
+        assert_eq!(ids(schedule.due(start + secs(90))), ["other", "team"]);
+        assert_eq!(
+            ids(schedule.due(start + secs(15 * 60))),
+            ["other", "work", "team"]
         );
     }
 

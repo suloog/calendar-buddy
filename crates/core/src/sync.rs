@@ -112,9 +112,47 @@ pub fn sync_account(
     window: Window,
     cache: &mut Cache,
 ) -> Result<(), SyncError> {
+    let list = sync_calendar_list(provider, account_id, cache)?;
+    sync_calendars(provider, &list.calendars, window, cache).map(|_| ())
+}
+
+/// An account's calendar list as just fetched, and how it differs from the one cached before.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CalendarList {
+    pub calendars: Vec<Calendar>,
+    /// The calendars no longer listed: deleted, unshared or otherwise out of reach (`MOD-02-F21`).
+    pub gone: Vec<Calendar>,
+    /// Whether anything differs: a calendar added or gone, renamed, recoloured or with another
+    /// access.
+    pub changed: bool,
+}
+
+/// Brings the account's cached calendar list up to date (`MOD-02-F05`): calendars added in the
+/// provider join it, and those no longer listed go with their events (`MOD-02-F21`).
+pub fn sync_calendar_list(
+    provider: &dyn Provider,
+    account_id: &str,
+    cache: &mut Cache,
+) -> Result<CalendarList, SyncError> {
     let calendars = provider.calendars()?;
+    // An unreadable cached list is rewritten; nothing can be told gone from it.
+    let known: Vec<Calendar> = cache
+        .calendar_list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|calendar| calendar.account_id == account_id)
+        .collect();
     cache.set_calendars(account_id, &calendars)?;
-    sync_calendars(provider, &calendars, window, cache).map(|_| ())
+    let gone = known
+        .iter()
+        .filter(|old| !calendars.iter().any(|new| new.id == old.id))
+        .cloned()
+        .collect();
+    Ok(CalendarList {
+        changed: known != calendars,
+        calendars,
+        gone,
+    })
 }
 
 /// Synchronizes each calendar (`sync_calendar`) and says whether anything changed. A calendar
@@ -197,6 +235,8 @@ mod tests {
         expired: RefCell<bool>,
         /// What was asked: "events", or "changes since <state>".
         asked: RefCell<Vec<String>>,
+        /// Calendars listed after "work".
+        others: RefCell<Vec<Calendar>>,
     }
 
     impl Fake {
@@ -219,7 +259,9 @@ mod tests {
 
     impl Provider for Fake {
         fn calendars(&self) -> Result<Vec<Calendar>, SyncError> {
-            Ok(vec![calendar()])
+            let mut calendars = vec![calendar()];
+            calendars.extend(self.others.borrow().iter().cloned());
+            Ok(calendars)
         }
 
         fn events(&self, _: &Calendar, window: Window) -> Result<Fetched, SyncError> {
@@ -349,6 +391,59 @@ mod tests {
         assert_eq!(changed, Ok(true));
         assert_eq!(*fake.asked.borrow(), ["events", "events"]);
         assert_eq!(titles(&cache), ["Conference", "Review", "Standup"]);
+    }
+
+    #[test]
+    fn the_calendar_list_follows_the_provider_and_says_what_is_gone() {
+        let fake = Fake::default();
+        let mut cache = first_sync(&fake);
+        let home = Calendar {
+            id: "home".into(),
+            name: "Home".into(),
+            ..calendar()
+        };
+
+        fake.others.borrow_mut().push(home.clone());
+        let added = sync_calendar_list(&fake, "1", &mut cache).unwrap();
+        sync_calendar(&fake, &home, window(), &mut cache).unwrap();
+
+        assert_eq!(added.calendars, [calendar(), home.clone()]);
+        assert!(added.changed);
+        assert!(added.gone.is_empty());
+        assert_eq!(cache.calendars().unwrap()[1].events.len(), 2);
+
+        fake.others.borrow_mut().clear();
+        let removed = sync_calendar_list(&fake, "1", &mut cache).unwrap();
+
+        assert_eq!(removed.gone, std::slice::from_ref(&home));
+        assert!(removed.changed);
+        assert_eq!(cache.calendar_list().unwrap(), [calendar()]);
+        assert_eq!(cache.sync_token(&home, window()).unwrap(), None);
+
+        // Gone once: the next list has nothing more to say.
+        let again = sync_calendar_list(&fake, "1", &mut cache).unwrap();
+        assert_eq!(again.gone, []);
+        assert!(!again.changed);
+    }
+
+    #[test]
+    fn a_calendar_renamed_or_with_other_access_changes_the_list() {
+        let fake = Fake::default();
+        let mut cache = first_sync(&fake);
+        let shared = Calendar {
+            id: "shared".into(),
+            access: Access::Writer,
+            ..calendar()
+        };
+        fake.others.borrow_mut().push(shared.clone());
+        sync_calendar_list(&fake, "1", &mut cache).unwrap();
+
+        fake.others.borrow_mut()[0].access = Access::Reader;
+        let list = sync_calendar_list(&fake, "1", &mut cache).unwrap();
+
+        assert!(list.changed);
+        assert!(list.gone.is_empty());
+        assert_eq!(cache.calendar_list().unwrap()[1].access, Access::Reader);
     }
 
     #[test]

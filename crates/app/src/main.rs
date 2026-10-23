@@ -129,8 +129,13 @@ struct CalendarApp {
     navigation: Navigation,
     /// Any day of the month the mini calendar shows; follows the view, browsed on its own.
     mini_month: NaiveDate,
+    /// The app's settings, as last saved.
+    settings: Settings,
     /// Saves the settings off the UI thread; `None` when there is no home directory.
     settings_writer: Option<Sender<Settings>>,
+    /// The names of calendars no longer available, until the user closes the notice
+    /// (`MOD-02-F21`).
+    gone: Vec<String>,
     /// Days from today the agenda covers; grows as the user scrolls down.
     agenda_days: i64,
     built: Built,
@@ -147,15 +152,16 @@ impl CalendarApp {
         let zone_changes = watch_zone(zone, ctx.clone());
         let today = Utc::now().with_timezone(&zone).date_naive();
         let settings_path = settings::default_path();
-        let last_view = settings_path
+        let settings = settings_path
             .as_deref()
-            .and_then(|path| Settings::load(path).last_view);
+            .map(Settings::load)
+            .unwrap_or_default();
         let settings_writer = settings_path.map(|path| {
             let (sender, receiver) = mpsc::channel::<Settings>();
             // The UI never waits on disk.
             std::thread::spawn(move || {
                 for settings in receiver {
-                    // Losing the last view is acceptable (`DEC-15`); the app still works.
+                    // Losing the settings is acceptable (`DEC-15`); the app still works.
                     let _ = settings.save(&path);
                 }
             });
@@ -171,7 +177,12 @@ impl CalendarApp {
             .iter()
             .map(|e| e.account.id.clone())
             .collect();
-        let sync = Synchronization::start(&ctx, account_ids, Window::around(today, zone));
+        let sync = Synchronization::start(
+            &ctx,
+            account_ids,
+            Window::around(today, zone),
+            settings.disabled.clone(),
+        );
         let accounts_writer = accounts_path.map(|path| {
             let (sender, receiver) = mpsc::channel::<Accounts>();
             std::thread::spawn(move || {
@@ -182,7 +193,7 @@ impl CalendarApp {
             });
             sender
         });
-        let navigation = Navigation::start(last_view, today, regional.week_start);
+        let navigation = Navigation::start(settings.last_view, today, regional.week_start);
         let built_at = Utc::now();
         let events = Vec::new();
         let built = build(&events, navigation, AGENDA_DAYS, zone, built_at);
@@ -202,7 +213,9 @@ impl CalendarApp {
             zone_changes,
             navigation,
             mini_month: today,
+            settings,
             settings_writer,
+            gone: Vec::new(),
             agenda_days: AGENDA_DAYS,
             built,
             built_at,
@@ -403,6 +416,12 @@ impl CalendarApp {
         }
     }
 
+    fn save_settings(&self) {
+        if let Some(writer) = &self.settings_writer {
+            let _ = writer.send(self.settings.clone());
+        }
+    }
+
     fn save_accounts(&self) {
         if let Some(writer) = &self.accounts_writer {
             let _ = writer.send(self.accounts.clone());
@@ -414,6 +433,10 @@ impl CalendarApp {
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
+        if self.settings.forget_account(id) {
+            self.save_settings();
+            self.sync.set_disabled(self.settings.disabled.clone());
+        }
         let window = self.window();
         self.sync.forget(id, window);
         if self
@@ -444,11 +467,8 @@ impl CalendarApp {
         }
         if self.navigation.view != before.view {
             self.agenda_days = AGENDA_DAYS;
-            if let Some(writer) = &self.settings_writer {
-                let _ = writer.send(Settings {
-                    last_view: Some(self.navigation.view),
-                });
-            }
+            self.settings.last_view = Some(self.navigation.view);
+            self.save_settings();
         }
         self.mini_month = self.navigation.selected;
         self.month_state = month_view::State::default();
@@ -486,6 +506,7 @@ impl eframe::App for CalendarApp {
             self.events = events;
             self.rebuild();
         }
+        self.gone.extend(self.sync.take_gone());
         // Looking at the app brings it up to date; a minimized window is polled less often.
         let (focused, minimized) = ui
             .ctx()
@@ -613,6 +634,21 @@ impl eframe::App for CalendarApp {
             });
             if close {
                 self.connected = None;
+            }
+        }
+        // Calendars the user no longer has are told of once (`MOD-02-F21`).
+        if !self.gone.is_empty() {
+            let mut close = false;
+            egui::Panel::top("calendars-gone").show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for name in &self.gone {
+                        ui.label(format!("The calendar “{name}” is no longer available."));
+                    }
+                    close = ui.small_button("✕").clicked();
+                });
+            });
+            if close {
+                self.gone.clear();
             }
         }
         egui::Panel::left("side-panel")

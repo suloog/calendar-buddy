@@ -59,6 +59,10 @@ fn failed(error: rusqlite::Error) -> SyncError {
     SyncError(format!("the local cache could not be used ({error})"))
 }
 
+fn unreadable() -> SyncError {
+    SyncError("the local cache could not be read".into())
+}
+
 impl Cache {
     /// Opens the cache file, creating it when missing; a damaged one is discarded and started
     /// anew, as Google holds everything in it.
@@ -247,12 +251,25 @@ impl Cache {
         Ok(())
     }
 
-    /// Every cached calendar with its events, each account's calendars in the order Google lists
-    /// them.
-    pub fn calendars(&self) -> Result<Vec<CachedCalendar>, SyncError> {
-        let unreadable = || SyncError("the local cache could not be read".into());
-        let mut calendars: Vec<CachedCalendar> = self
-            .connection
+    /// Deletes the calendar's events and synchronization state; the calendar stays listed, as a
+    /// disabled one does (`MOD-02-F06`).
+    pub fn clear_calendar(&mut self, account_id: &str, calendar_id: &str) -> Result<(), SyncError> {
+        let transaction = self.connection.transaction().map_err(failed)?;
+        for table in ["events", "sync_tokens"] {
+            transaction
+                .execute(
+                    &format!("DELETE FROM {table} WHERE account_id = ?1 AND calendar_id = ?2"),
+                    params![account_id, calendar_id],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
+    /// Every cached calendar, without its events, each account's calendars in the order Google
+    /// lists them.
+    pub fn calendar_list(&self) -> Result<Vec<Calendar>, SyncError> {
+        self.connection
             .prepare(
                 "SELECT account_id, id, name, color, access, zone FROM calendars \
                  ORDER BY account_id, position",
@@ -274,20 +291,30 @@ impl Cache {
             .map_err(failed)?
             .into_iter()
             .map(|(account_id, id, name, color, access, zone)| {
-                Some(CachedCalendar {
-                    calendar: Calendar {
-                        id,
-                        account_id,
-                        name,
-                        color: parse_color(&color)?,
-                        access: parse_access(&access)?,
-                        zone: zone.parse().ok()?,
-                    },
-                    events: Vec::new(),
+                Some(Calendar {
+                    id,
+                    account_id,
+                    name,
+                    color: parse_color(&color)?,
+                    access: parse_access(&access)?,
+                    zone: zone.parse().ok()?,
                 })
             })
             .collect::<Option<_>>()
-            .ok_or_else(unreadable)?;
+            .ok_or_else(unreadable)
+    }
+
+    /// Every cached calendar with its events, each account's calendars in the order Google lists
+    /// them.
+    pub fn calendars(&self) -> Result<Vec<CachedCalendar>, SyncError> {
+        let mut calendars: Vec<CachedCalendar> = self
+            .calendar_list()?
+            .into_iter()
+            .map(|calendar| CachedCalendar {
+                calendar,
+                events: Vec::new(),
+            })
+            .collect();
         let index: HashMap<(String, String), usize> = calendars
             .iter()
             .enumerate()
@@ -735,6 +762,30 @@ mod tests {
             cache.sync_token(&work, window()).unwrap().as_deref(),
             Some("token")
         );
+    }
+
+    #[test]
+    fn a_cleared_calendar_stays_listed_without_events_or_sync_token() {
+        let mut cache = Cache::in_memory();
+        let (work, home) = (calendar("1", "work"), calendar("1", "home"));
+        cache
+            .set_calendars("1", &[work.clone(), home.clone()])
+            .unwrap();
+        for calendar in [&work, &home] {
+            cache.set_events(calendar, &events()).unwrap();
+            cache
+                .set_sync_token(calendar, Some("token"), window())
+                .unwrap();
+        }
+
+        cache.clear_calendar("1", "home").unwrap();
+
+        assert_eq!(cache.calendar_list().unwrap(), [work.clone(), home.clone()]);
+        let cached = cache.calendars().unwrap();
+        assert_eq!(cached[0].events.len(), 3);
+        assert!(cached[1].events.is_empty());
+        assert_eq!(cache.sync_token(&home, window()).unwrap(), None);
+        assert!(cache.sync_token(&work, window()).unwrap().is_some());
     }
 
     #[test]

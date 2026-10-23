@@ -1128,3 +1128,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-93] The calendar list is refreshed with each polling round; a calendar gone is told of in the app
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-04
+- **Affects:** `US-02-04`, `MOD-02-F05`, `MOD-02-F21`, `DEC-24`, `DEC-90`
+- **Decision:** Every synchronization round (polling, "Refresh", activating the window, opening an event, waking, the network's return) first fetches the calendar list of each account it synchronizes calendars of, one request per account, as does each account's first synchronization of a run. A calendar new on the list is synchronized in full at once and polled from then on; a calendar whose access changed is polled at its new rate; a calendar no longer on the list goes from the cache with its events, whatever the reason (deleted, unshared, access removed, or hidden from the list in Google, which Google's list does not tell apart), disabled ones included. The user is told once, in a banner at the top of the window ("The calendar “…” is no longer available.", closed with ✕), not with a desktop notification; a calendar gone while the app was closed or offline is told of at the account's next synchronization. A list Google does not send leaves the calendars as they were. An account whose every calendar is disabled has no rounds, so its list is refreshed at the next start.
+- **Why:** The account's primary calendar is always editable and polled every minute, so the list stays as current as the editable calendars at one extra request per account per round, well within `MOD-02-NFR-01`. An in-app notice is the simplest form of "the user is told once" (`DEC-24`); desktop notifications are reminders (`MOD-07`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-94] Disabled calendars are kept in the app's settings, per account
+
+- **Date:** 2026-10-23
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-02-04
+- **Affects:** `US-02-04`, `US-03-07`, `MOD-02-F06`, `MOD-03-F13`, `DEC-28`, `DEC-85`
+- **Decision:** The calendars disabled in the settings are kept in the app's settings file (`~/.config/calendar-buddy/settings`), one `disabled = <account ID> <calendar ID>` line each, so the same calendar on two accounts is disabled on each separately, like its place in the side panel under its account. They are forgotten when their account is removed. A disabled calendar stays in the cache's calendar list, its events and sync token are deleted (at start and when it is disabled) and it is not polled; enabling it synchronizes it in full at once. The synchronization worker takes the set at start and on every change (`Synchronization::set_disabled`); the switch that changes it is `US-03-07`, until which the line can be added to the settings file by hand.
+- **Why:** The settings are where the user's own choices live (as local colours will), and the cache can be discarded and rebuilt from Google at any time, which must not enable calendars again.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
