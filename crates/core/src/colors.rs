@@ -1,5 +1,7 @@
 //! A calendar's local colour (`MOD-02-F04`): chosen in the app, kept in its settings and never
-//! sent to Google; without one the calendar keeps the colour Google gives it.
+//! sent to Google; without one the calendar keeps the colour Google gives it. An event's own
+//! colour (`MOD-05-F25`) is one of Google's event colours, and is shown instead of its
+//! calendar's.
 
 use std::collections::BTreeMap;
 
@@ -36,6 +38,72 @@ pub const CALENDAR_COLORS: [(&str, Rgb); 24] = [
     ("Birch", Rgb(0xA7, 0x9B, 0x8E)),
 ];
 
+/// Google's event colours, as Google Calendar names and shows them (`DEC-118`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventColor {
+    Tomato,
+    Flamingo,
+    Tangerine,
+    Banana,
+    Sage,
+    Basil,
+    Peacock,
+    Blueberry,
+    Lavender,
+    Grape,
+    Graphite,
+}
+
+impl EventColor {
+    /// Every event colour, in the order Google Calendar's event menu offers them.
+    pub const ALL: [EventColor; 11] = [
+        EventColor::Tomato,
+        EventColor::Flamingo,
+        EventColor::Tangerine,
+        EventColor::Banana,
+        EventColor::Sage,
+        EventColor::Basil,
+        EventColor::Peacock,
+        EventColor::Blueberry,
+        EventColor::Lavender,
+        EventColor::Grape,
+        EventColor::Graphite,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            EventColor::Tomato => "Tomato",
+            EventColor::Flamingo => "Flamingo",
+            EventColor::Tangerine => "Tangerine",
+            EventColor::Banana => "Banana",
+            EventColor::Sage => "Sage",
+            EventColor::Basil => "Basil",
+            EventColor::Peacock => "Peacock",
+            EventColor::Blueberry => "Blueberry",
+            EventColor::Lavender => "Lavender",
+            EventColor::Grape => "Grape",
+            EventColor::Graphite => "Graphite",
+        }
+    }
+
+    /// The colour Google Calendar shows it in.
+    pub fn rgb(self) -> Rgb {
+        match self {
+            EventColor::Tomato => Rgb(0xD5, 0x00, 0x00),
+            EventColor::Flamingo => Rgb(0xE6, 0x7C, 0x73),
+            EventColor::Tangerine => Rgb(0xF4, 0x51, 0x1E),
+            EventColor::Banana => Rgb(0xF6, 0xBF, 0x26),
+            EventColor::Sage => Rgb(0x33, 0xB6, 0x79),
+            EventColor::Basil => Rgb(0x0B, 0x80, 0x43),
+            EventColor::Peacock => Rgb(0x03, 0x9B, 0xE5),
+            EventColor::Blueberry => Rgb(0x3F, 0x51, 0xB5),
+            EventColor::Lavender => Rgb(0x79, 0x86, 0xCB),
+            EventColor::Grape => Rgb(0x8E, 0x24, 0xAA),
+            EventColor::Graphite => Rgb(0x61, 0x61, 0x61),
+        }
+    }
+}
+
 /// The colour the app shows the calendar in: its local colour, or else Google's.
 pub fn calendar_color(calendar: &Calendar, local: &LocalColors) -> Rgb {
     local
@@ -44,7 +112,8 @@ pub fn calendar_color(calendar: &Calendar, local: &LocalColors) -> Rgb {
         .unwrap_or(calendar.color)
 }
 
-/// The events, in the same order, each in its calendar's local colour where it has one.
+/// The events, in the same order, each in its calendar's local colour where it has one; an
+/// event's own colour is shown over either (`Event::shown_color`).
 pub fn apply(events: &[Event], local: &LocalColors) -> Vec<Event> {
     events
         .iter()
@@ -96,6 +165,45 @@ mod tests {
         assert_eq!(shown[0].title, "Standup");
         assert_eq!(calendar_color(&calendar("1", "work"), &local), green);
         assert_eq!(calendar_color(&calendar("2", "work"), &local), PALETTE[0]);
+    }
+
+    #[test]
+    fn event_colours_are_googles_eleven_named_as_in_google_calendar() {
+        let colors: Vec<(&str, Rgb)> = EventColor::ALL
+            .iter()
+            .map(|color| (color.name(), color.rgb()))
+            .collect();
+        assert_eq!(
+            colors,
+            [
+                ("Tomato", Rgb(0xD5, 0x00, 0x00)),
+                ("Flamingo", Rgb(0xE6, 0x7C, 0x73)),
+                ("Tangerine", Rgb(0xF4, 0x51, 0x1E)),
+                ("Banana", Rgb(0xF6, 0xBF, 0x26)),
+                ("Sage", Rgb(0x33, 0xB6, 0x79)),
+                ("Basil", Rgb(0x0B, 0x80, 0x43)),
+                ("Peacock", Rgb(0x03, 0x9B, 0xE5)),
+                ("Blueberry", Rgb(0x3F, 0x51, 0xB5)),
+                ("Lavender", Rgb(0x79, 0x86, 0xCB)),
+                ("Grape", Rgb(0x8E, 0x24, 0xAA)),
+                ("Graphite", Rgb(0x61, 0x61, 0x61)),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_events_own_colour_is_shown_over_its_calendars_local_one() {
+        let local = LocalColors::from([(("1".to_string(), "work".to_string()), PALETTE[1])]);
+        let mut own = timed("Dentist", d(2026, 11, 12), (16, 0), (17, 0));
+        own.about.color = Some(EventColor::Tomato);
+        let plain = timed("Standup", d(2026, 11, 12), (9, 0), (10, 0));
+
+        let shown: Vec<Rgb> = apply(&[own, plain], &local)
+            .iter()
+            .map(Event::shown_color)
+            .collect();
+
+        assert_eq!(shown, [EventColor::Tomato.rgb(), PALETTE[1]]);
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use calendar_core::cache::CachedCalendar;
+use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
@@ -1008,6 +1009,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             // Google keeps "confidential" for compatibility; it means private.
             visibility: Visibility::Private,
             kind: Kind::Ordinary,
+            color: None,
         }
     );
     assert_eq!(
@@ -1178,6 +1180,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             show: Show::Free,
             visibility: Visibility::Public,
             kind: Kind::Ordinary,
+            color: Some(EventColor::Tomato),
         },
         recurrence: Vec::new(),
     };
@@ -1193,6 +1196,80 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
     assert_eq!(sent["location"], "Lisbon");
     assert_eq!(sent["transparency"], "transparent");
     assert_eq!(sent["visibility"], "public");
+    assert_eq!(sent["colorId"], "11");
+}
+
+#[test]
+fn events_come_with_their_own_google_colour() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("colours");
+    for id in 1..=12 {
+        let mut event = timed(
+            &format!("c{id}"),
+            "Coloured",
+            "2026-11-12T09:00:00+01:00",
+            "2026-11-12T10:00:00+01:00",
+        );
+        event["colorId"] = json!(id.to_string());
+        google.add_event(ACCOUNT_ID, "work", event);
+    }
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let color = |id: &str| cached(&cache, "work", id).unwrap().about.color;
+    let colors: Vec<Option<EventColor>> = (1..=11).map(|id| color(&format!("c{id}"))).collect();
+    assert_eq!(
+        colors,
+        [
+            EventColor::Lavender,
+            EventColor::Sage,
+            EventColor::Grape,
+            EventColor::Flamingo,
+            EventColor::Banana,
+            EventColor::Tangerine,
+            EventColor::Peacock,
+            EventColor::Graphite,
+            EventColor::Blueberry,
+            EventColor::Basil,
+            EventColor::Tomato,
+        ]
+        .map(Some)
+    );
+    // An ID outside Google's event palette, and no colour at all: the calendar's.
+    assert_eq!(color("c12"), None);
+    assert_eq!(color("standup"), None);
+}
+
+#[test]
+fn an_events_colour_is_patched_and_taken_away() {
+    let (google, store, dir, client_file, cache) = synchronized_once("patch-colour");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = |google: &FakeGoogle| {
+        let kept = google.event(ACCOUNT_ID, "work", "standup").unwrap();
+        kept["etag"].as_str().unwrap().to_string()
+    };
+    let recolour = |color| Patch {
+        color: Some(color),
+        ..Patch::default()
+    };
+
+    let painted = session.update(
+        &work,
+        "standup",
+        &etag(&google),
+        &recolour(Some(EventColor::Peacock)),
+    );
+    let painted_to = google.event(ACCOUNT_ID, "work", "standup").unwrap()["colorId"].clone();
+    let cleared = session.update(&work, "standup", &etag(&google), &recolour(None));
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(painted.is_ok() && cleared.is_ok());
+    assert_eq!(painted_to, "7");
+    let kept = google.event(ACCOUNT_ID, "work", "standup").unwrap();
+    assert_eq!(kept.get("colorId"), None);
+    assert_eq!(kept["summary"], "Standup");
 }
 
 #[test]
@@ -1565,11 +1642,20 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
             end: at(10) + chrono::Duration::minutes(15),
             zone: Warsaw,
         },
-        about: About::default(),
+        // The series' colour, as synchronized.
+        about: About {
+            color: Some(EventColor::Banana),
+            ..About::default()
+        },
         recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6".into()],
+    };
+    let uncoloured = NewEvent {
+        about: About::default(),
+        ..following.clone()
     };
 
     let id = session.copy(&work, "weekly", &following).unwrap();
+    let without = session.copy(&work, "weekly", &uncoloured).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 
     let copy = google.event(ACCOUNT_ID, "work", &id).unwrap();
@@ -1577,6 +1663,9 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
     assert_eq!(copy["attendees"][0]["email"], "guest@example.com");
     assert_eq!(copy["reminders"]["overrides"][0]["minutes"], 5);
     assert_eq!(copy["colorId"], "5");
+    // A colour taken away for the new series is not copied from the old.
+    let without = google.event(ACCOUNT_ID, "work", &without).unwrap();
+    assert_eq!(without.get("colorId"), None);
     assert_eq!(copy["start"]["dateTime"], "2026-12-14T11:00:00+01:00");
     assert_eq!(
         copy["recurrence"],

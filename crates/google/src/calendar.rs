@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::cache::{Cache, parse_access, parse_color};
+use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
 use calendar_core::model::{About, Calendar, Kind, Show, Timing, Visibility};
@@ -317,6 +318,9 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
     if !event.recurrence.is_empty() {
         fields["recurrence"] = json!(event.recurrence);
     }
+    if let Some(color) = event.about.color {
+        fields["colorId"] = json!(color_id(color));
+    }
     // Out of office and focus time with what Google Calendar sets them up with: new invitations
     // that clash are declined, and chat is set to do not disturb during focus time; both busy.
     match event.about.kind {
@@ -409,6 +413,35 @@ fn visibility(visibility: Visibility) -> &'static str {
     }
 }
 
+/// Google's event colours by their `colorId`, as Google Calendar shows them (`DEC-118`).
+const COLOR_IDS: [(&str, EventColor); 11] = [
+    ("1", EventColor::Lavender),
+    ("2", EventColor::Sage),
+    ("3", EventColor::Grape),
+    ("4", EventColor::Flamingo),
+    ("5", EventColor::Banana),
+    ("6", EventColor::Tangerine),
+    ("7", EventColor::Peacock),
+    ("8", EventColor::Graphite),
+    ("9", EventColor::Blueberry),
+    ("10", EventColor::Basil),
+    ("11", EventColor::Tomato),
+];
+
+/// Google's `colorId` of an event colour.
+fn color_id(color: EventColor) -> &'static str {
+    let (id, _) = COLOR_IDS
+        .iter()
+        .find(|(_, c)| *c == color)
+        .expect("every event colour has an ID");
+    id
+}
+
+/// The event colour of Google's `colorId`; `None` for one outside the palette.
+fn event_color(id: &str) -> Option<EventColor> {
+    COLOR_IDS.iter().find(|(i, _)| *i == id).map(|(_, c)| *c)
+}
+
 /// Whether a 403 from Google's APIs is a rate limit rather than a refusal.
 fn rate_limited(body: &str) -> bool {
     let value: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
@@ -489,6 +522,8 @@ impl Provider for Session {
         ] {
             event.remove(own);
         }
+        // The new series has the colour `new` gives it, none included.
+        event.remove("colorId");
         event.extend(fields(new));
         let mut url = self.url(&["calendars", &calendar.id, "events"]);
         url.query_pairs_mut()
@@ -521,6 +556,11 @@ impl Provider for Session {
             set("end", Some(end));
         }
         set("recurrence", patch.recurrence.clone().map(Value::from));
+        // Null takes the event's own colour away.
+        set(
+            "colorId",
+            patch.color.map(|color| json!(color.map(color_id))),
+        );
         let url = self.url(&["calendars", &calendar.id, "events", id]);
         Ok(self
             .patch::<Version>(url, &Value::Object(change), version(etag))?
@@ -622,6 +662,7 @@ struct GoogleEvent {
     #[serde(default)]
     guests_can_modify: bool,
     event_type: Option<String>,
+    color_id: Option<String>,
 }
 
 /// Google's `organizer` of an event; `self` when it is the calendar the copy is on.
@@ -715,6 +756,7 @@ impl GoogleEvent {
                     Some("birthday") => Kind::Birthday,
                     _ => Kind::Ordinary,
                 },
+                color: self.color_id.as_deref().and_then(event_color),
             },
             etag: self.etag,
             // A guest's copy, with the organizer's event elsewhere, as Google tells them apart.

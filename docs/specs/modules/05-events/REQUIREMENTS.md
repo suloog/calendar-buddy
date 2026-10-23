@@ -114,7 +114,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - **Google Calendar API — events** (write): create, update, delete, move between calendars, and occurrences of a series.
 - **Google Calendar API — settings** (read): the user's default event length.
-- **Google Calendar API — colours** (read): the event colour palette.
+- **Google Calendar API — colours**: the event colour IDs (`colorId` 1–11); the palette itself is built in, as Google Calendar shows it (`DEC-118`).
 
 ## Technical notes
 

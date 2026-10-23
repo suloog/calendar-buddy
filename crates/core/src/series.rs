@@ -187,6 +187,7 @@ pub fn change(
                     show: patch.show.unwrap_or(about.show),
                     visibility: patch.visibility.unwrap_or(about.visibility),
                     kind: about.kind,
+                    color: patch.color.unwrap_or(about.color),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
             };
@@ -406,6 +407,7 @@ fn following(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::colors::EventColor;
     use crate::fixtures::d;
     use crate::model::{Access, Rgb};
     use crate::recurrence::expand;
@@ -789,6 +791,26 @@ mod tests {
                 end_exclusive: d(2026, 11, 18),
             })
         );
+    }
+
+    #[test]
+    fn this_and_following_keeps_the_series_colour_or_takes_the_one_picked() {
+        let mut old = standup();
+        old.about.color = Some(EventColor::Sage);
+        let fifth = occurrence(&old, d(2026, 12, 14));
+
+        let kept = split(change(&retitled(&fifth), Scope::Following, &old, &[]));
+        let recoloured = edit(
+            &fifth,
+            Patch {
+                color: Some(Some(EventColor::Grape)),
+                ..Patch::default()
+            },
+        );
+        let picked = split(change(&recoloured, Scope::Following, &old, &[]));
+
+        assert_eq!(kept.new.unwrap().about.color, Some(EventColor::Sage));
+        assert_eq!(picked.new.unwrap().about.color, Some(EventColor::Grape));
     }
 
     #[test]

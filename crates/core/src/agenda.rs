@@ -105,7 +105,7 @@ pub fn agenda_view(
                         AgendaItem {
                             event: i,
                             title: shown_title(event),
-                            color: event.color,
+                            color: event.shown_color(),
                             read_only: event.read_only,
                             saving: event.saving,
                             time: event_time(event),

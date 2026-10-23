@@ -107,7 +107,7 @@ pub fn grid_view(
             Block {
                 placement,
                 title: shown_title(event),
-                color: event.color,
+                color: event.shown_color(),
                 read_only: event.read_only,
                 saving: event.saving,
                 movable: movable(event),
@@ -125,7 +125,7 @@ pub fn grid_view(
             Bar {
                 bar,
                 title: shown_title(event),
-                color: event.color,
+                color: event.shown_color(),
                 read_only: event.read_only,
                 saving: event.saving,
                 movable: movable(event),
