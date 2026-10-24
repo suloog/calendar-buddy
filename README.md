@@ -46,9 +46,9 @@ Calendar Buddy is built for Ubuntu with KDE Plasma, on Wayland and on X11. It ke
 in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the Secret Service API).
 
 1. Install a recent stable [Rust](https://rustup.rs) toolchain.
-2. Create a Google OAuth client of type **Desktop app** in a Google Cloud project with the Google
-   Calendar API and the People API enabled, download its JSON and save it, as downloaded, to
-   `~/.config/calendar-buddy/google-oauth-client.json`. It stays out of the repository.
+2. Set up your own Google OAuth client and save its file to
+   `~/.config/calendar-buddy/google-oauth-client.json`, as described in
+   [Setting up the Google OAuth client](#setting-up-the-google-oauth-client) below.
 3. Run the app:
 
    ```sh
@@ -62,6 +62,43 @@ in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the S
 
 Your calendars are cached in `~/.cache/calendar-buddy/`, your settings in
 `~/.config/calendar-buddy/`.
+
+### Setting up the Google OAuth client
+
+Calendar Buddy has no Google client built in: each install talks to Google through an OAuth
+client from your own Google Cloud project. You set it up once, in the
+[Google Cloud Console](https://console.cloud.google.com/):
+
+1. **Create a project** (or pick one you have) in the project picker at the top.
+2. **Enable the APIs.** In *APIs & Services → Library*, enable the **Google Calendar API** and the
+   **People API** (the People API suggests guests from your contacts and directory).
+3. **Configure the consent screen.** In *Google Auth Platform* (*APIs & Services → OAuth consent
+   screen*):
+   - *Branding*: an app name (e.g. Calendar Buddy) and your e-mail as the support and developer
+     contact.
+   - *Audience*: **External**, so any Google account can connect (or **Internal** if you only use
+     accounts of one Workspace organization). While the app is in **Testing**, add every account
+     you will connect under *Test users*. Google ends a Testing app's sign-ins after 7 days; to
+     stay signed in, choose **Publish app** — no verification is needed for your own use, Google
+     only shows the unverified-app warning when you connect.
+   - *Data access* (optional): add the scopes the app asks for — `…/auth/calendar`,
+     `…/auth/contacts.readonly`, `…/auth/contacts.other.readonly` and
+     `…/auth/directory.readonly`.
+4. **Create the client.** In *Clients* (*APIs & Services → Credentials → Create credentials →
+   OAuth client ID*), choose the application type **Desktop app**, give it a name and create it.
+   No redirect URI is needed: the app signs in through a loopback address on your machine.
+5. **Download the JSON** (*Download JSON* in the dialog, or the download icon next to the client)
+   and put it, unchanged, where the app looks for it:
+
+   ```sh
+   mkdir -p ~/.config/calendar-buddy
+   mv ~/Downloads/client_secret_*.json ~/.config/calendar-buddy/google-oauth-client.json
+   ```
+
+   The file starts with `{"installed": {"client_id": …`. If `XDG_CONFIG_HOME` is set, the app
+   reads `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json` instead. The file holds your
+   client's secret: keep it out of the repository. Without it, **Connect Google account** tells
+   you which file to put where.
 
 ## Development
 
