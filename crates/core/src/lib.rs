@@ -18,6 +18,7 @@ pub mod layout;
 pub mod model;
 pub mod month;
 pub mod navigation;
+pub mod notice;
 pub mod notify;
 pub mod offline;
 pub mod platform;
