@@ -14,7 +14,8 @@
 //! through synchronizing its calendar (`US-05-01`), and so does a changed one (`US-05-02`), a
 //! deleted one and one restored (`US-05-04`); each account's default event length is read with
 //! its first synchronization. People to invite are searched for at Google while the user types a
-//! guest (`US-06-01`).
+//! guest (`US-06-01`). An event saved with Google Meet that comes back without a call is told of
+//! (`US-06-07`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -97,6 +98,8 @@ enum Update {
     Created(u64, String),
     /// Google did not create the new event, and why; never holds the event's contents.
     NotCreated(u64, String),
+    /// The new or changed event was saved with Google Meet, but came back without a call.
+    WithoutMeet(u64),
     /// Google changed the event; its new version.
     Changed(u64, String),
     /// Google did not change the event, and why; never holds the event's contents.
@@ -148,6 +151,8 @@ pub enum Saved {
     Created(u64, String),
     /// Why it was not created.
     NotCreated(u64, String),
+    /// Saved, but without the Google Meet call asked for (MOD-06 *Constraints and edge cases*).
+    WithoutMeet(u64),
     /// The event's new version.
     Changed(u64, String),
     /// Why it was not changed.
@@ -420,6 +425,7 @@ impl Synchronization {
                 Update::NotCreated(local, reason) => {
                     self.saved.push(Saved::NotCreated(local, reason))
                 }
+                Update::WithoutMeet(local) => self.saved.push(Saved::WithoutMeet(local)),
                 Update::Changed(local, etag) => self.saved.push(Saved::Changed(local, etag)),
                 Update::NotChanged(local, reason) => {
                     self.saved.push(Saved::NotChanged(local, reason))
@@ -690,8 +696,11 @@ impl Engine {
         };
         match session.create(&calendar, event) {
             Ok(id) => {
-                let mut updates = vec![Update::Created(local, id)];
-                updates.extend(self.synchronize(&[calendar], now));
+                let mut updates = vec![Update::Created(local, id.clone())];
+                updates.extend(self.synchronize(std::slice::from_ref(&calendar), now));
+                if event.meet && self.without_meet(std::slice::from_ref(&calendar), &id) {
+                    updates.push(Update::WithoutMeet(local));
+                }
                 updates
             }
             Err(error) => vec![Update::NotCreated(local, error.0)],
@@ -710,6 +719,8 @@ impl Engine {
         if !edit.patch.is_empty() {
             changed = session.update(calendar, id, &edit.event.etag, &edit.patch, edit.notify);
         }
+        // Saved with Google Meet, even when the move after it was not.
+        let meet = edit.patch.meet == Some(true) && changed.is_ok();
         let mut updates = vec![match (changed, &edit.to) {
             (Err(error), _) => Update::NotChanged(local, refusal(error)),
             (Ok(etag), None) => Update::Changed(local, etag),
@@ -731,7 +742,25 @@ impl Engine {
             .chain(edit.to.clone())
             .collect();
         updates.extend(self.synchronize(&calendars, now));
+        if meet && self.without_meet(&calendars, id) {
+            updates.push(Update::WithoutMeet(local));
+        }
         updates
+    }
+
+    /// Whether the event, saved with Google Meet in one of the calendars, came back from Google
+    /// without a call: Google could not make one for the account (MOD-06 *Constraints and edge
+    /// cases*).
+    fn without_meet(&self, calendars: &[Calendar], id: &str) -> bool {
+        (self.cache.calendars().ok().into_iter().flatten())
+            .filter(|cached| {
+                calendars.iter().any(|calendar| {
+                    cached.calendar.account_id == calendar.account_id
+                        && cached.calendar.id == calendar.id
+                })
+            })
+            .flat_map(|cached| cached.events)
+            .any(|event| event.id == id && event.about.meet.is_none())
     }
 
     /// Deletes the event at Google, against the version shown, then synchronizes its calendar,
@@ -2509,6 +2538,7 @@ mod tests {
                 Update::NotCreated(local, reason) => {
                     Some(Saved::NotCreated(*local, reason.clone()))
                 }
+                Update::WithoutMeet(local) => Some(Saved::WithoutMeet(*local)),
                 _ => None,
             })
             .collect()
@@ -4319,7 +4349,7 @@ mod tests {
             .collect();
         assert_eq!(created.len(), 1);
         assert!(
-            created[0].ends_with("/events?sendUpdates=all"),
+            created[0].contains("/events?sendUpdates=all"),
             "{created:?}"
         );
         // Back through synchronization, with its guests.
@@ -5017,5 +5047,128 @@ mod tests {
         assert!(week(&settings).is_empty());
         settings.hide_declined = false;
         assert_eq!(week(&settings), [("Lunch".to_string(), true)]);
+    }
+
+    #[test]
+    fn tc_06_10_adding_the_first_guest_turns_google_meet_on_and_the_saved_event_has_a_meet_link() {
+        let google = Google::start("tc-06-10");
+        personal(&google);
+        google
+            .fake
+            .add_contact(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+        // "ewa@example.com" was invited to an earlier event.
+        let mut earlier = event("earlier", "Planning");
+        earlier["attendees"] = json!([
+            {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "ewa@example.com", "responseStatus": "accepted"}
+        ]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, earlier);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendars = engine.cache.calendar_list().unwrap();
+        // A new event "Design review", from the next full hour, open in the editor.
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let entry = QuickEntry {
+            title: "Design review".to_string(),
+            ..QuickEntry::new(
+                create::keyed(d(2026, 11, 12), thursday_9(), 60, Warsaw),
+                Warsaw,
+                default,
+            )
+        };
+        let mut editor = Editor::from_quick(&entry, &regional);
+        let own = editor.own_addresses(&accounts());
+        assert!(!editor.meet);
+
+        // 1. Adam added: the "Add Google Meet" switch turns on.
+        editor.guest_field = "Adam".to_string();
+        let found = suggested(&mut engine, &editor, Reach::of(&accounts()[0].account));
+        editor.add_guest(&found[0], &own);
+        assert!(editor.meet);
+
+        // 2. Saved: Google is asked to make a Meet call, and the event shows its link.
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the event with its call: {saved:?}");
+        };
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(
+            sent["conferenceData"]["createRequest"]["conferenceSolutionKey"]["type"],
+            "hangoutsMeet"
+        );
+        assert!(
+            (google.fake.requests().iter())
+                .any(|r| r.starts_with("POST ") && r.contains("conferenceDataVersion=1"))
+        );
+        let review = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.title == "Design review")
+            .unwrap();
+        let link = event_details(&review, Warsaw).meet.unwrap();
+        assert!(link.starts_with("https://meet.google.com/"), "{link}");
+    }
+
+    #[test]
+    fn an_event_google_cannot_make_a_meet_call_for_is_saved_without_one_and_the_user_is_told() {
+        let google = Google::start("no-meet");
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": EMAIL,
+                "summary": "Personal",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#9fe1e7",
+                "accessRole": "owner",
+                "primary": true,
+                "conferenceProperties": {"allowedConferenceSolutionTypes": ["eventHangout"]},
+            }),
+        );
+        google.event(EMAIL, "standup", "Standup");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let entry = QuickEntry {
+            title: "Design review".to_string(),
+            ..QuickEntry::new(
+                create::keyed(d(2026, 11, 12), thursday_9(), 60, Warsaw),
+                Warsaw,
+                Some(calendar.clone()),
+            )
+        };
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.meet = true;
+        let Ok(Save::Create(to, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+
+        let created = engine.handle(Some(Job::Create(1, to, *event)), start);
+        let standup = (now_shown(&engine).into_iter())
+            .find(|e| e.id == "standup")
+            .unwrap();
+        let mut editor = Editor::of(&standup, calendar, &regional);
+        editor.meet = true;
+        let changed = engine.handle(Some(Job::Change(2, edit(&editor, &regional))), start);
+
+        let saved = saved(&created);
+        let [Saved::Created(1, id), Saved::WithoutMeet(1)] = saved.as_slice() else {
+            panic!("saved without the call, and told: {saved:?}");
+        };
+        let review = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        assert_eq!(review["summary"], "Design review");
+        assert_eq!(review.get("conferenceData"), None);
+        assert!(
+            changed
+                .iter()
+                .any(|update| matches!(update, Update::WithoutMeet(2)))
+        );
+        assert!(matches!(
+            saved_changes(&changed)[..],
+            [Saved::Changed(2, _)]
+        ));
     }
 }

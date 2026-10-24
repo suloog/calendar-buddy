@@ -4,7 +4,8 @@
 //! (`US-05-07`); out of office and focus time where the account allows them (`US-05-08`). What
 //! the fields mean and what saving does is `calendar_core::editor`'s. The event's own colour is
 //! picked from Google's event colours (`US-05-09`). Guests are added by address or from the people
-//! suggested while typing, marked optional and removed (`US-06-01`).
+//! suggested while typing, marked optional and removed (`US-06-01`); the "Add Google Meet" switch
+//! turns on with the first guest (`US-06-07`).
 
 use calendar_core::accounts::Entry;
 use calendar_core::colors::EventColor;
@@ -328,10 +329,14 @@ pub fn show(
             );
             ui.end_row();
 
-            // Google takes no guests for out of office and focus time.
+            // Google takes no guests for out of office and focus time, nor a Meet call.
             if !editor.kind.timed_only() {
                 ui.label("Guests");
                 guests(ui, editor, suggested, &own);
+                ui.end_row();
+
+                ui.label("");
+                ui.checkbox(&mut editor.meet, "Add Google Meet");
                 ui.end_row();
             }
 

@@ -8,6 +8,8 @@
 //! account allows it (`US-05-08`, `MOD-05-F24`). The event's own colour is picked from Google's
 //! event colours (`US-05-09`, `MOD-05-F25`). Guests are added by address or from the people
 //! suggested, marked required or optional, and removed (`US-06-01`, `MOD-06-F01`, `F06`, `F07`).
+//! The "Add Google Meet" switch turns on by itself with the first guest (`US-06-07`,
+//! `MOD-06-F16`, `F17`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
@@ -22,6 +24,11 @@ use crate::repeat::{Ends, Pattern, rule};
 
 /// What the editor says when the end is set before the start.
 pub const ENDS_BEFORE_STARTS: &str = "The event ends before it starts.";
+
+/// What the app says when an event saved with Google Meet came back without a call
+/// (MOD-06 *Constraints and edge cases*).
+pub const WITHOUT_MEET: &str =
+    "The event was saved without Google Meet: Google could not add a Meet call for this account.";
 
 /// What the editor says when a series is set to end before its first occurrence.
 pub const SERIES_ENDS_BEFORE_IT_STARTS: &str = "The series ends before it starts.";
@@ -73,6 +80,9 @@ pub struct Editor {
     pub guest_field: String,
     /// Why what was typed in the guest field was not added.
     pub guest_problem: Option<String>,
+    /// The "Add Google Meet" switch: on for an event with a Meet call, and turned on by the
+    /// first guest added (`MOD-06-F17`).
+    pub meet: bool,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
 }
@@ -111,6 +121,9 @@ pub struct Patch {
     /// The user's own answer to the invitation, given in their own guest entry alone
     /// (`MOD-06-F11`).
     pub response: Option<Response>,
+    /// Whether the event has a Google Meet call: `Some(true)` makes one, `Some(false)` takes it
+    /// away (`MOD-06-F16`).
+    pub meet: Option<bool>,
 }
 
 impl Patch {
@@ -176,6 +189,10 @@ impl Edit {
                 guest.response = response;
             }
         }
+        // A new call's link is known once Google made it.
+        if patch.meet == Some(false) {
+            event.about.meet = None;
+        }
         if let Some(to) = &self.to {
             event.calendar_id = to.id.clone();
             event.color = to.color;
@@ -223,6 +240,7 @@ impl Editor {
             guests: Vec::new(),
             guest_field: String::new(),
             guest_problem: None,
+            meet: false,
             start: Some(start),
         }
     }
@@ -276,6 +294,7 @@ impl Editor {
             kind: event.about.kind,
             color: event.about.color,
             guests: event.about.guests.clone(),
+            meet: event.about.meet.is_some(),
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
@@ -405,12 +424,14 @@ impl Editor {
     }
 
     /// Invites the person, unless they are invited already or the address is one of the user's
-    /// own (`own`); the guest field is emptied either way.
+    /// own (`own`); the guest field is emptied either way. The first guest turns Google Meet on
+    /// (`MOD-06-F17`).
     pub fn add_guest(&mut self, person: &Person, own: &[String]) {
         let taken = (self.guests.iter().map(|guest| &guest.email))
             .chain(own)
             .any(|email| guests::same(email, &person.email));
         if !taken {
+            self.meet |= self.guests.iter().all(|guest| guest.own);
             self.guests.push(Guest::invited(person));
         }
         self.guest_field.clear();
@@ -552,7 +573,11 @@ impl Editor {
             } else {
                 self.guests.clone()
             },
+            // Its link is Google's to make.
+            meet: None,
         };
+        // Nor a Google Meet call.
+        let meet = self.meet && !self.kind.timed_only();
         let Some((event, opened_in)) = &self.opened else {
             return Ok(Save::Create(
                 calendar,
@@ -561,6 +586,7 @@ impl Editor {
                     recurrence: self.recurrence(regional, &timing)?,
                     timing,
                     about,
+                    meet,
                 }),
             ));
         };
@@ -579,6 +605,7 @@ impl Editor {
             color: changed(event.about.color, about.color),
             guests: changed(event.about.guests.clone(), about.guests),
             response: None,
+            meet: changed(event.about.meet.is_some(), meet),
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {
@@ -703,8 +730,10 @@ mod tests {
                     color: None,
                     attachments: Vec::new(),
                     guests: Vec::new(),
+                    meet: None,
                 },
                 recurrence: Vec::new(),
+                meet: false,
             }
         );
     }
@@ -1337,8 +1366,8 @@ mod tests {
         let listed: Vec<String> = editor.listed_guests().map(|g| g.email.clone()).collect();
         assert_eq!(listed, ["ewa@example.com"]);
 
-        editor.remove_guest("ewa@example.com");
         editor.add_guest(&person("Adam", "adam@example.com"), &[]);
+        editor.remove_guest("ewa@example.com");
         let edit = change(&editor);
 
         let adam = Guest::invited(&person("Adam", "adam@example.com"));
@@ -1364,6 +1393,67 @@ mod tests {
             panic!("a new event");
         };
         assert!(event.about.guests.is_empty());
+    }
+
+    #[test]
+    fn the_first_guest_turns_google_meet_on_and_a_new_event_is_saved_with_it() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        assert!(!editor.meet);
+
+        editor.add_guest(&person("Adam", "adam@example.com"), &[]);
+        assert!(editor.meet);
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert!(event.meet);
+
+        // Switched off, it stays off for the guests after the first, and without guests.
+        editor.meet = false;
+        editor.add_guest(&person("Ewa", "ewa@example.com"), &[]);
+        assert!(!editor.meet);
+        editor.remove_guest("adam@example.com");
+        editor.remove_guest("ewa@example.com");
+        assert!(!editor.meet);
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert!(!event.meet);
+    }
+
+    #[test]
+    fn google_meet_is_switched_on_and_off_for_an_existing_event() {
+        let mut call = standup();
+        call.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
+        let mut editor = Editor::of(&call, calendar("1", "a@example.com"), &regional());
+        assert!(editor.meet);
+        assert_eq!(change(&editor).patch, Patch::default());
+
+        editor.meet = false;
+        let edit = change(&editor);
+        assert_eq!(edit.patch.meet, Some(false));
+        assert_eq!(edit.changed().about.meet, None);
+
+        // The account itself is no guest of its own event: the first one turns Meet on.
+        let mut standup = standup();
+        standup.about.guests = vec![Guest {
+            own: true,
+            ..Guest::invited(&person("", "a@example.com"))
+        }];
+        let mut editor = Editor::of(&standup, calendar("1", "a@example.com"), &regional());
+        assert!(!editor.meet);
+        editor.add_guest(&person("Adam", "adam@example.com"), &[]);
+        assert_eq!(change(&editor).patch.meet, Some(true));
+    }
+
+    #[test]
+    fn out_of_office_is_saved_without_google_meet() {
+        let mut editor = Editor::from_quick(&quick(), &regional());
+        editor.meet = true;
+        editor.kind = Kind::OutOfOffice;
+        let Ok(Save::Create(_, event)) = editor.save(&regional()) else {
+            panic!("a new event");
+        };
+        assert!(!event.meet);
     }
 
     #[test]

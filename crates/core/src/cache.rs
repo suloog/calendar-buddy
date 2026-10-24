@@ -15,7 +15,7 @@ use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
 /// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 6;
+const VERSION: i64 = 7;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -49,6 +49,7 @@ const SCHEMA: &str = "
         color TEXT,
         attachments TEXT NOT NULL,
         guests TEXT NOT NULL,
+        meet TEXT,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -378,7 +379,7 @@ impl Cache {
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
                  series_id, original_start, description, location, show, visibility, etag, \
-                 organizer_only, kind, color, attachments, guests FROM events",
+                 organizer_only, kind, color, attachments, guests, meet FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -404,6 +405,7 @@ impl Cache {
                             .and_then(|key| parse_event_color(&key)),
                         attachments: parse_attachments(&row.get::<_, String>(18)?),
                         guests: parse_guests(&row.get::<_, String>(19)?),
+                        meet: row.get(20)?,
                     },
                     row.get::<_, String>(14)?,
                     row.get::<_, bool>(15)?,
@@ -465,7 +467,7 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         )
         .map_err(failed)?;
     for event in events {
@@ -511,6 +513,7 @@ fn insert(
                 event.about.color.map(EventColor::name),
                 attachments_text(&event.about.attachments),
                 guests_text(&event.about.guests),
+                event.about.meet,
             ])
             .map_err(failed)?;
     }
@@ -798,6 +801,7 @@ mod tests {
                             own: false,
                         },
                     ],
+                    meet: Some("https://meet.google.com/abc-defg-hij".into()),
                 },
                 etag: "\"3\"".into(),
                 organizer_only: true,

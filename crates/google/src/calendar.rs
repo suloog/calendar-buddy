@@ -25,11 +25,18 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, refresh};
+use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, random, refresh};
 
 /// Google's largest pages: fewer requests for the first full synchronization.
 const CALENDARS_PER_PAGE: &str = "250";
 const EVENTS_PER_PAGE: &str = "2500";
+
+/// How an error starts when Google answered, but refused what was asked.
+const REFUSED: &str = "Google refused";
+
+/// How an error starts when Google refused what was asked as invalid (400), as it refuses a
+/// Google Meet call the account may not have.
+const INVALID: &str = "Google refused it as invalid";
 
 /// How many people each search of the People API asks for.
 const PEOPLE_PER_SEARCH: &str = "10";
@@ -228,7 +235,8 @@ impl Session {
         }
         if !status.is_success() {
             let reason = google_reason(&body).unwrap_or_else(|| status.to_string());
-            return Err(SyncError(format!("Google refused ({reason})")));
+            let refused = if status == 400 { INVALID } else { REFUSED };
+            return Err(SyncError(format!("{refused} ({reason})")));
         }
         // A deletion is answered without a body.
         let body = if body.is_empty() { "null" } else { &body };
@@ -415,6 +423,41 @@ fn kept_list(attendees: &Value) -> &[Value] {
     attendees.as_array().map_or(&[], Vec::as_slice)
 }
 
+/// Google's request to make a Google Meet call for an event, each with an ID of its own.
+fn meet_request() -> Value {
+    json!({
+        "createRequest": {
+            "requestId": random(),
+            "conferenceSolutionKey": {"type": "hangoutsMeet"},
+        }
+    })
+}
+
+/// Sends a new or changed event with its Google Meet call asked for (`send(true)`); when Google
+/// refuses it as invalid, as for an account that cannot have Meet, sends it again without
+/// (`send(false)`), so the event is saved without a call (MOD-06 *Constraints and edge cases*).
+fn with_meet<T>(send: impl Fn(bool) -> Result<T, SyncError>) -> Result<T, SyncError> {
+    match send(true) {
+        Err(error) if error.0.starts_with(INVALID) => send(false),
+        sent => sent,
+    }
+}
+
+/// The link of an event's Google Meet call, from its `conferenceData`: the video entry point of a
+/// `hangoutsMeet` conference; `None` for another conference, or one Google has not made.
+fn meet_link(conference: &Value) -> Option<String> {
+    if conference["conferenceSolution"]["key"]["type"] != "hangoutsMeet" {
+        return None;
+    }
+    let entry_points = conference["entryPoints"].as_array()?;
+    (entry_points.iter())
+        .find(|entry| entry["entryPointType"] == "video")
+        .and_then(|entry| entry["uri"].as_str())
+        // Only web pages are handed to the desktop's URL handler.
+        .filter(|uri| uri.starts_with("https://"))
+        .map(str::to_string)
+}
+
 /// A new event's ID, as Google answers its creation.
 #[derive(Deserialize)]
 struct Created {
@@ -576,14 +619,27 @@ impl Provider for Session {
         self.fetch(url, calendar)
     }
 
-    /// Google e-mails the invitations to a new event's guests (`MOD-06-F08`).
+    /// Google e-mails the invitations to a new event's guests (`MOD-06-F08`), and makes its
+    /// Google Meet call where the account allows it (`MOD-06-F16`).
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
-        let mut url = self.url(&["calendars", &calendar.id, "events"]);
-        if !event.about.guests.is_empty() {
-            url.query_pairs_mut().append_pair("sendUpdates", "all");
+        let send = |meet: bool| {
+            let mut url = self.url(&["calendars", &calendar.id, "events"]);
+            if !event.about.guests.is_empty() {
+                url.query_pairs_mut().append_pair("sendUpdates", "all");
+            }
+            let mut change = fields(event);
+            if meet {
+                url.query_pairs_mut()
+                    .append_pair("conferenceDataVersion", "1");
+                change.insert("conferenceData".into(), meet_request());
+            }
+            Ok(self.post::<Created>(url, Some(&Value::Object(change)))?.id)
+        };
+        if event.meet {
+            with_meet(send)
+        } else {
+            send(false)
         }
-        let change = Value::Object(fields(event));
-        Ok(self.post::<Created>(url, Some(&change))?.id)
     }
 
     /// The event as Google keeps it, but what Google gives an event of its own and what made it
@@ -625,12 +681,29 @@ impl Provider for Session {
                 attendees(&new.about.guests, kept_list(&kept)),
             );
         }
-        let mut url = self.url(&["calendars", &calendar.id, "events"]);
-        url.query_pairs_mut()
-            .append_pair("conferenceDataVersion", "1")
-            .append_pair("supportsAttachments", "true");
-        send_updates(&mut url, notify);
-        Ok(self.post::<Created>(url, Some(&Value::Object(event)))?.id)
+        // The series' Google Meet call stays the copy's, unless it is switched off; one switched
+        // on is made (`MOD-06-F16`).
+        let had = event.get("conferenceData").and_then(meet_link).is_some();
+        if !new.meet && had {
+            event.remove("conferenceData");
+        }
+        let send = |meet: bool| {
+            let mut event = event.clone();
+            if meet {
+                event.insert("conferenceData".into(), meet_request());
+            }
+            let mut url = self.url(&["calendars", &calendar.id, "events"]);
+            url.query_pairs_mut()
+                .append_pair("conferenceDataVersion", "1")
+                .append_pair("supportsAttachments", "true");
+            send_updates(&mut url, notify);
+            Ok(self.post::<Created>(url, Some(&Value::Object(event)))?.id)
+        };
+        if new.meet && !had {
+            with_meet(send)
+        } else {
+            send(false)
+        }
     }
 
     fn update(
@@ -690,9 +763,31 @@ impl Provider for Session {
             set("attendees", Some(list));
         }
         send_updates(&mut url, notify);
-        Ok(self
-            .patch::<Version>(url, &Value::Object(change), version(etag))?
-            .etag)
+        // Google Meet made or taken away (`MOD-06-F16`).
+        if patch.meet.is_some() {
+            url.query_pairs_mut()
+                .append_pair("conferenceDataVersion", "1");
+        }
+        let send = |meet: bool| {
+            let mut change = change.clone();
+            match patch.meet {
+                Some(true) if meet => {
+                    change.insert("conferenceData".into(), meet_request());
+                }
+                Some(false) => {
+                    change.insert("conferenceData".into(), Value::Null);
+                }
+                _ => {}
+            }
+            Ok(self
+                .patch::<Version>(url.clone(), &Value::Object(change), version(etag))?
+                .etag)
+        };
+        if patch.meet == Some(true) {
+            with_meet(send)
+        } else {
+            send(false)
+        }
     }
 
     fn move_to(
@@ -893,6 +988,8 @@ struct GoogleEvent {
     attachments: Vec<GoogleAttachment>,
     #[serde(default)]
     attendees: Vec<GoogleAttendee>,
+    #[serde(default)]
+    conference_data: Value,
 }
 
 /// One of Google's `attendees` of an event.
@@ -1047,6 +1144,7 @@ impl GoogleEvent {
                 guests: (self.attendees.into_iter())
                     .filter_map(GoogleAttendee::into_guest)
                     .collect(),
+                meet: meet_link(&self.conference_data),
             },
             etag: self.etag,
             // A guest's copy, with the organizer's event elsewhere, as Google tells them apart.

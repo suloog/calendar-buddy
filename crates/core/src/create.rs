@@ -36,6 +36,8 @@ pub struct NewEvent {
     pub about: About,
     /// The rule of the series it starts (`MOD-05-F18`); empty when it does not repeat.
     pub recurrence: Vec<String>,
+    /// Whether it has a Google Meet call, one made for it when it has none yet (`MOD-06-F16`).
+    pub meet: bool,
 }
 
 /// The instant `minute` minutes after midnight of `date` on the wall clock in `zone`; a time the
@@ -197,6 +199,7 @@ impl QuickEntry {
             },
             about: About::default(),
             recurrence: Vec::new(),
+            meet: false,
         };
         Some((self.calendar.clone()?, event))
     }

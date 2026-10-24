@@ -889,6 +889,7 @@ fn planning() -> NewEvent {
         },
         about: About::default(),
         recurrence: Vec::new(),
+        meet: false,
     }
 }
 
@@ -1013,6 +1014,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             color: None,
             attachments: Vec::new(),
             guests: Vec::new(),
+            meet: None,
         }
     );
     assert_eq!(
@@ -1186,8 +1188,10 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             color: Some(EventColor::Tomato),
             attachments: Vec::new(),
             guests: Vec::new(),
+            meet: None,
         },
         recurrence: Vec::new(),
+        meet: false,
     };
 
     let id = session.create(&work, &trip).unwrap();
@@ -1705,6 +1709,7 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
             ..About::default()
         },
         recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6".into()],
+        meet: false,
     };
     let uncoloured = NewEvent {
         about: About::default(),
@@ -2255,4 +2260,235 @@ fn a_contact_warm_up_that_did_not_get_through_is_tried_again_at_the_next_search(
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert_eq!(found, [person("Adam Kowalski", "adam@example.com")]);
+}
+
+/// A Google Meet call of an event, as Google sends it: its link, a phone number and a PIN.
+fn meet_call(code: &str) -> Value {
+    json!({
+        "createRequest": {
+            "requestId": "request-1",
+            "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            "status": {"statusCode": "success"}
+        },
+        "entryPoints": [
+            {"entryPointType": "video", "uri": format!("https://meet.google.com/{code}"),
+             "label": format!("meet.google.com/{code}")},
+            {"entryPointType": "phone", "uri": "tel:+48-22-000-0000", "pin": "123456789"}
+        ],
+        "conferenceSolution": {"key": {"type": "hangoutsMeet"}, "name": "Google Meet"},
+        "conferenceId": code
+    })
+}
+
+#[test]
+fn events_come_with_the_link_of_their_google_meet_call() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("meet-link");
+    let mut review = timed(
+        "review",
+        "Review",
+        "2026-11-12T09:00:00+01:00",
+        "2026-11-12T10:00:00+01:00",
+    );
+    review["conferenceData"] = meet_call("abc-defg-hij");
+    google.add_event(ACCOUNT_ID, "work", review);
+    // Another conference than Google Meet, e.g. from an add-on, has no Join.
+    let mut other = timed(
+        "other",
+        "Other call",
+        "2026-11-12T11:00:00+01:00",
+        "2026-11-12T12:00:00+01:00",
+    );
+    other["conferenceData"] = json!({
+        "entryPoints": [{"entryPointType": "video", "uri": "https://example.com/call/1"}],
+        "conferenceSolution": {"key": {"type": "addOn"}, "name": "Other"}
+    });
+    google.add_event(ACCOUNT_ID, "work", other);
+    // A call Google could not make has no link.
+    let mut failed = timed(
+        "failed",
+        "Failed call",
+        "2026-11-12T13:00:00+01:00",
+        "2026-11-12T14:00:00+01:00",
+    );
+    failed["conferenceData"] = json!({
+        "createRequest": {
+            "requestId": "request-2",
+            "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            "status": {"statusCode": "failure"}
+        }
+    });
+    google.add_event(ACCOUNT_ID, "work", failed);
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let meet = |id| cached(&cache, "work", id).unwrap().about.meet;
+    assert_eq!(
+        meet("review").as_deref(),
+        Some("https://meet.google.com/abc-defg-hij")
+    );
+    assert_eq!(meet("other"), None);
+    assert_eq!(meet("failed"), None);
+    assert_eq!(meet("standup"), None);
+}
+
+#[test]
+fn a_new_event_with_google_meet_asks_google_to_make_its_call() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("create-meet");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let with_meet = NewEvent {
+        meet: true,
+        ..planning()
+    };
+
+    let id = session.create(&work, &with_meet).unwrap();
+    let without = session.create(&work, &planning()).unwrap();
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let sent = google.event(ACCOUNT_ID, "work", &id).unwrap();
+    let asked = &sent["conferenceData"]["createRequest"];
+    assert_eq!(asked["conferenceSolutionKey"]["type"], "hangoutsMeet");
+    assert!(!asked["requestId"].as_str().unwrap().is_empty());
+    let created: Vec<String> = (google.requests().into_iter())
+        .filter(|r| r.starts_with("POST /calendar/v3/"))
+        .collect();
+    assert_eq!(
+        created,
+        [
+            "POST /calendar/v3/calendars/work/events?conferenceDataVersion=1",
+            "POST /calendar/v3/calendars/work/events"
+        ]
+    );
+    assert_eq!(synced, Ok(()));
+    let link = cached(&cache, "work", &id).unwrap().about.meet.unwrap();
+    assert!(link.starts_with("https://meet.google.com/"), "{link}");
+    assert_eq!(cached(&cache, "work", &without).unwrap().about.meet, None);
+}
+
+#[test]
+fn an_event_google_cannot_make_a_meet_call_for_is_saved_without_one() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("create-no-meet");
+    let mut work_entry = entry("work", "Work", "#9fe1e7", "owner");
+    work_entry["conferenceProperties"] =
+        json!({"allowedConferenceSolutionTypes": ["eventHangout"]});
+    google.remove_calendar(ACCOUNT_ID, "work");
+    google.add_calendar(ACCOUNT_ID, work_entry);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+
+    let created = session.create(
+        &work,
+        &NewEvent {
+            meet: true,
+            ..planning()
+        },
+    );
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let id = created.unwrap();
+    assert_eq!(synced, Ok(()));
+    let saved = cached(&cache, "work", &id).unwrap();
+    assert_eq!(saved.title, "Planning");
+    assert_eq!(saved.about.meet, None);
+}
+
+#[test]
+fn google_meet_is_added_to_an_existing_event_and_taken_away() {
+    let (google, store, dir, client_file, cache) = synchronized_once("patch-meet");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = |google: &FakeGoogle| {
+        let kept = google.event(ACCOUNT_ID, "work", "standup").unwrap();
+        kept["etag"].as_str().unwrap().to_string()
+    };
+    let meet = |on| Patch {
+        meet: Some(on),
+        ..Patch::default()
+    };
+
+    let added = session.update(&work, "standup", &etag(&google), &meet(true), false);
+    let call = google.event(ACCOUNT_ID, "work", "standup").unwrap()["conferenceData"].clone();
+    let removed = session.update(&work, "standup", &etag(&google), &meet(false), false);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(added.is_ok() && removed.is_ok());
+    assert_eq!(call["conferenceSolution"]["key"]["type"], "hangoutsMeet");
+    let kept = google.event(ACCOUNT_ID, "work", "standup").unwrap();
+    assert_eq!(kept.get("conferenceData"), None);
+    assert_eq!(kept["summary"], "Standup");
+    let patches: Vec<String> = (google.requests().into_iter())
+        .filter(|r| r.starts_with("PATCH "))
+        .collect();
+    assert!(
+        patches
+            .iter()
+            .all(|r| r.contains("conferenceDataVersion=1")),
+        "{patches:?}"
+    );
+}
+
+#[test]
+fn a_series_copy_keeps_its_meet_call_unless_switched_off_and_gets_one_when_switched_on() {
+    let (google, store, dir, client_file, cache) = synchronized_once("copy-meet");
+    let mut weekly = timed(
+        "weekly",
+        "Weekly",
+        "2026-11-16T09:00:00+01:00",
+        "2026-11-16T09:15:00+01:00",
+    );
+    weekly["recurrence"] = json!(["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10"]);
+    weekly["conferenceData"] = meet_call("abc-defg-hij");
+    google.add_event(ACCOUNT_ID, "work", weekly);
+    let mut plain = timed(
+        "plain",
+        "Plain",
+        "2026-11-17T09:00:00+01:00",
+        "2026-11-17T09:15:00+01:00",
+    );
+    plain["recurrence"] = json!(["RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=10"]);
+    google.add_event(ACCOUNT_ID, "work", plain);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let new = |meet| NewEvent { meet, ..planning() };
+
+    let kept = session.copy(&work, "weekly", &new(true), false).unwrap();
+    let off = session.copy(&work, "weekly", &new(false), false).unwrap();
+    let on = session.copy(&work, "plain", &new(true), false).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let call = |id: &str| google.event(ACCOUNT_ID, "work", id).unwrap()["conferenceData"].clone();
+    assert_eq!(call(&kept)["conferenceId"], "abc-defg-hij");
+    assert_eq!(call(&off), Value::Null);
+    assert_eq!(
+        call(&on)["conferenceSolution"]["key"]["type"],
+        "hangoutsMeet"
+    );
+    assert_ne!(call(&on)["conferenceId"], "abc-defg-hij");
+}
+
+#[test]
+fn a_new_event_with_google_meet_google_fails_to_save_is_not_sent_again_without_its_call() {
+    let (google, store, dir, client_file, cache) = synchronized_once("create-meet-failing");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    google.fail_calendar("work");
+
+    let created = session.create(
+        &work,
+        &NewEvent {
+            meet: true,
+            ..planning()
+        },
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(created.unwrap_err().0.starts_with("Google refused"));
+    let posted = (google.requests().into_iter())
+        .filter(|r| r.starts_with("POST /calendar/v3/"))
+        .count();
+    assert_eq!(posted, 1);
 }
