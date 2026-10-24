@@ -288,3 +288,15 @@ What real Google and the People API answer, the e-mail Google sends, and what th
 - [ ] `US-06-01#4`, `#5` (real Google, a person's eyes):
   - Mark a guest **Optional** and save: Google Calendar in the browser shows them as optional.
   - Open an existing event with guests, remove one and add another, and save. In the browser the guest list matches, and the guests who stayed keep their answers.
+
+## US-06-02
+
+Needs a connected real Google account, a second mailbox the owner can answer invitations from, the KDE session and a person's eyes. Against the fake Google, these tests prove that an event's details carry each guest's name, address and answer, that the four answers have their own icons (in the app's fonts), that an answer changed in Google shows after the next synchronization, and that a list of more than 10 guests shows the first 10 until expanded:
+- app: `tc_06_03_a_guests_answer_is_shown_as_an_icon_and_changes_after_the_next_synchronization`, `the_guest_answers_icons_are_in_the_apps_fonts`;
+- core: `an_event_opens_with_each_guests_name_address_and_answer`, `each_answer_has_its_own_icon_and_name`, `a_guest_list_of_more_than_10_shows_the_first_10_until_expanded`.
+
+What the details look like in the window, and real Google's answers, are not proven. A choice to ratify: `DEC-123` (count, the user listed too, Google's order, ✔ ✖ ❓ ⏳ with hover names, "Show N more" / "Show fewer").
+
+- [ ] `TC-06-03` / `US-06-02#1` (real Google, a person's eyes): in the browser, create "Kickoff" with the second mailbox and one other address as guests. Run `cargo run -p calendar-buddy` and open Kickoff: the details say "3 guests" and list you (✔), and each guest with their name (where Google has one), their address and ⏳; hovering an icon names the answer.
+- [ ] `TC-06-03` / `US-06-02#2` (real Google, second mailbox): with Kickoff's details open, decline the invitation from the second mailbox. Within about a minute (the next synchronization) its icon turns to ✖ without reopening the details. Delete the event afterwards.
+- [ ] `US-06-02#3` (a person's eyes): open an event with more than 10 guests (e.g. 12). The first 10 are listed with "Show 2 more"; clicking it lists all 12 and "Show fewer" collapses them again; reopening the event starts collapsed.
