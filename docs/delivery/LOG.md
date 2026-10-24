@@ -448,3 +448,16 @@
   - until the portal answers, the app is light, so a dark desktop may show a light first frame.
 - Manual checks: TC-04-01 (US-04-01#1), TC-04-02 (US-04-01#2, #3)
 - Commits on main: 2190680 feat(themes): follow the desktop's light or dark theme [US-04-01] (one squash commit: one logical change)
+
+## US-04-02 — review — 2026-10-24 07:21
+- What: event text is black or white by WCAG contrast with what is under it (fill, invitation fill, declined veil now drawn under the text, out-of-office stripes cleared under the text). The themes' weak, link and warning text colours now reach 4.5:1. Today's header uses strong text, and the mini calendar keeps plain colours on the selection and on hover. The 44-point hour already fits 8:00–18:00 in 1080 px; tests read the contrast and layout back from egui's shapes.
+- Decisions: DEC-148, DEC-149
+- Reviews: code 2 round(s), spec 1 round(s); open notes:
+  - fixed in round 2 (blocking): egui hovers a mini-calendar day from up to 5 pt outside it;
+  - also fixed: out-of-office stripes under text, and the stripe clear colour on faded or invited events;
+  - not done: `clear_under` lays out the label a second time;
+  - `background()` assumes the panel colour, which equals the window colour today;
+  - TC-04-03's "8:00 at the top" precondition cannot be met, because the hours scroll only about 3.5 h in that window; the test checks that 8:00–18:00 is visible, and DEC-149 records why;
+  - the light theme's link and warning colours are set ahead of US-04-03's palette.
+- Manual checks: none of the TCs (TC-04-03, TC-04-04 are automated); US-04-02 edge case 150%/200% on KDE, US-04-02#4 look-over in both themes, US-04-02#3 and declined look
+- Commits on main: f4075b4 feat(themes): compact grid with readable text in both themes [US-04-02] (one squash commit: one logical change)
