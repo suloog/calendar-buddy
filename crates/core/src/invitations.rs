@@ -1,7 +1,10 @@
 //! Invitations awaiting the user's answer (`US-06-04`): marked in every view (`MOD-06-F09`,
 //! `MOD-06-U04`) and counted in the side panel, whose counter opens a list of them
 //! (`MOD-06-F10`); those of calendars disabled in the settings are neither shown nor counted
-//! (`MOD-06-F21`).
+//! (`MOD-06-F21`). Answered from their details and from that list (`US-06-05`, `MOD-06-F11`,
+//! `MOD-06-U03`), an occurrence of a series asking first whether the answer applies to this event
+//! or to all events (`MOD-06-F13`); a guest answers also an event only its organizer may change
+//! (`MOD-06-F15`).
 
 use std::collections::HashSet;
 
@@ -9,10 +12,53 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 
 use crate::accounts::Entry;
+use crate::editor::{Edit, Patch};
 use crate::guests::{Response, same};
-use crate::model::{Event, Timing};
+use crate::model::{Calendar, Event, Timing};
+use crate::series::Question;
 use crate::settings::Settings;
 use crate::week::day_start;
+
+/// The answers to an invitation, in the order offered, with what their buttons say
+/// (`MOD-06-U03`).
+pub const ANSWERS: [(Response, &str); 3] = [
+    (Response::Accepted, "Accept"),
+    (Response::Maybe, "Maybe"),
+    (Response::Declined, "Decline"),
+];
+
+/// The user's own answer to the event, when they can answer it: they are among its guests
+/// (Google's `self`), in a calendar the account can change; also when only the organizer may
+/// change the event itself (`MOD-06-F15`), and when they organize it (`DEC-129`). `None` when
+/// they cannot.
+pub fn own_answer(event: &Event) -> Option<Response> {
+    if event.read_only || event.busy_only {
+        return None;
+    }
+    (event.about.guests.iter())
+        .find(|guest| guest.own)
+        .map(|guest| guest.response)
+}
+
+/// The user's answer to the event of `calendar`, to send to Google, which lets the organizer know
+/// (`DEC-128`); for an occurrence of a series, the question whether it applies to this event or
+/// to all events (`MOD-06-F13`).
+pub fn answer(event: &Event, calendar: Calendar, response: Response) -> Result<Edit, Question> {
+    let edit = Edit {
+        event: event.clone(),
+        calendar,
+        patch: Patch {
+            response: Some(response),
+            ..Patch::default()
+        },
+        to: None,
+        notify: true,
+    };
+    match event.series {
+        Some(_) => Err(Question::Respond(Box::new(edit))),
+        None => Ok(edit),
+    }
+}
 
 /// What the list of invitations says when none awaits an answer.
 pub const NONE: &str = "No invitations await an answer.";
@@ -315,6 +361,123 @@ mod tests {
         let awaiting = awaiting(&events, &accounts(), &Settings::default(), Warsaw, clock());
 
         assert_eq!(titles(&events, &awaiting), ["Today", "Now"]);
+    }
+
+    fn personal() -> Calendar {
+        Calendar {
+            id: "owner@example.com".to_string(),
+            account_id: "1".to_string(),
+            name: "Personal".to_string(),
+            color: crate::model::Rgb(0x9f, 0xe1, 0xe7),
+            access: crate::model::Access::Owner,
+            zone: Warsaw,
+        }
+    }
+
+    #[test]
+    fn tc_06_06_accepting_board_from_the_list_takes_it_off_the_list_at_once() {
+        let events = tc_06_05_week();
+        let listed = awaiting(&events, &accounts(), &Settings::default(), Warsaw, clock());
+        let board = &events[listed[0]];
+        assert_eq!(board.title, "Board");
+
+        // Accept, Maybe and Decline are offered.
+        let offered: Vec<&str> = ANSWERS.iter().map(|(_, label)| *label).collect();
+        assert_eq!(offered, ["Accept", "Maybe", "Decline"]);
+        assert_eq!(own_answer(board), Some(Response::Awaiting));
+
+        // Accepted: sent at once, no scope asked, and shown answered while Google confirms it.
+        let Ok(edit) = answer(board, personal(), Response::Accepted) else {
+            panic!("a single event asks no scope");
+        };
+        assert_eq!(edit.patch.response, Some(Response::Accepted));
+        assert!(edit.notify);
+        let mut saving = crate::create::Saving::default();
+        saving.change(board, edit.changed());
+        let shown = saving.shown(&events);
+        let listed = awaiting(&shown, &accounts(), &Settings::default(), Warsaw, clock());
+
+        assert_eq!(titles(&shown, &listed), ["Lunch"]);
+        assert_eq!(counter(listed.len()), "1 invitation awaiting an answer");
+        let board = shown.iter().find(|e| e.title == "Board").unwrap();
+        assert_eq!(own_answer(board), Some(Response::Accepted));
+    }
+
+    #[test]
+    fn tc_06_07_answering_an_occurrence_asks_this_event_or_all_events() {
+        let mut call = invited(
+            timed("Team call", d(2026, 11, 23), (10, 0), (11, 0)),
+            Response::Awaiting,
+        );
+        call.recurring = true;
+        call.series = Some(("teamcall".to_string(), Start::On(d(2026, 11, 23))));
+
+        let Err(question) = answer(&call, personal(), Response::Declined) else {
+            panic!("an occurrence asks the scope first");
+        };
+
+        let asked: Vec<&str> = (question.scopes().into_iter())
+            .map(|(scope, why)| {
+                assert_eq!(why, None);
+                scope.label()
+            })
+            .collect();
+        assert_eq!(asked, ["This event", "All events"]);
+        assert_eq!(question.event(), &call);
+        // Answered, it is sent without asking whether to e-mail the guests.
+        let pending = crate::notify::Pending::of(question, crate::series::Scope::This);
+        assert_eq!(pending.asks(), None);
+    }
+
+    #[test]
+    fn tc_06_08_a_guest_answers_an_event_only_its_organizer_may_change() {
+        let mut board = invited(
+            timed("Board", d(2026, 11, 12), (14, 0), (15, 0)),
+            Response::Awaiting,
+        );
+        board.organizer_only = true;
+
+        // Accept, Maybe and Decline stay available; changing the event does not.
+        assert_eq!(own_answer(&board), Some(Response::Awaiting));
+        assert_eq!(
+            board.protected(),
+            Some(crate::model::Protected::OrganizerOnly)
+        );
+        let Ok(edit) = answer(&board, personal(), Response::Maybe) else {
+            panic!("a single event asks no scope");
+        };
+        // The answer alone: nothing of the event itself is sent.
+        assert_eq!(
+            edit.patch,
+            Patch {
+                response: Some(Response::Maybe),
+                ..Patch::default()
+            }
+        );
+        // Shown as the user's own answer; the organizer's stays as it was.
+        let answers: Vec<Response> = (edit.changed().about.guests.iter())
+            .map(|guest| guest.response)
+            .collect();
+        assert_eq!(answers, [Response::Accepted, Response::Maybe]);
+    }
+
+    #[test]
+    fn only_an_event_the_user_is_invited_to_in_a_calendar_they_can_change_can_be_answered() {
+        let board = invited(
+            timed("Board", d(2026, 11, 12), (14, 0), (15, 0)),
+            Response::Declined,
+        );
+        assert_eq!(own_answer(&board), Some(Response::Declined));
+        assert_eq!(
+            own_answer(&timed("Standup", d(2026, 11, 13), (9, 0), (9, 15))),
+            None
+        );
+        let mut read_only = board.clone();
+        read_only.read_only = true;
+        assert_eq!(own_answer(&read_only), None);
+        let mut busy = board.clone();
+        busy.busy_only = true;
+        assert_eq!(own_answer(&busy), None);
     }
 
     #[test]

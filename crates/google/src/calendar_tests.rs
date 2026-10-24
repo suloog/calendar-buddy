@@ -1906,6 +1906,151 @@ fn an_events_guests_are_patched_whole_and_those_google_has_no_entry_for_go_unans
 }
 
 #[test]
+fn the_users_answer_patches_their_own_entry_alone_also_in_a_copy_only_its_organizer_may_change() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("answer");
+    let mut board = timed(
+        "board",
+        "Board",
+        "2026-11-12T14:00:00+01:00",
+        "2026-11-12T15:00:00+01:00",
+    );
+    board["organizer"] = json!({"email": "boss@example.com"});
+    board["attendees"] = json!([
+        {"email": "boss@example.com", "organizer": true, "responseStatus": "accepted"},
+        {"email": "owner@example.com", "self": true, "responseStatus": "needsAction"},
+        {"email": "adam@example.com", "displayName": "Adam", "responseStatus": "tentative",
+         "comment": "Late"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", board);
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = cached(&cache, "work", "board").unwrap().etag;
+    let answer = |response| Patch {
+        response: Some(response),
+        ..Patch::default()
+    };
+
+    let accepted = session.update(&work, "board", &etag, &answer(Response::Accepted), true);
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    let maybe = cached(&cache, "work", "board").unwrap().etag;
+    let tentative = session.update(&work, "board", &maybe, &answer(Response::Maybe), true);
+    let declined = session.update(&work, "board", "", &answer(Response::Declined), true);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(accepted.is_ok() && tentative.is_ok() && declined.is_ok());
+    assert_eq!(synced, Ok(()));
+    let sent: Vec<Value> = google.patched().into_iter().map(|(_, sent)| sent).collect();
+    // Everyone else's entry goes back as Google keeps it.
+    assert_eq!(
+        sent[0],
+        json!({"attendees": [
+            {"email": "boss@example.com", "organizer": true, "responseStatus": "accepted"},
+            {"email": "owner@example.com", "self": true, "responseStatus": "accepted"},
+            {"email": "adam@example.com", "displayName": "Adam", "responseStatus": "tentative",
+             "comment": "Late"}
+        ]})
+    );
+    let own = |sent: &Value| sent["attendees"][1]["responseStatus"].clone();
+    assert_eq!(own(&sent[1]), "tentative");
+    assert_eq!(own(&sent[2]), "declined");
+    // Back through synchronization, as the user's own answer.
+    let guests = cached(&cache, "work", "board").unwrap().about.guests;
+    let answers: Vec<(bool, Response)> = guests.iter().map(|g| (g.own, g.response)).collect();
+    assert_eq!(
+        answers,
+        [
+            (false, Response::Accepted),
+            (true, Response::Accepted),
+            (false, Response::Maybe)
+        ]
+    );
+    assert!(
+        (google.requests().iter())
+            .filter(|r| r.starts_with("PATCH "))
+            .all(|r| r.ends_with("?sendUpdates=all"))
+    );
+}
+
+#[test]
+fn the_organizers_own_answer_emails_nobody_and_a_list_google_left_guests_out_of_stays_so() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("answer-own");
+    let mut own = timed(
+        "own",
+        "Own",
+        "2026-11-12T14:00:00+01:00",
+        "2026-11-12T15:00:00+01:00",
+    );
+    own["organizer"] = json!({"email": "owner@example.com", "self": true});
+    own["attendees"] = json!([
+        {"email": "owner@example.com", "self": true, "organizer": true, "responseStatus": "accepted"},
+        {"email": "adam@example.com", "responseStatus": "needsAction"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", own);
+    let mut few = timed(
+        "few",
+        "Few",
+        "2026-11-13T14:00:00+01:00",
+        "2026-11-13T15:00:00+01:00",
+    );
+    few["organizer"] = json!({"email": "boss@example.com"});
+    few["guestsCanModify"] = json!(true);
+    few["attendeesOmitted"] = json!(true);
+    few["attendees"] = json!([
+        {"email": "owner@example.com", "self": true, "responseStatus": "needsAction"}
+    ]);
+    google.add_event(ACCOUNT_ID, "work", few);
+    assert_eq!(
+        sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache),
+        Ok(())
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let answer = Patch {
+        response: Some(Response::Declined),
+        ..Patch::default()
+    };
+
+    let declined = session.update(&work, "own", "", &answer, true);
+    let accepted = session.update(
+        &work,
+        "few",
+        "",
+        &Patch {
+            response: Some(Response::Accepted),
+            ..Patch::default()
+        },
+        true,
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(declined.is_ok() && accepted.is_ok());
+    let patches: Vec<String> = (google.requests().into_iter())
+        .filter(|r| r.starts_with("PATCH "))
+        .collect();
+    assert!(
+        patches[0].ends_with("/events/own?sendUpdates=none"),
+        "{patches:?}"
+    );
+    assert!(
+        patches[1].ends_with("/events/few?sendUpdates=all"),
+        "{patches:?}"
+    );
+    let sent: Vec<Value> = google.patched().into_iter().map(|(_, sent)| sent).collect();
+    assert_eq!(sent[0]["attendees"][0]["responseStatus"], "declined");
+    assert_eq!(sent[0].get("attendeesOmitted"), None);
+    assert_eq!(
+        sent[1],
+        json!({"attendeesOmitted": true, "attendees": [
+            {"email": "owner@example.com", "self": true, "responseStatus": "accepted"}
+        ]})
+    );
+}
+
+#[test]
 fn whether_google_emails_the_guests_is_sent_with_every_change_and_deletion() {
     let (google, store, dir, client_file, cache) = synchronized_once("send-updates");
     google.add_calendar(ACCOUNT_ID, entry("team", "Team", "#7bd148", "writer"));

@@ -468,6 +468,16 @@ fn send_updates(url: &mut Url, notify: bool) {
     url.query_pairs_mut().append_pair("sendUpdates", send);
 }
 
+/// Google's `responseStatus` of a guest's answer.
+fn response_status(response: Response) -> &'static str {
+    match response {
+        Response::Accepted => "accepted",
+        Response::Declined => "declined",
+        Response::Maybe => "tentative",
+        Response::Awaiting => "needsAction",
+    }
+}
+
 /// Google's `transparency`.
 fn transparency(show: Show) -> &'static str {
     match show {
@@ -654,13 +664,30 @@ impl Provider for Session {
             patch.color.map(|color| json!(color.map(color_id))),
         );
         let mut url = self.url(&["calendars", &calendar.id, "events", id]);
-        // What Google keeps of each guest is read first, as the list is replaced whole.
-        if let Some(guests) = &patch.guests {
-            let kept = self.get::<Value>(url.clone())?.unwrap_or_default();
-            set(
-                "attendees",
-                Some(attendees(guests, kept_list(&kept["attendees"]))),
-            );
+        // What Google keeps of each guest is read first, as the list is replaced whole. The
+        // user's own answer goes in their own entry (`self`) alone, all a guest may change in a
+        // copy only its organizer may change (`MOD-06-F15`); a list Google left guests out of
+        // stays so. The organizer's own answer e-mails nobody (`DEC-128`).
+        let mut notify = notify;
+        if patch.guests.is_some() || patch.response.is_some() {
+            let event = self.get::<Value>(url.clone())?.unwrap_or_default();
+            let kept = kept_list(&event["attendees"]);
+            let mut list = match &patch.guests {
+                Some(guests) => attendees(guests, kept),
+                None => Value::Array(kept.to_vec()),
+            };
+            if let Some(response) = patch.response {
+                for attendee in list.as_array_mut().into_iter().flatten() {
+                    if attendee["self"] == true {
+                        attendee["responseStatus"] = json!(response_status(response));
+                    }
+                }
+                if event["attendeesOmitted"] == true {
+                    set("attendeesOmitted", Some(json!(true)));
+                }
+                notify &= event["organizer"]["self"] != true;
+            }
+            set("attendees", Some(list));
         }
         send_updates(&mut url, notify);
         Ok(self

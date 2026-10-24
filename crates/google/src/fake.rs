@@ -880,9 +880,9 @@ fn insert_event(
 }
 
 /// The Calendar API's `events.patch`, also of a series' occurrence: the fields sent replace those
-/// kept, a null one goes; only when the version sent in `If-Match` is the one kept, and not in a
-/// guest's copy the organizer does not let guests change. A deleted event is kept cancelled, and
-/// patching its status to confirmed brings it back.
+/// kept, a null one goes; only when the version sent in `If-Match` is the one kept, and in a
+/// guest's copy the organizer does not let guests change only the guest's own answer. A deleted
+/// event is kept cancelled, and patching its status to confirmed brings it back.
 fn patch_event(
     state: &mut State,
     account: &'static str,
@@ -904,10 +904,13 @@ fn patch_event(
     if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
         return precondition_failed();
     }
-    // A guest's copy of an event whose organizer does not let guests change it.
+    let patch: Value = serde_json::from_str(body).unwrap();
+    // A guest's copy of an event whose organizer does not let guests change it: only the guest's
+    // own answer may change.
     if event["organizer"].is_object()
         && event["organizer"]["self"] != true
         && event["guestsCanModify"] != true
+        && !answers_only(&event, &patch)
     {
         return (
             "403 Forbidden",
@@ -917,7 +920,6 @@ fn patch_event(
                 .to_string(),
         );
     }
-    let patch: Value = serde_json::from_str(body).unwrap();
     state
         .patched
         .push((if_match.unwrap_or_default(), patch.clone()));
@@ -970,6 +972,27 @@ fn delete_event(
         state.put_event(account, &calendar, occurrence);
     }
     ("204 No Content", String::new())
+}
+
+/// Whether the patch changes nothing of the event but the answer of the guest whose calendar the
+/// copy is in (`self`).
+fn answers_only(event: &Value, patch: &Value) -> bool {
+    let without_own_answer = |attendees: &Value| -> Vec<Value> {
+        (attendees.as_array().into_iter().flatten())
+            .map(|attendee| {
+                let mut attendee = attendee.clone();
+                if attendee["self"] == true {
+                    attendee.as_object_mut().unwrap().remove("responseStatus");
+                }
+                attendee
+            })
+            .collect()
+    };
+    patch.as_object().is_some_and(|fields| {
+        fields.len() == 1
+            && fields.contains_key("attendees")
+            && without_own_answer(&patch["attendees"]) == without_own_answer(&event["attendees"])
+    })
 }
 
 fn precondition_failed() -> (&'static str, String) {
