@@ -375,3 +375,14 @@
   - one squash commit: one logical change.
 - Manual checks: TC-07-07 (US-07-02#3), US-07-02#1, #2 on real KDE, US-07-02 no-buttons edge case
 - Commits on main: 33923dd feat(reminders): snooze, dismiss and join from notifications [US-07-02]
+
+## US-07-03 — review — 2026-10-24 05:52
+- What: a "Desktop notifications" switch in the settings and "Mute notifications" in a calendar's side-panel menu; silenced reminders are skipped in the sync worker, nothing goes to Google, and the calendar's events stay shown.
+- Decisions: DEC-140
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - the code review found nothing blocking. Its should-fix was a late silence change while the worker was busy; fixed by sharing the state with the worker (`Arc<Mutex<Silenced>>`) instead of queuing a job, which also passes the startup state in `Synchronization::start` like `disabled`;
+  - the UI wiring (the settings checkbox, the menu item's click) has no automated test, like the rest of `main.rs`;
+  - no SQLite schema change, no calendar-provider or platform interface change; two settings-file keys were added (`notifications`, `muted`);
+  - one squash commit: one logical change.
+- Manual checks: TC-07-04 (US-07-03#2), US-07-03#1, US-07-03#3 on real KDE and Google
+- Commits on main: aeb9140 feat(reminders): turn notifications off and mute a calendar [US-07-03]
