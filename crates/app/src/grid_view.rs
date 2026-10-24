@@ -67,6 +67,26 @@ pub fn hatch(painter: &egui::Painter, rect: Rect, ink: Color32) {
     }
 }
 
+/// How long the dashes of an invitation's outline are, and the gaps between them.
+const DASH: f32 = 4.0;
+
+/// An invitation awaiting the user's answer (`MOD-06-U04`): a light fill of its colour `c` inside
+/// a dashed outline of it, its text in the view's colour.
+pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) {
+    // Square, as the dashes are.
+    painter.rect_filled(rect, CornerRadius::ZERO, color(c).gamma_multiply(0.2));
+    let rect = rect.shrink(0.5);
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+        rect.left_top(),
+    ];
+    let outline = Stroke::new(1.0, color(c));
+    painter.extend(egui::Shape::dashed_line(&corners, outline, DASH, DASH));
+}
+
 /// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
 /// keeps it in sight and rings it; Enter or a click opens it into `opened`.
 pub fn openable(
@@ -303,6 +323,9 @@ pub fn show(
         let ink = if bar.label {
             let outline = Stroke::new(1.0, color(bar.color));
             painter.rect_stroke(rect, CornerRadius::same(3), outline, StrokeKind::Inside);
+            visuals.text_color()
+        } else if bar.awaiting {
+            awaiting(&painter, rect, bar.color);
             visuals.text_color()
         } else {
             painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
@@ -544,8 +567,13 @@ pub fn show(
                 }
                 _ => {}
             }
-            painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
-            let ink = text_on(block.color);
+            let ink = if block.awaiting {
+                awaiting(&painter, rect, block.color);
+                ui.visuals().text_color()
+            } else {
+                painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
+                text_on(block.color)
+            };
             if block.hatched {
                 hatch(&painter, rect, ink);
             }

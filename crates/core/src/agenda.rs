@@ -21,6 +21,9 @@ pub struct AgendaItem {
     pub read_only: bool,
     /// Google has not confirmed the new event yet (`MOD-05-U03`).
     pub saving: bool,
+    /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
+    /// (`MOD-06-U04`).
+    pub awaiting: bool,
     /// Start and end of a timed event, also one lasting a day or more; `None` for all-day events.
     pub time: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
@@ -108,6 +111,7 @@ pub fn agenda_view(
                             color: event.shown_color(),
                             read_only: event.read_only,
                             saving: event.saving,
+                            awaiting: event.about.awaiting(),
                             time: event_time(event),
                         }
                     })

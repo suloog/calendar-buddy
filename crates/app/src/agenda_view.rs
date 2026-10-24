@@ -5,7 +5,7 @@ use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use calendar_core::regional::Regional;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
-use crate::grid_view::{color, event_label, openable};
+use crate::grid_view::{awaiting, color, event_label, openable};
 
 const DATE_WIDTH: f32 = 96.0;
 const TIME_WIDTH: f32 = 140.0;
@@ -101,6 +101,14 @@ pub fn show(
             for (n, item) in day.items.iter().enumerate() {
                 let y = rect.top() + (n as f32 + 0.5) * ITEM_HEIGHT;
                 let x = rect.left() + DATE_WIDTH;
+                // An invitation awaiting an answer (`MOD-06-U04`).
+                if item.awaiting {
+                    let row = egui::Rect::from_center_size(
+                        Pos2::new((x + rect.right()) / 2.0, y),
+                        Vec2::new(rect.right() - x, ITEM_HEIGHT - 2.0),
+                    );
+                    awaiting(&painter, row, item.color);
+                }
                 painter.circle_filled(Pos2::new(x + 6.0, y), 5.0, color(item.color));
                 painter.text(
                     Pos2::new(x + 20.0, y),

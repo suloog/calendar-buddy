@@ -8,7 +8,7 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{color, event_label, openable, text_on};
+use crate::grid_view::{awaiting, color, event_label, openable, text_on};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -43,14 +43,23 @@ fn paint_item(
 ) {
     let clipped = painter.with_clip_rect(rect);
     let text = label(item, view, regional);
+    // An invitation awaiting an answer, a chip or not (`MOD-06-U04`).
+    if item.awaiting {
+        awaiting(painter, rect, item.color);
+    }
     if item.start.is_none() {
-        painter.rect_filled(rect, CornerRadius::same(3), color(item.color));
+        let on = if item.awaiting {
+            ink
+        } else {
+            painter.rect_filled(rect, CornerRadius::same(3), color(item.color));
+            text_on(item.color)
+        };
         clipped.text(
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
             text,
             FontId::proportional(12.0),
-            text_on(item.color),
+            on,
         );
     } else {
         painter.circle_filled(

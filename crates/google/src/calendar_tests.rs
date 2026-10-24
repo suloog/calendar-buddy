@@ -1793,6 +1793,35 @@ fn events_come_with_their_guests_their_answers_and_the_accounts_own_entry() {
 }
 
 #[test]
+fn an_invitation_the_account_has_not_answered_awaits_its_answer() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("awaiting");
+    let invitation = |id: &str, answer: &str| {
+        let mut event = timed(
+            id,
+            id,
+            "2026-11-13T10:00:00+01:00",
+            "2026-11-13T11:00:00+01:00",
+        );
+        event["organizer"] = json!({"email": "boss@example.com"});
+        event["attendees"] = json!([
+            {"email": "boss@example.com", "organizer": true, "responseStatus": "accepted"},
+            {"email": "owner@example.com", "self": true, "responseStatus": answer}
+        ]);
+        event
+    };
+    google.add_event(ACCOUNT_ID, "work", invitation("board", "needsAction"));
+    google.add_event(ACCOUNT_ID, "work", invitation("lunch", "accepted"));
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert!(cached(&cache, "work", "board").unwrap().about.awaiting());
+    assert!(!cached(&cache, "work", "lunch").unwrap().about.awaiting());
+    assert!(!cached(&cache, "work", "standup").unwrap().about.awaiting());
+}
+
+#[test]
 fn a_new_event_with_guests_is_created_with_them_and_google_sends_the_invitations() {
     let (google, store, dir, client_file, cache) = synchronized_once("invite");
     let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();

@@ -19,6 +19,7 @@ use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
 use calendar_core::guests::{self, Person, Reach};
+use calendar_core::invitations;
 use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
@@ -103,6 +104,9 @@ enum Dialog {
     /// Whether Google e-mails the guests of the event changed or deleted (`MOD-06-F12`), and the
     /// editor the change was made in, which Back goes back to.
     Notify(Pending, Option<Box<Editor>>),
+    /// The invitations awaiting the user's answer, opened from the side panel's counter
+    /// (`MOD-06-F10`).
+    Invitations,
 }
 
 /// Ctrl+Z: undoes the last change to an event (`MOD-05-F28`); not Ctrl+Shift+Z, there is no redo.
@@ -224,6 +228,8 @@ struct CalendarApp {
     built: Built,
     /// The places in `events` of the events the built view's indices point to.
     places: Vec<usize>,
+    /// The places in `events` of the invitations awaiting the user's answer (`MOD-06-F10`).
+    invitations: Vec<usize>,
     built_at: DateTime<Utc>,
     view_state: grid_view::State,
     month_state: month_view::State,
@@ -319,6 +325,7 @@ impl CalendarApp {
             agenda_days: AGENDA_DAYS,
             built,
             places,
+            invitations: Vec::new(),
             built_at,
             view_state: grid_view::State::default(),
             month_state: month_view::State::default(),
@@ -336,6 +343,21 @@ impl CalendarApp {
             self.zone,
             self.built_at,
         );
+        self.invitations = invitations::awaiting(
+            &self.events,
+            self.accounts.list(),
+            &self.settings,
+            self.zone,
+            self.built_at,
+        );
+    }
+
+    /// Opens the details of the event at `event` in `events`, giving the keyboard back to
+    /// `focused` when they close.
+    fn open(&mut self, event: usize, focused: Option<egui::Id>) {
+        // The event is brought up to date first, as the editor opens from its details.
+        self.sync.opening(&self.events[event].calendar_id);
+        self.dialog = Some(Dialog::Event(self.events[event].clone(), focused, false));
     }
 
     /// The cached events but those changed meanwhile, followed by the new and changed events not
@@ -579,6 +601,7 @@ impl CalendarApp {
         let mut open_series = None;
         let mut attachment = None;
         let mut search = None;
+        let mut invitation = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -590,6 +613,7 @@ impl CalendarApp {
             Dialog::Scope(Question::Change(_), _) => "Edit recurring event",
             Dialog::Scope(Question::Delete(_), _) => "Delete recurring event",
             Dialog::Notify(..) => "Notify guests",
+            Dialog::Invitations => "Invitations",
         };
         egui::Window::new(title)
             .open(&mut open)
@@ -831,6 +855,24 @@ impl CalendarApp {
                         }
                     });
                 }
+                Dialog::Invitations => {
+                    if self.invitations.is_empty() {
+                        ui.label(invitations::NONE);
+                    }
+                    // Each opens the invitation's details, to answer from.
+                    for &i in &self.invitations {
+                        let details = event_details(&self.events[i], self.zone);
+                        ui.horizontal(|ui| {
+                            if ui
+                                .link(details.title.as_deref().unwrap_or("Busy"))
+                                .clicked()
+                            {
+                                invitation = Some(i);
+                            }
+                            ui.weak(details.when.describe(&self.regional));
+                        });
+                    }
+                }
                 Dialog::Settings => {
                     ui.heading("Accounts");
                     egui::Grid::new("accounts").show(ui, |ui| {
@@ -949,6 +991,9 @@ impl CalendarApp {
         }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
+        }
+        if let Some(event) = invitation {
+            self.open(event, None);
         }
         if let Some((event, calendar)) = delete {
             self.dialog = match Question::deleting(calendar, event) {
@@ -1333,6 +1378,15 @@ impl eframe::App for CalendarApp {
                     None => {}
                 }
                 ui.separator();
+                // How many invitations await an answer; the counter opens their list
+                // (`MOD-06-F10`).
+                if !self.invitations.is_empty() {
+                    let counter = invitations::counter(self.invitations.len());
+                    if ui.link(counter).clicked() {
+                        self.dialog = Some(Dialog::Invitations);
+                    }
+                    ui.separator();
+                }
                 // A problem with one calendar is told on that calendar (`MOD-02-F18`).
                 let groups = side_panel::groups(
                     self.accounts.list(),
@@ -1428,11 +1482,8 @@ impl eframe::App for CalendarApp {
             });
         }
         if let Some(event) = opened {
-            let event = self.places[event];
-            // The event is brought up to date first, as the editor opens from its details.
-            self.sync.opening(&self.events[event].calendar_id);
             let focused = ui.ctx().memory(|m| m.focused());
-            self.dialog = Some(Dialog::Event(self.events[event].clone(), focused, false));
+            self.open(self.places[event], focused);
         }
     }
 }
