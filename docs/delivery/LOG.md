@@ -359,3 +359,19 @@
   - one squash commit: one logical change.
 - Manual checks: TC-07-07 (US-07-01#3), US-07-01#1, #2 on real KDE, US-07-01#7 (real sleep)
 - Commits on main: 4257d1e feat(reminders): show desktop notifications for reminders [US-07-01]
+
+## US-07-02 — review — 2026-10-24 05:39
+- What: reminder notifications offer Join (Meet), Snooze 5/10 minutes and Dismiss over D-Bus; snooze is local and follows its event; without notification buttons the event's details offer Snooze.
+- Decisions: DEC-139
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - no blocking findings; spec review found nothing unmet;
+  - fixed after code review: a snooze counts from when it was chosen, not when the worker gets to it; an unknown action key keeps the notification's callback; only 5 and 10 are accepted as snooze keys; the Dismiss and Snooze 10 test was split in two;
+  - left:
+    - the Join-to-browser and Snooze-to-worker routing in `remind_with` uses `SystemBrowser` directly and has no test;
+    - the notification callback holds a `jobs` sender, so the worker no longer sees the channel close (matters only at exit);
+    - `buttons()` caches its first answer for the run, also a failure;
+    - GNOME shows at most 3 buttons (outside the MVP);
+  - `Notifier` (platform interface) changed: `show` takes `Fn(Action)` and `buttons()` was added. No SQLite schema change and no calendar-provider interface change;
+  - one squash commit: one logical change.
+- Manual checks: TC-07-07 (US-07-02#3), US-07-02#1, #2 on real KDE, US-07-02 no-buttons edge case
+- Commits on main: 33923dd feat(reminders): snooze, dismiss and join from notifications [US-07-02]
