@@ -49,6 +49,34 @@ pub const SHORTCUTS: [(char, Command, &str); 13] = [
     ('?', Command::ShowShortcuts, texts::KEYBOARD_SHORTCUTS),
 ];
 
+/// A row of the shortcuts' list: its keys and what they do.
+pub type Row = (Vec<char>, &'static str);
+
+/// The list "?" shows: the shortcuts in groups (views, getting around, the rest), each group's
+/// title with its rows, keys doing the same thing on one row, in the order of `SHORTCUTS`.
+pub fn listed() -> Vec<(&'static str, Vec<Row>)> {
+    let group = |command: Command| match command {
+        Command::Switch(_) => texts::SHORTCUTS_VIEWS,
+        Command::Next | Command::Previous | Command::Today | Command::GoToDate => {
+            texts::SHORTCUTS_NAVIGATION
+        }
+        Command::NewEvent | Command::ShowShortcuts => texts::SHORTCUTS_ACTIONS,
+    };
+    let mut groups: Vec<(&str, Vec<Row>)> = Vec::new();
+    for (key, command, description) in SHORTCUTS {
+        let title = group(command);
+        if groups.last().is_none_or(|(last, _)| *last != title) {
+            groups.push((title, Vec::new()));
+        }
+        let rows = &mut groups.last_mut().expect("a group").1;
+        match rows.iter_mut().find(|(_, said)| *said == description) {
+            Some((keys, _)) => keys.push(key),
+            None => rows.push((vec![key], description)),
+        }
+    }
+    groups
+}
+
 /// The command of a typed character, if it is a shortcut.
 pub fn command(key: char) -> Option<Command> {
     SHORTCUTS
@@ -89,6 +117,37 @@ mod tests {
         let command = command(key).expect("a shortcut");
         nav.run(command, d(2026, 11, 11));
         command
+    }
+
+    #[test]
+    fn the_list_groups_the_shortcuts_and_puts_keys_doing_the_same_on_one_row() {
+        let listed = listed();
+        let titles: Vec<&str> = listed.iter().map(|(title, _)| *title).collect();
+        assert_eq!(
+            titles,
+            [
+                texts::SHORTCUTS_VIEWS,
+                texts::SHORTCUTS_NAVIGATION,
+                texts::SHORTCUTS_ACTIONS
+            ]
+        );
+        assert_eq!(listed[0].1.len(), 5);
+        assert_eq!(
+            listed[1].1,
+            [
+                (vec!['j', 'n'], texts::NEXT_PERIOD),
+                (vec!['k', 'p'], texts::PREVIOUS_PERIOD),
+                (vec!['t'], texts::TODAY),
+                (vec!['g'], texts::GO_TO_DATE),
+            ]
+        );
+        assert_eq!(
+            listed[2].1,
+            [
+                (vec!['c'], texts::NEW_EVENT),
+                (vec!['?'], texts::KEYBOARD_SHORTCUTS),
+            ]
+        );
     }
 
     #[test]

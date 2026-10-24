@@ -251,10 +251,15 @@ pub fn date_as(example: &str) -> String {
 
 /// The dialogs' titles.
 pub const KEYBOARD_SHORTCUTS: &str = "Keyboard shortcuts";
+/// The groups of the shortcuts' list.
+pub const SHORTCUTS_VIEWS: &str = "Views";
+pub const SHORTCUTS_NAVIGATION: &str = "Navigation";
+pub const SHORTCUTS_ACTIONS: &str = "Actions";
 pub const GO_TO_DATE: &str = "Go to date";
 pub const NEW_EVENT: &str = "New event";
 pub const EDIT_EVENT: &str = "Edit event";
 pub const EVENT: &str = "Event";
+pub const CLOSE: &str = "Close";
 pub const EDIT_RECURRING_EVENT: &str = "Edit recurring event";
 pub const DELETE_RECURRING_EVENT: &str = "Delete recurring event";
 pub const RESPOND_TO_RECURRING_EVENT: &str = "Respond to recurring event";
