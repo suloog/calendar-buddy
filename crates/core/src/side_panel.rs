@@ -29,6 +29,8 @@ pub struct Row {
     pub read_only: bool,
     /// What keeps it from being up to date (`MOD-02-F18`, `DEC-97`).
     pub problem: Option<&'static str>,
+    /// Its notifications are muted from its menu (`MOD-07-F12`, `MOD-07-U03`).
+    pub muted: bool,
 }
 
 /// A connected account and, under it, its calendars.
@@ -54,6 +56,7 @@ pub fn groups(
             shown: !settings.hidden.contains(&key(calendar)),
             read_only: !calendar.access.can_edit(),
             problem: status.problem(calendar, online).map(status::on_row),
+            muted: settings.muted.contains(&key(calendar)),
         })
     });
     rows.into_iter()
@@ -62,7 +65,8 @@ pub fn groups(
 }
 
 /// The quick toggle: hides the calendar's events, or shows them again. In the settings, the same
-/// on the disabled calendars disables the calendar or enables it again (`MOD-03-F13`).
+/// on the disabled calendars disables the calendar or enables it again (`MOD-03-F13`), and on the
+/// muted ones mutes its notifications or unmutes them (`MOD-07-F12`).
 pub fn toggle(hidden: &mut Hidden, calendar: &Calendar) {
     let key = key(calendar);
     if !hidden.remove(&key) {

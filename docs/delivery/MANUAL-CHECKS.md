@@ -436,3 +436,23 @@ Not proven: the real KDE buttons, the real browser, and a desktop without button
 - [ ] `TC-07-07` / `US-07-02#3` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy`. In Google Calendar, create an event with Google Meet starting in 12 minutes with a 10-minute notification reminder. The notification shows the buttons "Join", "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss". Choose "Join": the Meet meeting opens in the default browser.
 - [ ] `US-07-02#1`, `#2` (KDE session, a person's eyes): on a reminder of an event without Meet, the KDE notification shows "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss", and no "Join". Choose "Snooze 5 minutes": the same notification comes back about 5 minutes later. Open the event in Google Calendar: nothing changed in it or its reminders. "Dismiss" closes it, and it does not come back.
 - [ ] `US-07-02` edge case (a desktop whose notifications have no buttons, e.g. a notification daemon without the "actions" capability; a person's eyes): click the notification. The app opens the event with "Join with Google Meet" (for a Meet event), "Snooze 5 minutes" and "Snooze 10 minutes". "Snooze 5 minutes" closes the details, and the notification comes back 5 minutes later.
+
+## US-07-03
+
+Needs the KDE session, a connected real Google account and a person's eyes. The tests below use a fake Google, fake desktop notifications and a clock the test moves. They prove:
+- with notifications off, no reminder shows, even across a synchronization; switched on again, only the reminders still to come show;
+- a muted calendar's events stay in the week view, but its reminders give no notification, while another calendar's still do;
+- a snoozed notification of a calendar muted meanwhile does not come back;
+- Google's calendars are only ever read, and the events' reminders there stay as they were;
+- the switch and the muted calendars survive a restart and are forgotten with their account.
+
+The tests:
+- app: `tc_07_04_a_muted_calendar_still_shows_its_events_but_gives_no_notifications`, `notifications_turned_off_show_none_and_turned_on_again_those_still_to_come`, `a_snoozed_notification_of_a_calendar_muted_meanwhile_does_not_come_back`, `calendar_list::tests::a_calendars_menu_mutes_its_notifications_or_unmutes_them`;
+- core: `reminders::tests::notifications_off_silence_every_one_and_a_muted_calendar_only_its_own`, `settings::tests::notifications_off_and_muted_calendars_survive_a_restart_and_go_with_their_account`.
+
+Not proven: the real settings dialog and side-panel menu, and real KDE notifications. Choice to ratify:
+- `DEC-140`: what the switch and the menu item say, and that reminders falling while silenced are not shown later.
+
+- [ ] `US-07-03#1` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy` and open the settings. Under "Notifications", "Desktop notifications" is ticked. Untick it, then create an event in Google Calendar starting in 12 minutes with a 10-minute notification reminder: no KDE notification comes. Restart the app: the box is still unticked. Tick it again, then create another such event: its notification comes.
+- [ ] `TC-07-04` / `US-07-03#2` (real Google, KDE session, a person's eyes): in the side panel, open a calendar's "…" menu. "Mute notifications" is under the colours. Choose it: the calendar and its events stay shown, and the menu now says "Unmute notifications". An event in that calendar, starting in 12 minutes with a 10-minute reminder, gives no notification. Unmute it: the next reminder of that calendar gives a notification again.
+- [ ] `US-07-03#3` (real Google, a person's eyes): after the two checks above, open the events in Google Calendar: their reminders are as they were set.

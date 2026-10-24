@@ -1,8 +1,8 @@
 //! Draws the calendars in the side panel under their accounts (`MOD-03-F10`): each with the quick
 //! toggle that hides its events (`MOD-03-F12`), a lock when it cannot be changed (`MOD-02-U01`),
 //! its synchronization problem (`DEC-97`) and its menu, where a local colour is picked or reset
-//! (`MOD-02-U04`). Also the settings' list, where calendars are disabled and enabled again
-//! (`MOD-03-F13`).
+//! (`MOD-02-U04`) and its notifications are muted (`MOD-07-U03`). Also the settings' list, where
+//! calendars are disabled and enabled again (`MOD-03-F13`).
 
 use calendar_core::colors::{CALENDAR_COLORS, LocalColors};
 use calendar_core::model::{Calendar, Rgb};
@@ -74,6 +74,8 @@ pub enum Action {
     Picked(Picked),
     /// The calendar's quick toggle was used.
     Toggled(Calendar),
+    /// The calendar's notifications are to be muted, or unmuted (`MOD-07-F12`).
+    Muted(Calendar),
 }
 
 pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<Action> {
@@ -143,12 +145,16 @@ fn show_row(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Action>
             action = Some(Action::Toggled(calendar.clone()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if let Some(color) = menu(ui, calendar, local) {
-                action = Some(Action::Picked(Picked {
-                    account_id: calendar.account_id.clone(),
-                    calendar_id: calendar.id.clone(),
-                    color,
-                }));
+            match menu(ui, row, local) {
+                Some(Chosen::Color(color)) => {
+                    action = Some(Action::Picked(Picked {
+                        account_id: calendar.account_id.clone(),
+                        calendar_id: calendar.id.clone(),
+                        color,
+                    }))
+                }
+                Some(Chosen::Mute) => action = Some(Action::Muted(calendar.clone())),
+                None => {}
             }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 let label = row_label(&calendar.name, row.read_only);
@@ -216,8 +222,18 @@ fn toggle(ui: &mut egui::Ui, row: &Row) -> egui::Response {
     response.on_hover_text(hint)
 }
 
-/// The calendar's menu: Google Calendar's calendar colours and "Reset". Gives what was picked.
-fn menu(ui: &mut egui::Ui, calendar: &Calendar, local: &LocalColors) -> Option<Option<Rgb>> {
+/// What was chosen in a calendar's menu.
+enum Chosen {
+    /// A local colour, or `None` to bring back Google's.
+    Color(Option<Rgb>),
+    /// Muting its notifications, or unmuting them.
+    Mute,
+}
+
+/// The calendar's menu: Google Calendar's calendar colours and "Reset", then muting its
+/// notifications or unmuting them. Gives what was chosen.
+fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Chosen> {
+    let calendar = &row.calendar;
     let current = local
         .get(&(calendar.account_id.clone(), calendar.id.clone()))
         .copied();
@@ -242,7 +258,7 @@ fn menu(ui: &mut egui::Ui, calendar: &Calendar, local: &LocalColors) -> Option<O
                         );
                     }
                     if response.on_hover_text(*name).clicked() {
-                        picked = Some(Some(*rgb));
+                        picked = Some(Chosen::Color(Some(*rgb)));
                         ui.close();
                     }
                     if (i + 1) % PALETTE_COLUMNS == 0 {
@@ -255,11 +271,26 @@ fn menu(ui: &mut egui::Ui, calendar: &Calendar, local: &LocalColors) -> Option<O
             .add_enabled(current.is_some(), egui::Button::new("Reset"))
             .clicked()
         {
-            picked = Some(None);
+            picked = Some(Chosen::Color(None));
+            ui.close();
+        }
+        ui.separator();
+        // Its events stay in the views; the reminders in Google stay as they are.
+        if ui.button(mute_label(row.muted)).clicked() {
+            picked = Some(Chosen::Mute);
             ui.close();
         }
     });
     picked
+}
+
+/// What the menu's item muting the calendar's notifications says, as they are now.
+fn mute_label(muted: bool) -> &'static str {
+    if muted {
+        "Unmute notifications"
+    } else {
+        "Mute notifications"
+    }
 }
 
 #[cfg(test)]
@@ -273,6 +304,12 @@ mod tests {
             row_label("Holidays in Poland", true),
             "🔒 Holidays in Poland"
         );
+    }
+
+    #[test]
+    fn a_calendars_menu_mutes_its_notifications_or_unmutes_them() {
+        assert_eq!(mute_label(false), "Mute notifications");
+        assert_eq!(mute_label(true), "Unmute notifications");
     }
 
     #[test]

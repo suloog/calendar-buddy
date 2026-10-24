@@ -1692,3 +1692,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-140] The notifications switch, muting a calendar, and reminders that fall while silenced
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-03
+- **Affects:** `US-07-03`, `MOD-07-F11`, `MOD-07-F12`, `MOD-07-U03`
+- **Decision:** The settings have a "Notifications" section with one checkbox, "Desktop notifications", ticked by default; unticking it shows no notification of any calendar. A calendar's "…" menu in the side panel has "Mute notifications" under its colours, which reads "Unmute notifications" while the calendar is muted; the side panel's row shows nothing else. Both are the app's own settings, kept in its settings file (`notifications = off`, `muted = <account> <calendar>`) and forgotten with a removed account; nothing is sent to Google. A reminder that falls while notifications are off, or its calendar is muted, is not shown later when they are turned on again; only reminders still to come are. A snoozed notification of a calendar muted meanwhile does not come back. Notifications already on the desktop stay.
+- **Why:** `MOD-07-F11`/`F12` and `DEC-45`/`DEC-64` say what is switched and where, not how it reads or what happens to reminders in between. Google Calendar's own setting is "Desktop notifications", and turning it back on does not replay what was missed, as reminders missed while the app was not running are not shown either (`MOD-07-F20`). Muting from Google's calendar settings would change the calendar's reminders in Google, which `MOD-07` Constraints rule out.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

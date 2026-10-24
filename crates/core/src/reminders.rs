@@ -6,15 +6,18 @@
 //! fell while the computer slept are, on waking, if their event has not started (`MOD-07-F20`).
 //! They are scheduled from the events the cache holds, so they work offline. A notification
 //! offers Join for an event with Google Meet, Snooze for 5 or 10 minutes, and Dismiss
-//! (`US-07-02`, `MOD-07-F09`, `F10`); a snooze is the app's own, Google is not told.
+//! (`US-07-02`, `MOD-07-F09`, `F10`); a snooze is the app's own, Google is not told. All
+//! notifications can be turned off in the settings, and a calendar's muted from the side panel
+//! (`US-07-03`, `MOD-07-F11`, `F12`); neither changes the reminders in Google.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 
 use crate::model::{Calendar, Event, Method, Reminders, Timing};
 use crate::regional::Regional;
+use crate::settings::Settings;
 use crate::week::day_start;
 
 /// How long after its time a reminder is still shown once its event has started: a reminder at
@@ -91,6 +94,31 @@ impl Notification {
             .chain(snoozes)
             .chain([Action::Dismiss])
             .collect()
+    }
+}
+
+/// The notifications not shown, as the settings say: all of them while notifications are off
+/// (`MOD-07-F11`), or those of the muted calendars (`MOD-07-F12`). Their reminders still come and
+/// go at their times, so turning notifications on again shows only those still to come.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Silenced {
+    pub all: bool,
+    /// By account ID and calendar ID.
+    pub muted: BTreeSet<(String, String)>,
+}
+
+impl Silenced {
+    pub fn of(settings: &Settings) -> Self {
+        Silenced {
+            all: settings.notifications_off,
+            muted: settings.muted.clone(),
+        }
+    }
+
+    /// Whether the notification is not to be shown.
+    pub fn silences(&self, notification: &Notification) -> bool {
+        let event = &notification.reminder.event;
+        self.all || (self.muted).contains(&(event.account_id.clone(), event.calendar_id.clone()))
     }
 }
 
@@ -419,6 +447,22 @@ mod tests {
         assert_eq!(notification.body(), "10:00\nRoom 2");
         notification.location.clear();
         assert_eq!(notification.body(), "10:00");
+    }
+
+    #[test]
+    fn notifications_off_silence_every_one_and_a_muted_calendar_only_its_own() {
+        let review = review_notification();
+        let mut settings = Settings::default();
+        assert!(!Silenced::of(&settings).silences(&review));
+
+        settings.notifications_off = true;
+        assert!(Silenced::of(&settings).silences(&review));
+
+        settings.notifications_off = false;
+        settings.muted.insert(("1".to_string(), "team".to_string()));
+        assert!(!Silenced::of(&settings).silences(&review));
+        settings.muted.insert(("1".to_string(), "work".to_string()));
+        assert!(Silenced::of(&settings).silences(&review));
     }
 
     #[test]

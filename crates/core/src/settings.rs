@@ -27,6 +27,12 @@ pub struct Settings {
     pub default_calendar: Option<(String, String)>,
     /// The switch in the views hides declined events; they are shown by default (`MOD-06-F22`).
     pub hide_declined: bool,
+    /// The switch in the settings turned all notifications off; they are on by default
+    /// (`MOD-07-F11`).
+    pub notifications_off: bool,
+    /// The calendars whose notifications are muted from the side panel, by account ID and
+    /// calendar ID; their events are still shown (`MOD-07-F12`).
+    pub muted: BTreeSet<(String, String)>,
 }
 
 impl Settings {
@@ -51,6 +57,12 @@ impl Settings {
                 "side_panel" => settings.side_panel_collapsed = value.trim() == "collapsed",
                 "default_calendar" => settings.default_calendar = calendar(value),
                 "declined" => settings.hide_declined = value.trim() == "hidden",
+                "notifications" => settings.notifications_off = value.trim() == "off",
+                "muted" => {
+                    if let Some(calendar) = calendar(value) {
+                        settings.muted.insert(calendar);
+                    }
+                }
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -93,6 +105,12 @@ impl Settings {
         if self.hide_declined {
             text.push_str("declined = hidden\n");
         }
+        if self.notifications_off {
+            text.push_str("notifications = off\n");
+        }
+        for (account, calendar) in &self.muted {
+            text.push_str(&format!("muted = {account} {calendar}\n"));
+        }
         text
     }
 
@@ -103,6 +121,7 @@ impl Settings {
         self.disabled.retain(|(account, _)| account != account_id);
         self.colors.retain(|(account, _), _| account != account_id);
         self.hidden.retain(|(account, _)| account != account_id);
+        self.muted.retain(|(account, _)| account != account_id);
         if self
             .default_calendar
             .as_ref()
@@ -317,11 +336,37 @@ mod tests {
     }
 
     #[test]
+    fn notifications_off_and_muted_calendars_survive_a_restart_and_go_with_their_account() {
+        assert!(!Settings::default().notifications_off);
+        let mut settings = Settings {
+            notifications_off: true,
+            ..Settings::default()
+        };
+        for (account, calendar) in [("1", "team@example.com"), ("2", "team@example.com")] {
+            settings
+                .muted
+                .insert((account.to_string(), calendar.to_string()));
+        }
+
+        assert!(settings.to_text().contains("notifications = off\n"));
+        assert!(settings.to_text().contains("muted = 1 team@example.com\n"));
+        assert_eq!(Settings::parse(&settings.to_text()), settings);
+        assert!(!Settings::parse("notifications = on").notifications_off);
+
+        assert!(settings.forget_account("1"));
+        assert!(!settings.forget_account("1"));
+        assert_eq!(
+            settings.muted.into_iter().collect::<Vec<_>>(),
+            [("2".to_string(), "team@example.com".to_string())]
+        );
+    }
+
+    #[test]
     fn a_missing_or_unknown_setting_gives_the_default() {
         assert_eq!(Settings::parse(""), Settings::default());
         assert_eq!(
             Settings::parse(
-                "view = year\nnoise\ndisabled = 1\nhidden = 1\ncolor = 1 work\ncolor = 1 work green"
+                "view = year\nnoise\ndisabled = 1\nhidden = 1\nmuted = 1\ncolor = 1 work\ncolor = 1 work green"
             ),
             Settings::default()
         );
