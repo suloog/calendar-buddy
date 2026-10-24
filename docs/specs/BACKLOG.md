@@ -82,7 +82,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | review | `US-03-06` | — |
 | `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04, U07 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
-| `US-03-10` | As a User, I can stretch or shrink the hours of the day, so that I see short events clearly or the whole day at once | F27, F28, F29, U08 | must | ready | `US-03-01`, `US-03-02` | — |
+| `US-03-10` | As a User, I can stretch or shrink the hours of the day, so that I see short events clearly or the whole day at once | F27, F28, F29, U08 | must | review | `US-03-01`, `US-03-02` | — |
 
 ## [MOD-04] Appearance and themes
 

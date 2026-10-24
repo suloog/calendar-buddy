@@ -8,12 +8,15 @@ use calendar_core::model::Rgb;
 use calendar_core::regional::Regional;
 use calendar_core::texts::{self, SAVING};
 use calendar_core::view_model::GridViewModel;
+use calendar_core::zoom::{self, HourZoom};
 use chrono::{DateTime, Datelike, Duration, Utc};
 use eframe::egui::{
-    self, Align2, Color32, CornerRadius, CursorIcon, FontId, LayerId, Order, PointerButton, Pos2,
-    Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2, text::LayoutJob,
+    self, Align2, Color32, CornerRadius, CursorIcon, FontId, Key, LayerId, Modifiers, Order,
+    PointerButton, Pos2, Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2, text::LayoutJob,
 };
 
+/// How tall an hour is at 100 %; the hour height in the settings is a factor on it
+/// (`MOD-03-F27`).
 pub const HOUR_HEIGHT: f32 = 44.0;
 const GUTTER: f32 = 52.0;
 const HEADER_HEIGHT: f32 = 52.0;
@@ -249,6 +252,19 @@ pub struct State {
     drag: Option<Drag>,
     /// The day and minute where a selection of a time range started.
     selecting: Option<(usize, u32)>,
+    /// The hours as last drawn.
+    hours: Option<Hours>,
+    /// How far down the hours' view the time to keep in place at the next zoom is; the middle
+    /// when `None`.
+    anchor: Option<f32>,
+}
+
+/// How high the hours' view was, how far it was scrolled and how tall an hour was.
+#[derive(Clone, Copy)]
+struct Hours {
+    view: f32,
+    offset: f32,
+    hour: f32,
 }
 
 impl State {
@@ -290,30 +306,31 @@ pub enum Action {
     },
 }
 
-/// The day and minute of the day under a point `at` from the hours' top left corner; `None` in
-/// the hour labels or past the last day.
-fn slot(at: Vec2, day_width: f32, days: usize) -> Option<(usize, u32)> {
+/// The day and minute of the day under a point `at` from the hours' top left corner, with hours
+/// `hour` points tall; `None` in the hour labels or past the last day.
+fn slot(at: Vec2, day_width: f32, days: usize, hour: f32) -> Option<(usize, u32)> {
     let x = at.x - GUTTER;
     let day = (x / day_width).floor();
     if x < 0.0 || day >= days as f32 {
         return None;
     }
-    let minute = (at.y / HOUR_HEIGHT * 60.0).clamp(0.0, 24.0 * 60.0);
+    let minute = (at.y / hour * 60.0).clamp(0.0, 24.0 * 60.0);
     Some((day as usize, minute as u32))
 }
 
-/// The minutes on the clock `dy` points of the hours stand for, in whole steps (`MOD-05-U02`).
-pub fn minutes(dy: f32) -> i64 {
-    drag::snap(dy / HOUR_HEIGHT * 60.0)
+/// The minutes on the clock `dy` points of hours `hour` points tall stand for, in whole steps
+/// (`MOD-05-U02`).
+pub fn minutes(dy: f32, hour: f32) -> i64 {
+    drag::snap(dy / hour * 60.0)
 }
 
-/// Where an event shown on `day` of `days` lands when dragged by `delta`: whole days, kept among
-/// those shown, and minutes in whole steps.
-pub fn moved(delta: Vec2, day_width: f32, day: usize, days: usize) -> Target {
+/// Where an event shown on `day` of `days` lands when dragged by `delta` over hours `hour` points
+/// tall: whole days, kept among those shown, and minutes in whole steps.
+pub fn moved(delta: Vec2, day_width: f32, day: usize, days: usize, hour: f32) -> Target {
     let shift = (delta.x / day_width).round() as i64;
     Target::Moved {
         days: shift.clamp(-(day as i64), (days - 1 - day) as i64),
-        minutes: minutes(delta.y),
+        minutes: minutes(delta.y, hour),
     }
 }
 
@@ -322,6 +339,7 @@ fn held(response: &egui::Response) -> bool {
     response.dragged() || response.drag_stopped()
 }
 
+/// Draws `view` with its hours `zoom` tall, which zooming in the hours changes (`MOD-03-F27`).
 pub fn show(
     ui: &mut egui::Ui,
     view: &GridViewModel,
@@ -329,7 +347,9 @@ pub fn show(
     state: &mut State,
     movable: bool,
     opened: &mut Option<usize>,
+    zoom: &mut HourZoom,
 ) -> Option<Action> {
+    let hour = HOUR_HEIGHT * zoom.factor();
     let width = ui.available_width();
     let columns = view.days.len();
     let day_width = ((width - GUTTER) / columns as f32).max(40.0);
@@ -348,7 +368,7 @@ pub fn show(
         state.drag = None;
     }
     let pointer = ui.input(|i| i.pointer.latest_pos());
-    let day_at = |x: f32, left: f32| slot(Vec2::new(x - left, 0.0), day_width, columns);
+    let day_at = |x: f32, left: f32| slot(Vec2::new(x - left, 0.0), day_width, columns, hour);
     let mut action = None;
 
     // Day header.
@@ -537,24 +557,34 @@ pub fn show(
 
     // Hours.
     // The grid follows the clock, also on daylight-saving days (`DEC-67`).
-    let grid_height = 24.0 * HOUR_HEIGHT;
+    let grid_height = 24.0 * hour;
     let mut scroll = ScrollArea::vertical()
         .id_salt("grid-hours")
         .auto_shrink([false, false]);
+    let anchor = state.anchor.take();
     if !state.scrolled_to_now {
-        let target = (view.initial_scroll_minute as f32 / 60.0 - 1.0).max(0.0) * HOUR_HEIGHT;
+        let target = (view.initial_scroll_minute as f32 / 60.0 - 1.0).max(0.0) * hour;
         scroll = scroll.vertical_scroll_offset(target);
         state.scrolled_to_now = true;
+    } else if let Some(last) = state.hours.filter(|last| last.hour != hour) {
+        // Zoomed: the time under the pointer, or at the middle, stays where it is
+        // (`MOD-03-U08`).
+        let anchor = anchor.unwrap_or(last.view / 2.0);
+        let offset = zoom::anchored(last.offset, anchor, last.hour, hour, last.view);
+        scroll = scroll.vertical_scroll_offset(offset);
+        // Zoomed in, the hours scroll past where they ended before at once, not springing back
+        // to there as from beyond their end.
+        ui.spacing_mut().scroll.kinetic.rubber_band = false;
     }
 
-    scroll.show(ui, |ui| {
+    let shown = scroll.show(ui, |ui| {
         // Clicking or selecting where there is no event starts one (`MOD-05-F01`); the events,
         // drawn over it, take their own clicks. Not a Tab stop: `c` starts one from the keyboard.
         let (grid, hours) =
             ui.allocate_exact_size(Vec2::new(width, grid_height), Sense::CLICK | Sense::DRAG);
         let painter = ui.painter_at(grid);
-        let minute_y = |m: f32| grid.top() + m / 60.0 * HOUR_HEIGHT;
-        let at = |pos: Option<Pos2>| slot(pos? - grid.left_top(), day_width, columns);
+        let minute_y = |m: f32| grid.top() + m / 60.0 * hour;
+        let at = |pos: Option<Pos2>| slot(pos? - grid.left_top(), day_width, columns, hour);
         if hours.clicked()
             && let Some((day, minute)) = at(hours.interact_pointer_pos())
         {
@@ -571,14 +601,14 @@ pub fn show(
             state.selecting = None;
         }
 
-        for hour in 0..=24 {
-            let y = minute_y(hour as f32 * 60.0);
+        for h in 0..=24 {
+            let y = minute_y(h as f32 * 60.0);
             painter.hline((grid.left() + GUTTER)..=grid.right(), y, grid_line);
-            if hour > 0 && hour < 24 {
+            if h > 0 && h < 24 {
                 painter.text(
                     Pos2::new(grid.left() + GUTTER - 6.0, y),
                     Align2::RIGHT_CENTER,
-                    regional.hour(hour),
+                    regional.hour(h),
                     FontId::proportional(11.0),
                     weak_text,
                 );
@@ -592,7 +622,7 @@ pub fn show(
         // The range being selected, in the day where the press started, as Google Calendar does.
         if let Some((day, pressed)) = state.selecting {
             let pointer = hours.interact_pointer_pos().unwrap_or_default() - grid.left_top();
-            let released = slot(Vec2::new(GUTTER, pointer.y), day_width, columns)
+            let released = slot(Vec2::new(GUTTER, pointer.y), day_width, columns, hour)
                 .map_or(pressed, |(_, minute)| minute);
             let (from, until) = snapped(pressed, released);
             let x = grid.left() + GUTTER + day as f32 * day_width;
@@ -694,10 +724,10 @@ pub fn show(
                             });
                         }
                     } else if let drop @ Target::Moved { days, minutes } =
-                        moved(drag.delta, day_width, p.day, columns)
+                        moved(drag.delta, day_width, p.day, columns, hour)
                     {
                         let shift =
-                            Vec2::new(days as f32 * day_width, minutes as f32 / 60.0 * HOUR_HEIGHT);
+                            Vec2::new(days as f32 * day_width, minutes as f32 / 60.0 * hour);
                         rect = rect.translate(shift);
                         let (start, end) =
                             drag::moved((block.start, block.end), days, minutes, view.zone);
@@ -720,8 +750,9 @@ pub fn show(
                     // A step long at least, and ending by midnight.
                     let step = i64::from(STEP);
                     let shortest = (p.start_min as i64 + step - p.end_min as i64).min(0);
-                    let by = minutes(drag.delta.y).clamp(shortest, 24 * 60 - p.end_min as i64);
-                    rect.max.y += by as f32 / 60.0 * HOUR_HEIGHT;
+                    let by =
+                        minutes(drag.delta.y, hour).clamp(shortest, 24 * 60 - p.end_min as i64);
+                    rect.max.y += by as f32 / 60.0 * hour;
                     let until = drag::stretched((block.start, block.end), by, view.zone);
                     times = Some((block.start, until));
                     if end.drag_stopped() {
@@ -827,6 +858,39 @@ pub fn show(
             painter.circle_filled(Pos2::new(x, y), 4.0, accent);
         }
     });
+    state.hours = Some(Hours {
+        view: shown.inner_rect.height(),
+        offset: shown.state.unclamped_offset().y,
+        hour,
+    });
+    // Zooming the hours (`MOD-03-F27`), not while an event is dragged or a range selected.
+    if state.drag.is_none() && state.selecting.is_none() {
+        let before = *zoom;
+        // Ctrl + wheel or a pinch over the hours, around the time under the pointer.
+        let delta = ui.input(|i| i.zoom_delta());
+        if delta != 1.0
+            && ui.rect_contains_pointer(shown.inner_rect)
+            && let Some(p) = ui.input(|i| i.pointer.hover_pos())
+        {
+            *zoom = zoom.times(delta);
+            state.anchor = Some(p.y - shown.inner_rect.top());
+        }
+        // Ctrl + plus, minus or 0, around the time at the middle; the rest of the interface
+        // keeps its size (`appearance::install`).
+        if !ui.ctx().text_edit_focused() {
+            let key = |key| ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, key));
+            if key(Key::Num0) {
+                *zoom = HourZoom::default();
+            } else if key(Key::Plus) || key(Key::Equals) {
+                *zoom = zoom.larger();
+            } else if key(Key::Minus) {
+                *zoom = zoom.smaller();
+            }
+        }
+        if *zoom != before {
+            ui.ctx().request_repaint();
+        }
+    }
     // A drag ends with the button released, wherever that was.
     if !ui.input(|i| i.pointer.primary_down()) {
         state.drag = None;
@@ -860,7 +924,15 @@ mod tests {
         let mut state = State::default();
         let window = (window - Vec2::new(0.0, CHROME)) / scale;
         screen::drawn(window, scale, scheme, None, |ui| {
-            show(ui, &view, &regional, &mut state, true, &mut None);
+            show(
+                ui,
+                &view,
+                &regional,
+                &mut state,
+                true,
+                &mut None,
+                &mut HourZoom::default(),
+            );
         })
     }
 
@@ -877,6 +949,374 @@ mod tests {
             .find(|(_, text)| text.galley.text() == label)
             .unwrap_or_else(|| panic!("{label} is drawn"));
         (text.visual_bounding_rect().center().y, clip)
+    }
+
+    /// The day, 3-day or week view of `days` days from Monday 9 November 2026, with "Standup" on
+    /// Wednesday 11 at 9:00–9:15, in a window 1080 pixels high at 100 %, drawn frame by frame as
+    /// egui gets it from the window; it is 10:00 on Wednesday in Warsaw.
+    struct Grid {
+        ctx: egui::Context,
+        view: GridViewModel,
+        state: State,
+        zoom: HourZoom,
+        time: f64,
+        actions: Vec<Action>,
+    }
+
+    /// Ctrl, as the window reports it with a key or the wheel.
+    const CTRL: egui::Modifiers = egui::Modifiers {
+        ctrl: true,
+        command: true,
+        ..egui::Modifiers::NONE
+    };
+
+    fn ctrl(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: CTRL,
+        }
+    }
+
+    /// Ctrl + wheel by `lines`; up is positive.
+    fn ctrl_wheel(lines: f32) -> egui::Event {
+        egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: Vec2::new(0.0, lines),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: CTRL,
+        }
+    }
+
+    fn button(pos: Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    impl Grid {
+        fn new(days: u32, zoom: HourZoom) -> Self {
+            let dates: Vec<_> = (9..9 + days).map(|day| d(2026, 11, day)).collect();
+            let standup = timed("Standup", d(2026, 11, 11), (9, 0), (9, 15));
+            let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+            let mut view = grid_view(&[standup], &dates, Warsaw, now);
+            view.initial_scroll_minute = 9 * 60;
+            let ctx = egui::Context::default();
+            crate::appearance::install(&ctx);
+            let mut grid = Grid {
+                ctx,
+                view,
+                state: State::default(),
+                zoom,
+                time: 0.0,
+                actions: Vec::new(),
+            };
+            grid.settle();
+            grid
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) -> Vec<ClippedShape> {
+            self.time += 1.0 / 60.0;
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    Pos2::ZERO,
+                    FULL_HD - Vec2::new(0.0, CHROME),
+                )),
+                time: Some(self.time),
+                events,
+                ..Default::default()
+            };
+            let regional = Regional::from_env(|_| None);
+            let (view, state, zoom) = (&self.view, &mut self.state, &mut self.zoom);
+            let actions = &mut self.actions;
+            let mut output = self.ctx.run_ui(input, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    actions.extend(show(ui, view, &regional, state, true, &mut None, zoom));
+                });
+            });
+            output.textures_delta.clear();
+            output.shapes
+        }
+
+        /// Frames until a zoom, and the smoothing of the wheel, have ended.
+        fn settle(&mut self) -> Vec<ClippedShape> {
+            let mut shapes = Vec::new();
+            for _ in 0..60 {
+                shapes = self.frame(Vec::new());
+            }
+            shapes
+        }
+
+        /// The hours, whole, and the part of them in view.
+        fn hours(&self) -> (Rect, Rect) {
+            let height = 24.0 * HOUR_HEIGHT * self.zoom.factor();
+            self.ctx
+                .viewport(|viewport| {
+                    (viewport.prev_pass.widgets.layers())
+                        .flat_map(|(_, widgets)| widgets)
+                        .find(|w| (w.rect.height() - height).abs() < 0.5)
+                        .map(|w| (w.rect, w.interact_rect))
+                })
+                .expect("the hours are drawn")
+        }
+
+        fn hour(&self) -> f32 {
+            self.hours().0.height() / 24.0
+        }
+
+        /// Where the time `minute` of the day is drawn.
+        fn y_of(&self, minute: f32) -> f32 {
+            self.hours().0.top() + minute / 60.0 * self.hour()
+        }
+
+        /// The time drawn at `y`.
+        fn minute_at(&self, y: f32) -> f32 {
+            (y - self.hours().0.top()) / self.hour() * 60.0
+        }
+
+        /// The middle of `day`.
+        fn x_of(&self, day: usize) -> f32 {
+            let hours = self.hours().0;
+            let width = (hours.width() - GUTTER) / self.view.days.len() as f32;
+            hours.left() + GUTTER + (day as f32 + 0.5) * width
+        }
+
+        /// The time at the middle of the view.
+        fn middle(&self) -> f32 {
+            self.minute_at(self.hours().1.center().y)
+        }
+
+        fn press(&mut self, key: egui::Key) {
+            self.frame(vec![ctrl(key)]);
+            self.settle();
+        }
+    }
+
+    #[test]
+    fn tc_03_13_ctrl_wheel_and_ctrl_plus_minus_0_zoom_the_hours_within_50_to_300_percent() {
+        let mut week = Grid::new(7, HourZoom::default());
+        let (usual, in_view) = week.hours();
+        let pixel = |week: &Grid| 60.0 / week.hour();
+
+        // 1. Ctrl + wheel up at 14:00 on Wednesday: taller, 14:00 still under the pointer.
+        let pointer = Pos2::new(week.x_of(2), week.y_of(14.0 * 60.0));
+        assert!(in_view.contains(pointer));
+        week.frame(vec![egui::Event::PointerMoved(pointer)]);
+        week.frame(vec![ctrl_wheel(1.0)]);
+        week.settle();
+        let taller = week.zoom.factor();
+        assert!(taller > 1.0, "{taller}");
+        assert!((week.minute_at(pointer.y) - 840.0).abs() <= pixel(&week));
+
+        // 2. Taller after a pinch, shorter after Ctrl + wheel down; 14:00 stays under the pointer.
+        week.frame(vec![egui::Event::Zoom(1.25)]);
+        week.settle();
+        let pinched = week.zoom.factor();
+        assert!(pinched > taller, "{pinched}");
+        assert!((week.minute_at(pointer.y) - 840.0).abs() <= pixel(&week));
+        week.frame(vec![ctrl_wheel(-1.0)]);
+        week.settle();
+        assert!(week.zoom.factor() < pinched, "{}", week.zoom.factor());
+        assert!((week.minute_at(pointer.y) - 840.0).abs() <= pixel(&week));
+
+        // 3. Ctrl + 0, then Ctrl + plus twice: 100 %, then 150 %, around the middle of the view;
+        // the rest of the interface keeps its size, and the days their width.
+        let middle = week.middle();
+        week.press(egui::Key::Num0);
+        assert_eq!(week.zoom, HourZoom::default());
+        // Kept, unless the hours end at 24:00 first: at 100 % this view cannot put a time past
+        // 13:45 at its middle.
+        let (day, shown) = week.hours();
+        let ended = (day.bottom() - shown.bottom()).abs() < 0.5;
+        assert!((week.middle() - middle).abs() <= pixel(&week) || ended);
+        let middle = week.middle();
+        week.press(egui::Key::Plus);
+        week.press(egui::Key::Plus);
+        assert_eq!(week.zoom.factor(), 1.5);
+        assert_eq!(week.hour(), HOUR_HEIGHT * 1.5);
+        assert!((week.middle() - middle).abs() <= pixel(&week));
+        assert_eq!(week.ctx.zoom_factor(), 1.0);
+        let (hours, shown) = week.hours();
+        assert_eq!((hours.left(), hours.width()), (usual.left(), usual.width()));
+        assert_eq!(
+            (shown.top(), shown.bottom()),
+            (in_view.top(), in_view.bottom())
+        );
+
+        // 4. It stops at 300 %, and at 50 %, where the whole day fits without scrolling.
+        for _ in 0..10 {
+            week.press(egui::Key::Plus);
+        }
+        assert_eq!(week.zoom.factor(), 3.0);
+        for _ in 0..20 {
+            week.press(egui::Key::Minus);
+        }
+        assert_eq!(week.zoom.factor(), 0.5);
+        let (day, shown) = week.hours();
+        assert!(shown.contains_rect(day), "{day:?} in {shown:?}");
+    }
+
+    #[test]
+    fn tc_03_13_at_200_percent_events_clicks_and_the_time_line_land_on_their_times() {
+        // 5. At 200 %: "Standup" dragged down by an hour of the grid moves to 10:00–10:15, a
+        // click at 16:30 on Thursday starts an event there, and the time line is at 10:00.
+        let mut week = Grid::new(7, HourZoom::new(2.0));
+        let shapes = week.settle();
+        let now = screen::in_order(&shapes)
+            .into_iter()
+            .find_map(|(_, shape)| match shape {
+                Shape::Circle(dot) if dot.radius == 4.0 => Some(dot.center.y),
+                _ => None,
+            })
+            .expect("the time line is drawn");
+        assert!((now - week.y_of(600.0)).abs() <= 0.5);
+
+        let from = Pos2::new(week.x_of(2), week.y_of(9.0 * 60.0) + 8.0);
+        let to = from + Vec2::new(0.0, week.hour());
+        week.frame(vec![egui::Event::PointerMoved(from)]);
+        week.frame(vec![button(from, true)]);
+        week.frame(vec![egui::Event::PointerMoved(from + Vec2::new(0.0, 10.0))]);
+        week.frame(vec![egui::Event::PointerMoved(to)]);
+        week.frame(vec![button(to, false)]);
+        let [Action::Dropped { event: 0, drop }] = week.actions.as_slice() else {
+            panic!("not dropped: {:?}", week.actions);
+        };
+        let Target::Moved { days, minutes } = *drop else {
+            panic!("not moved: {drop:?}");
+        };
+        let standup = &week.view.blocks[0];
+        let (start, end) = drag::moved((standup.start, standup.end), days, minutes, Warsaw);
+        assert_eq!(
+            (start, end),
+            (
+                Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap(),
+                Utc.with_ymd_and_hms(2026, 11, 11, 9, 15, 0).unwrap()
+            )
+        );
+
+        week.actions.clear();
+        week.settle();
+        let at = Pos2::new(week.x_of(3), week.y_of(16.0 * 60.0 + 30.0) + 0.5);
+        week.frame(vec![egui::Event::PointerMoved(at)]);
+        week.frame(vec![button(at, true)]);
+        week.frame(vec![button(at, false)]);
+        assert!(
+            matches!(
+                week.actions.as_slice(),
+                [Action::Clicked {
+                    day: 3,
+                    minute: 990
+                }]
+            ),
+            "{:?}",
+            week.actions
+        );
+    }
+
+    #[test]
+    fn the_hours_do_not_zoom_from_above_them_nor_while_an_event_is_dragged() {
+        let mut week = Grid::new(7, HourZoom::default());
+        // Over the day header and the all-day strip.
+        let above = Pos2::new(week.x_of(2), week.hours().1.top() - 10.0);
+        week.frame(vec![egui::Event::PointerMoved(above)]);
+        week.frame(vec![ctrl_wheel(1.0)]);
+        week.frame(vec![egui::Event::Zoom(1.25)]);
+        week.settle();
+        assert_eq!(week.zoom, HourZoom::default());
+
+        // While "Standup" is dragged.
+        let from = Pos2::new(week.x_of(2), week.y_of(9.0 * 60.0) + 8.0);
+        week.frame(vec![egui::Event::PointerMoved(from)]);
+        week.frame(vec![button(from, true)]);
+        week.frame(vec![egui::Event::PointerMoved(from + Vec2::new(0.0, 20.0))]);
+        week.frame(vec![ctrl(egui::Key::Plus)]);
+        week.frame(vec![ctrl_wheel(1.0)]);
+        assert!(week.state.drag.is_some());
+        assert_eq!(week.zoom, HourZoom::default());
+    }
+
+    /// The slider of the hour height, drawn alone with `events`, and whether it was moved.
+    fn slider(ctx: &egui::Context, zoom: &mut HourZoom, events: Vec<egui::Event>) -> bool {
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(600.0, 200.0))),
+            events,
+            ..Default::default()
+        };
+        let mut moved = false;
+        ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                moved = crate::appearance::hour_height(ui, zoom);
+            });
+        })
+        .textures_delta
+        .clear();
+        moved
+    }
+
+    /// What the slider of the hour height reads.
+    fn slider_reads(mut zoom: HourZoom) -> String {
+        let ctx = egui::Context::default();
+        crate::appearance::install(&ctx);
+        let input = egui::RawInput::default();
+        let mut output = ctx.run_ui(input, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                crate::appearance::hour_height(ui, &mut zoom);
+            });
+        });
+        output.textures_delta.clear();
+        // The value and its unit, drawn one after the other.
+        (texts(&output.shapes).iter())
+            .map(|(_, text)| text.galley.text())
+            .collect()
+    }
+
+    #[test]
+    fn tc_03_14_the_hour_height_is_a_slider_shared_by_the_three_views() {
+        // 1. The slider reads 100 %.
+        assert_eq!(slider_reads(HourZoom::default()), "100 %");
+
+        // 2. Moved to 175 %, the week view's hours are 1.75 times the usual height.
+        let ctx = egui::Context::default();
+        crate::appearance::install(&ctx);
+        let mut zoom = HourZoom::default();
+        slider(&ctx, &mut zoom, Vec::new());
+        let rail = ctx
+            .viewport(|viewport| {
+                (viewport.prev_pass.widgets.layers())
+                    .flat_map(|(_, widgets)| widgets)
+                    .filter(|w| w.sense.senses_drag())
+                    .map(|w| w.rect)
+                    .min_by(|a, b| a.left().total_cmp(&b.left()))
+            })
+            .expect("the slider is drawn");
+        let at = rail.center();
+        slider(&ctx, &mut zoom, vec![egui::Event::PointerMoved(at)]);
+        assert!(slider(&ctx, &mut zoom, vec![button(at, true)]));
+        slider(&ctx, &mut zoom, vec![button(at, false)]);
+        assert_eq!(zoom.factor(), 1.75);
+        let mut week = Grid::new(7, HourZoom::default());
+        let middle = week.middle();
+        week.zoom = zoom;
+        week.settle();
+        assert_eq!(week.hour(), HOUR_HEIGHT * 1.75);
+        // Around the time at the middle of the view (`DEC-169`).
+        assert!((week.middle() - middle).abs() <= 60.0 / week.hour());
+
+        // 3. Ctrl + minus in the week view, and the slider reads 150 %.
+        week.press(egui::Key::Minus);
+        assert_eq!(slider_reads(week.zoom), "150 %");
+
+        // 4. The day and the 3-day views show the hours at 150 % too.
+        for days in [1, 3] {
+            assert_eq!(Grid::new(days, week.zoom).hour(), HOUR_HEIGHT * 1.5);
+        }
+        // 5. Kept across a restart: `settings::tests::tc_03_14_the_hour_height_survives_a_restart`.
     }
 
     #[test]
@@ -1117,21 +1557,30 @@ mod tests {
         let at = |day: f32, minute: f32| {
             Vec2::new(GUTTER + day * day_width + 10.0, minute / 60.0 * HOUR_HEIGHT)
         };
-        assert_eq!(slot(at(3.0, 600.0), day_width, 7), Some((3, 600)));
-        assert_eq!(slot(at(3.0, 690.0), day_width, 7), Some((3, 690)));
         assert_eq!(
-            slot(at(0.0, 24.0 * 60.0 + 30.0), day_width, 7),
+            slot(at(3.0, 600.0), day_width, 7, HOUR_HEIGHT),
+            Some((3, 600))
+        );
+        assert_eq!(
+            slot(at(3.0, 690.0), day_width, 7, HOUR_HEIGHT),
+            Some((3, 690))
+        );
+        assert_eq!(
+            slot(at(0.0, 24.0 * 60.0 + 30.0), day_width, 7, HOUR_HEIGHT),
             Some((0, 1440))
         );
-        assert_eq!(slot(Vec2::new(GUTTER - 1.0, 0.0), day_width, 7), None);
-        assert_eq!(slot(at(7.0, 600.0), day_width, 7), None);
+        assert_eq!(
+            slot(Vec2::new(GUTTER - 1.0, 0.0), day_width, 7, HOUR_HEIGHT),
+            None
+        );
+        assert_eq!(slot(at(7.0, 600.0), day_width, 7, HOUR_HEIGHT), None);
     }
 
     #[test]
     fn a_dragged_event_moves_by_whole_days_kept_in_view_and_15_minute_steps() {
         let day_width = 100.0;
         let hour = HOUR_HEIGHT;
-        let to = |dx: f32, dy: f32, day| moved(Vec2::new(dx, dy), day_width, day, 7);
+        let to = |dx: f32, dy: f32, day| moved(Vec2::new(dx, dy), day_width, day, 7, hour);
         assert_eq!(
             to(140.0, hour * 40.0 / 60.0, 2),
             Target::Moved {
@@ -1161,7 +1610,7 @@ mod tests {
                 minutes: 0
             }
         );
-        assert_eq!(minutes(hour * 1.5), 90);
+        assert_eq!(minutes(hour * 1.5, hour), 90);
     }
 
     #[test]

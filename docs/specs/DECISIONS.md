@@ -2029,3 +2029,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-168] Ctrl + plus and Ctrl + minus go to the next multiple of 25 %
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-10
+- **Affects:** `MOD-03-U08`, `US-03-10`, `TC-03-13`
+- **Decision:** When the hour height is between two steps — after zooming with the wheel, a pinch or the slider — Ctrl + plus goes to the next multiple of 25 % above it and Ctrl + minus to the one below (137 % → 150 % or 125 %); on a step they move by 25 %. Always between 50 % and 300 %.
+- **Why:** The spec says the keys go "in steps of 25 %" but not from where; snapping keeps the keys on round heights that Ctrl + 0 and the slider's ends share, as a browser's zoom keys do, and from 100 % it gives exactly the spec's 125 %, 150 %, ….
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-169] The hour-height slider moves in whole percent and keeps the time at the middle
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-03-10
+- **Affects:** `MOD-03-F28`, `MOD-03-U08`, `US-03-10`, `TC-03-14`
+- **Decision:** The slider in the settings' "Appearance" section goes from 50 % to 300 % in steps of 1 % and shows whole percent; a height zoomed smoothly in the views is kept as it is and shown rounded. A change of the height from the slider keeps the time at the middle of the view in place, as the keys do.
+- **Why:** The spec names the slider and its unit but not its step or what stays in place; whole percent is what the slider reads, and anchoring at the middle is the rule the spec already gives for a change not made at the pointer.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

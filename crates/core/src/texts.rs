@@ -559,6 +559,8 @@ pub const THEME: &str = "Theme";
 pub const SYSTEM: &str = "System";
 pub const LIGHT: &str = "Light";
 pub const DARK: &str = "Dark";
+/// The setting of how tall the hours of the day, 3-day and week views are (`MOD-03-F28`).
+pub const HOUR_HEIGHT: &str = "Hour height";
 
 #[cfg(test)]
 mod tests {

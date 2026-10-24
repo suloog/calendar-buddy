@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use calendar_core::platform::Appearance;
 use calendar_core::theme::{Scheme, Theme};
+use calendar_core::zoom::{self, HourZoom};
 use eframe::egui::{
     self, Color32, CornerRadius, Stroke,
     style::{ImeComposition, Selection, TextCursorStyle},
@@ -256,6 +257,8 @@ fn spacing(style: &mut egui::Style) {
 /// Gives the light and dark themes their looks and fonts, without transition animations
 /// (`MOD-04-U05`).
 pub fn install(ctx: &egui::Context) {
+    // Ctrl + plus, minus and 0 zoom the hours, not the whole interface (`DEC-166`).
+    ctx.options_mut(|o| o.zoom_with_keyboard = false);
     ctx.set_fonts(fonts());
     ctx.set_visuals_of(egui::Theme::Light, visuals(Scheme::Light));
     ctx.set_visuals_of(egui::Theme::Dark, visuals(Scheme::Dark));
@@ -263,6 +266,22 @@ pub fn install(ctx: &egui::Context) {
         style.animation_time = 0.0;
         spacing(style);
     });
+}
+
+/// The slider of the hour height in the settings, in percent of the usual height
+/// (`MOD-03-F28`, `DEC-169`); says whether the user moved it.
+pub fn hour_height(ui: &mut egui::Ui, hours: &mut HourZoom) -> bool {
+    let mut percent = hours.factor() * 100.0;
+    let range = zoom::MIN * 100.0..=zoom::MAX * 100.0;
+    let slider = egui::Slider::new(&mut percent, range)
+        .step_by(1.0)
+        .fixed_decimals(0)
+        .suffix(" %");
+    let moved = ui.add(slider).changed();
+    if moved {
+        *hours = HourZoom::new(percent / 100.0);
+    }
+    moved
 }
 
 /// Shows the app in the theme `theme` makes of the desktop's preference.

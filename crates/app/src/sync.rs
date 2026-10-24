@@ -1407,6 +1407,7 @@ mod tests {
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_core::undo::{self, LastChange, Undo};
+    use calendar_core::zoom::HourZoom;
     use calendar_google::CLIENT_FILE;
     use calendar_google::fake::{
         ACCOUNT_ID, CLIENT_ID, EMAIL, FakeGoogle, FakeStore, OTHER_EMAIL, OTHER_ID,
@@ -3554,7 +3555,14 @@ mod tests {
 
         // 1. "Call" dragged down by 40 minutes snaps to 45 and keeps its length.
         let down = grid_view::HOUR_HEIGHT * 40.0 / 60.0;
-        let drop = grid_view::moved(egui::Vec2::new(0.0, down), 100.0, block.placement.day, 7);
+        let hour = grid_view::HOUR_HEIGHT;
+        let drop = grid_view::moved(
+            egui::Vec2::new(0.0, down),
+            100.0,
+            block.placement.day,
+            7,
+            hour,
+        );
         assert_eq!(
             drop,
             Target::Moved {
@@ -3956,6 +3964,7 @@ mod tests {
                     &mut state,
                     true,
                     &mut opened,
+                    &mut HourZoom::default(),
                 ));
             })
             .textures_delta

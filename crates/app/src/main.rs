@@ -879,6 +879,7 @@ impl CalendarApp {
         let mut notifications = None;
         let mut start_at_login = None;
         let mut theme = None;
+        let mut hour_zoom = None;
         let mut scope = None;
         let mut notify = None;
         let mut cancelled = false;
@@ -1515,6 +1516,13 @@ impl CalendarApp {
                                         }
                                     });
                                 });
+                                // Also zoomed in the views (`MOD-03-F28`).
+                                widgets::form_row(ui, texts::HOUR_HEIGHT, |ui| {
+                                    let mut zoom = self.settings.hour_zoom;
+                                    if appearance::hour_height(ui, &mut zoom) {
+                                        hour_zoom = Some(zoom);
+                                    }
+                                });
                                 widgets::section(ui);
                                 widgets::heading(ui, texts::CALENDARS);
                                 // Where new events go (`MOD-05-F10`).
@@ -1569,6 +1577,10 @@ impl CalendarApp {
             self.settings.theme = theme;
             self.save_settings();
             ctx.request_repaint();
+        }
+        if let Some(zoom) = hour_zoom {
+            self.settings.hour_zoom = zoom;
+            self.save_settings();
         }
         match save {
             Some(Save::Create(calendar, event)) => {
@@ -2128,6 +2140,7 @@ impl eframe::App for CalendarApp {
         let mut started = None;
         let mut dropped = None;
         let mut unmovable = None;
+        let zoom = self.settings.hour_zoom;
         egui::CentralPanel::default().show(ui, |ui| {
             if let Some(note) = browsed.note {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
@@ -2139,7 +2152,16 @@ impl eframe::App for CalendarApp {
                 Built::Grid(view) => {
                     // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
                     let state = &mut self.view_state;
-                    match grid_view::show(ui, view, &self.regional, state, online, &mut opened) {
+                    let hours = &mut self.settings.hour_zoom;
+                    match grid_view::show(
+                        ui,
+                        view,
+                        &self.regional,
+                        state,
+                        online,
+                        &mut opened,
+                        hours,
+                    ) {
                         Some(grid_view::Action::Dropped { event, drop }) if online => {
                             dropped = Some((self.places[event], drop));
                         }
@@ -2175,6 +2197,10 @@ impl eframe::App for CalendarApp {
                 }
             }
         });
+        // One height for the three views, kept across restarts (`MOD-03-F29`).
+        if self.settings.hour_zoom != zoom {
+            self.save_settings();
+        }
         if let Some((event, drop)) = dropped {
             self.dropped(event, drop);
         }

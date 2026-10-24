@@ -40,3 +40,4 @@ pub mod undo;
 pub mod view_model;
 pub mod webcal;
 pub mod week;
+pub mod zoom;

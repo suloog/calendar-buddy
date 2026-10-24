@@ -9,8 +9,9 @@ use crate::colors::LocalColors;
 use crate::navigation::View;
 use crate::side_panel::Hidden;
 use crate::theme::Theme;
+use crate::zoom::HourZoom;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Settings {
     /// The view used last; the app starts in it (`DEC-55`).
     pub last_view: Option<View>,
@@ -36,6 +37,8 @@ pub struct Settings {
     pub muted: BTreeSet<(String, String)>,
     /// The theme chosen in the settings; by default the desktop's (`MOD-04-F03`).
     pub theme: Theme,
+    /// The height of the hours of the day, 3-day and week views (`MOD-03-F29`).
+    pub hour_zoom: HourZoom,
 }
 
 impl Settings {
@@ -67,6 +70,7 @@ impl Settings {
                     }
                 }
                 "theme" => settings.theme = Theme::from_key(value.trim()),
+                "hour_height" => settings.hour_zoom = HourZoom::from_key(value.trim()),
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -117,6 +121,9 @@ impl Settings {
         }
         if let Some(theme) = self.theme.key() {
             text.push_str(&format!("theme = {theme}\n"));
+        }
+        if let Some(height) = self.hour_zoom.key() {
+            text.push_str(&format!("hour_height = {height}\n"));
         }
         text
     }
@@ -371,6 +378,26 @@ mod tests {
             settings.muted.into_iter().collect::<Vec<_>>(),
             [("2".to_string(), "team@example.com".to_string())]
         );
+    }
+
+    #[test]
+    fn tc_03_14_the_hour_height_survives_a_restart() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-tc-03-14-{}", std::process::id()));
+        let path = dir.join("settings");
+        assert!(!Settings::default().to_text().contains("hour_height"));
+        Settings {
+            hour_zoom: HourZoom::new(1.5),
+            ..Settings::default()
+        }
+        .save(&path)
+        .unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let restarted = Settings::load(&path);
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(text.contains("hour_height = 1.5\n"));
+        assert_eq!(restarted.hour_zoom, HourZoom::new(1.5));
     }
 
     #[test]
