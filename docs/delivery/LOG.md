@@ -461,3 +461,14 @@
   - the light theme's link and warning colours are set ahead of US-04-03's palette.
 - Manual checks: none of the TCs (TC-04-03, TC-04-04 are automated); US-04-02 edge case 150%/200% on KDE, US-04-02#4 look-over in both themes, US-04-02#3 and declined look
 - Commits on main: f4075b4 feat(themes): compact grid with readable text in both themes [US-04-02] (one squash commit: one logical change)
+
+## US-04-03 — review — 2026-10-24 07:45
+- What: the themes get one accent (Google's blue, one tone per theme) for links, selection, warnings and the current-time line; everything else is gray. egui's animations take no time. Every interface text moved into one table, `calendar_core::texts`, with the wording unchanged; tests check the palette, the drawn week, the animations, that the table is English and that the views hold no texts of their own.
+- Decisions: DEC-150, DEC-151, DEC-152
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - no blocking findings;
+  - fixed: the cache keeps event colours under fixed keys rather than their table names, the texts scan now reads multi-line strings, `SHOW_BUSY` split from `BUSY`, and the cache's reasons moved into the table;
+  - not done: single lowercase words in views are not caught by the scan; `ACCENT_HUE` in the test helper is a copy of the accent's hue;
+  - the current-time line is now blue, not Google's red (DEC-150), for the product owner to confirm.
+- Manual checks: TC-04-05 (steps 1, 2), US-04-03#3 look-over
+- Commits on main: 960cdae feat(themes): one accent, no animations, texts in one table [US-04-03] (one squash commit: one logical change)
