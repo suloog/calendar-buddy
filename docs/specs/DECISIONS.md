@@ -1644,3 +1644,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-136] When a reminder is shown, and when it is not
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-01
+- **Affects:** `US-07-01`, `MOD-07-F01`, `MOD-07-F07`, `MOD-07-F20`, MOD-07 *Technical notes*
+- **Decision:** Reminders are scheduled by the synchronization worker from the events the cache holds, so they keep coming while the window is minimized. "While the app was not running" means before this run of the app started: a reminder whose time is earlier is never shown. A reminder whose time has come is shown at once while its event has not started, or within a minute of its time. This covers reminders that fell while the computer slept (the worker wakes with the system's wake signal, and at least once a minute to follow the clock), and also those whose event reached the app by synchronization only after their time. A reminder is told apart by its account, calendar, event (an occurrence's own ID), its event's start and its minutes. The record of reminders shown is kept in memory for the run. That suffices: a reminder from before the run is not shown anyway. A moved event's reminder is a new one; a deleted event's goes. Calendars hidden by the side panel's quick toggle still remind, as only disabling (`MOD-07-F13`) and muting (`MOD-07-F12`) silence a calendar. Events of free/busy-only calendars remind of nothing (Google gives no reminders with them). The same calendar on two accounts' lists reminds once per account, as each account's own reminders are separate in Google.
+- **Why:** `MOD-07-F20` separates "not running" from "asleep" but does not say what "not running" is measured against. The start of the run is the simplest clear line. Showing a late-synchronized reminder while its event has not started follows the rule for sleep. The minute's grace lets a reminder set at the event's start be shown at all.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-137] All-day events' reminders
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-01
+- **Affects:** `US-07-01`, `MOD-07-F02`
+- **Decision:** An all-day event's own reminders count back from midnight of its first day in the system's time zone, as Google Calendar does ("the day before at 17:00" is 420 minutes). An all-day event that uses its calendar's defaults gives no notification. Google keeps separate defaults for all-day events but does not give them through the Calendar API (`defaultReminders` are those of timed events). Using the timed defaults instead would remind e.g. 10 minutes before midnight.
+- **Why:** The app can only follow reminders Google gives it (`MOD-07-F02`). No reminder is better than a wrong one.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-138] What a notification says, and what clicking it does
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-01
+- **Affects:** `US-07-01`, `MOD-07-F08`, `MOD-07-U01`
+- **Decision:** The notification's title is the event's title ("(No title)" when it has none). Its text gives the start time in the system's formats ("10:00"). An event on another day than today gets its day before the time ("Friday 13 November, 10:00"), and an all-day event the day alone. The location, if any, is on a second line. It comes from "Calendar Buddy" with the `x-office-calendar` icon, and stays as long as the desktop keeps notifications. Clicking it brings the window forward, un-minimized, and opens the event's details. The view moves to the event's day (the agenda stays as it is). While the quick entry, the editor or one of their questions is open, the click only brings the window forward, so nothing typed is lost. The notifications go through `org.freedesktop.Notifications` (the body's "default" action), behind the `Notifier` platform interface. **SQLite schema change:** `calendars.reminders` (the calendar's default reminders) and `events.reminders` (an event's own; none when it uses the defaults). Cache version 8 drops the calendars too, so the list is fetched again.
+- **Why:** `MOD-07-U01` names the contents but not their form. Google Calendar's notifications show the title over the time and place. Replacing an open editor would lose the user's work.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

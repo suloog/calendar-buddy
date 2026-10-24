@@ -10,12 +10,16 @@ use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
 use crate::colors::EventColor;
 use crate::guests::{Guest, Response};
-use crate::model::{About, Access, Attachment, Calendar, Kind, Rgb, Show, Timing, Visibility};
+use crate::model::{
+    About, Access, Attachment, Calendar, Kind, Method, Reminder, Reminders, Rgb, Show, Timing,
+    Visibility,
+};
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
 
-/// The version of `SCHEMA`; a cache made with an earlier one has its events, synchronization
-/// states and time of the last synchronization dropped, so they are fetched again in full.
-const VERSION: i64 = 7;
+/// The version of `SCHEMA`; a cache made with an earlier one has its calendars, events,
+/// synchronization states and time of the last synchronization dropped, so they are fetched
+/// again in full.
+const VERSION: i64 = 8;
 
 const SCHEMA: &str = "
     CREATE TABLE IF NOT EXISTS calendars (
@@ -26,6 +30,7 @@ const SCHEMA: &str = "
         color TEXT NOT NULL,
         access TEXT NOT NULL,
         zone TEXT NOT NULL,
+        reminders TEXT NOT NULL,
         PRIMARY KEY (account_id, id)
     );
     CREATE TABLE IF NOT EXISTS events (
@@ -50,6 +55,7 @@ const SCHEMA: &str = "
         attachments TEXT NOT NULL,
         guests TEXT NOT NULL,
         meet TEXT,
+        reminders TEXT,
         PRIMARY KEY (account_id, calendar_id, id)
     );
     CREATE TABLE IF NOT EXISTS sync_tokens (
@@ -115,8 +121,8 @@ impl Cache {
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version < VERSION {
             connection.execute_batch(
-                "DROP TABLE IF EXISTS events; DROP TABLE IF EXISTS sync_tokens; \
-                 DROP TABLE IF EXISTS last_synced;",
+                "DROP TABLE IF EXISTS calendars; DROP TABLE IF EXISTS events; \
+                 DROP TABLE IF EXISTS sync_tokens; DROP TABLE IF EXISTS last_synced;",
             )?;
         }
         connection.execute_batch(SCHEMA)?;
@@ -146,7 +152,7 @@ impl Cache {
         for (position, calendar) in calendars.iter().enumerate() {
             transaction
                 .execute(
-                    "INSERT OR REPLACE INTO calendars VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT OR REPLACE INTO calendars VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                     params![
                         account_id,
                         calendar.id,
@@ -155,6 +161,7 @@ impl Cache {
                         color_text(calendar.color),
                         access_key(calendar.access),
                         calendar.zone.name(),
+                        reminders_text(&calendar.default_reminders),
                     ],
                 )
                 .map_err(failed)?;
@@ -325,7 +332,7 @@ impl Cache {
     pub fn calendar_list(&self) -> Result<Vec<Calendar>, SyncError> {
         self.connection
             .prepare(
-                "SELECT account_id, id, name, color, access, zone FROM calendars \
+                "SELECT account_id, id, name, color, access, zone, reminders FROM calendars \
                  ORDER BY account_id, position",
             )
             .and_then(|mut select| {
@@ -338,13 +345,14 @@ impl Cache {
                             row.get::<_, String>(3)?,
                             row.get::<_, String>(4)?,
                             row.get::<_, String>(5)?,
+                            row.get::<_, String>(6)?,
                         ))
                     })?
                     .collect::<Result<Vec<_>, _>>()
             })
             .map_err(failed)?
             .into_iter()
-            .map(|(account_id, id, name, color, access, zone)| {
+            .map(|(account_id, id, name, color, access, zone, reminders)| {
                 Some(Calendar {
                     id,
                     account_id,
@@ -352,6 +360,7 @@ impl Cache {
                     color: parse_color(&color)?,
                     access: parse_access(&access)?,
                     zone: zone.parse().ok()?,
+                    default_reminders: parse_reminders(&reminders)?,
                 })
             })
             .collect::<Option<_>>()
@@ -379,7 +388,7 @@ impl Cache {
             .prepare(
                 "SELECT account_id, calendar_id, id, title, start, end, zone, recurrence, \
                  series_id, original_start, description, location, show, visibility, etag, \
-                 organizer_only, kind, color, attachments, guests, meet FROM events",
+                 organizer_only, kind, color, attachments, guests, meet, reminders FROM events",
             )
             .map_err(failed)?;
         let rows = select
@@ -406,6 +415,10 @@ impl Cache {
                         attachments: parse_attachments(&row.get::<_, String>(18)?),
                         guests: parse_guests(&row.get::<_, String>(19)?),
                         meet: row.get(20)?,
+                        reminders: match row.get::<_, Option<String>>(21)? {
+                            None => Reminders::Default,
+                            Some(own) => Reminders::Own(parse_reminders(&own).unwrap_or_default()),
+                        },
                     },
                     row.get::<_, String>(14)?,
                     row.get::<_, bool>(15)?,
@@ -467,7 +480,8 @@ fn insert(
     let mut insert = transaction
         .prepare(
             "INSERT OR REPLACE INTO events VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, \
+             ?22)",
         )
         .map_err(failed)?;
     for event in events {
@@ -514,6 +528,10 @@ fn insert(
                 attachments_text(&event.about.attachments),
                 guests_text(&event.about.guests),
                 event.about.meet,
+                match &event.about.reminders {
+                    Reminders::Default => None,
+                    Reminders::Own(own) => Some(reminders_text(own)),
+                },
             ])
             .map_err(failed)?;
     }
@@ -664,6 +682,43 @@ fn parse_guests(text: &str) -> Vec<Guest> {
         .collect()
 }
 
+/// Reminders as a JSON list of `[method, minutes]`, `method` as Google names it.
+fn reminders_text(reminders: &[Reminder]) -> String {
+    let rows: Vec<(&str, u32)> = (reminders.iter())
+        .map(|reminder| (method_key(reminder.method), reminder.minutes))
+        .collect();
+    serde_json::to_string(&rows).expect("strings serialize")
+}
+
+fn parse_reminders(text: &str) -> Option<Vec<Reminder>> {
+    let rows: Vec<(String, u32)> = serde_json::from_str(text).ok()?;
+    (rows.into_iter())
+        .map(|(method, minutes)| {
+            Some(Reminder {
+                method: parse_method(&method)?,
+                minutes,
+            })
+        })
+        .collect()
+}
+
+/// The name Google gives a reminder's method.
+pub fn method_key(method: Method) -> &'static str {
+    match method {
+        Method::Notification => "popup",
+        Method::Email => "email",
+    }
+}
+
+/// Google's names of a reminder's methods.
+pub fn parse_method(key: &str) -> Option<Method> {
+    Some(match key {
+        "popup" => Method::Notification,
+        "email" => Method::Email,
+        _ => return None,
+    })
+}
+
 fn parse_event_color(name: &str) -> Option<EventColor> {
     EventColor::ALL
         .into_iter()
@@ -723,6 +778,7 @@ mod tests {
             color: Rgb(0x0b, 0x80, 0x43),
             access: Access::Reader,
             zone: London,
+            default_reminders: Vec::new(),
         }
     }
 
@@ -742,7 +798,11 @@ mod tests {
                     "EXDATE;TZID=Europe/Warsaw:20261109T090000".into(),
                 ],
                 instance_of: None,
-                about: About::default(),
+                // No reminders, which is not the calendar's defaults.
+                about: About {
+                    reminders: Reminders::Own(Vec::new()),
+                    ..About::default()
+                },
                 etag: "\"1\"".into(),
                 organizer_only: false,
             },
@@ -802,6 +862,16 @@ mod tests {
                         },
                     ],
                     meet: Some("https://meet.google.com/abc-defg-hij".into()),
+                    reminders: Reminders::Own(vec![
+                        Reminder {
+                            method: Method::Notification,
+                            minutes: 10,
+                        },
+                        Reminder {
+                            method: Method::Email,
+                            minutes: 1440,
+                        },
+                    ]),
                 },
                 etag: "\"3\"".into(),
                 organizer_only: true,
@@ -812,7 +882,13 @@ mod tests {
     #[test]
     fn calendars_and_events_come_back_as_they_were_written() {
         let mut cache = Cache::in_memory();
-        let work = calendar("1", "work");
+        let work = Calendar {
+            default_reminders: vec![Reminder {
+                method: Method::Notification,
+                minutes: 30,
+            }],
+            ..calendar("1", "work")
+        };
         cache
             .set_calendars("1", std::slice::from_ref(&work))
             .unwrap();
@@ -825,6 +901,26 @@ mod tests {
                 events: events()
             }]
         );
+    }
+
+    #[test]
+    fn a_cache_of_an_earlier_version_drops_its_calendars_to_fetch_them_again() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE calendars (account_id TEXT NOT NULL, id TEXT NOT NULL, \
+                 position INTEGER NOT NULL, name TEXT NOT NULL, color TEXT NOT NULL, \
+                 access TEXT NOT NULL, zone TEXT NOT NULL, PRIMARY KEY (account_id, id)); \
+                 INSERT INTO calendars VALUES ('1', 'work', 0, 'Work', '#0b8043', 'reader', \
+                 'Europe/London'); PRAGMA user_version = 7;",
+            )
+            .unwrap();
+
+        let mut cache = Cache::with_schema(connection).unwrap();
+
+        assert_eq!(cache.calendars().unwrap(), []);
+        cache.set_calendars("1", &[calendar("1", "work")]).unwrap();
+        assert_eq!(cache.calendar_list().unwrap(), [calendar("1", "work")]);
     }
 
     #[test]
@@ -975,7 +1071,13 @@ mod tests {
     #[test]
     fn changes_replace_add_and_remove_events_a_removed_series_with_its_occurrences() {
         let mut cache = Cache::in_memory();
-        let work = calendar("1", "work");
+        let work = Calendar {
+            default_reminders: vec![Reminder {
+                method: Method::Notification,
+                minutes: 30,
+            }],
+            ..calendar("1", "work")
+        };
         cache
             .set_calendars("1", std::slice::from_ref(&work))
             .unwrap();
@@ -1039,7 +1141,13 @@ mod tests {
     #[test]
     fn a_sync_token_is_given_only_for_the_window_it_was_kept_for() {
         let mut cache = Cache::in_memory();
-        let work = calendar("1", "work");
+        let work = Calendar {
+            default_reminders: vec![Reminder {
+                method: Method::Notification,
+                minutes: 30,
+            }],
+            ..calendar("1", "work")
+        };
         cache
             .set_calendars("1", std::slice::from_ref(&work))
             .unwrap();

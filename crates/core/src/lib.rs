@@ -21,6 +21,7 @@ pub mod offline;
 pub mod platform;
 pub mod recurrence;
 pub mod regional;
+pub mod reminders;
 pub mod repeat;
 pub mod schedule;
 pub mod series;

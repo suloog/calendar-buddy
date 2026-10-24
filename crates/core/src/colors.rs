@@ -141,6 +141,7 @@ mod tests {
             color: PALETTE[0],
             access: Access::Owner,
             zone: chrono_tz::Europe::Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 

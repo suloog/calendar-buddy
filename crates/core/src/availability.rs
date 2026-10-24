@@ -183,6 +183,7 @@ mod tests {
             color: Rgb(0x9f, 0xe1, 0xe7),
             access: Access::Owner,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         };
         let entry = QuickEntry::new(
             selected(d(2026, 11, 13), 870, 900, Warsaw),

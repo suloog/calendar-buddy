@@ -291,6 +291,7 @@ mod tests {
             color: Rgb(0x03, 0x9B, 0xE5),
             access: Access::Owner,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 

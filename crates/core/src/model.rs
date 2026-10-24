@@ -185,6 +185,8 @@ pub struct About {
     /// The web page of its Google Meet call, which Join opens in the browser (`MOD-06-F18`);
     /// `None` without one.
     pub meet: Option<String>,
+    /// When the user is reminded of it, as set in Google (`MOD-07-F02`).
+    pub reminders: Reminders,
 }
 
 impl About {
@@ -205,6 +207,30 @@ impl About {
             .find(|guest| guest.own)
             .map(|guest| guest.response)
     }
+}
+
+/// An event's reminders (`MOD-07-F02`): its calendar's defaults, as Google gives a new event, or
+/// its own.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Reminders {
+    #[default]
+    Default,
+    Own(Vec<Reminder>),
+}
+
+/// A reminder some minutes before an event starts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Reminder {
+    pub method: Method,
+    pub minutes: u32,
+}
+
+/// How a reminder reaches the user: a desktop notification from the app, or an e-mail Google
+/// sends (`MOD-07-F06`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Method {
+    Notification,
+    Email,
 }
 
 /// A file attached to an event, listed by name and opened in the browser (`MOD-05-F26`).
@@ -244,4 +270,6 @@ pub struct Calendar {
     pub access: Access,
     /// The calendar's own time zone, for events stored without one.
     pub zone: Tz,
+    /// The reminders of its events that use the calendar's defaults, as set in Google.
+    pub default_reminders: Vec<Reminder>,
 }

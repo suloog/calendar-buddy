@@ -21,13 +21,14 @@ use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save, WITHOUT_MEET};
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
-use calendar_core::model::{Calendar, Event};
+use calendar_core::model::{Calendar, Event, Timing};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
 use calendar_core::platform::Browser;
 use calendar_core::regional::Regional;
+use calendar_core::reminders::EventId;
 use calendar_core::series::{Question, Scope};
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
@@ -286,6 +287,7 @@ impl CalendarApp {
             account_ids,
             Window::around(today, zone),
             settings.disabled.clone(),
+            regional,
         );
         // Accounts Google turned away in an earlier run are not checked, nor synchronized: their
         // calendars are marked as not synchronizing.
@@ -371,6 +373,34 @@ impl CalendarApp {
         // The event is brought up to date first, as the editor opens from its details.
         self.sync.opening(&self.events[event].calendar_id);
         self.dialog = Some(Dialog::Event(self.events[event].clone(), focused, false));
+    }
+
+    /// Opens the event of a notification clicked on its day, bringing the window forward
+    /// (`MOD-07-F08`). Over an event being edited or saved, the window only comes forward, so
+    /// nothing typed is lost.
+    fn open_notified(&mut self, ctx: &egui::Context, notified: &EventId) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        let busy = matches!(
+            self.dialog,
+            Some(
+                Dialog::QuickEntry(..) | Dialog::Editor(_) | Dialog::Scope(..) | Dialog::Notify(..)
+            )
+        );
+        let found = self.events.iter().position(|event| {
+            event.account_id == notified.account_id
+                && event.calendar_id == notified.calendar_id
+                && event.id == notified.id
+        });
+        let (false, Some(event)) = (busy, found) else {
+            return;
+        };
+        // The agenda starts now whatever the date; the other views move to the event's day.
+        self.navigation.selected = match self.events[event].timing {
+            Timing::Timed { start, .. } => start.with_timezone(&self.zone).date_naive(),
+            Timing::AllDay { start, .. } => start,
+        };
+        self.open(event, None);
     }
 
     /// The cached events but those changed meanwhile, followed by the new and changed events not
@@ -1289,6 +1319,9 @@ impl eframe::App for CalendarApp {
             .request_repaint_after(std::time::Duration::from_secs(30));
         let before = self.navigation;
         self.shortcuts(ui.ctx());
+        if let Some(event) = self.sync.take_opened() {
+            self.open_notified(ui.ctx(), &event);
+        }
         let online = self.online.get();
         let sync_status = self.sync.status().clone();
         self.panel.resized(ui.ctx().content_rect().width());

@@ -222,6 +222,7 @@ mod tests {
             color: Rgb(0x9f, 0xe1, 0xe7),
             access,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 

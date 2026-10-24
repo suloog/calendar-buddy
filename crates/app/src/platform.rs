@@ -1,11 +1,13 @@
 //! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
-//! handler, and systemd-logind and NetworkManager on the system bus. Tests never use these; they
-//! use fakes.
+//! handler, the desktop's notifications, and systemd-logind and NetworkManager on the system bus.
+//! Tests never use these; they use fakes.
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use calendar_core::accounts::Account;
-use calendar_core::platform::{Browser, Network, SecretStore, SecretStoreError, Wakeups};
+use calendar_core::platform::{Browser, Network, Notifier, SecretStore, SecretStoreError, Wakeups};
+use calendar_core::reminders::Notification;
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
@@ -101,6 +103,101 @@ impl Browser for SystemBrowser {
         // `xdg-open` can stay until the browser closes; the sign-in does not wait for it.
         std::thread::spawn(move || child.wait());
         Ok(())
+    }
+}
+
+/// What clicking each notification shown and not closed yet does, by its ID.
+type Clicks = Arc<Mutex<HashMap<u32, Box<dyn Fn() + Send + Sync>>>>;
+
+/// The desktop's notifications, through `org.freedesktop.Notifications` on the session bus
+/// (MOD-07 *Technical notes*). Without a session bus nothing is shown.
+pub struct SystemNotifier {
+    /// The session bus, once connected; `None` when it could not be.
+    bus: OnceLock<Option<zbus::blocking::Connection>>,
+    clicks: Clicks,
+}
+
+const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
+const NOTIFICATIONS_PATH: &str = "/org/freedesktop/Notifications";
+
+impl SystemNotifier {
+    pub fn new() -> Self {
+        SystemNotifier {
+            bus: OnceLock::new(),
+            clicks: Arc::default(),
+        }
+    }
+
+    /// Connects to the session bus and listens for clicks on the notifications and for their
+    /// closing, in the order the desktop sends them.
+    fn connect(clicks: Clicks) -> zbus::Result<zbus::blocking::Connection> {
+        let bus = zbus::blocking::Connection::session()?;
+        let rule = format!(
+            "type='signal',sender='{NOTIFICATIONS}',interface='{NOTIFICATIONS}',\
+             path='{NOTIFICATIONS_PATH}'"
+        );
+        let messages = zbus::blocking::MessageIterator::for_match_rule(rule.as_str(), &bus, None)?;
+        std::thread::spawn(move || {
+            for message in messages.flatten() {
+                let header = message.header();
+                let body = message.body();
+                // Clicking a notification's body invokes its "default" action.
+                let (id, invoked) = match header.member().map(|member| member.as_str()) {
+                    Some("ActionInvoked") => match body.deserialize::<(u32, String)>() {
+                        Ok((id, action)) if action == "default" => (id, true),
+                        _ => continue,
+                    },
+                    Some("NotificationClosed") => match body.deserialize::<(u32, u32)>() {
+                        Ok((id, _)) => (id, false),
+                        Err(_) => continue,
+                    },
+                    _ => continue,
+                };
+                let clicked = clicks.lock().expect("clicks").remove(&id);
+                if invoked && let Some(clicked) = clicked {
+                    clicked();
+                }
+            }
+        });
+        Ok(bus)
+    }
+}
+
+/// The notification's text with the characters of the notifications' markup written out.
+fn escaped(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+impl Notifier for SystemNotifier {
+    fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>) {
+        let bus = self
+            .bus
+            .get_or_init(|| SystemNotifier::connect(self.clicks.clone()).ok());
+        let Some(bus) = bus else {
+            return;
+        };
+        let hints: HashMap<&str, zbus::zvariant::Value> = HashMap::new();
+        let shown = bus.call_method(
+            Some(NOTIFICATIONS),
+            NOTIFICATIONS_PATH,
+            Some(NOTIFICATIONS),
+            "Notify",
+            &(
+                "Calendar Buddy",
+                0u32,
+                "x-office-calendar",
+                notification.title.as_str(),
+                escaped(&notification.body()),
+                vec!["default", "Open"],
+                hints,
+                -1i32,
+            ),
+        );
+        if let Ok(id) = shown.and_then(|reply| reply.body().deserialize::<u32>()) {
+            self.clicks.lock().expect("clicks").insert(id, clicked);
+        }
     }
 }
 
