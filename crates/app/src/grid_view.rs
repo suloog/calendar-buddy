@@ -1,6 +1,7 @@
 //! Draws a `GridViewModel` (the day, 3-day or week view) with egui. Only drawing and input live
 //! here; what goes where is decided in `calendar_core::view_model`.
 
+use calendar_core::contrast;
 use calendar_core::create::{SAVING, STEP, snapped};
 use calendar_core::drag::{self, Target};
 use calendar_core::model::Rgb;
@@ -25,13 +26,15 @@ pub fn color(c: Rgb) -> Color32 {
     Color32::from_rgb(c.0, c.1, c.2)
 }
 
+/// The colour of text on `c`: dark or light, whichever reads better on it (`MOD-04-U04`).
 pub fn text_on(c: Rgb) -> Color32 {
-    let luminance = 0.299 * c.0 as f32 + 0.587 * c.1 as f32 + 0.114 * c.2 as f32;
-    if luminance > 150.0 {
-        Color32::BLACK
-    } else {
-        Color32::WHITE
-    }
+    color(contrast::text_on(c))
+}
+
+/// The view's background, which the panels are filled with.
+fn background(painter: &egui::Painter) -> Rgb {
+    let fill = painter.ctx().global_style().visuals.panel_fill;
+    Rgb(fill.r(), fill.g(), fill.b())
 }
 
 /// What an event is called in the views: its title, or "Busy" for an event of a calendar shared
@@ -66,10 +69,28 @@ pub fn event_text(
     painter.galley(at, galley, ink);
 }
 
-/// Fades a declined event drawn in `rect` (`MOD-06-F14`) under a veil of the view's background.
+/// How much of the view's background veils a declined event.
+const VEIL: f32 = 0.5;
+
+/// Fades a declined event drawn in `rect` (`MOD-06-F14`) under a veil of the view's background;
+/// drawn under its text, which stays readable (`MOD-04-NFR-01`).
 pub fn fade(painter: &egui::Painter, rect: Rect) {
-    let background = painter.ctx().global_style().visuals.panel_fill;
-    painter.rect_filled(rect, CornerRadius::same(3), background.gamma_multiply(0.5));
+    painter.rect_filled(
+        rect,
+        CornerRadius::same(3),
+        color(background(painter)).gamma_multiply(VEIL),
+    );
+}
+
+/// An event filled with its colour `c` in `rect`, faded when it is declined; gives the colour
+/// its text is on, to pick the text's colour from (`MOD-04-U04`).
+pub fn filled(painter: &egui::Painter, rect: Rect, c: Rgb, declined: bool) -> Rgb {
+    painter.rect_filled(rect, CornerRadius::same(3), color(c));
+    if !declined {
+        return c;
+    }
+    fade(painter, rect);
+    contrast::over(background(painter), VEIL, c)
 }
 
 /// How far apart the stripes of a hatched event are.
@@ -93,14 +114,40 @@ pub fn hatch(painter: &egui::Painter, rect: Rect, ink: Color32) {
     }
 }
 
+/// Clears the stripes of a hatched event from under its `text`, to be drawn at `pos`, with the
+/// colour `c` under them: the text reads on that colour alone (`MOD-04-NFR-01`).
+pub fn clear_under(
+    painter: &egui::Painter,
+    pos: Pos2,
+    align: Align2,
+    text: &str,
+    font: FontId,
+    c: Rgb,
+) {
+    let size = painter
+        .layout_no_wrap(text.to_owned(), font, Color32::PLACEHOLDER)
+        .size();
+    // Also under the ends of a strikethrough.
+    let area = align.anchor_size(pos, size).expand(2.0);
+    painter.rect_filled(area, CornerRadius::ZERO, color(c));
+}
+
 /// How long the dashes of an invitation's outline are, and the gaps between them.
 const DASH: f32 = 4.0;
+/// How strong the fill of an invitation is.
+const AWAITING_FILL: f32 = 0.2;
 
 /// An invitation awaiting the user's answer (`MOD-06-U04`): a light fill of its colour `c` inside
-/// a dashed outline of it, its text in the view's colour.
-pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) {
+/// a dashed outline of it; gives the colour of the fill, to pick its text's colour from
+/// (`MOD-04-U04`).
+pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) -> Rgb {
+    let under = contrast::over(c, AWAITING_FILL, background(painter));
     // Square, as the dashes are.
-    painter.rect_filled(rect, CornerRadius::ZERO, color(c).gamma_multiply(0.2));
+    painter.rect_filled(
+        rect,
+        CornerRadius::ZERO,
+        color(c).gamma_multiply(AWAITING_FILL),
+    );
     let rect = rect.shrink(0.5);
     let corners = [
         rect.left_top(),
@@ -111,6 +158,7 @@ pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) {
     ];
     let outline = Stroke::new(1.0, color(c));
     painter.extend(egui::Shape::dashed_line(&corners, outline, DASH, DASH));
+    under
 }
 
 /// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
@@ -280,7 +328,11 @@ pub fn show(
             Align2::CENTER_CENTER,
             regional.weekday_day(day.date),
             FontId::proportional(14.0),
-            visuals.text_color(),
+            if day.is_today {
+                visuals.strong_text_color()
+            } else {
+                visuals.text_color()
+            },
         );
     }
 
@@ -346,32 +398,42 @@ pub fn show(
             }
         }
         // Working locations and birthdays are labels, outlined in their colour (`MOD-05-U01`).
-        let ink = if bar.label {
+        let (ink, under) = if bar.label {
             let outline = Stroke::new(1.0, color(bar.color));
             painter.rect_stroke(rect, CornerRadius::same(3), outline, StrokeKind::Inside);
-            visuals.text_color()
-        } else if bar.awaiting {
-            awaiting(&painter, rect, bar.color);
-            visuals.text_color()
+            (visuals.text_color(), background(&painter))
         } else {
-            painter.rect_filled(rect, CornerRadius::same(3), color(bar.color));
-            text_on(bar.color)
+            let under = if bar.awaiting {
+                awaiting(&painter, rect, bar.color)
+            } else {
+                filled(&painter, rect, bar.color, bar.declined)
+            };
+            (text_on(under), under)
         };
+        let painter = painter.with_clip_rect(rect);
+        let at = rect.left_center() + Vec2::new(4.0, 0.0);
+        let label = event_label(bar.title.as_deref(), bar.read_only, bar.saving);
+        let font = FontId::proportional(12.0);
         if bar.hatched {
             hatch(&painter, rect, ink);
+            clear_under(
+                &painter,
+                at,
+                Align2::LEFT_CENTER,
+                &label,
+                font.clone(),
+                under,
+            );
         }
         event_text(
-            &painter.with_clip_rect(rect),
-            rect.left_center() + Vec2::new(4.0, 0.0),
+            &painter,
+            at,
             Align2::LEFT_CENTER,
-            event_label(bar.title.as_deref(), bar.read_only, bar.saving),
-            FontId::proportional(12.0),
+            label,
+            font,
             ink,
             bar.declined,
         );
-        if bar.declined {
-            fade(&painter, rect);
-        }
         openable(ui, &response, rect, bar.bar.event, opened);
     }
     // An event of the hours dragged over the strip, in the day under the pointer: drawn over the
@@ -598,16 +660,12 @@ pub fn show(
                 }
                 _ => {}
             }
-            let ink = if block.awaiting {
-                awaiting(&painter, rect, block.color);
-                ui.visuals().text_color()
+            let under = if block.awaiting {
+                awaiting(&painter, rect, block.color)
             } else {
-                painter.rect_filled(rect, CornerRadius::same(3), color(block.color));
-                text_on(block.color)
+                filled(&painter, rect, block.color, block.declined)
             };
-            if block.hatched {
-                hatch(&painter, rect, ink);
-            }
+            let ink = text_on(under);
             let clipped = painter.with_clip_rect(rect.shrink(2.0));
             let name = event_label(block.title.as_deref(), block.read_only, block.saving);
             let time = match times {
@@ -622,18 +680,21 @@ pub fn show(
                 Some(_) => format!("{name}\n{time}"),
                 None => name,
             };
+            let at = rect.left_top() + Vec2::new(4.0, 2.0);
+            let font = FontId::proportional(12.0);
+            if block.hatched {
+                hatch(&painter, rect, ink);
+                clear_under(&clipped, at, Align2::LEFT_TOP, &label, font.clone(), under);
+            }
             event_text(
                 &clipped,
-                rect.left_top() + Vec2::new(4.0, 2.0),
+                at,
                 Align2::LEFT_TOP,
                 label,
-                FontId::proportional(12.0),
+                font,
                 ink,
                 block.declined,
             );
-            if block.declined {
-                fade(&painter, rect);
-            }
             openable(ui, &response, rect, p.event, opened);
         }
 
@@ -687,7 +748,207 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use calendar_core::model::Kind;
+    use crate::screen::{self, VERY_DARK, VERY_LIGHT, answered, contrast_of, texts};
+    use calendar_core::contrast::AA;
+    use calendar_core::fixtures::{d, tc_03_01_week, timed};
+    use calendar_core::guests::Response;
+    use calendar_core::model::{Event, Kind};
+    use calendar_core::theme::Scheme;
+    use calendar_core::view_model::grid_view;
+    use chrono::TimeZone;
+    use chrono_tz::Europe::Warsaw;
+    use egui::epaint::{ClippedShape, Shape};
+
+    /// What a window, `CHROME` points of which go to its title bar and the app's view bar, draws
+    /// of the week of 9–15 November 2026 with `events`, scrolled towards 8:00 at the top; today is
+    /// Wednesday 11.
+    fn drawn(events: &[Event], window: Vec2, scale: f32, scheme: Scheme) -> Vec<ClippedShape> {
+        let dates: Vec<_> = (9..=15).map(|day| d(2026, 11, day)).collect();
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 12, 0, 0).unwrap();
+        let mut view = grid_view(events, &dates, Warsaw, now);
+        view.initial_scroll_minute = 9 * 60;
+        let regional = Regional::from_env(|_| None);
+        let mut state = State::default();
+        let window = (window - Vec2::new(0.0, CHROME)) / scale;
+        screen::drawn(window, scale, scheme, None, |ui| {
+            show(ui, &view, &regional, &mut state, true, &mut None);
+        })
+    }
+
+    /// Room for the window's title bar and the app's view bar above the grid: more than either
+    /// takes (`DEC-149`).
+    const CHROME: f32 = 100.0;
+    const FULL_HD: Vec2 = Vec2::new(1920.0, 1080.0);
+
+    /// Where the hours' line of `hour` is drawn, from its label, and the clip it is drawn in.
+    fn hour_line(shapes: &[ClippedShape], hour: u32) -> (f32, Rect) {
+        let label = Regional::from_env(|_| None).hour(hour);
+        let (clip, text) = texts(shapes)
+            .into_iter()
+            .find(|(_, text)| text.galley.text() == label)
+            .unwrap_or_else(|| panic!("{label} is drawn"));
+        (text.visual_bounding_rect().center().y, clip)
+    }
+
+    #[test]
+    fn tc_04_03_a_1080_pixel_window_at_100_percent_shows_8_to_18_without_scrolling() {
+        let shapes = drawn(&tc_03_01_week(), FULL_HD, 1.0, Scheme::Light);
+
+        // As far towards 8:00 at the top as the hours scroll: in this window they end at midnight
+        // before 8:00 gets there.
+        let (eight, shown) = hour_line(&shapes, 8);
+        let (eighteen, _) = hour_line(&shapes, 18);
+        let (midnight, _) = hour_line(&shapes, 23);
+        assert!(midnight + HOUR_HEIGHT <= shown.bottom() + 1.0);
+        assert!(
+            shown.top() <= eight && eighteen <= shown.bottom(),
+            "8:00 at {eight} and 18:00 at {eighteen}, the hours shown are {shown:?}"
+        );
+        assert_eq!(eighteen - eight, 10.0 * HOUR_HEIGHT);
+    }
+
+    #[test]
+    fn at_150_and_200_percent_the_grid_scales_and_keeps_its_proportions() {
+        let lines = |scale: f32| {
+            let shapes = drawn(&tc_03_01_week(), FULL_HD, scale, Scheme::Light);
+            let (nine, _) = hour_line(&shapes, 9);
+            let (ten, _) = hour_line(&shapes, 10);
+            let label = texts(&shapes)
+                .into_iter()
+                .find(|(_, text)| text.galley.text().starts_with("Standup"))
+                .map(|(_, text)| text.galley.size())
+                .expect("the event is drawn");
+            // In pixels on the screen.
+            ((ten - nine) * scale, label * scale)
+        };
+        let (hour, label) = lines(1.0);
+        for scale in [1.5, 2.0] {
+            let (scaled_hour, scaled_label) = lines(scale);
+            assert_eq!(scaled_hour, hour * scale);
+            assert!((scaled_label - label * scale).length() < 0.5);
+        }
+    }
+
+    #[test]
+    fn an_event_block_shows_only_its_title_and_time() {
+        let mut standup = timed("Standup", d(2026, 11, 10), (9, 0), (10, 0));
+        standup.about.location = "Room 5".to_string();
+        standup.about.description = "Agenda: the sprint".to_string();
+        standup.about.meet = Some("https://meet.google.com/abc-defg-hij".to_string());
+
+        let shapes = drawn(&[standup], FULL_HD, 1.0, Scheme::Light);
+
+        let shown: Vec<String> = texts(&shapes)
+            .into_iter()
+            .map(|(_, text)| text.galley.text().to_string())
+            .filter(|text| {
+                text.contains("Standup") || text.contains("Room") || text.contains("meet")
+            })
+            .collect();
+        let nine =
+            Regional::from_env(|_| None).time(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(shown, [format!("Standup\n{nine}")]);
+    }
+
+    #[test]
+    fn tc_04_04_text_on_a_very_light_and_a_very_dark_calendar_reads_at_4_5_in_both_themes() {
+        let mut light = timed("Light", d(2026, 11, 10), (9, 0), (10, 0));
+        light.color = VERY_LIGHT;
+        let mut dark = timed("Dark", d(2026, 11, 11), (9, 0), (10, 0));
+        dark.color = VERY_DARK;
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = drawn(&[light.clone(), dark.clone()], FULL_HD, 1.0, scheme);
+            for title in ["Light", "Dark"] {
+                let ratio = contrast_of(&shapes, title);
+                assert!(ratio >= AA, "{scheme:?}, {title}: {ratio}");
+            }
+        }
+    }
+
+    #[test]
+    fn text_of_invitations_and_declined_events_reads_at_4_5_in_both_themes() {
+        let at = |title: &str, day| timed(title, d(2026, 11, day), (9, 0), (10, 0));
+        let events = [
+            answered(at("Invited light", 9), VERY_LIGHT, Response::Awaiting),
+            answered(at("Invited dark", 10), VERY_DARK, Response::Awaiting),
+            answered(at("Declined light", 11), VERY_LIGHT, Response::Declined),
+            answered(at("Declined dark", 12), VERY_DARK, Response::Declined),
+        ];
+        assert!(events[0].about.awaiting() && events[2].about.declined());
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = drawn(&events, FULL_HD, 1.0, scheme);
+            for event in &events {
+                let ratio = contrast_of(&shapes, &event.title);
+                assert!(ratio >= AA, "{scheme:?}, {}: {ratio}", event.title);
+            }
+        }
+    }
+
+    #[test]
+    fn todays_date_in_the_day_header_reads_at_4_5_on_its_mark_in_both_themes() {
+        let today = Regional::from_env(|_| None).weekday_day(d(2026, 11, 11));
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let ratio = contrast_of(&drawn(&[], FULL_HD, 1.0, scheme), &today);
+            assert!(ratio >= AA, "{scheme:?}: {ratio}");
+        }
+    }
+
+    #[test]
+    fn the_stripes_of_an_out_of_office_event_do_not_pass_under_its_text() {
+        let away = |title: &str, day, until, color, response| {
+            let mut event = timed(title, d(2026, 11, day), (9, 0), until);
+            event.about.kind = Kind::OutOfOffice;
+            answered(event, color, response)
+        };
+        // A middle gray, on which black text only just reaches 4.5:1.
+        let gray = Rgb(118, 118, 118);
+        let events = [
+            away("Away", 10, (12, 0), gray, Response::Accepted),
+            // Over two days, in the all-day strip.
+            away("Trip", 11, (24 + 12, 0), gray, Response::Accepted),
+            away("Declined", 13, (12, 0), VERY_DARK, Response::Declined),
+            away("Invited", 14, (12, 0), VERY_DARK, Response::Awaiting),
+        ];
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shown = screen::in_order(&drawn(&events, FULL_HD, 1.0, scheme));
+            for event in &events {
+                let text = shown
+                    .iter()
+                    .position(|(_, shape)| {
+                        matches!(shape, Shape::Text(t) if t.galley.text().contains(&event.title))
+                    })
+                    .expect("the event is drawn");
+                let Shape::Text(label) = &shown[text].1 else {
+                    unreachable!("found as a text")
+                };
+                let area = label.visual_bounding_rect();
+                let stripe = shown[..text].iter().rposition(|(_, shape)| match shape {
+                    Shape::LineSegment { points, .. } => {
+                        Rect::from_two_pos(points[0], points[1]).intersects(area)
+                    }
+                    _ => false,
+                });
+                let cleared = shown[..text]
+                    .iter()
+                    .rposition(|(_, s)| matches!(s, Shape::Rect(r) if r.rect.contains_rect(area)));
+                let title = &event.title;
+                assert!(stripe.is_some(), "{scheme:?}, {title} is striped");
+                assert!(
+                    cleared > stripe,
+                    "{scheme:?}, {title}: stripes under the text"
+                );
+                let Shape::Rect(clear) = &shown[cleared.unwrap()].1 else {
+                    unreachable!("found as a rectangle")
+                };
+                let fill = Rgb(clear.fill.r(), clear.fill.g(), clear.fill.b());
+                let ratio = calendar_core::contrast::contrast(screen::ink(label), fill);
+                assert!(ratio >= AA, "{scheme:?}, {title}: {ratio}");
+            }
+        }
+    }
 
     #[test]
     fn the_marks_of_special_event_types_are_in_the_apps_fonts() {
