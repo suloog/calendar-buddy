@@ -309,3 +309,14 @@
   - One squash commit: one logical change.
 - Manual checks: TC-06-06 (US-06-05#1, #2), TC-06-07 (US-06-05#3), TC-06-08 (US-06-05#4)
 - Commits on main: f5cf06d feat(guests): accept, decline or maybe for one or all events [US-06-05]
+
+## US-06-06 — review — 2026-10-24 04:34
+- What: an event whose own guest entry (Google's `self`) is `declined` stays in the day/3-day/week, month and agenda views with its text struck through and the event faded; a "Show declined events" checkbox in the view bar (on by default, kept in the settings as `declined = hidden`) leaves declined events out of every view and brings them back.
+- Decisions: DEC-130
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - not done: the drag previews (an all-day event dragged into the hours, a timed one over the all-day strip) are drawn unstruck and unfaded until dropped (cosmetic, left);
+  - not done: the strike-through, the fading and the checkbox are UI, not unit-tested (manual checks);
+  - settings gained the `declined` key; no SQLite schema or provider-interface change.
+  - One squash commit: one logical change.
+- Manual checks: TC-06-09 (US-06-06#1, #2)
+- Commits on main: 3e9a3b3 feat(guests): strike through and hide declined events [US-06-06]
