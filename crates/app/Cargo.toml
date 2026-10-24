@@ -14,6 +14,7 @@ eframe = { version = "0.37.0", default-features = false, features = ["default_fo
 # The lock and tick marks are in egui's emoji fonts, left out of its default fonts.
 egui = { version = "0.37.0", default-features = false, features = ["monochrome_emoji_fonts"] }
 iana-time-zone = "0.1.65"
+ksni = { version = "0.3.7", default-features = false, features = ["async-io", "blocking"] }
 secret-service = { version = "5.2.0", features = ["rt-async-io-crypto-rust"] }
 zbus = "5.19.0"
 

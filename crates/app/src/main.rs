@@ -14,6 +14,7 @@ mod sync;
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::availability;
+use calendar_core::background::{self, Signal};
 use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
@@ -26,7 +27,7 @@ use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
-use calendar_core::platform::Browser;
+use calendar_core::platform::{Autostart, Browser, Instance, Tray};
 use calendar_core::regional::Regional;
 use calendar_core::reminders::{Action, ReminderId, SNOOZES, Silenced};
 use calendar_core::series::{Question, Scope};
@@ -43,9 +44,9 @@ use chrono_tz::Tz;
 use connect::Connect;
 use eframe::egui;
 use network::Online;
-use platform::{SystemBrowser, SystemNetwork};
+use platform::{SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart};
 use remove::Removal;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
 use sync::{Opened, Saved, Synchronization};
 
@@ -254,10 +255,28 @@ struct CalendarApp {
     view_state: grid_view::State,
     month_state: month_view::State,
     dialog: Option<Dialog>,
+    /// The event of the notification last clicked, to open once the window is shown
+    /// (`MOD-07-F08`).
+    notified: Option<Opened>,
+    /// What the user did to the tray icon or the launcher, and wake-ups of the app while its
+    /// window is closed (`None`).
+    signals: Receiver<Option<Signal>>,
+    /// Whether the desktop shows the app's tray icon (`MOD-07-F14`).
+    tray: bool,
+    /// Whether "Quit" was chosen in the tray menu (`MOD-07-F15`).
+    quitting: bool,
+    /// Whether the window closes to open again in front (`MOD-07-F17`).
+    reopening: bool,
+    /// The window's size and whether it is maximized, as last shown.
+    placement: Placement,
+    /// Whether the app starts at login (`MOD-07-F16`), as last set, and what turns it on or off
+    /// off the UI thread, in the order set.
+    start_at_login: bool,
+    autostart_writer: Sender<bool>,
 }
 
 impl CalendarApp {
-    fn new(ctx: egui::Context) -> Self {
+    fn new(ctx: egui::Context, signals: Receiver<Option<Signal>>, tray: bool) -> Self {
         let regional = Regional::from_env(|key| std::env::var(key).ok());
         let zone = system_zone();
         let zone_changes = watch_zone(zone, ctx.clone());
@@ -319,6 +338,15 @@ impl CalendarApp {
         let built_at = Utc::now();
         let events = Vec::new();
         let (built, places) = build(&events, &settings, navigation, AGENDA_DAYS, zone, built_at);
+        let autostart = XdgAutostart::new();
+        let start_at_login = autostart.is_on();
+        let (autostart_writer, turned) = mpsc::channel::<bool>();
+        std::thread::spawn(move || {
+            for on in turned {
+                // Like the settings, a lost change is acceptable.
+                let _ = autostart.set(on);
+            }
+        });
         CalendarApp {
             accounts,
             accounts_writer,
@@ -352,6 +380,14 @@ impl CalendarApp {
             view_state: grid_view::State::default(),
             month_state: month_view::State::default(),
             dialog: None,
+            notified: None,
+            signals,
+            tray,
+            quitting: false,
+            reopening: false,
+            placement: Placement::default(),
+            start_at_login,
+            autostart_writer,
         }
     }
 
@@ -689,6 +725,7 @@ impl CalendarApp {
         let mut delete = None;
         let mut default_calendar = None;
         let mut notifications = None;
+        let mut start_at_login = None;
         let mut scope = None;
         let mut notify = None;
         let mut cancelled = false;
@@ -1095,6 +1132,17 @@ impl CalendarApp {
                     {
                         notifications = Some(on);
                     }
+                    // Off until the user turns it on (`MOD-07-F16`, `DEC-64`); without a tray
+                    // icon there would be nothing to open the app from at login.
+                    let mut on = self.start_at_login;
+                    if self.tray
+                        && ui
+                            .checkbox(&mut on, background::START_AT_LOGIN)
+                            .on_hover_text(background::START_AT_LOGIN_HINT)
+                            .changed()
+                    {
+                        start_at_login = Some(on);
+                    }
                 }
             });
         if let Some(email) = again {
@@ -1111,6 +1159,10 @@ impl CalendarApp {
             self.settings.notifications_off = !on;
             self.save_settings();
             self.sync.set_silenced(Silenced::of(&self.settings));
+        }
+        if let Some(on) = start_at_login {
+            self.start_at_login = on;
+            let _ = self.autostart_writer.send(on);
         }
         match save {
             Some(Save::Create(calendar, event)) => {
@@ -1269,10 +1321,10 @@ impl CalendarApp {
         self.month_state = month_view::State::default();
         self.rebuild();
     }
-}
 
-impl eframe::App for CalendarApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    /// What the app does whether its window is shown or not: taking in what came from Google,
+    /// the sign-ins and the notifications clicked.
+    fn background(&mut self, ctx: &egui::Context) {
         if let Some(account) = self.connect.poll() {
             self.connected = Some(account.clone());
             self.accounts.add(account);
@@ -1296,7 +1348,7 @@ impl eframe::App for CalendarApp {
             Some(Err(problem)) => self.problem = Some(problem),
             None => {}
         }
-        self.checks.tick(ui.ctx(), &self.accounts);
+        self.checks.tick(ctx, &self.accounts);
         let cached = self.sync.poll();
         let saved = self.sync.take_saved();
         let now = Instant::now();
@@ -1335,26 +1387,66 @@ impl eframe::App for CalendarApp {
             self.show_events(cached);
         }
         self.gone.extend(self.sync.take_gone());
+        if let Some(opened) = self.sync.take_opened() {
+            self.notified = Some(opened);
+        }
+        // Events and their reminders move to their new local times when the system's time zone
+        // changes.
+        if let Some(zone) = self.zone_changes.try_iter().last() {
+            self.zone = zone;
+            self.rebuild();
+        }
+        let window = self.window();
+        self.sync.set_window(window);
+    }
+
+    /// Acts on what the user did to the tray icon or the launcher while the window is shown.
+    fn signaled(&mut self, ctx: &egui::Context) {
+        for signal in self.signals.try_iter().flatten().collect::<Vec<_>>() {
+            match background::respond(signal, true, self.tray) {
+                background::Response::Hide => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                background::Response::Quit => {
+                    self.quitting = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                // Wayland lets no app bring its own window forward, so a window without the
+                // keyboard is closed and opened again, in front.
+                background::Response::Show | background::Response::Raise => {
+                    if !ctx.input(|i| i.focused) {
+                        self.reopening = true;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl eframe::App for CalendarApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.signaled(ui.ctx());
+        self.background(ui.ctx());
         // Looking at the app brings it up to date; a minimized window is polled less often.
         let (focused, minimized) = ui
             .ctx()
             .input(|i| (i.focused, i.viewport().minimized == Some(true)));
+        // The window opens again as it was left.
+        ui.ctx().input(|i| {
+            let viewport = i.viewport();
+            self.placement.size = viewport
+                .inner_rect
+                .map_or(self.placement.size, |r| r.size());
+            self.placement.maximized = viewport.maximized.unwrap_or(self.placement.maximized);
+        });
         if focused && !self.focused {
             self.sync.activated();
         }
         self.focused = focused;
         self.sync.set_shown(!minimized);
-        let window = self.window();
-        self.sync.set_window(window);
         // With no account connected there is only the welcome screen (`MOD-01-F12`).
         if self.accounts.is_empty() {
             connect::welcome(ui, &mut self.connect);
             return;
-        }
-        // Events move to their new local times when the system's time zone changes.
-        if let Some(zone) = self.zone_changes.try_iter().last() {
-            self.zone = zone;
-            self.rebuild();
         }
         // The now line and today move; nothing else changes on its own.
         if Utc::now() - self.built_at >= chrono::Duration::minutes(1) {
@@ -1364,7 +1456,7 @@ impl eframe::App for CalendarApp {
             .request_repaint_after(std::time::Duration::from_secs(30));
         let before = self.navigation;
         self.shortcuts(ui.ctx());
-        if let Some(event) = self.sync.take_opened() {
+        if let Some(event) = self.notified.take() {
             self.open_notified(ui.ctx(), &event);
         }
         let online = self.online.get();
@@ -1696,20 +1788,111 @@ impl eframe::App for CalendarApp {
     }
 }
 
-fn main() -> eframe::Result {
-    let options = eframe::NativeOptions {
+/// The window over the app, which outlives it: closing the window leaves the app in the tray
+/// (`MOD-07-F14`).
+struct AppWindow<'a>(&'a mut CalendarApp);
+
+impl eframe::App for AppWindow<'_> {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.0.ui(ui, frame);
+    }
+}
+
+/// How long the app waits, while its window is closed, before looking at its accounts again.
+const IN_TRAY_CHECK: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// The window's size and whether it is maximized.
+struct Placement {
+    size: egui::Vec2,
+    maximized: bool,
+}
+
+impl Default for Placement {
+    fn default() -> Self {
+        Placement {
+            size: egui::vec2(1200.0, 800.0),
+            maximized: false,
+        }
+    }
+}
+
+fn window_options(placement: &Placement) -> eframe::NativeOptions {
+    eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_title("Calendar Buddy")
-            .with_inner_size([1200.0, 800.0])
+            .with_inner_size(placement.size)
+            .with_maximized(placement.maximized)
             .with_min_inner_size([480.0, 360.0]),
+        // Also makes each new window's renderer get the whole font atlas of the context the
+        // windows share; without it a reopened window panics on its first new glyph.
+        system_font_fallback: true,
         ..Default::default()
+    }
+}
+
+fn main() -> eframe::Result {
+    // One context for every time the window opens, so what the app's threads ask of it reaches
+    // the window shown.
+    let ctx = egui::Context::default();
+    let (sender, signals) = mpsc::channel::<Option<Signal>>();
+    let signaled = {
+        let (sender, ctx) = (sender.clone(), ctx.clone());
+        move |signal: Signal| {
+            let _ = sender.send(Some(signal));
+            ctx.request_repaint();
+        }
     };
-    eframe::run_native(
-        "calendar-buddy",
-        options,
-        Box::new(|cc| Ok(Box::new(CalendarApp::new(cc.egui_ctx.clone())))),
-    )
+    // Only one copy runs; a second launch brings the first one's window forward (`MOD-07-F17`).
+    let instance = SystemInstance::new();
+    let launched = signaled.clone();
+    if !instance.claim(Box::new(move || launched(Signal::Launched))) {
+        return Ok(());
+    }
+    // While the window is closed, the app wakes whenever its threads ask for the window to be
+    // drawn, e.g. when a notification is clicked.
+    ctx.set_repaint_observer(move |info| {
+        if info.delay.is_zero() {
+            let _ = sender.send(None);
+        }
+    });
+    let args: Vec<String> = std::env::args().collect();
+    let tray = SystemTray::new();
+    let tray_shown = tray.show(Box::new(signaled), background::at_login(&args));
+    let mut shown = background::starts_shown(&args, tray_shown);
+    let mut app = CalendarApp::new(ctx.clone(), signals, tray_shown);
+    loop {
+        if shown {
+            eframe::run_native_ext(
+                "calendar-buddy",
+                window_options(&app.placement),
+                Some(ctx.clone()),
+                Box::new(|_| Ok(Box::new(AppWindow(&mut app)))),
+            )?;
+            let closed = background::respond(Signal::Closed, true, tray_shown);
+            if app.quitting || (closed == background::Response::Quit && !app.reopening) {
+                return Ok(());
+            }
+            shown = std::mem::take(&mut app.reopening);
+            if shown {
+                continue;
+            }
+        }
+        // In the tray, the app keeps synchronizing, less often, and reminding (`MOD-07-F14`).
+        app.sync.set_shown(false);
+        match app.signals.recv_timeout(IN_TRAY_CHECK) {
+            Ok(Some(signal)) => match background::respond(signal, false, tray_shown) {
+                background::Response::Show => shown = true,
+                background::Response::Quit => return Ok(()),
+                background::Response::Hide | background::Response::Raise => {}
+            },
+            Ok(None) | Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+        }
+        app.background(&ctx);
+        // A notification clicked opens its event in the window (`MOD-07-F08`).
+        shown |= app.notified.is_some();
+    }
 }
 
 #[cfg(test)]

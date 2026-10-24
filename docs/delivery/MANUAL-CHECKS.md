@@ -477,3 +477,30 @@ Not proven: the real editor's "Notifications" section, and that real Google take
 - [ ] `US-07-04#2`, `#3` (real Google, a person's eyes): open that event in the app's editor. Add an "Email" reminder of 1 "days", change the first to 2 "hours", and save. In Google Calendar in the browser, the event shows a notification 2 hours before and an email 1 day before. Back in the app, "Remove" one and save: it is gone in the browser too. "Add notification" disappears once the event has five reminders.
 - [ ] `US-07-04#4` (real Google, a person's eyes): in the app's editor of that event, choose "Use calendar defaults" and save. Google takes it without an error. In the browser the event is back on the calendar's default notifications.
 - [ ] `US-07-04` edge case (real Google): add the same reminder twice and save. Note whether Google keeps both, merges them, or refuses the change.
+
+## US-07-05
+
+Needs a real KDE Plasma (Wayland) session, a connected Google account and a person's eyes.
+
+What the automated tests prove:
+- the window and tray logic: `calendar_core::background::tests::*`, including `tc_07_06_launching_the_app_again_brings_its_window_forward_or_opens_it_from_the_tray`, `closing_the_window_leaves_the_app_in_the_tray_or_quits_it_without_one`, `clicking_the_tray_icon_shows_or_hides_the_window`, `the_tray_menu_opens_the_window_and_quits_the_app` and `the_app_starts_in_the_tray_only_at_login_and_with_a_tray_icon`;
+- the autostart entry and its quoting: `the_autostart_entry_*`, and in the app `platform::tests::starting_at_login_is_off_until_turned_on_and_off_again_when_turned_off`, which uses a temporary folder;
+- the single instance on a private `dbus-daemon`: `platform::tests::tc_07_06_a_second_launch_tells_the_running_copy_and_does_not_run`.
+
+A smoke run on the owner's KDE session, with no accounts and a temporary HOME, showed:
+- started with `--in-tray`, there was no window, and both the tray item and `pl.ordergroup.CalendarBuddy` were on the session bus;
+- a second launch exited at once, and the first copy opened its window (KWin listed "Calendar Buddy").
+
+Hiding and re-showing from a tray click could not be watched, because the screen was off (DPMS) and a Wayland window does not paint then.
+
+Decisions to ratify:
+- `DEC-142`: the window really closes and reopens; the tray menu; closing quits when there is no tray;
+- `DEC-143`: the autostart entry, `--in-tray`, and the D-Bus name `pl.ordergroup.CalendarBuddy`;
+- `DEC-144`: bring forward by closing and reopening; at login, wait for the tray;
+- `DEC-145`: "Start at login" only with a tray; the window keeps its size.
+
+- [ ] `TC-07-08` step 1 / `US-07-05#1` (real Google, KDE, a person's eyes): run `cargo run -p calendar-buddy` and create an event in Google Calendar with a reminder in 5 minutes. Close the window with its ×: the Calendar Buddy icon stays in the tray, and the reminder arrives on time.
+- [ ] `US-07-05#2` (KDE, a person's eyes; no test case): click the tray icon: the window opens with everything as it was left, and at the same size, or still maximized. Click the icon again: the window closes and the icon stays.
+- [ ] `TC-07-08` step 2 / `US-07-05#3` (real Google, KDE): right-click the tray icon. "Open Calendar Buddy" opens the window. Then choose "Quit": the icon disappears and no `calendar-buddy` process is left (`pgrep calendar-buddy`). Create a reminder 3 minutes ahead in the browser: no notification arrives.
+- [ ] `TC-07-08` step 3 / `US-07-05#4` (KDE, log out and in): in the settings under "Notifications", "Start at login" is unticked. Tick it: `~/.config/autostart/calendar-buddy.desktop` appears, and KDE's System Settings → Autostart lists Calendar Buddy. Log out and in: only the tray icon shows, with no window, and reminders arrive. Untick it again if it is not wanted: the file is gone.
+- [ ] `TC-07-06` / `US-07-05#5` on the real desktop (KDE Wayland): with the window open but behind another window, launch the app again from the launcher. The window comes to the front (it is closed and reopened), and only one `calendar-buddy` process runs. Do the same with the window closed to the tray: it opens.
