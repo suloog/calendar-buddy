@@ -9,10 +9,13 @@ mod mini_calendar;
 mod month_view;
 mod network;
 mod platform;
+#[cfg(test)]
+mod preview;
 mod remove;
 #[cfg(test)]
 mod screen;
 mod sync;
+mod widgets;
 
 use appearance::Desktop;
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
@@ -826,7 +829,7 @@ impl CalendarApp {
                             if ui.button(texts::MORE_OPTIONS).clicked() {
                                 edit = Some(Editor::from_quick(entry, &self.regional));
                             }
-                            let button = egui::Button::new(texts::SAVE);
+                            let button = widgets::primary(ui, texts::SAVE);
                             ui.add_enabled(unavailable.is_none(), button).clicked()
                         })
                         .inner;
@@ -1487,7 +1490,9 @@ impl eframe::App for CalendarApp {
         let online = self.online.get();
         let sync_status = self.sync.status().clone();
         self.panel.resized(ui.ctx().content_rect().width());
-        egui::Panel::top("view-bar").show(ui, |ui| {
+        let bar =
+            egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(12, 10));
+        egui::Panel::top("view-bar").frame(bar).show(ui, |ui| {
             ui.horizontal(|ui| {
                 // Google Calendar's main menu button, at the far left.
                 let hint = if self.panel.expanded() {
@@ -1495,45 +1500,50 @@ impl eframe::App for CalendarApp {
                 } else {
                     texts::SHOW_SIDE_PANEL
                 };
-                if ui.button("☰").on_hover_text(hint).clicked() {
+                if widgets::icon_button(ui, "☰", hint).clicked() {
                     self.settings.side_panel_collapsed = self.panel.toggle();
                     self.save_settings();
                 }
-                if ui.button(texts::TODAY).clicked() {
+                ui.add_space(4.0);
+                if widgets::outlined_button(ui, texts::TODAY).clicked() {
                     self.navigation.today(self.today());
                     // Brings back a mini calendar browsed away, even when the view stays put.
                     self.mini_month = self.navigation.selected;
                 }
                 // The agenda always starts now; there is no period to step through.
                 let periods = self.navigation.view != View::Agenda;
-                if ui.add_enabled(periods, egui::Button::new("‹")).clicked() {
-                    self.navigation.previous();
-                }
-                if ui.add_enabled(periods, egui::Button::new("›")).clicked() {
-                    self.navigation.next();
-                }
+                ui.add_enabled_ui(periods, |ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    if widgets::icon_button(ui, "‹", texts::PREVIOUS_PERIOD).clicked() {
+                        self.navigation.previous();
+                    }
+                    if widgets::icon_button(ui, "›", texts::NEXT_PERIOD).clicked() {
+                        self.navigation.next();
+                    }
+                });
+                ui.add_space(4.0);
                 let regional = &self.regional;
-                ui.label(match (self.navigation.view, self.navigation.period()) {
+                ui.heading(match (self.navigation.view, self.navigation.period()) {
                     (View::Month, _) => regional.month_year(self.navigation.selected),
                     (_, Some((first, last))) if first == last => regional.short_date(first),
                     (_, Some((first, last))) => regional.date_range(first, last),
                     (_, None) => texts::UPCOMING.to_string(),
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(texts::SETTINGS).clicked() {
+                    if widgets::icon_button(ui, "⚙", texts::SETTINGS).clicked() {
                         self.dialog = Some(Dialog::Settings);
                     }
-                    if ui.button(texts::REFRESH).clicked() {
+                    if widgets::icon_button(ui, "🔄", texts::REFRESH).clicked() {
                         self.sync.refresh();
                     }
                     // The synchronization indicator (`MOD-02-F17`, `MOD-02-U03`).
                     let today = self.today();
-                    ui.label(status::last_synced(
+                    let synced = status::last_synced(
                         sync_status.last_synced,
                         self.zone,
                         today,
                         &self.regional,
-                    ));
+                    );
                     // Accounts that cannot be checked are not synchronized either (`DEC-52`).
                     let state = match sync_status.state(online) {
                         State::Offline => State::Offline,
@@ -1541,19 +1551,23 @@ impl eframe::App for CalendarApp {
                         state => state,
                     };
                     let label = status::label(state);
+                    let small = |text: String| egui::RichText::new(text).small();
+                    ui.label(small(synced).weak());
                     if matches!(state, State::Delayed | State::Error) {
-                        ui.colored_label(ui.visuals().warn_fg_color, label);
+                        ui.colored_label(ui.visuals().warn_fg_color, small(label.to_string()));
                     } else {
-                        ui.label(label);
+                        ui.label(small(label.to_string()).weak());
                     }
-                    for view in View::ALL.into_iter().rev() {
-                        if ui
-                            .selectable_label(self.navigation.view == view, view.name())
-                            .clicked()
-                        {
-                            self.navigation.switch(view);
-                        }
+                    ui.add_space(8.0);
+                    let names: Vec<&str> = View::ALL.iter().map(|view| view.name()).collect();
+                    let picked = View::ALL
+                        .iter()
+                        .position(|view| *view == self.navigation.view)
+                        .unwrap_or(0);
+                    if let Some(i) = widgets::segmented(ui, &names, picked) {
+                        self.navigation.switch(View::ALL[i]);
                     }
+                    ui.add_space(8.0);
                     // One switch shows or hides declined events, shown by default (`MOD-06-F22`).
                     let mut declined = !self.settings.hide_declined;
                     if ui.checkbox(&mut declined, texts::SHOW_DECLINED).changed() {
@@ -1679,7 +1693,11 @@ impl eframe::App for CalendarApp {
             }
         }
         let mut expanded = self.panel.expanded();
+        let side = egui::Frame::side_top_panel(ui.style())
+            .fill(appearance::side_fill(ui.visuals()))
+            .inner_margin(egui::Margin::symmetric(14, 12));
         egui::Panel::left("side-panel")
+            .frame(side)
             .resizable(false)
             .show_collapsible(ui, &mut expanded, |ui| {
                 let today = self.today();
@@ -2040,6 +2058,7 @@ mod tests {
             ("mini_calendar.rs", include_str!("mini_calendar.rs")),
             ("month_view.rs", include_str!("month_view.rs")),
             ("remove.rs", include_str!("remove.rs")),
+            ("widgets.rs", include_str!("widgets.rs")),
         ];
         for (file, source) in views {
             for (line, literal) in literals(source) {

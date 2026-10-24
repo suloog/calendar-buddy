@@ -39,6 +39,15 @@ impl Checks {
         }
     }
 
+    /// No check is due until "Try again"; for pictures of the app, which must not reach Google.
+    #[cfg(test)]
+    pub fn paused() -> Self {
+        Checks {
+            next: None,
+            ..Checks::new()
+        }
+    }
+
     /// Starts a check of the connected accounts when one is due. Called every frame.
     pub fn tick(&mut self, ctx: &egui::Context, accounts: &Accounts) {
         if self.running || self.next.is_none_or(|next| Instant::now() < next) {

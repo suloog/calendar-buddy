@@ -101,13 +101,18 @@ pub fn text_where(shapes: &[ClippedShape], matches: impl Fn(&str) -> bool) -> Te
         .expect("the text is drawn")
 }
 
-/// The fills drawn at `at` among `shapes`, laid one over the other on `base` as egui blends
+/// The fills of rectangles and discs drawn at `at` among `shapes`, laid one over the other on `base` as egui blends
 /// them, premultiplied.
 fn laid(shapes: &[(Rect, Shape)], at: Pos2, base: Rgb) -> Rgb {
     let channels = shapes
         .iter()
         .filter_map(|(clip, shape)| match shape {
             Shape::Rect(rect) if clip.contains(at) && rect.rect.contains(at) => Some(rect.fill),
+            Shape::Circle(circle)
+                if clip.contains(at) && circle.center.distance(at) <= circle.radius =>
+            {
+                Some(circle.fill)
+            }
             _ => None,
         })
         .fold([base.0, base.1, base.2].map(f32::from), |below, fill| {

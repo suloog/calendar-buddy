@@ -3,10 +3,11 @@
 
 use calendar_core::navigation::MiniCalendar;
 use calendar_core::regional::Regional;
+use calendar_core::texts;
 use chrono::{Months, NaiveDate};
 use eframe::egui::{self, RichText};
 
-const DAY_SIZE: [f32; 2] = [26.0, 22.0];
+const DAY_SIZE: [f32; 2] = [34.0, 28.0];
 
 /// What the user did in the mini calendar.
 pub enum Action {
@@ -19,12 +20,15 @@ pub enum Action {
 pub fn show(ui: &mut egui::Ui, mini: &MiniCalendar, regional: &Regional) -> Option<Action> {
     let mut action = None;
     ui.horizontal(|ui| {
-        ui.strong(regional.month_year(mini.month));
+        ui.label(
+            RichText::new(regional.month_year(mini.month)).font(crate::appearance::strong(15.0)),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.small_button("›").clicked() {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            if crate::widgets::icon_button(ui, "›", texts::NEXT_MONTH).clicked() {
                 action = Some(Action::Browse(mini.month + Months::new(1)));
             }
-            if ui.small_button("‹").clicked() {
+            if crate::widgets::icon_button(ui, "‹", texts::PREVIOUS_MONTH).clicked() {
                 action = Some(Action::Browse(mini.month - Months::new(1)));
             }
         });
@@ -41,7 +45,7 @@ pub fn show(ui: &mut egui::Ui, mini: &MiniCalendar, regional: &Regional) -> Opti
             ui.end_row();
             for week in &mini.weeks {
                 for day in week {
-                    let mut text = RichText::new(day.date.format("%-d").to_string()).small();
+                    let mut text = RichText::new(day.date.format("%-d").to_string()).size(12.5);
                     // A day of the period shown, or one under the pointer, is drawn on a fill the
                     // accent and weak text do not read on (`MOD-04-NFR-01`); egui hovers a day
                     // also from just outside it.

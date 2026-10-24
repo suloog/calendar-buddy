@@ -241,7 +241,7 @@ impl Synchronization {
         sync
     }
 
-    fn with(
+    pub fn with(
         ctx: &egui::Context,
         open: impl FnOnce() -> Cache + Send + 'static,
         sign_in: SignIn,

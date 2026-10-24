@@ -534,7 +534,7 @@ pub fn show(
         ui.colored_label(ui.visuals().warn_fg_color, problem);
     }
     let clicked = ui
-        .add_enabled(problem.is_none(), egui::Button::new(texts::SAVE))
+        .add_enabled(problem.is_none(), crate::widgets::primary(ui, texts::SAVE))
         .clicked();
     if open_series {
         return Some(Edited::OpenSeries);

@@ -9,7 +9,9 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{awaiting, color, event_label, event_text, fade, filled, openable, text_on};
+use crate::grid_view::{
+    STRIP, awaiting, color, event_label, event_text, fade, filled, openable, text_on,
+};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -58,10 +60,10 @@ fn paint_item(
         };
         event_text(
             &clipped,
-            rect.left_center() + Vec2::new(4.0, 0.0),
+            rect.left_center() + Vec2::new(STRIP + 5.0, 0.0),
             Align2::LEFT_CENTER,
             text,
-            FontId::proportional(12.0),
+            crate::appearance::strong(12.0),
             on,
             item.declined,
         );

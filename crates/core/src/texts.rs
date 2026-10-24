@@ -267,6 +267,8 @@ pub const WEEK_VIEW: &str = "Week view";
 pub const MONTH_VIEW: &str = "Month view";
 pub const AGENDA_VIEW: &str = "Agenda view";
 pub const NEXT_PERIOD: &str = "Next period";
+pub const NEXT_MONTH: &str = "Next month";
+pub const PREVIOUS_MONTH: &str = "Previous month";
 pub const PREVIOUS_PERIOD: &str = "Previous period";
 
 // The side panel and the calendars (`MOD-02`).

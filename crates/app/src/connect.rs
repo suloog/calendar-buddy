@@ -161,7 +161,7 @@ impl Connect {
                     }
                     None => start,
                 };
-                if ui.button(label).clicked() {
+                if ui.add(crate::widgets::primary(ui, label)).clicked() {
                     chosen = Some(Action::Check);
                 }
             }

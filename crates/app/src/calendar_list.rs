@@ -76,7 +76,10 @@ pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<
     let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
         for group in groups {
-            ui.add(egui::Label::new(egui::RichText::new(&group.email).strong()).truncate());
+            let email = egui::RichText::new(&group.email)
+                .font(crate::appearance::strong(12.5))
+                .color(ui.visuals().weak_text_color());
+            ui.add(egui::Label::new(email).truncate());
             for row in &group.calendars {
                 let calendar = &row.calendar;
                 ui.push_id((&calendar.account_id, &calendar.id), |ui| {
@@ -233,7 +236,7 @@ fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Chosen> {
         .copied();
     let mut picked = None;
     // The default fonts have no "⋮".
-    ui.menu_button("…", |ui| {
+    crate::widgets::menu_dots(ui, |ui| {
         egui::Grid::new("palette")
             .spacing([4.0, 4.0])
             .show(ui, |ui| {

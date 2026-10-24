@@ -8,7 +8,7 @@ use calendar_core::model::Rgb;
 use calendar_core::regional::Regional;
 use calendar_core::texts::{self, SAVING};
 use calendar_core::view_model::GridViewModel;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Datelike, Duration, Utc};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, FontId, LayerId, Order, PointerButton, Pos2,
     Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2, text::LayoutJob,
@@ -16,12 +16,16 @@ use eframe::egui::{
 
 pub const HOUR_HEIGHT: f32 = 44.0;
 const GUTTER: f32 = 52.0;
-const HEADER_HEIGHT: f32 = 28.0;
-const LANE_HEIGHT: f32 = 20.0;
+const HEADER_HEIGHT: f32 = 52.0;
+const LANE_HEIGHT: f32 = 22.0;
 /// How far up from a block's bottom edge its end can be grabbed.
 const END_HANDLE: f32 = 5.0;
 /// Narrowest a column of overlapping events may get, so the start of its title stays visible.
 const MIN_BLOCK_WIDTH: f32 = 18.0;
+/// Lower than this, an event shows its title and time on one line.
+const SHORT_BLOCK: f32 = 30.0;
+/// Lowest an event is drawn, however short it is.
+const MIN_BLOCK_HEIGHT: f32 = 18.0;
 
 pub fn color(c: Rgb) -> Color32 {
     Color32::from_rgb(c.0, c.1, c.2)
@@ -78,20 +82,57 @@ const VEIL: f32 = 0.5;
 pub fn fade(painter: &egui::Painter, rect: Rect) {
     painter.rect_filled(
         rect,
-        CornerRadius::same(3),
+        CornerRadius::same(EVENT_RADIUS),
         color(background(painter)).gamma_multiply(VEIL),
     );
 }
 
-/// An event filled with its colour `c` in `rect`, faded when it is declined; gives the colour
-/// its text is on, to pick the text's colour from (`MOD-04-U04`).
+/// An event of colour `c` in `rect`: a tint of its colour with a strip of the colour itself along
+/// its left edge, faded when it is declined; gives the colour its text is on, to pick the text's
+/// colour from (`MOD-04-U04`).
 pub fn filled(painter: &egui::Painter, rect: Rect, c: Rgb, declined: bool) -> Rgb {
-    painter.rect_filled(rect, CornerRadius::same(3), color(c));
+    let under = tint(painter, c);
+    painter.rect_filled(rect, CornerRadius::same(EVENT_RADIUS), color(under));
+    strip(painter, rect, c);
     if !declined {
-        return c;
+        return under;
     }
     fade(painter, rect);
-    contrast::over(background(painter), VEIL, c)
+    contrast::over(background(painter), VEIL, under)
+}
+
+/// How strongly an event's colour tints its fill, over the light and the dark background.
+const TINT_LIGHT: f32 = 0.22;
+const TINT_DARK: f32 = 0.4;
+/// How wide the strip of an event's own colour along its left edge is.
+pub const STRIP: f32 = 3.0;
+/// How rounded events are.
+pub const EVENT_RADIUS: u8 = 4;
+
+/// The fill of an event of colour `c`: its colour, light over the view's background.
+pub fn tint(painter: &egui::Painter, c: Rgb) -> Rgb {
+    let strength = if painter.ctx().global_style().visuals.dark_mode {
+        TINT_DARK
+    } else {
+        TINT_LIGHT
+    };
+    contrast::over(c, strength, background(painter))
+}
+
+/// The strip of an event's colour `c` along the left edge of `rect`.
+pub fn strip(painter: &egui::Painter, rect: Rect, c: Rgb) {
+    let strip = Rect::from_min_max(
+        rect.left_top(),
+        Pos2::new(rect.left() + STRIP, rect.bottom()),
+    );
+    let r = EVENT_RADIUS;
+    let corners = CornerRadius {
+        nw: r,
+        sw: r,
+        ne: 0,
+        se: 0,
+    };
+    painter.rect_filled(strip, corners, color(c));
 }
 
 /// How far apart the stripes of a hatched event are.
@@ -135,20 +176,13 @@ pub fn clear_under(
 
 /// How long the dashes of an invitation's outline are, and the gaps between them.
 const DASH: f32 = 4.0;
-/// How strong the fill of an invitation is.
-const AWAITING_FILL: f32 = 0.2;
-
-/// An invitation awaiting the user's answer (`MOD-06-U04`): a light fill of its colour `c` inside
-/// a dashed outline of it; gives the colour of the fill, to pick its text's colour from
-/// (`MOD-04-U04`).
+/// An invitation awaiting the user's answer (`MOD-06-U04`): the view's background inside a dashed
+/// outline of its colour `c`, unlike the tinted events answered; gives the colour of the fill, to
+/// pick its text's colour from (`MOD-04-U04`).
 pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) -> Rgb {
-    let under = contrast::over(c, AWAITING_FILL, background(painter));
+    let under = background(painter);
     // Square, as the dashes are.
-    painter.rect_filled(
-        rect,
-        CornerRadius::ZERO,
-        color(c).gamma_multiply(AWAITING_FILL),
-    );
+    painter.rect_filled(rect, CornerRadius::ZERO, color(under));
     let rect = rect.shrink(0.5);
     let corners = [
         rect.left_top(),
@@ -177,7 +211,7 @@ pub fn openable(
     if response.has_focus() {
         ui.painter().rect_stroke(
             rect,
-            CornerRadius::same(3),
+            CornerRadius::same(EVENT_RADIUS),
             ui.visuals().selection.stroke,
             StrokeKind::Outside,
         );
@@ -317,23 +351,28 @@ pub fn show(
             Pos2::new(x, header.top()),
             Vec2::new(day_width, HEADER_HEIGHT),
         );
-        if day.is_today {
-            painter.rect_filled(
-                rect.shrink(2.0),
-                CornerRadius::same(4),
-                visuals.selection.bg_fill,
-            );
-        }
+        // The weekday small above the day's number; today's number on a disc of the accent.
+        let accent = visuals.selection.stroke.color;
         painter.text(
-            rect.center(),
+            rect.center_top() + Vec2::new(0.0, 6.0),
+            Align2::CENTER_TOP,
+            regional.weekday(day.date).to_uppercase(),
+            FontId::proportional(11.0),
+            if day.is_today { accent } else { weak_text },
+        );
+        let number = rect.center_top() + Vec2::new(0.0, 34.0);
+        let ink = if day.is_today {
+            painter.circle_filled(number, 14.0, accent);
+            text_on(Rgb(accent.r(), accent.g(), accent.b()))
+        } else {
+            visuals.strong_text_color()
+        };
+        painter.text(
+            number,
             Align2::CENTER_CENTER,
-            regional.weekday_day(day.date),
-            FontId::proportional(14.0),
-            if day.is_today {
-                visuals.strong_text_color()
-            } else {
-                visuals.text_color()
-            },
+            day.date.day().to_string(),
+            crate::appearance::strong(18.0),
+            ink,
         );
     }
 
@@ -401,7 +440,12 @@ pub fn show(
         // Working locations and birthdays are labels, outlined in their colour (`MOD-05-U01`).
         let (ink, under) = if bar.label {
             let outline = Stroke::new(1.0, color(bar.color));
-            painter.rect_stroke(rect, CornerRadius::same(3), outline, StrokeKind::Inside);
+            painter.rect_stroke(
+                rect,
+                CornerRadius::same(EVENT_RADIUS),
+                outline,
+                StrokeKind::Inside,
+            );
             (visuals.text_color(), background(&painter))
         } else {
             let under = if bar.awaiting {
@@ -412,9 +456,9 @@ pub fn show(
             (text_on(under), under)
         };
         let painter = painter.with_clip_rect(rect);
-        let at = rect.left_center() + Vec2::new(4.0, 0.0);
+        let at = rect.left_center() + Vec2::new(STRIP + 5.0, 0.0);
         let label = event_label(bar.title.as_deref(), bar.read_only, bar.saving);
-        let font = FontId::proportional(12.0);
+        let font = crate::appearance::strong(12.0);
         if bar.hatched {
             hatch(&painter, rect, ink);
             clear_under(
@@ -549,6 +593,8 @@ pub fn show(
                 Pos2::new(x, minute_y(p.start_min as f32) + 1.0),
                 Pos2::new(x + column_width - 2.0, minute_y(p.end_min as f32) - 1.0),
             );
+            // A short event stays tall enough for a line of its title.
+            rect.max.y = rect.max.y.max(rect.min.y + MIN_BLOCK_HEIGHT);
             let response = ui.interact(
                 rect,
                 // Keyed on the event, so focus stays on it when the view is rebuilt.
@@ -667,7 +713,7 @@ pub fn show(
                 filled(&painter, rect, block.color, block.declined)
             };
             let ink = text_on(under);
-            let clipped = painter.with_clip_rect(rect.shrink(2.0));
+            let clipped = painter.with_clip_rect(rect.shrink(1.0));
             let name = event_label(block.title.as_deref(), block.read_only, block.saving);
             let time = match times {
                 Some((start, end)) => {
@@ -677,25 +723,42 @@ pub fn show(
                 }
                 None => regional.time(block.start.with_timezone(&view.zone).time()),
             };
-            let label = match &block.title {
-                Some(_) => format!("{name}\n{time}"),
-                None => name,
+            // The title in semibold, and the time under it; on one line in a short event.
+            let short = rect.height() < SHORT_BLOCK;
+            let mut lines = vec![(name, crate::appearance::strong(12.0))];
+            if block.title.is_some() {
+                lines.push((time, FontId::proportional(11.5)));
+            }
+            if short && lines.len() == 2 {
+                let time = lines.pop().map(|(time, _)| time).unwrap_or_default();
+                lines[0].0 = format!("{}  {time}", lines[0].0);
+                lines[0].1 = crate::appearance::strong(11.0);
+            }
+            let left = rect.left() + STRIP + 4.0;
+            let mut y = if short {
+                rect.center().y - 7.0
+            } else {
+                rect.top() + 3.0
             };
-            let at = rect.left_top() + Vec2::new(4.0, 2.0);
-            let font = FontId::proportional(12.0);
             if block.hatched {
                 hatch(&painter, rect, ink);
-                clear_under(&clipped, at, Align2::LEFT_TOP, &label, font.clone(), under);
             }
-            event_text(
-                &clipped,
-                at,
-                Align2::LEFT_TOP,
-                label,
-                font,
-                ink,
-                block.declined,
-            );
+            for (text, font) in lines {
+                let at = Pos2::new(left, y);
+                y += font.size + 3.0;
+                if block.hatched {
+                    clear_under(&clipped, at, Align2::LEFT_TOP, &text, font.clone(), under);
+                }
+                event_text(
+                    &clipped,
+                    at,
+                    Align2::LEFT_TOP,
+                    text,
+                    font,
+                    ink,
+                    block.declined,
+                );
+            }
             openable(ui, &response, rect, p.event, opened);
         }
 
@@ -824,7 +887,8 @@ mod tests {
         for scale in [1.5, 2.0] {
             let (scaled_hour, scaled_label) = lines(scale);
             assert_eq!(scaled_hour, hour * scale);
-            assert!((scaled_label - label * scale).length() < 0.5);
+            // Line heights are rounded to whole pixels, so up to one pixel apart.
+            assert!((scaled_label - label * scale).length() <= 1.0);
         }
     }
 
@@ -837,16 +901,21 @@ mod tests {
 
         let shapes = drawn(&[standup], FULL_HD, 1.0, Scheme::Light);
 
-        let shown: Vec<String> = texts(&shapes)
-            .into_iter()
-            .map(|(_, text)| text.galley.text().to_string())
-            .filter(|text| {
-                text.contains("Standup") || text.contains("Room") || text.contains("meet")
-            })
-            .collect();
         let nine =
             Regional::from_env(|_| None).time(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap());
-        assert_eq!(shown, [format!("Standup\n{nine}")]);
+        // Right of the hours' labels, in the days.
+        let shown: Vec<String> = texts(&shapes)
+            .into_iter()
+            .filter(|(_, text)| text.pos.x > GUTTER)
+            .map(|(_, text)| text.galley.text().to_string())
+            .filter(|text| {
+                text.contains("Standup")
+                    || text.contains("Room")
+                    || text.contains("meet")
+                    || *text == nine
+            })
+            .collect();
+        assert_eq!(shown, ["Standup".to_string(), nine]);
     }
 
     #[test]
@@ -887,9 +956,9 @@ mod tests {
 
     #[test]
     fn todays_date_in_the_day_header_reads_at_4_5_on_its_mark_in_both_themes() {
-        let today = Regional::from_env(|_| None).weekday_day(d(2026, 11, 11));
         for scheme in [Scheme::Light, Scheme::Dark] {
-            let ratio = contrast_of(&drawn(&[], FULL_HD, 1.0, scheme), &today);
+            let shapes = drawn(&[], FULL_HD, 1.0, scheme);
+            let ratio = screen::contrast_where(&shapes, |text| text == "11");
             assert!(ratio >= AA, "{scheme:?}: {ratio}");
         }
     }

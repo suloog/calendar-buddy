@@ -1848,3 +1848,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-153] A modern look, in the manner of Morgen
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("the buttons are small, the interface looks generic; Morgen looks more modern")
+- **Affects:** `MOD-04-U01`, `MOD-04-U03`, `MOD-04-U04`, `MOD-04-NFR-01`, `MOD-06-U04`, every view and dialog
+- **Decision:** The interface is restyled; no requirement changes. Inter (SIL Open Font License, bundled) is the app's font, semibold for headings and event titles. Buttons and rows are about 30 points high, rounded, filled in calm grays, with no outline; the bars' icon buttons have no fill until hovered. The top bar shows the period as a large title and the view picker as one segmented control; Refresh and Settings are icons with their names as hover text. Days in the grid are headed by a small weekday over a large date, today's on a disc of the accent. An event is a light tint of its calendar's colour with a strip of the colour itself along its left edge; its title is semibold with its time under it, on one line in a short event, which is drawn at least one line high. An invitation awaiting an answer stays the view's background inside a dashed outline of its colour, so it still differs from the answered events. The side panel is a step off the background; each calendar's menu is a quiet "…". The main action of a form (Save, Connect Google account) is filled with the accent.
+- **Why:** The product owner asked for a more modern interface than egui's defaults, naming Morgen. The look stays within `MOD-04`: neutral grays and one accent besides the calendar colours (`MOD-04-U03`), events in their calendar's colour with readable text (`MOD-04-U04`, 4.5:1 checked by the existing tests, `MOD-04-NFR-01`), and 8:00–18:00 visible in a 1080-pixel window (`MOD-04-U01`, `TC-04-03`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
