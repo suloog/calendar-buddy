@@ -1584,3 +1584,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-131] How the "Add Google Meet" switch behaves
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-07
+- **Affects:** `US-06-07`, `MOD-06-F16`, `MOD-06-F17`
+- **Decision:** The editor shows an "Add Google Meet" checkbox under the guests, for a new and an existing event, except for out of office and focus time, which take neither guests nor a call. For a new event it starts off. For an existing one it shows whether the event has a Google Meet call. It turns on by itself whenever a guest is added to an event that has no other guest at that moment. Otherwise it stays as the user left it: removing the guests does not turn it off, and switched off it stays off for the guests added after the first. Saved on, a new event asks Google to make a call (`conferenceDataVersion=1`, `createRequest` of type `hangoutsMeet`). Switched on for an existing event, it adds a call. Switched off, it takes the call away. "This and following events" keeps the series' call for the new series unless the switch changed. Undo puts the switch back as it was.
+- **Why:** As in Google Calendar, where Meet comes with the first guest and is added or removed in the editor (`DEC-62`). Turning on only for the first guest keeps the user's own choice once made.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-132] An event Google cannot make a Meet call for
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-07
+- **Affects:** `US-06-07`, `MOD-06-F16`, MOD-06 *Constraints and edge cases*
+- **Decision:** When Google refuses a new or changed event sent with a Meet call to make, as it does for an account that may not use Google Meet, the event is sent again without the call, so it is saved. After saving, the app synchronizes the event's calendar. If the event comes back without a Meet link, the app says "The event was saved without Google Meet: Google could not add a Meet call for this account." among its notices. This also covers Google accepting the request but failing to make the call. It is not said after "this and following events" makes a new series. It is also said, wrongly, in two rare cases. One is a call Google is still making when the event comes back (`pending`); that call gets its Join at the next synchronization. The other is a change saved with Meet whose synchronization right after it fails.
+- **Why:** The edge case asks that the event is saved without the call and that the app says so. Checking the event as it comes back covers both ways Google can fail. The provider's methods stay as they are: only the event and patch they take carry the switch (`NewEvent.meet`, `Patch.meet`), and the event they give carries the link (`About.meet`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-133] Which calls have Join, and where it sits
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-07
+- **Affects:** `US-06-07`, `MOD-06-F18`
+- **Decision:** Only a Google Meet conference (`conferenceSolution` of type `hangoutsMeet`) gives an event a Join button. Join opens the conference's video entry point, and only when it is an `https://` page. Other conferences, e.g. from add-ons, get no Join. The event's details have a "Join with Google Meet" button under its time. In the agenda, an event's row has a "Join" button at its right end. Both open the link with the desktop's URL handler. Events of calendars shared as free/busy only show no Join. The link is kept in the local cache with the event.
+- **Why:** The requirement names Google Meet. Google Calendar labels the button "Join with Google Meet" (`DEC-62`). Only web pages are handed to the URL handler, as for attachments (`MOD-05-F26`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

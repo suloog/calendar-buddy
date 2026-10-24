@@ -1,5 +1,6 @@
 //! Draws an `AgendaViewModel` with egui. Only drawing and input live here; which events are
-//! upcoming and on which days is decided in `calendar_core::agenda`.
+//! upcoming and on which days is decided in `calendar_core::agenda`. An event with a Google Meet
+//! call has a Join button (`MOD-06-F18`).
 
 use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use calendar_core::regional::Regional;
@@ -11,6 +12,7 @@ const DATE_WIDTH: f32 = 96.0;
 const TIME_WIDTH: f32 = 140.0;
 const ITEM_HEIGHT: f32 = 24.0;
 const DAY_GAP: f32 = 8.0;
+const JOIN_WIDTH: f32 = 48.0;
 /// How close to the end of the list scrolling has to get before more days load.
 const LOAD_MARGIN: f32 = 200.0;
 
@@ -22,12 +24,14 @@ fn time_label(item: &AgendaItem, view: &AgendaViewModel, regional: &Regional) ->
     }
 }
 
-/// Returns true when the user has scrolled near the end and more days should be loaded.
+/// Returns true when the user has scrolled near the end and more days should be loaded. Join
+/// gives the link of the Google Meet call to open in `join`.
 pub fn show(
     ui: &mut egui::Ui,
     view: &AgendaViewModel,
     regional: &Regional,
     opened: &mut Option<usize>,
+    join: &mut Option<String>,
 ) -> bool {
     if view.is_empty() {
         ui.centered_and_justified(|ui| ui.label("No upcoming events"));
@@ -126,6 +130,17 @@ pub fn show(
                     visuals.text_color(),
                     item.declined,
                 );
+                // Join opens its Google Meet call in the browser (`MOD-06-F18`).
+                if let Some(link) = &item.meet {
+                    let button = egui::Rect::from_min_max(
+                        Pos2::new(row.right() - JOIN_WIDTH, row.top()),
+                        row.max,
+                    );
+                    // Placed over the row, not laid out: the day's room is taken already.
+                    if ui.place(button, egui::Button::new("Join")).clicked() {
+                        *join = Some(link.clone());
+                    }
+                }
                 // A declined event, struck through and faded (`MOD-06-F14`).
                 if item.declined {
                     fade(&painter, row);

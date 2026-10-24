@@ -26,6 +26,8 @@ pub struct AgendaItem {
     pub awaiting: bool,
     /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
     pub declined: bool,
+    /// The link of its Google Meet call, which Join opens in the browser (`MOD-06-F18`).
+    pub meet: Option<String>,
     /// Start and end of a timed event, also one lasting a day or more; `None` for all-day events.
     pub time: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
@@ -115,6 +117,7 @@ pub fn agenda_view(
                             saving: event.saving,
                             awaiting: event.about.awaiting(),
                             declined: event.about.declined(),
+                            meet: event.about.meet.clone().filter(|_| !event.busy_only),
                             time: event_time(event),
                         }
                     })
@@ -173,6 +176,25 @@ mod tests {
         assert_eq!(titles(&vm.days[1]), vec!["Planning"]);
         assert!(!vm.has_more);
         assert!(!vm.is_empty());
+    }
+
+    #[test]
+    fn an_event_with_a_google_meet_call_has_its_link_to_join_in_the_agenda() {
+        let mut call = timed("Call", d(2026, 11, 12), (9, 0), (10, 0));
+        call.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
+        let mut busy = call.clone();
+        busy.busy_only = true;
+        let events = [
+            call,
+            timed("Review", d(2026, 11, 12), (11, 0), (12, 0)),
+            busy,
+        ];
+        let vm = agenda_view(&events, Warsaw, clock(), 30);
+        let meet: Vec<Option<&str>> = vm.days[0].items.iter().map(|i| i.meet.as_deref()).collect();
+        assert_eq!(
+            meet,
+            [Some("https://meet.google.com/abc-defg-hij"), None, None]
+        );
     }
 
     #[test]

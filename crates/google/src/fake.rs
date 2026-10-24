@@ -871,12 +871,74 @@ fn insert_event(
             );
         }
     }
+    if let Err(refusal) = conference(state, account, id, &url, &mut event) {
+        return refusal;
+    }
     event["kind"] = json!("calendar#event");
     event["id"] = json!(format!("created-{}", state.changes + 1));
     event["status"] = json!("confirmed");
     mark_self(&mut event, id);
     let event = state.put_event(account, id, event);
     ("200 OK", event.to_string())
+}
+
+/// Google Meet as the Calendar API makes it for an event inserted or patched: `conferenceData` is
+/// taken only with `conferenceDataVersion=1`, and a `createRequest` for `hangoutsMeet` gets a
+/// call, unless the calendar's `conferenceProperties` do not allow it (400).
+fn conference(
+    state: &State,
+    account: &str,
+    calendar: &str,
+    url: &Url,
+    event: &mut Value,
+) -> Result<(), (&'static str, String)> {
+    if param(url, "conferenceDataVersion").as_deref() != Some("1") {
+        if let Some(fields) = event.as_object_mut() {
+            fields.remove("conferenceData");
+        }
+        return Ok(());
+    }
+    // A call copied with its event stays the same call.
+    let asked = &event["conferenceData"]["createRequest"];
+    let Some(kind) = asked["conferenceSolutionKey"]["type"].as_str() else {
+        return Ok(());
+    };
+    if event["conferenceData"]["entryPoints"].is_array() {
+        return Ok(());
+    }
+    let entry = (state.calendars.iter())
+        .find(|(owner, entry)| *owner == account && entry["id"] == calendar)
+        .map(|(_, entry)| entry);
+    let allowed = entry
+        .and_then(|entry| {
+            entry["conferenceProperties"]["allowedConferenceSolutionTypes"].as_array()
+        })
+        .is_none_or(|types| types.iter().any(|t| t == kind));
+    if kind != "hangoutsMeet" || !allowed {
+        return Err((
+            "400 Bad Request",
+            r#"{"error": {"code": 400, "message": "Invalid conference type value.",
+                "errors": [{"domain": "global", "reason": "invalid",
+                "message": "Invalid conference type value."}]}}"#
+                .to_string(),
+        ));
+    }
+    let code = format!("fak-{:04}-meet", state.changes + 1);
+    event["conferenceData"] = json!({
+        "createRequest": {
+            "requestId": asked["requestId"],
+            "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            "status": {"statusCode": "success"}
+        },
+        "entryPoints": [{
+            "entryPointType": "video",
+            "uri": format!("https://meet.google.com/{code}"),
+            "label": format!("meet.google.com/{code}")
+        }],
+        "conferenceSolution": {"key": {"type": "hangoutsMeet"}, "name": "Google Meet"},
+        "conferenceId": code
+    });
+    Ok(())
 }
 
 /// The Calendar API's `events.patch`, also of a series' occurrence: the fields sent replace those
@@ -904,7 +966,10 @@ fn patch_event(
     if if_match.as_ref().is_some_and(|etag| *etag != event["etag"]) {
         return precondition_failed();
     }
-    let patch: Value = serde_json::from_str(body).unwrap();
+    let mut patch: Value = serde_json::from_str(body).unwrap();
+    if let Err(refusal) = conference(state, account, &calendar, &url, &mut patch) {
+        return refusal;
+    }
     // A guest's copy of an event whose organizer does not let guests change it: only the guest's
     // own answer may change.
     if event["organizer"].is_object()

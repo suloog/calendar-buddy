@@ -182,6 +182,9 @@ pub struct About {
     /// The people invited to it, the account itself included when it is one of them
     /// (`MOD-06-F01`).
     pub guests: Vec<Guest>,
+    /// The web page of its Google Meet call, which Join opens in the browser (`MOD-06-F18`);
+    /// `None` without one.
+    pub meet: Option<String>,
 }
 
 impl About {

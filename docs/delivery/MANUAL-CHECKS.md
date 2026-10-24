@@ -349,3 +349,25 @@ What the strike-through and the fading look like, and where the switch sits, are
 
 - [ ] `TC-06-09` / `US-06-06#1` (real Google, second mailbox, a person's eyes): from the second mailbox, invite the account to "Lunch" this week and decline it (in the app or in Google Calendar). Run `cargo run -p calendar-buddy`: after the next synchronization "Lunch" is still shown, its title struck through and the event faded, in the week view, in the day and 3-day views, in the month view and in the agenda, in both a light and a dark desktop theme; other events look as before.
 - [ ] `TC-06-09` / `US-06-06#2` (real Google, a person's eyes): the view bar has "Show declined events", ticked on first start. Untick it: "Lunch" disappears from every view; tick it again: it is shown again, struck through. Untick it, quit and start the app again: it stays unticked and "Lunch" stays hidden.
+
+## US-06-07
+
+Needs a connected real Google account, the KDE session with a browser, and a person's eyes. The fake Google stands in for Google in the tests below. They prove four things:
+- the "Add Google Meet" switch turns on with the first guest, and a new event saved with it asks Google for a `hangoutsMeet` call (`conferenceDataVersion=1`);
+- the link comes back through synchronization into the details and agenda view models;
+- the switch adds and takes away a call on an existing event, and a series keeps its call when split;
+- a calendar that may not have Meet gets the event saved without a call, and the user is told.
+
+The tests:
+- app: `tc_06_10_adding_the_first_guest_turns_google_meet_on_and_the_saved_event_has_a_meet_link`, `an_event_google_cannot_make_a_meet_call_for_is_saved_without_one_and_the_user_is_told`;
+- core: `the_first_guest_turns_google_meet_on_and_a_new_event_is_saved_with_it`, `google_meet_is_switched_on_and_off_for_an_existing_event`, `out_of_office_is_saved_without_google_meet`, `an_event_with_a_google_meet_call_opens_with_its_link_to_join`, `an_event_with_a_google_meet_call_has_its_link_to_join_in_the_agenda`, `this_and_following_keeps_the_series_meet_call_unless_switched_off`;
+- google: `events_come_with_the_link_of_their_google_meet_call`, `a_new_event_with_google_meet_asks_google_to_make_its_call`, `an_event_google_cannot_make_a_meet_call_for_is_saved_without_one`, `a_new_event_with_google_meet_google_fails_to_save_is_not_sent_again_without_its_call`, `google_meet_is_added_to_an_existing_event_and_taken_away`, `a_series_copy_keeps_its_meet_call_unless_switched_off_and_gets_one_when_switched_on`.
+
+Not proven: real Google making the call, the Join buttons opening the browser, and how the switch and the buttons look. Choices to ratify:
+- `DEC-131`: the switch sits under the guests and turns on with the first guest; it also adds or removes a call on an existing event.
+- `DEC-132`: a call Google refuses: the event is saved without it and the app says so; this is also said, wrongly, for a call Google is still making.
+- `DEC-133`: only Google Meet calls get Join: "Join with Google Meet" in the details, "Join" at the right of the agenda row.
+
+- [ ] `TC-06-10` / `US-06-07#2` (real Google, a person's eyes): run `cargo run -p calendar-buddy`, create "Design review" in the editor, add a guest: "Add Google Meet" ticks itself; save. Open Google Calendar in the browser as the account: "Design review" has a Google Meet link. Edit it in the app, untick "Add Google Meet", save: the link goes from Google Calendar too; tick it again, save: a new link appears.
+- [ ] `TC-06-11` / `US-06-07#3` (real Google, KDE session, a person's eyes): open the details of a test event this week with a Google Meet link: **Join with Google Meet** opens the meeting in the browser. In **Agenda**, the same event's row has **Join** at its right end: it opens the same meeting; clicking elsewhere on the row still opens the details. Delete the test event afterwards.
+- [ ] `US-06-07` edge case (real Google, an account or calendar where Meet is not allowed, if one is available): save an event with "Add Google Meet" ticked: it is saved, without a link, and the app says "The event was saved without Google Meet: Google could not add a Meet call for this account."

@@ -1,7 +1,7 @@
 //! What opening an event shows, independent of how it is drawn: its title and when it happens in
 //! the system's time zone (`DEC-73`), and also in its own zone when that is another one
-//! (`DEC-29`), its attachments as links (`MOD-05-F26`), and its guests with their answers
-//! (`MOD-06-F05`).
+//! (`DEC-29`), its attachments as links (`MOD-05-F26`), its guests with their answers
+//! (`MOD-06-F05`), and its Google Meet call to join (`MOD-06-F18`).
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate};
 use chrono_tz::Tz;
@@ -38,6 +38,8 @@ pub struct EventDetails {
     /// Everyone invited, the user included, with their answers, in Google's order
     /// (`MOD-06-F05`).
     pub guests: Vec<Guest>,
+    /// The link of its Google Meet call, which Join opens in the browser (`MOD-06-F18`).
+    pub meet: Option<String>,
 }
 
 pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
@@ -46,6 +48,7 @@ pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
         read_only: event.read_only,
         attachments: event.about.attachments.clone(),
         guests: event.about.guests.clone(),
+        meet: event.about.meet.clone().filter(|_| !event.busy_only),
         own_zone: match event.timing {
             Timing::Timed {
                 start,
@@ -183,6 +186,20 @@ mod tests {
         };
         event.about.attachments = vec![numbers.clone()];
         assert_eq!(event_details(&event, Warsaw).attachments, [numbers]);
+    }
+
+    #[test]
+    fn an_event_with_a_google_meet_call_opens_with_its_link_to_join() {
+        let mut event = timed("Review", d(2026, 11, 12), (9, 0), (10, 0));
+        assert_eq!(event_details(&event, Warsaw).meet, None);
+        event.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
+        assert_eq!(
+            event_details(&event, Warsaw).meet.as_deref(),
+            Some("https://meet.google.com/abc-defg-hij")
+        );
+        // An event shared as free/busy only shows no details.
+        event.busy_only = true;
+        assert_eq!(event_details(&event, Warsaw).meet, None);
     }
 
     fn guest(name: &str, email: &str, response: Response) -> Guest {

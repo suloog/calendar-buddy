@@ -17,7 +17,7 @@ use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
-use calendar_core::editor::{Edit, Editor, Save};
+use calendar_core::editor::{Edit, Editor, Save, WITHOUT_MEET};
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
 use calendar_core::model::{Calendar, Event};
@@ -489,6 +489,13 @@ impl CalendarApp {
         }
     }
 
+    /// Join: opens the event's Google Meet call in the browser (`MOD-06-F18`).
+    fn join(&mut self, link: &str) {
+        if let Err(error) = SystemBrowser.open(link) {
+            (self.not_saved).push(format!("The meeting could not be opened: {error}."));
+        }
+    }
+
     /// Opens the series of the occurrence in Google Calendar's editor in the browser, as its
     /// account, where its repetition is changed (`MOD-05-F29`, `DEC-111`).
     fn open_series(&mut self, event: &Event) {
@@ -641,6 +648,7 @@ impl CalendarApp {
         let mut cancelled = false;
         let mut open_series = None;
         let mut attachment = None;
+        let mut join = None;
         let mut search = None;
         let mut invitation = None;
         let mut answered = None;
@@ -800,6 +808,12 @@ impl CalendarApp {
                     ui.label(details.when.describe(&self.regional));
                     if let Some(own) = details.in_own_zone(&self.regional) {
                         ui.label(own);
+                    }
+                    // Join opens its Google Meet call in the browser (`MOD-06-F18`).
+                    if let Some(link) = &details.meet
+                        && ui.button("Join with Google Meet").clicked()
+                    {
+                        join = Some(link.clone());
                     }
                     // Each attachment opens in the browser (`MOD-05-F26`).
                     for listed in &details.attachments {
@@ -1057,6 +1071,9 @@ impl CalendarApp {
         {
             (self.not_saved).push(format!("The attachment could not be opened: {error}."));
         }
+        if let Some(link) = join {
+            self.join(&link);
+        }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
         }
@@ -1210,6 +1227,9 @@ impl eframe::App for CalendarApp {
                     self.last.refused(*local);
                     self.not_saved
                         .push(format!("The event could not be deleted: {reason}."));
+                }
+                Saved::WithoutMeet(_) => {
+                    self.not_saved.push(WITHOUT_MEET.to_string());
                 }
             }
         }
@@ -1496,6 +1516,7 @@ impl eframe::App for CalendarApp {
         let browsed = offline::browsed(self.window(), first, last, online);
         self.sync.browse(browsed.fetch);
         let mut opened = None;
+        let mut join = None;
         let mut started = None;
         let mut dropped = None;
         let mut unmovable = None;
@@ -1538,7 +1559,7 @@ impl eframe::App for CalendarApp {
                     month_view::show(ui, view, &self.regional, &mut self.month_state, &mut opened)
                 }
                 Built::Agenda(view) => {
-                    if agenda_view::show(ui, view, &self.regional, &mut opened) {
+                    if agenda_view::show(ui, view, &self.regional, &mut opened, &mut join) {
                         self.agenda_days += AGENDA_DAYS;
                         self.rebuild();
                         ui.ctx().request_repaint();
@@ -1548,6 +1569,9 @@ impl eframe::App for CalendarApp {
         });
         if let Some((event, drop)) = dropped {
             self.dropped(event, drop);
+        }
+        if let Some(link) = join {
+            self.join(&link);
         }
         if let Some(event) = unmovable {
             tell_unmovable(&mut self.not_saved, &self.events[event]);

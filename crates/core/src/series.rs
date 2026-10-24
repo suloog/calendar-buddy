@@ -195,8 +195,11 @@ pub fn change(
                     // Sent with the rest of the series by copying the event at Google.
                     attachments: about.attachments.clone(),
                     guests: (patch.guests.clone()).unwrap_or_else(|| about.guests.clone()),
+                    meet: about.meet.clone(),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
+                // The series' call is copied with it, unless switched off or on here.
+                meet: patch.meet.unwrap_or(about.meet.is_some()),
             };
             let split = ended(&edit.calendar, master, original, Some(new), exceptions);
             Plan::Split(Box::new(split))
@@ -819,6 +822,31 @@ mod tests {
 
         assert_eq!(kept.new.unwrap().about.color, Some(EventColor::Sage));
         assert_eq!(picked.new.unwrap().about.color, Some(EventColor::Grape));
+    }
+
+    #[test]
+    fn this_and_following_keeps_the_series_meet_call_unless_switched_off() {
+        let mut old = standup();
+        old.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
+        let fifth = occurrence(&old, d(2026, 12, 14));
+        let switched = |meet| {
+            edit(
+                &fifth,
+                Patch {
+                    meet: Some(meet),
+                    ..Patch::default()
+                },
+            )
+        };
+
+        let kept = split(change(&retitled(&fifth), Scope::Following, &old, &[]));
+        let switched_off = split(change(&switched(false), Scope::Following, &old, &[]));
+
+        assert!(kept.new.unwrap().meet);
+        assert!(!switched_off.new.unwrap().meet);
+        old.about.meet = None;
+        let switched_on = split(change(&switched(true), Scope::Following, &old, &[]));
+        assert!(switched_on.new.unwrap().meet);
     }
 
     #[test]
