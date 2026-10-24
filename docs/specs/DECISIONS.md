@@ -1993,3 +1993,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-165] Recurrence as Google's "Custom": the repeat menu and the custom recurrence dialog
+
+- **Date:** 2026-10-24
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-24 (`SRC-04-01`, `SRC-04-02`)
+- **Affects:** `DEC-36` (its "full rule editor out" part), `MOD-05-F18`, `MOD-05-F29`, `US-05-06`, `US-05-07`, `MOD-08`
+- **Decision:** The editor's repeat menu becomes Google Calendar's: "Does not repeat", "Daily", "Weekly on <weekday>", "Monthly on the <nth> <weekday>", "Annually on <date>", "Every weekday (Monday to Friday)", "Custom…", with the labels taken from the event's start date. "Custom…" opens Google's custom recurrence dialog: repeat every N days, weeks, months or years; for weeks, the chosen weekdays; for months, on the same day of the month, or on the same weekday in the same week of the month (the fourth Tuesday) — and also on its last occurrence in the month (the last Friday) when the date falls in the month's last seven days; the series ends never, on a date, or after N occurrences. A rule the dialog can express — made in the app or in Google — is shown in the menu by its description ("Every 2 weeks on Monday, Wednesday") and is edited in the app; only other rules keep `MOD-05-F29`'s path to the browser. Changing an occurrence's rule asks only "this and following events" or "all events", as Google does. Rules beyond the dialog (several months, set positions, hourly…) stay out.
+- **Why:** The presets of `DEC-36` turned out too narrow in daily use (every two weeks, the last Friday); Google's own dialog is the boundary, as `DEC-62` asks.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-166] Zooming the hours of the day, 3-day and week views
+
+- **Date:** 2026-10-24
+- **Decided by:** client (product owner — Maciej); the range and steps proposed by the analyst
+- **Source:** product owner's request of 2026-10-24 (`SRC-04-03`…`SRC-04-05`)
+- **Affects:** `MOD-03`, `MOD-04-U01`, `DEC-62`
+- **Decision:** The height of an hour in the day, 3-day and week views can be changed — only vertically; the width of the days does not change. Ctrl + mouse wheel or a touchpad pinch over the hours zooms smoothly, keeping the time under the pointer where it is; Ctrl + plus and Ctrl + minus step by 25 %, keeping the time at the middle of the view in place; Ctrl + 0 returns to 100 %. The settings' "Appearance" section has a slider with the value in percent. The height goes from 50 % to 300 % of today's height (`MOD-04-U01` stays true at 100 %), is one for the three views and is kept in the settings across restarts. The whole interface is not zoomed by these keys.
+- **Why:** The product owner wants more room for short events on a large screen and the whole day on a small one. Google Calendar in the browser has no such zoom, so this goes beyond `DEC-62` at the product owner's explicit request.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted

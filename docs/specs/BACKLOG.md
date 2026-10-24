@@ -31,14 +31,14 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 
 | Module | Requirements (F/U) | Stories | done | Slicing |
 | ------ | ------------------ | ------- | ---- | ------- |
-| `MOD-01` Google accounts and sign-in | 14 / 3 | 4 | 0 | sliced |
+| `MOD-01` Google accounts and sign-in | 14 / 2 | 4 | 0 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
-| `MOD-03` Views and navigation | 24 / 5 | 9 | 7 | sliced |
-| `MOD-04` Appearance and themes | 4 / 5 | 3 | 0 | sliced |
-| `MOD-05` Creating and editing events | 29 / 4 | 10 | 0 | sliced |
+| `MOD-03` Views and navigation | 29 / 8 | 10 | 7 | sliced |
+| `MOD-04` Appearance and themes | 4 / 6 | 3 | 0 | sliced |
+| `MOD-05` Creating and editing events | 35 / 5 | 11 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 8 | 0 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| **Total** | **136 / 28** | **47** | **7** | 7 / 7 modules sliced |
+| **Total** | **147 / 32** | **49** | **7** | 7 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -82,6 +82,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | review | `US-03-06` | — |
 | `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04, U07 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
+| `US-03-10` | As a User, I can stretch or shrink the hours of the day, so that I see short events clearly or the whole day at once | F27, F28, F29, U08 | must | draft | `US-03-01`, `US-03-02` | — |
 
 ## [MOD-04] Appearance and themes
 
@@ -109,6 +110,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-05-08` | As a User, I can see out-of-office, focus-time and similar events at a glance and create out-of-office and focus time, so that my availability is clear | F23, F24, U01 | must | review | `US-05-02` | — |
 | `US-05-09` | As a User, I can see and change an event's own colour, so that it matches how I colour events in Google | F25 | must | review | `US-05-02` | — |
 | `US-05-10` | As a User, I can open an event's attachments, so that the documents for a meeting are one click away | F26 | must | review | `US-05-02` | — |
+| `US-05-11` | As a User, I can set how an event repeats as freely as in Google Calendar's "Custom", so that meetings every two weeks or on the last Friday are set in the app too | F29, F32, F33, F34, F35, U05 | must | draft | `US-05-06`, `US-05-07` | — |
 
 ## [MOD-06] Guests, invitations, RSVP and Google Meet
 

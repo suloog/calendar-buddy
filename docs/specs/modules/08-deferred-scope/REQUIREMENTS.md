@@ -41,7 +41,7 @@ This module holds no requirements and nothing in it is planned for delivery. Eac
 Also deferred, recorded in the delivery modules' *Out of scope* sections rather than here because no source item asks for them on its own:
 
 - Adding Google Drive attachments, ICS import and export — `DEC-37` (`MOD-05`).
-- A full recurrence-rule editor, creating working-location events — `DEC-36`, `DEC-34` (`MOD-05`).
+- Recurrence rules beyond Google's custom recurrence dialog, creating working-location events — `DEC-165`, `DEC-34` (`MOD-05`).
 - Advanced scheduling with guests (multi-day grid, free-slot suggestions) — `DEC-42` (`MOD-06`).
 - A second time zone, choosing the display time zone by hand — `DEC-29` (`MOD-03`).
 - Interface translations — `DEC-31` (`MOD-04`).

@@ -50,6 +50,9 @@
 | `MOD-03-F24` | `US-03-08` |
 | `MOD-03-F25` | `US-03-05` |
 | `MOD-03-F26` | `US-03-03` |
+| `MOD-03-F27` | `US-03-10` |
+| `MOD-03-F28` | `US-03-10` |
+| `MOD-03-F29` | `US-03-10` |
 
 ### UI/UX requirements
 
@@ -62,6 +65,7 @@
 | `MOD-03-U05` | `US-03-01` |
 | `MOD-03-U06` | `US-03-05` |
 | `MOD-03-U07` | `US-03-08` |
+| `MOD-03-U08` | `US-03-10` |
 
 ### Non-functional requirements
 
@@ -116,6 +120,13 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-09#1` | With a system locale whose week starts on Sunday, the day, 3-day an… | `TC-03-12` | auto | — |
 | `US-03-09#2` | After the system's time zone changes, events are shown at their new… | `TC-03-12` | auto | — |
 | `US-03-09#3` | Opening an event stored in another time zone shows its time in that… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-10#1` | With the pointer over 14:00 in the week view, Ctrl + wheel up makes… | `TC-03-13` | auto | — |
+| `US-03-10#2` | Ctrl + plus and Ctrl + minus change the height in steps of 25 %, ke… | `TC-03-13` | auto | — |
+| `US-03-10#3` | The height stops at 50 % and at 300 %; at 50 % the whole day from 0… | `TC-03-13` | auto | — |
+| `US-03-10#4` | Only the height of the hours changes: the width of the days, the al… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-10#5` | Events, the current-time line, clicking to create, dragging and res… | `TC-03-13` | auto | — |
+| `US-03-10#6` | The settings' "Appearance" section shows the height as a slider wit… | `TC-03-14` | auto | — |
+| `US-03-10#7` | The height chosen in the week view is the same in the day and 3-day… | `TC-03-14` | auto | — |
 
 ### Module constraints and edge cases
 
@@ -128,3 +139,6 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | The agenda has nothing ahead → it says there are no upcoming events. | — | smoke depth — not tested yet (`DEC-65`) |
 | Offline, the user moves outside the cache window → the period is sh… | — | smoke depth — not tested yet (`DEC-65`) |
 | The window is made very small → it does not go below a minimum size… | — | smoke depth — not tested yet (`DEC-65`) |
+| Zoomed out so far that the whole day is shorter than the view → the… | — | smoke depth — not tested yet (`DEC-65`) |
+| Zooming while an event is being dragged or resized → ignored until… | — | smoke depth — not tested yet (`DEC-65`) |
+| Ctrl + wheel over the side panel, the all-day strip or the month an… | — | smoke depth — not tested yet (`DEC-65`) |

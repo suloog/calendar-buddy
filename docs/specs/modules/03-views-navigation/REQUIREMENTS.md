@@ -4,7 +4,7 @@ title: Views and navigation
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-02] # other module IDs
-sources: [SRC-01, SRC-02] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-01, SRC-02, SRC-04] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -39,6 +39,9 @@ How the user looks at the calendar and moves around it: day, 3-day, week, month 
 | `SRC-02-37` Views in the MVP besides day, full week and month: 3 days (chosen by hand) and agenda;… | informal | `MOD-03-F04`, `MOD-03-F05`; workweek view not built (`DEC-27`) |
 | `SRC-02-38` Two levels of hiding: a quick toggle in the side panel hides only the events; disabling… | informal | `MOD-03-F12`, `MOD-03-F13` |
 | `SRC-02-40` Week start and date/time formats follow the system; the calendar is shown in the system… | informal | `MOD-03-F16`, `MOD-03-F17` |
+| `SRC-04-03` The second missing feature is zooming, only vertically: stretching the hours of the day. | informal | `MOD-03-F27` |
+| `SRC-04-04` Zooming works with Ctrl + mouse wheel or a touchpad pinch, with Ctrl + plus / minus / 0… | informal | `MOD-03-F27`, `MOD-03-F28`, `MOD-03-U08` |
+| `SRC-04-05` The chosen height of an hour is one for the day, 3-day and week views and is remembere… | informal | `MOD-03-F29` |
 
 ## Functional requirements
 
@@ -70,6 +73,9 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-F24] The user can move between the side panel, the calendar and its events, and open an event, without a mouse.
 - [MOD-03-F25] In the mini calendar, a day with events shown in the views has a dot under its number. — *source: `DEC-158`*
 - [MOD-03-F26] In the month view, an all-day or multi-day event is one bar across the days it covers in each week, above the days' timed events. — *source: `DEC-159`*
+- [MOD-03-F27] In the day, 3-day and week views the user can make the hours taller or shorter — only vertically — with Ctrl + mouse wheel or a touchpad pinch over the hours, and with Ctrl + plus and Ctrl + minus; Ctrl + 0 returns to the usual height. — *source: `DEC-166`*
+- [MOD-03-F28] The settings' "Appearance" section has a slider for the height of an hour, showing it in percent of the usual height. — *source: `DEC-166`*
+- [MOD-03-F29] The height of an hour is one for the day, 3-day and week views and is kept after a restart. — *source: `DEC-166`*
 
 ## UI/UX requirements
 
@@ -80,6 +86,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-U05] The day, 3-day and week views open scrolled to the current time. — *source: `DEC-56`*
 - [MOD-03-U06] "Go to date" also opens from a button in the top bar, beside next and previous. — *source: `DEC-161`*
 - [MOD-03-U07] The list of keyboard shortcuts also opens from a help button in the top bar, beside the settings, and shows the shortcuts in groups, keys doing the same thing on one row. — *source: `DEC-162`*
+- [MOD-03-U08] Zooming with the wheel or a pinch is smooth and keeps the time under the pointer where it is; zooming with the keys goes in steps of 25 % and keeps the time at the middle of the view in place; the height goes from 50 % to 300 %. — *source: `DEC-166`*
 
 ## Non-functional requirements
 
@@ -94,6 +101,9 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - The agenda has nothing ahead → it says there are no upcoming events. — *source: `DEC-56`*
 - Offline, the user moves outside the cache window → the period is shown empty with a note that it is not available offline (`MOD-02-F12`).
 - The window is made very small → it does not go below a minimum size at which a day stays readable.
+- Zoomed out so far that the whole day is shorter than the view → the hours end at 24:00 and the space below stays empty; scrolling stops there. — *source: `DEC-166`*
+- Zooming while an event is being dragged or resized → ignored until the drag ends. — *source: `DEC-166`*
+- Ctrl + wheel over the side panel, the all-day strip or the month and agenda views → does nothing. — *source: `DEC-166`*
 
 ## Integrations
 
@@ -107,6 +117,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Shortcuts follow Google Calendar's keys: `d`, `x` (3 days — Google's custom view key), `w`, `m`, `a`; `j`/`n` next, `k`/`p` previous; `t` today; `g` go to date; `c` new event (opens `MOD-05`'s editor); `?` the list. `/` (search) is not bound — no search (`DEC-30`).
 - Regional settings and the time zone come from the system locale and the system's zone database; a change of zone triggers a re-render.
 - View state (last view, side panel collapsed, calendars hidden) lives in the app's settings; calendars disabled are honoured by `MOD-02-F06`.
+- The hour height is a factor on the grid's usual hour height (`HOUR_HEIGHT`), stored in the settings; every place that turns minutes into pixels and back (layout, the time line, clicking, dragging, resizing, the opening scroll) goes through it. eframe's own zoom of the whole interface on Ctrl + plus / minus / 0 (`zoom_with_keyboard`) is switched off, so the keys reach the grid; `egui`'s `zoom_delta` carries both Ctrl + wheel and the pinch. The anchoring arithmetic is a pure function, test-first.
 
 ## Out of scope / what not to worry about
 
@@ -114,6 +125,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Event search — `DEC-30`, `MOD-08`.
 - A second time zone or choosing the display time zone by hand — `DEC-29`.
 - Themes, colours of the interface and visual style — `MOD-04`; calendar colours — `MOD-02`.
+- Zooming the width of the days, the month or agenda views, or the whole interface — `DEC-166`.
 - Creating events by clicking or selecting a range, dragging and resizing events, and everything in the event editor — `MOD-05`.
 - Guests, responses and the Join button in the event details — `MOD-06`.
 - Fetching and synchronizing the data the views show — `MOD-02`.
@@ -127,3 +139,4 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] Overlapping events, an event past midnight and a day with a daylight-saving change are all drawn readably and at the right times.
 - [ ] With the system set to a locale starting the week on Sunday and a different time zone, the views follow both.
 - [ ] Scrolling the week view on the 20,000-event profile is smooth and within the measured thresholds.
+- [ ] The hours of the day, 3-day and week views zoom vertically with Ctrl + wheel, a pinch, Ctrl + plus / minus / 0 and the slider in the settings, and the height is kept after a restart.

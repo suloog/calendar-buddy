@@ -18,9 +18,11 @@
 | `SRC-01` | Desktop Calendar — Product Requirements Document, v0.1 (129 items) | informal | internal — product owner (Maciej), draft PRD | 2026-10-22 | — | `sources/01-desktop-calendar-prd.md` |
 | `SRC-02` | Analyst notes — discovery session 2026-10-22 (49 items) | informal | analyst — Maciej (product owner), interview | 2026-10-22 | — | `sources/02-analyst-notes-2026-10-22.md` |
 | `SRC-03` | Analyst notes — discovery session 2026-10-23 (39 items) | informal | analyst — Maciej (product owner), interview | 2026-10-23 | — | `sources/03-analyst-notes-2026-10-23.md` |
+| `SRC-04` | Analyst notes — product owner's requests 2026-10-24 (5 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-24 | — | `sources/04-analyst-notes-2026-10-24.md` |
 
 ## Originals
 
 - `SRC-01` — `docs/specs/sources/original/mvp-v0.1.md` (in this repo; undated, file date used)
 - `SRC-02` — written directly in this repo during `/og:discovery`; no separate original
 - `SRC-03` — written directly in this repo during `/og:discovery`; no separate original
+- `SRC-04` — written directly in this repo from the conversation; no separate original

@@ -45,12 +45,12 @@ that module. Numbers are never reused or renumbered.
 | ------ | -------------- | ------- | ------------------ | ------- |
 | `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
-| `MOD-03` Views and navigation | 34 | 22 | 10 / 2 | written |
+| `MOD-03` Views and navigation | 41 | 28 | 12 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
-| `MOD-05` Creating and editing events | 34 | 18 | 10 / 2 | written |
+| `MOD-05` Creating and editing events | 42 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 19 | 11 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **180** | **106** | **51 / 13** | 7 / 7 modules written |
+| **Total** | **195** | **120** | **55 / 14** | 7 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -108,6 +108,8 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-03-10` | A disabled calendar is absent from the side panel, the calendar pickers and the views, and returns when enabled | `US-03-07#1`, `US-03-07#2` | desktop | happy-path | auto | ready |
 | `TC-03-11` | Google Calendar's keys switch views, move between periods and show the shortcut list | `US-03-08#1`, `US-03-08#2`, `US-03-08#4` | desktop | happy-path | auto | ready |
 | `TC-03-12` | A Sunday-first locale and a change of system time zone are followed by the views | `US-03-09#1`, `US-03-09#2` | desktop | happy-path | auto | ready |
+| `TC-03-13` | Ctrl + wheel and Ctrl + plus / minus / 0 zoom the hours around the pointer or the middle, within 50–300 % | `US-03-10#1`, `US-03-10#2`, `US-03-10#3`, `US-03-10#5` | desktop | happy-path | auto | draft |
+| `TC-03-14` | The hour height is a slider in the settings, shared by the three views and kept after a restart | `US-03-10#6`, `US-03-10#7` | desktop | happy-path | auto | draft |
 
 ## [MOD-04] Appearance and themes
 
@@ -139,6 +141,9 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-05-10` | Changing an event's colour in the editor sends the new colour to Google | `US-05-09#2` | desktop | happy-path | auto | ready |
 | `TC-05-11` | An event's attachments are listed and open in the browser | `US-05-10#1`, `US-05-10#2` | desktop | happy-path | manual-only | ready |
 | `TC-05-12` | A series created in the app shows the same occurrences in Google Calendar in the browser | `US-05-06#3` | desktop | happy-path | manual-only | ready |
+| `TC-05-13` | The repeat menu is Google's and "Custom…" saves every-2-weeks and last-weekday rules | `US-05-11#1`, `US-05-11#2`, `US-05-11#3`, `US-05-11#4` | desktop | happy-path | auto | draft |
+| `TC-05-14` | A rule from Google the dialog can express is edited in the app; one it cannot is kept | `US-05-11#5`, `US-05-11#6`, `US-05-11#7` | desktop | edge | auto | draft |
+| `TC-05-15` | A series set in "Custom…" shows the same occurrences in Google Calendar in the browser | `US-05-11#8` | desktop | happy-path | manual-only | draft |
 
 ## [MOD-06] Guests, invitations, RSVP and Google Meet
 

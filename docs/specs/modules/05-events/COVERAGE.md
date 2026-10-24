@@ -52,9 +52,13 @@
 | `MOD-05-F26` | `US-05-10` |
 | `MOD-05-F27` | `US-05-04` |
 | `MOD-05-F28` | `US-05-04` |
-| `MOD-05-F29` | `US-05-07` |
+| `MOD-05-F29` | `US-05-07`, `US-05-11` |
 | `MOD-05-F30` | `US-05-02` |
 | `MOD-05-F31` | `US-05-02` |
+| `MOD-05-F32` | `US-05-11` |
+| `MOD-05-F33` | `US-05-11` |
+| `MOD-05-F34` | `US-05-11` |
+| `MOD-05-F35` | `US-05-11` |
 
 ### UI/UX requirements
 
@@ -64,6 +68,7 @@
 | `MOD-05-U02` | `US-05-03` |
 | `MOD-05-U03` | `US-05-01`, `US-05-02`, `US-05-03` |
 | `MOD-05-U04` | `US-05-04` |
+| `MOD-05-U05` | `US-05-11` |
 
 <!-- og:part tests -->
 
@@ -109,6 +114,14 @@
 | `US-05-09#2` | Changing the event's colour in the editor shows in Google Calendar… | `TC-05-10` | auto | — |
 | `US-05-10#1` | An event with attachments lists them in its details by name. | `TC-05-11` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-05-10#2` | Choosing an attachment opens it in the browser. | `TC-05-11` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-05-11#1` | For an event starting on Tuesday 17 November 2026, the repeat menu… | `TC-05-13` | auto | — |
+| `US-05-11#2` | In "Custom…" the user sets "every 2 weeks on Monday and Wednesday,… | `TC-05-13` | auto | — |
+| `US-05-11#3` | For months the dialog offers "Monthly on day 17" and "Monthly on t… | `TC-05-13` | auto | — |
+| `US-05-11#4` | For weeks the dialog shows the weekdays with the start's weekday c… | `TC-05-13` | auto | — |
+| `US-05-11#5` | A series created in Google as "every 3 months on the second Monday… | `TC-05-14` | auto | — |
+| `US-05-11#6` | Changing the rule of an occurrence asks "This and following events… | `TC-05-14` | auto | — |
+| `US-05-11#7` | A series from Google with a rule the dialog cannot express (e.g. `… | `TC-05-14` | auto | — |
+| `US-05-11#8` | A series set in "Custom…" shows the same occurrences in Google Cal… | `TC-05-15` | manual-only | manual — checked by the product owner (`DEC-65`) |
 
 ### Module constraints and edge cases
 
@@ -122,3 +135,7 @@
 | Moving an event to a calendar of another account → not offered (Goo… | — | smoke depth — not tested yet (`DEC-65`) |
 | No network → creating and changing are unavailable (`MOD-02-F15`). | — | smoke depth — not tested yet (`DEC-65`) |
 | An event stored in another time zone → edited in its own time zone,… | — | smoke depth — not tested yet (`DEC-65`) |
+| Weekly with no weekday chosen → the dialog does not allow it; the e… | `TC-05-13` | — |
+| Monthly on day 29–31 → months without that day are skipped, as in G… | — | smoke depth — not tested yet (`DEC-65`) |
+| "Ends on" a date before the start, or "after" 0 occurrences → the d… | — | smoke depth — not tested yet (`DEC-65`) |
+| The event's start date changes after a rule was chosen → the weekda… | — | smoke depth — not tested yet (`DEC-65`) |
