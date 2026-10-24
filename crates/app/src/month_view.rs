@@ -8,7 +8,7 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{awaiting, color, event_label, openable, text_on};
+use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable, text_on};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -54,12 +54,14 @@ fn paint_item(
             painter.rect_filled(rect, CornerRadius::same(3), color(item.color));
             text_on(item.color)
         };
-        clipped.text(
+        event_text(
+            &clipped,
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
             text,
             FontId::proportional(12.0),
             on,
+            item.declined,
         );
     } else {
         painter.circle_filled(
@@ -67,13 +69,19 @@ fn paint_item(
             3.5,
             color(item.color),
         );
-        clipped.text(
+        event_text(
+            &clipped,
             rect.left_center() + Vec2::new(14.0, 0.0),
             Align2::LEFT_CENTER,
             text,
             FontId::proportional(12.0),
             ink,
+            item.declined,
         );
+    }
+    // A declined event, struck through and faded (`MOD-06-F14`).
+    if item.declined {
+        fade(painter, rect);
     }
 }
 

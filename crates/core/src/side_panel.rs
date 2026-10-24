@@ -70,13 +70,16 @@ pub fn toggle(hidden: &mut Hidden, calendar: &Calendar) {
     }
 }
 
-/// The places in `events` of those whose calendar is neither hidden nor disabled.
+/// The places in `events` of those whose calendar is neither hidden nor disabled, declined ones
+/// left out while the switch hides them (`MOD-06-F22`).
 pub fn shown(events: &[Event], settings: &Settings) -> Vec<usize> {
     (0..events.len())
         .filter(|&i| {
             let event = &events[i];
             let key = (event.account_id.clone(), event.calendar_id.clone());
-            !settings.hidden.contains(&key) && !settings.disabled.contains(&key)
+            !settings.hidden.contains(&key)
+                && !settings.disabled.contains(&key)
+                && !(settings.hide_declined && event.about.declined())
         })
         .collect()
 }

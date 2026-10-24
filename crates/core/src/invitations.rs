@@ -4,7 +4,8 @@
 //! (`MOD-06-F21`). Answered from their details and from that list (`US-06-05`, `MOD-06-F11`,
 //! `MOD-06-U03`), an occurrence of a series asking first whether the answer applies to this event
 //! or to all events (`MOD-06-F13`); a guest answers also an event only its organizer may change
-//! (`MOD-06-F15`).
+//! (`MOD-06-F15`). An event the user declined stays in the views, struck through and faded, and
+//! one switch hides and shows declined events (`US-06-06`, `MOD-06-F14`, `MOD-06-F22`).
 
 use std::collections::HashSet;
 
@@ -258,6 +259,102 @@ mod tests {
 
         assert_eq!(counter(awaiting.len()), "2 invitations awaiting an answer");
         assert_eq!(titles(&events, &awaiting), ["Board", "Lunch"]);
+    }
+
+    /// The week of `TC-06-05`, the user having declined "Lunch" (`TC-06-09`).
+    fn tc_06_09_week() -> Vec<Event> {
+        let mut events = tc_06_05_week();
+        events[3] = invited(
+            timed("Lunch", d(2026, 11, 13), (12, 0), (13, 0)),
+            Response::Declined,
+        );
+        events
+    }
+
+    #[test]
+    fn tc_06_09_a_declined_lunch_is_struck_through_and_faded_in_the_week_view() {
+        let events = tc_06_09_week();
+        let days = Week::containing(d(2026, 11, 12), Weekday::Mon)
+            .days()
+            .to_vec();
+
+        let view = grid_view(&events, &days, Warsaw, clock());
+
+        let marked: Vec<(String, bool)> = (view.blocks.iter())
+            .map(|block| (block.title.clone().unwrap(), block.declined))
+            .collect();
+        assert_eq!(marked.len(), 4);
+        for (title, declined) in marked {
+            assert_eq!(declined, title == "Lunch", "{title}");
+        }
+    }
+
+    #[test]
+    fn declined_events_are_struck_through_in_the_month_view_and_the_agenda_and_all_day_too() {
+        let mut events = tc_06_09_week();
+        events.push(invited(
+            all_day("Offsite", d(2026, 11, 13), 1),
+            Response::Declined,
+        ));
+        let days = Week::containing(d(2026, 11, 12), Weekday::Mon)
+            .days()
+            .to_vec();
+        let declined = |title: &str| title == "Lunch" || title == "Offsite";
+
+        let week = grid_view(&events, &days, Warsaw, clock());
+        let month = month_view(&events, d(2026, 11, 12), Warsaw, clock(), Weekday::Mon);
+        let agenda = agenda_view(&events, Warsaw, clock(), 7);
+
+        let in_week: Vec<(&str, bool)> = (week.bars.iter())
+            .map(|bar| (bar.title.as_deref().unwrap(), bar.declined))
+            .collect();
+        let in_month: Vec<(&str, bool)> = (month.weeks.iter().flatten())
+            .flat_map(|day| &day.items)
+            .map(|item| (item.title.as_deref().unwrap(), item.declined))
+            .collect();
+        let in_agenda: Vec<(&str, bool)> = (agenda.days.iter())
+            .flat_map(|day| &day.items)
+            .map(|item| (item.title.as_deref().unwrap(), item.declined))
+            .collect();
+        assert_eq!(in_week, [("Offsite", true)]);
+        assert_eq!((in_month.len(), in_agenda.len()), (5, 5));
+        for (title, struck) in in_month.into_iter().chain(in_agenda) {
+            assert_eq!(struck, declined(title), "{title}");
+        }
+    }
+
+    #[test]
+    fn tc_06_09_the_switch_hides_the_declined_lunch_and_shows_it_again() {
+        let events = tc_06_09_week();
+        let mut settings = Settings::default();
+        let all = ["Board", "Review", "Standup", "Lunch"];
+        assert_eq!(titles(&events, &side_panel::shown(&events, &settings)), all);
+
+        settings.hide_declined = true;
+        assert_eq!(
+            titles(&events, &side_panel::shown(&events, &settings)),
+            ["Board", "Review", "Standup"]
+        );
+
+        settings.hide_declined = false;
+        assert_eq!(titles(&events, &side_panel::shown(&events, &settings)), all);
+    }
+
+    #[test]
+    fn only_the_users_own_declined_entry_makes_an_event_declined() {
+        let mut lunch = timed("Lunch", d(2026, 11, 13), (12, 0), (13, 0));
+        lunch.about.guests = vec![
+            guest("boss@example.com", false, Response::Declined),
+            guest("owner@example.com", true, Response::Accepted),
+        ];
+        assert!(!lunch.about.declined());
+        lunch.about.guests[1].response = Response::Declined;
+        assert!(lunch.about.declined());
+        assert!(
+            !timed("Standup", d(2026, 11, 13), (9, 0), (9, 15))
+                .about
+                .declined()
+        );
     }
 
     #[test]

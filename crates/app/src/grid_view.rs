@@ -9,7 +9,7 @@ use calendar_core::view_model::GridViewModel;
 use chrono::{DateTime, Duration, Utc};
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, CursorIcon, FontId, LayerId, Order, PointerButton, Pos2,
-    Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2,
+    Rect, ScrollArea, Sense, Stroke, StrokeKind, Vec2, text::LayoutJob,
 };
 
 pub const HOUR_HEIGHT: f32 = 44.0;
@@ -44,6 +44,32 @@ pub fn event_label(title: Option<&str>, read_only: bool, saving: bool) -> String
         (false, true) => format!("{title} · {SAVING}"),
         (false, false) => title.to_string(),
     }
+}
+
+/// Draws an event's `text` at `pos`, like `Painter::text`; a declined event's struck through
+/// (`MOD-06-F14`).
+pub fn event_text(
+    painter: &egui::Painter,
+    pos: Pos2,
+    align: Align2,
+    text: String,
+    font: FontId,
+    ink: Color32,
+    declined: bool,
+) {
+    let mut job = LayoutJob::simple(text, font, ink, f32::INFINITY);
+    if declined {
+        job.sections[0].format.strikethrough = Stroke::new(1.0, ink);
+    }
+    let galley = painter.layout_job(job);
+    let at = align.anchor_size(pos, galley.size()).min;
+    painter.galley(at, galley, ink);
+}
+
+/// Fades a declined event drawn in `rect` (`MOD-06-F14`) under a veil of the view's background.
+pub fn fade(painter: &egui::Painter, rect: Rect) {
+    let background = painter.ctx().global_style().visuals.panel_fill;
+    painter.rect_filled(rect, CornerRadius::same(3), background.gamma_multiply(0.5));
 }
 
 /// How far apart the stripes of a hatched event are.
@@ -334,13 +360,18 @@ pub fn show(
         if bar.hatched {
             hatch(&painter, rect, ink);
         }
-        painter.with_clip_rect(rect).text(
+        event_text(
+            &painter.with_clip_rect(rect),
             rect.left_center() + Vec2::new(4.0, 0.0),
             Align2::LEFT_CENTER,
             event_label(bar.title.as_deref(), bar.read_only, bar.saving),
             FontId::proportional(12.0),
             ink,
+            bar.declined,
         );
+        if bar.declined {
+            fade(&painter, rect);
+        }
         openable(ui, &response, rect, bar.bar.event, opened);
     }
     // An event of the hours dragged over the strip, in the day under the pointer: drawn over the
@@ -591,13 +622,18 @@ pub fn show(
                 Some(_) => format!("{name}\n{time}"),
                 None => name,
             };
-            clipped.text(
+            event_text(
+                &clipped,
                 rect.left_top() + Vec2::new(4.0, 2.0),
                 Align2::LEFT_TOP,
                 label,
                 FontId::proportional(12.0),
                 ink,
+                block.declined,
             );
+            if block.declined {
+                fade(&painter, rect);
+            }
             openable(ui, &response, rect, p.event, opened);
         }
 

@@ -4981,4 +4981,41 @@ mod tests {
         assert_eq!(kept["summary"], "Board");
         assert_eq!(kept["start"]["dateTime"], "2026-11-12T14:00:00+01:00");
     }
+
+    #[test]
+    fn tc_06_09_declined_lunch_is_struck_through_and_the_switch_hides_and_shows_it() {
+        let google = Google::start("tc-06-09");
+        personal(&google);
+        let mut lunch = invitation(
+            "lunch",
+            "Lunch",
+            "2026-11-13T12:00:00+01:00",
+            "2026-11-13T13:00:00+01:00",
+        );
+        lunch["attendees"][1]["responseStatus"] = json!("declined");
+        google.fake.add_event(ACCOUNT_ID, EMAIL, lunch);
+        let engine = first_sync(&google, Instant::now());
+        let events = now_shown(&engine);
+        let week = |settings: &Settings| {
+            let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
+            let (Built::Grid(week), _) =
+                build(&events, settings, navigation, 30, Warsaw, thursday_9())
+            else {
+                panic!("the week view is built");
+            };
+            (week.blocks.iter())
+                .map(|block| (block.title.clone().unwrap(), block.declined))
+                .collect::<Vec<_>>()
+        };
+
+        // 1. In the week view, "Lunch" is shown struck through and faded.
+        let mut settings = Settings::default();
+        assert_eq!(week(&settings), [("Lunch".to_string(), true)]);
+
+        // 2. The switch off, "Lunch" disappears; on again, it is shown again.
+        settings.hide_declined = true;
+        assert!(week(&settings).is_empty());
+        settings.hide_declined = false;
+        assert_eq!(week(&settings), [("Lunch".to_string(), true)]);
+    }
 }

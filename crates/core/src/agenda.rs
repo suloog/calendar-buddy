@@ -24,6 +24,8 @@ pub struct AgendaItem {
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
+    /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
+    pub declined: bool,
     /// Start and end of a timed event, also one lasting a day or more; `None` for all-day events.
     pub time: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
@@ -112,6 +114,7 @@ pub fn agenda_view(
                             read_only: event.read_only,
                             saving: event.saving,
                             awaiting: event.about.awaiting(),
+                            declined: event.about.declined(),
                             time: event_time(event),
                         }
                     })

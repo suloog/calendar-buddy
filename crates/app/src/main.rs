@@ -1316,6 +1316,13 @@ impl eframe::App for CalendarApp {
                             self.navigation.switch(view);
                         }
                     }
+                    // One switch shows or hides declined events, shown by default (`MOD-06-F22`).
+                    let mut declined = !self.settings.hide_declined;
+                    if ui.checkbox(&mut declined, "Show declined events").changed() {
+                        self.settings.hide_declined = !declined;
+                        self.save_settings();
+                        self.rebuild();
+                    }
                 });
             });
         });

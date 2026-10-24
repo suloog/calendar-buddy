@@ -25,6 +25,8 @@ pub struct Settings {
     /// The calendar new events go to, by account ID and calendar ID, once the user chose one
     /// (`MOD-05-F10`).
     pub default_calendar: Option<(String, String)>,
+    /// The switch in the views hides declined events; they are shown by default (`MOD-06-F22`).
+    pub hide_declined: bool,
 }
 
 impl Settings {
@@ -48,6 +50,7 @@ impl Settings {
                 }
                 "side_panel" => settings.side_panel_collapsed = value.trim() == "collapsed",
                 "default_calendar" => settings.default_calendar = calendar(value),
+                "declined" => settings.hide_declined = value.trim() == "hidden",
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -86,6 +89,9 @@ impl Settings {
         }
         if let Some((account, calendar)) = &self.default_calendar {
             text.push_str(&format!("default_calendar = {account} {calendar}\n"));
+        }
+        if self.hide_declined {
+            text.push_str("declined = hidden\n");
         }
         text
     }
@@ -294,6 +300,20 @@ mod tests {
             [("2".to_string(), "team@example.com".to_string())]
         );
         assert!(!Settings::parse("side_panel = expanded").side_panel_collapsed);
+    }
+
+    #[test]
+    fn declined_events_are_shown_by_default_and_hiding_them_survives_a_restart() {
+        assert!(!Settings::default().hide_declined);
+        assert!(!Settings::default().to_text().contains("declined"));
+        let settings = Settings {
+            hide_declined: true,
+            ..Settings::default()
+        };
+
+        assert!(settings.to_text().contains("declined = hidden\n"));
+        assert_eq!(Settings::parse(&settings.to_text()), settings);
+        assert!(!Settings::parse("declined = shown").hide_declined);
     }
 
     #[test]

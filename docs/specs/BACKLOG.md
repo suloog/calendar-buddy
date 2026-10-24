@@ -121,7 +121,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-06-03` | As a User, I am asked whether to notify guests when I change or delete an event, so that I decide when people get an e-mail | F12 | must | review | `US-06-01`, `US-05-03` | — |
 | `US-06-04` | As a User, I can spot invitations waiting for my answer and list them, so that none slips through | F09, F10, F21, U04 | must | review | `US-02-01` | — |
 | `US-06-05` | As a User, I can accept, decline or answer maybe — for one occurrence or a whole series — while guest rules are respected, so that organizers know whether I come | F11, F13, F15, U03 | must | review | `US-06-04` | — |
-| `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | ready | `US-06-05` | — |
+| `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | review | `US-06-05` | — |
 | `US-06-07` | As a User, I can add Google Meet to a meeting and join it with one click, so that video calls start on time | F16, F17, F18 | must | ready | `US-06-01` | — |
 | `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | ready | `US-06-01` | — |
 
