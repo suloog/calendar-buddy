@@ -31,6 +31,7 @@ pub mod shortcuts;
 pub mod side_panel;
 pub mod status;
 pub mod sync;
+pub mod theme;
 pub mod undo;
 pub mod view_model;
 pub mod webcal;

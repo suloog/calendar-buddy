@@ -1,7 +1,8 @@
 //! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
 //! handler, the desktop's notifications, systemd-logind and NetworkManager on the system bus, the
-//! system tray, XDG autostart, the handler of `webcal:` links and the app's name on the session
-//! bus. Tests never use these; they use fakes, or a private bus and folder of their own.
+//! system tray, XDG autostart, the handler of `webcal:` links, the desktop's light or dark
+//! preference and the app's name on the session bus. Tests never use these; they use fakes, or a
+//! private bus and folder of their own.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,10 +11,11 @@ use std::sync::{Arc, Mutex, OnceLock};
 use calendar_core::accounts::Account;
 use calendar_core::background::{self, Signal};
 use calendar_core::platform::{
-    Autostart, Browser, Instance, LinkHandler, Network, Notifier, SecretStore, SecretStoreError,
-    Tray, Wakeups,
+    Appearance, Autostart, Browser, Instance, LinkHandler, Network, Notifier, SecretStore,
+    SecretStoreError, Tray, Wakeups,
 };
 use calendar_core::reminders::{Action, Notification, SNOOZES};
+use calendar_core::theme::{self, Scheme};
 use calendar_core::webcal;
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
@@ -110,6 +112,58 @@ impl Browser for SystemBrowser {
         // `xdg-open` can stay until the browser closes; the sign-in does not wait for it.
         std::thread::spawn(move || child.wait());
         Ok(())
+    }
+}
+
+/// The desktop's light or dark preference, from the XDG desktop portal's `color-scheme` and its
+/// change signal on the session bus (MOD-04 *Technical notes*). Without the portal the desktop
+/// states no preference.
+pub struct SystemAppearance;
+
+const PORTAL: &str = "org.freedesktop.portal.Desktop";
+const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
+const PORTAL_SETTINGS: &str = "org.freedesktop.portal.Settings";
+const APPEARANCE: &str = "org.freedesktop.appearance";
+const COLOR_SCHEME: &str = "color-scheme";
+
+/// The preference a `color-scheme` value states.
+fn scheme(value: &zbus::zvariant::Value) -> Option<Scheme> {
+    theme::from_color_scheme(value.downcast_ref::<u32>().unwrap_or(0))
+}
+
+impl SystemAppearance {
+    /// Watches the portal on `bus`, off the UI thread.
+    fn watch_on(
+        bus: zbus::Result<zbus::blocking::Connection>,
+        changed: Box<dyn Fn(Option<Scheme>) + Send + Sync>,
+    ) {
+        std::thread::spawn(move || -> zbus::Result<()> {
+            let bus = bus?;
+            let proxy = zbus::blocking::Proxy::new(&bus, PORTAL, PORTAL_PATH, PORTAL_SETTINGS)?;
+            // Listening first, so no change is missed between the answer and the signals.
+            let signals = proxy.receive_signal("SettingChanged")?;
+            let value: zbus::zvariant::OwnedValue =
+                proxy.call("ReadOne", &(APPEARANCE, COLOR_SCHEME))?;
+            changed(scheme(&value));
+            for message in signals {
+                let body = message.body();
+                let Ok((namespace, key, value)) =
+                    body.deserialize::<(&str, &str, zbus::zvariant::Value)>()
+                else {
+                    continue;
+                };
+                if namespace == APPEARANCE && key == COLOR_SCHEME {
+                    changed(scheme(&value));
+                }
+            }
+            Ok(())
+        });
+    }
+}
+
+impl Appearance for SystemAppearance {
+    fn watch(&self, changed: Box<dyn Fn(Option<Scheme>) + Send + Sync>) {
+        SystemAppearance::watch_on(zbus::blocking::Connection::session(), changed);
     }
 }
 
@@ -683,6 +737,63 @@ mod tests {
             let _ = self.0.kill();
             let _ = self.0.wait();
         }
+    }
+
+    /// A desktop portal whose `color-scheme` the test sets.
+    struct FakePortal(Arc<Mutex<u32>>);
+
+    #[zbus::interface(name = "org.freedesktop.portal.Settings")]
+    impl FakePortal {
+        fn read_one(
+            &self,
+            namespace: &str,
+            key: &str,
+        ) -> zbus::fdo::Result<zbus::zvariant::OwnedValue> {
+            if (namespace, key) != (APPEARANCE, COLOR_SCHEME) {
+                return Err(zbus::fdo::Error::Failed("not found".into()));
+            }
+            Ok(zbus::zvariant::OwnedValue::from(*self.0.lock().unwrap()))
+        }
+    }
+
+    #[test]
+    fn the_desktop_preference_is_read_from_the_portal_and_followed_as_it_changes() {
+        let bus = PrivateBus::start();
+        let desktop = bus.connect();
+        let color_scheme = Arc::new(Mutex::new(1));
+        desktop
+            .object_server()
+            .at(PORTAL_PATH, FakePortal(color_scheme.clone()))
+            .unwrap();
+        desktop.request_name(PORTAL).unwrap();
+
+        let (told, preferences) = std::sync::mpsc::channel();
+        let told = Mutex::new(told);
+        SystemAppearance::watch_on(
+            Ok(bus.connect()),
+            Box::new(move |preference| told.lock().unwrap().send(preference).unwrap()),
+        );
+        let next = || preferences.recv_timeout(std::time::Duration::from_secs(5));
+        assert_eq!(next(), Ok(Some(Scheme::Dark)));
+
+        let changed = |namespace: &str, value: u32| {
+            *color_scheme.lock().unwrap() = value;
+            let value = zbus::zvariant::Value::from(value);
+            desktop
+                .emit_signal(
+                    None::<()>,
+                    PORTAL_PATH,
+                    PORTAL_SETTINGS,
+                    "SettingChanged",
+                    &(namespace, COLOR_SCHEME, value),
+                )
+                .unwrap();
+        };
+        changed("org.kde.kdeglobals.General", 2);
+        changed(APPEARANCE, 2);
+        assert_eq!(next(), Ok(Some(Scheme::Light)));
+        changed(APPEARANCE, 0);
+        assert_eq!(next(), Ok(None));
     }
 
     #[test]

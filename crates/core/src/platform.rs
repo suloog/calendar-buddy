@@ -4,6 +4,7 @@
 use crate::accounts::Account;
 use crate::background::Signal;
 use crate::reminders::{Action, Notification};
+use crate::theme::Scheme;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SecretStoreError {
@@ -43,6 +44,13 @@ pub trait Network {
     /// Calls `changed` with whether the computer is online, once the system answers and after
     /// every change from then on.
     fn watch(&self, changed: Box<dyn Fn(bool) + Send + Sync>);
+}
+
+/// The desktop's light or dark preference (`MOD-04-F02`).
+pub trait Appearance {
+    /// Calls `changed` with the desktop's preference, `None` when it states none, once the
+    /// desktop answers and after every change from then on.
+    fn watch(&self, changed: Box<dyn Fn(Option<Scheme>) + Send + Sync>);
 }
 
 /// The desktop's notification service (`MOD-07-F01`); the desktop decides what is shown, e.g.

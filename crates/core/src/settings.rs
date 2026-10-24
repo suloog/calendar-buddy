@@ -8,6 +8,7 @@ use crate::cache::{color_text, parse_color};
 use crate::colors::LocalColors;
 use crate::navigation::View;
 use crate::side_panel::Hidden;
+use crate::theme::Theme;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -33,6 +34,8 @@ pub struct Settings {
     /// The calendars whose notifications are muted from the side panel, by account ID and
     /// calendar ID; their events are still shown (`MOD-07-F12`).
     pub muted: BTreeSet<(String, String)>,
+    /// The theme chosen in the settings; by default the desktop's (`MOD-04-F03`).
+    pub theme: Theme,
 }
 
 impl Settings {
@@ -63,6 +66,7 @@ impl Settings {
                         settings.muted.insert(calendar);
                     }
                 }
+                "theme" => settings.theme = Theme::from_key(value.trim()),
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -110,6 +114,9 @@ impl Settings {
         }
         for (account, calendar) in &self.muted {
             text.push_str(&format!("muted = {account} {calendar}\n"));
+        }
+        if let Some(theme) = self.theme.key() {
+            text.push_str(&format!("theme = {theme}\n"));
         }
         text
     }
