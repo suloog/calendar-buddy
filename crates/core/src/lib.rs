@@ -25,6 +25,7 @@ pub mod recurrence;
 pub mod regional;
 pub mod reminders;
 pub mod repeat;
+pub mod rich;
 pub mod schedule;
 pub mod series;
 pub mod settings;

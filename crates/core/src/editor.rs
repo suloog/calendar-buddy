@@ -25,6 +25,7 @@ use crate::model::{
 };
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
+use crate::rich;
 use crate::texts::{
     self, ENDS_BEFORE_STARTS, NO_CALENDAR, NO_TITLE, NOT_AN_ADDRESS, REMINDER_TOO_EARLY,
     SERIES_ENDS_BEFORE_IT_STARTS, TOO_MANY_REMINDERS,
@@ -50,6 +51,9 @@ pub struct Editor {
     pub opened: Option<(Event, Calendar)>,
     pub title: String,
     pub description: String,
+    /// The description, written in Google with formatting, has been turned into plain text to be
+    /// edited (`MOD-05-F31`); until then it is kept as it is.
+    pub description_as_text: bool,
     pub location: String,
     pub all_day: bool,
     pub start_date: String,
@@ -290,6 +294,7 @@ impl Editor {
             opened: None,
             title: String::new(),
             description: String::new(),
+            description_as_text: false,
             location: String::new(),
             all_day: false,
             start_date: regional.numeric_date(start.date()),
@@ -372,6 +377,18 @@ impl Editor {
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
+    }
+
+    /// Whether the description keeps its formatting from Google: shown formatted, and saved as
+    /// it is unless the user edits it as plain text first (`MOD-05-F31`).
+    pub fn keeps_formatting(&self) -> bool {
+        !self.description_as_text && rich::is_formatted(&self.description)
+    }
+
+    /// Turns the description into plain text to be edited, its formatting lost (`MOD-05-F31`).
+    pub fn edit_description_as_text(&mut self) {
+        self.description = rich::plain(&self.description);
+        self.description_as_text = true;
     }
 
     /// The calendars the event can be saved to, under their accounts: any of `choices` for a new
@@ -1213,6 +1230,31 @@ mod tests {
         let changed = edit.changed();
         assert_eq!(changed.about.location, "Room 3");
         assert_eq!(changed.id, event.id);
+    }
+
+    #[test]
+    fn a_description_formatted_in_google_is_kept_until_edited_as_plain_text() {
+        let mut event = standup();
+        event.about.description = "<b>Agenda</b><br>Numbers".to_string();
+        let mut editor = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        // Kept as it is: saving another change leaves it alone.
+        assert!(editor.keeps_formatting());
+        editor.location = "Room 3".to_string();
+        assert_eq!(change(&editor).patch.description, None);
+        // Edited, it is plain text, and saved so.
+        editor.edit_description_as_text();
+        assert!(!editor.keeps_formatting());
+        assert_eq!(editor.description, "Agenda\nNumbers");
+        editor.description.push_str(" <b>today</b>");
+        assert!(!editor.keeps_formatting());
+        assert_eq!(
+            change(&editor).patch.description.as_deref(),
+            Some("Agenda\nNumbers <b>today</b>")
+        );
+        // Text without formatting is edited as it is.
+        event.about.description = "Agenda".to_string();
+        let editor = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        assert!(!editor.keeps_formatting());
     }
 
     #[test]

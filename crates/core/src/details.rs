@@ -1,7 +1,8 @@
 //! What opening an event shows, independent of how it is drawn: its title and when it happens in
 //! the system's time zone (`DEC-73`), and also in its own zone when that is another one
-//! (`DEC-29`), its attachments as links (`MOD-05-F26`), its guests with their answers
-//! (`MOD-06-F05`), and its Google Meet call to join (`MOD-06-F18`).
+//! (`DEC-29`), its location and description (`MOD-05-F30`), its attachments as links
+//! (`MOD-05-F26`), its guests with their answers (`MOD-06-F05`), and its Google Meet call to join
+//! (`MOD-06-F18`).
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate};
 use chrono_tz::Tz;
@@ -9,6 +10,7 @@ use chrono_tz::Tz;
 use crate::guests::Guest;
 use crate::model::{Attachment, Event, Timing};
 use crate::regional::Regional;
+use crate::rich::{self, Span};
 
 /// How many guests the details list before the rest is expanded (`DEC-63`).
 pub const GUESTS_LISTED: usize = 10;
@@ -33,6 +35,11 @@ pub struct EventDetails {
     pub when: When,
     /// A timed event stored in another time zone, in that zone.
     pub own_zone: Option<When>,
+    /// Where it happens; `None` without one, or for free/busy events (`MOD-05-F30`).
+    pub location: Option<String>,
+    /// What it says about itself, as lines with their formatting from Google; `None` without
+    /// one, or for free/busy events.
+    pub description: Option<Vec<Vec<Span>>>,
     /// Listed by name, each opened in the browser (`MOD-05-F26`).
     pub attachments: Vec<Attachment>,
     /// Everyone invited, the user included, with their answers, in Google's order
@@ -46,6 +53,11 @@ pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
     EventDetails {
         title: (!event.busy_only).then(|| event.title.clone()),
         read_only: event.read_only,
+        location: Some(event.about.location.trim())
+            .filter(|location| !location.is_empty() && !event.busy_only)
+            .map(str::to_string),
+        description: Some(rich::lines(&event.about.description))
+            .filter(|lines| !lines.is_empty() && !event.busy_only),
         attachments: event.about.attachments.clone(),
         guests: event.about.guests.clone(),
         meet: event.about.meet.clone().filter(|_| !event.busy_only),
@@ -267,6 +279,30 @@ mod tests {
         let details = event_details(&event, Warsaw);
         assert_eq!(details.listed_guests(false).len(), 10);
         assert_eq!(details.more_guests(), 0);
+    }
+
+    #[test]
+    fn an_event_opens_with_its_location_and_description() {
+        let mut event = timed("Review", d(2026, 11, 12), (9, 0), (10, 0));
+        let details = event_details(&event, Warsaw);
+        assert_eq!((details.location, details.description), (None, None));
+        event.about.location = "Room 4, Warsaw office".into();
+        event.about.description = "Agenda:\n<b>Numbers</b>".into();
+        let details = event_details(&event, Warsaw);
+        assert_eq!(details.location.as_deref(), Some("Room 4, Warsaw office"));
+        // With its formatting from Google.
+        assert_eq!(
+            details.description,
+            Some(rich::lines("Agenda:\n<b>Numbers</b>"))
+        );
+        // An event shared as free/busy only shows neither.
+        event.busy_only = true;
+        let details = event_details(&event, Warsaw);
+        assert_eq!((details.location, details.description), (None, None));
+        // A description of only tags is none.
+        event.busy_only = false;
+        event.about.description = "<br><br>".into();
+        assert_eq!(event_details(&event, Warsaw).description, None);
     }
 
     #[test]
