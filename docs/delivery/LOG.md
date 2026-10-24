@@ -297,3 +297,15 @@
   - One squash commit: one logical change.
 - Manual checks: TC-06-05 (US-06-04#1, #2), US-06-04#3
 - Commits on main: 535fa1f feat(guests): mark and list invitations awaiting an answer [US-06-04]
+
+## US-06-05 — review — 2026-10-24 04:27
+- What: Accept / Maybe / Decline in a "Going?" row at the top of an invitation's details and in each row of the invitations list; the answer patches the account's own attendee entry (`Patch.response`), an occurrence asking "This event" (instance) or "All events" (master); a guest's copy only its organizer may change can be answered but not dragged or edited.
+- Decisions: DEC-128, DEC-129
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - fixed after review: the organizer's own answer is sent with `sendUpdates=none`; Google's `attendeesOmitted` is kept on an answer; list rows without an answerable entry show no buttons; a test now proves other guests' answers stay;
+  - not done: Ctrl+Z after an edit and then an answer to the same event within 5 s reverts against an old version and reports "could not be undone" (harmless, left);
+  - not done: no automated test drives the answer buttons offline (UI wiring of `offline::refused`; manual check);
+  - the provider interface's `Patch` gained `response` (calendar-provider interface change, constitution review rule); no SQLite schema change.
+  - One squash commit: one logical change.
+- Manual checks: TC-06-06 (US-06-05#1, #2), TC-06-07 (US-06-05#3), TC-06-08 (US-06-05#4)
+- Commits on main: f5cf06d feat(guests): accept, decline or maybe for one or all events [US-06-05]
