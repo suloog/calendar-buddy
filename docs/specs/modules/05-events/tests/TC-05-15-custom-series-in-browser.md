@@ -6,7 +6,7 @@ layer: desktop # desktop — the project's own layer (`DEC-65`)
 type: happy-path # happy-path | edge | negative | nfr
 automation: manual-only # auto | manual-only — manual-only is never green in the report
 roles: [User] # actors from PROJECT.md whose roles the test runs as
-status: draft # draft | ready
+status: ready # draft | ready
 depends_on: [] # test case IDs that must pass first
 ---
 

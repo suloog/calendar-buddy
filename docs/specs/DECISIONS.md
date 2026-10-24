@@ -2017,3 +2017,15 @@
 - **Scope effect:** extension
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-167] A start on the fifth weekday of the month repeats on the last one
+
+- **Date:** 2026-10-24
+- **Decided by:** client (product owner — Maciej)
+- **Source:** the product owner's check in Google Calendar in the browser, 2026-10-24 (an event on Tuesday 29 December 2026)
+- **Affects:** `DEC-165`, `MOD-05-F32`, `MOD-05-F33`, `US-05-11`, `TC-05-13`
+- **Decision:** When the event's start is the fifth occurrence of its weekday in the month, the repeat menu offers "Monthly on the last <weekday>" instead of a numbered one, and the custom recurrence dialog offers only "Monthly on day <d>" and "Monthly on the last <weekday>" — never "the fifth <weekday>". For the first four occurrences `DEC-165` stands.
+- **Why:** That is what Google Calendar shows: for Tuesday 29 December 2026 its menu reads "Monthly on the last Tuesday" and its custom dialog offers "Monthly on day 29" and "Monthly on the last Tuesday".
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

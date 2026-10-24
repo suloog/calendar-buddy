@@ -141,9 +141,9 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-05-10` | Changing an event's colour in the editor sends the new colour to Google | `US-05-09#2` | desktop | happy-path | auto | ready |
 | `TC-05-11` | An event's attachments are listed and open in the browser | `US-05-10#1`, `US-05-10#2` | desktop | happy-path | manual-only | ready |
 | `TC-05-12` | A series created in the app shows the same occurrences in Google Calendar in the browser | `US-05-06#3` | desktop | happy-path | manual-only | ready |
-| `TC-05-13` | The repeat menu is Google's and "Custom…" saves every-2-weeks and last-weekday rules | `US-05-11#1`, `US-05-11#2`, `US-05-11#3`, `US-05-11#4` | desktop | happy-path | auto | draft |
-| `TC-05-14` | A rule from Google the dialog can express is edited in the app; one it cannot is kept | `US-05-11#5`, `US-05-11#6`, `US-05-11#7` | desktop | edge | auto | draft |
-| `TC-05-15` | A series set in "Custom…" shows the same occurrences in Google Calendar in the browser | `US-05-11#8` | desktop | happy-path | manual-only | draft |
+| `TC-05-13` | The repeat menu is Google's and "Custom…" saves every-2-weeks and last-weekday rules | `US-05-11#1`, `US-05-11#2`, `US-05-11#3`, `US-05-11#4` | desktop | happy-path | auto | ready |
+| `TC-05-14` | A rule from Google the dialog can express is edited in the app; one it cannot is kept | `US-05-11#5`, `US-05-11#6`, `US-05-11#7` | desktop | edge | auto | ready |
+| `TC-05-15` | A series set in "Custom…" shows the same occurrences in Google Calendar in the browser | `US-05-11#8` | desktop | happy-path | manual-only | ready |
 
 ## [MOD-06] Guests, invitations, RSVP and Google Meet
 

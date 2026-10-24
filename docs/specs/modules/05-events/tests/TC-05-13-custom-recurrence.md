@@ -6,7 +6,7 @@ layer: desktop # desktop — the project's own layer (`DEC-65`)
 type: happy-path # happy-path | edge | negative | nfr
 automation: auto # auto | manual-only — manual-only is never green in the report
 roles: [User] # actors from PROJECT.md whose roles the test runs as
-status: draft # draft | ready
+status: ready # draft | ready
 depends_on: [] # test case IDs that must pass first
 ---
 
@@ -35,6 +35,7 @@ depends_on: [] # test case IDs that must pass first
 | 3 | Set every 2 weeks, tick Monday and Wednesday, untick Tuesday, end after 10 occurrences; confirm and save. | The fake Google received `RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10`; reopened, the menu shows "Every 2 weeks on Monday, Wednesday, 10 times". | API request, app state |
 | 4 | Open "Custom…" for a new event on Thursday 26 November 2026, unit "month". | The choices are "Monthly on day 26", "Monthly on the fourth Thursday" and "Monthly on the last Thursday"; for days, months and years no weekdays are shown. | app state |
 | 5 | Choose "Monthly on the last Thursday", save. | The fake Google received `RRULE:FREQ=MONTHLY;BYDAY=-1TH`; the views show the occurrences on 26 November, 31 December 2026 and 28 January 2027. | API request, app state |
+| 6 | Open the editor for a new event on Tuesday 29 December 2026, open the repeat menu, then "Custom…" with unit "month". | The menu reads "Monthly on the last Tuesday"; the dialog offers only "Monthly on day 29" and "Monthly on the last Tuesday". | app state |
 
 ## Pass criterion
 
