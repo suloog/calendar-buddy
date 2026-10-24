@@ -386,3 +386,16 @@
   - one squash commit: one logical change.
 - Manual checks: TC-07-04 (US-07-03#2), US-07-03#1, US-07-03#3 on real KDE and Google
 - Commits on main: aeb9140 feat(reminders): turn notifications off and mute a calendar [US-07-03]
+
+## US-07-04 — review — 2026-10-24 06:08
+- What: the editor's "Notifications" section: a new event shows and keeps its calendar's defaults; notification/e-mail reminders in minutes, hours or days are added, changed and removed (at most 5, at most 4 weeks before) and sent to Google; "Use calendar defaults" resets (`useDefault` with empty overrides). The fake Google now refuses defaults with overrides, and more than five, as Google does.
+- Decisions: DEC-141
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - the code review found nothing blocking. Fixed: a test for reminders in "this and following"; the number field no longer clamps silently when the unit changes; the fake records a patch only once it is taken;
+  - the code review also suggested not asking about guest e-mails for a reminders-only change. It was tried and reverted: it would narrow the `must` MOD-06-F12, which is the owner's call. Today, saving reminders of an event with guests still asks "Send update e-mails to the guests?" (Google Calendar does not ask);
+  - a guest's copy that only the organizer may change stays read-only in the editor, so a guest cannot set their own reminders there, though Google allows it. This is outside this story;
+  - spec review: compliant. Added a core check of the 5-reminder cap (`an_event_takes_five_reminders_and_no_more`). The TC-07-05 test skips the fake notifier and the clock in the TC's preconditions, as none of its steps uses them;
+  - no SQLite schema change. The calendar-provider interface is unchanged in signature; `Patch` gained a `reminders` field;
+  - one squash commit: one logical change.
+- Manual checks: US-07-04#1, US-07-04#2/#3, US-07-04#4, duplicate-reminder edge case (real Google)
+- Commits on main: 86cf4e6 feat(reminders): edit an event's reminders in the editor [US-07-04]
