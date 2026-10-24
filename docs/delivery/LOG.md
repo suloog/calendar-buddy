@@ -436,3 +436,15 @@
   - the app does not change the user's default `webcal:` program.
 - Manual checks: TC-07-09 (US-07-06#1)
 - Commits on main: 4a14c9f feat(reminders): open webcal links in Google Calendar [US-07-06] (one squash commit: one logical change)
+
+## US-04-01 — review — 2026-10-24 06:52
+- What: a System / Light / Dark theme under Settings → Appearance, kept as `theme = light|dark`. With System, the app follows the desktop's preference live. The preference comes from the XDG portal's `color-scheme` (`ReadOne` + `SettingChanged`) behind a new `Appearance` platform interface, and light is used when the desktop states none. The themes are egui's default light and dark looks until US-04-03.
+- Decisions: DEC-147
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - none blocking;
+  - the theme preference itself is now compared (fixed);
+  - the platform header was re-wrapped (fixed);
+  - the wiring and the radio buttons are covered only by manual checks;
+  - until the portal answers, the app is light, so a dark desktop may show a light first frame.
+- Manual checks: TC-04-01 (US-04-01#1), TC-04-02 (US-04-01#2, #3)
+- Commits on main: 2190680 feat(themes): follow the desktop's light or dark theme [US-04-01] (one squash commit: one logical change)
