@@ -65,17 +65,18 @@ enum Job {
     Create(u64, Calendar, NewEvent),
     /// A change to an event, by the number the views know it by.
     Change(u64, Box<Edit>),
-    /// An event to delete from the calendar, by the number the views know it by.
-    Delete(u64, Calendar, Event),
+    /// An event to delete from the calendar, by the number the views know it by, and whether
+    /// Google e-mails its guests (`MOD-06-F12`).
+    Delete(u64, Calendar, Event, bool),
     /// An event deleted just now to bring back to the calendar, by the number the views know it
-    /// by.
-    Restore(u64, Calendar, Event),
+    /// by, and whether Google e-mails its guests.
+    Restore(u64, Calendar, Event, bool),
     /// A change to an occurrence of a series and the following or all events, by the number the
     /// views know it by (`MOD-05-F20`).
     ChangeSeries(u64, Box<Edit>, Scope),
     /// An occurrence of a series to delete from the calendar with the following or all events,
-    /// by the number the views know it by (`MOD-05-F21`).
-    DeleteSeries(u64, Calendar, Event, Scope),
+    /// by the number the views know it by (`MOD-05-F21`), and whether Google e-mails its guests.
+    DeleteSeries(u64, Calendar, Event, Scope, bool),
     /// What is typed in the guest field, to search the account's people for where it may look
     /// (`MOD-06-F02`, `F04`).
     Suggest(String, String, Reach),
@@ -343,15 +344,17 @@ impl Synchronization {
     }
 
     /// Deletes the event from the calendar at Google, then synchronizes the calendar
-    /// (`MOD-05-F12`); `poll` tells what became of it by `local`.
-    pub fn delete(&self, local: u64, calendar: Calendar, event: Event) {
-        let _ = self.jobs.send(Job::Delete(local, calendar, event));
+    /// (`MOD-05-F12`), e-mailing its guests or not as `notify` says; `poll` tells what became of
+    /// it by `local`.
+    pub fn delete(&self, local: u64, calendar: Calendar, event: Event, notify: bool) {
+        let _ = self.jobs.send(Job::Delete(local, calendar, event, notify));
     }
 
     /// Brings back the event deleted just now at Google, then synchronizes the calendar
-    /// (`MOD-05-F27`); `poll` tells what became of it by `local`, as of a change.
-    pub fn restore(&self, local: u64, calendar: Calendar, event: Event) {
-        let _ = self.jobs.send(Job::Restore(local, calendar, event));
+    /// (`MOD-05-F27`), e-mailing its guests or not as `notify` says; `poll` tells what became of
+    /// it by `local`, as of a change.
+    pub fn restore(&self, local: u64, calendar: Calendar, event: Event, notify: bool) {
+        let _ = self.jobs.send(Job::Restore(local, calendar, event, notify));
     }
 
     /// Changes the occurrence of a series and the following or all events at Google, by the
@@ -361,11 +364,17 @@ impl Synchronization {
     }
 
     /// Deletes the occurrence of a series and the following or all events at Google, by the
-    /// number the views know it by, then synchronizes its calendar.
-    pub fn delete_series(&self, local: u64, calendar: Calendar, event: Event, scope: Scope) {
-        let _ = self
-            .jobs
-            .send(Job::DeleteSeries(local, calendar, event, scope));
+    /// number the views know it by, e-mailing its guests or not as `notify` says, then
+    /// synchronizes its calendar.
+    pub fn delete_series(
+        &self,
+        local: u64,
+        calendar: Calendar,
+        event: Event,
+        scope: Scope,
+        notify: bool,
+    ) {
+        let _ = (self.jobs).send(Job::DeleteSeries(local, calendar, event, scope, notify));
     }
 
     /// Searches the account's people at Google for what is typed in the guest field, where
@@ -562,17 +571,17 @@ impl Engine {
                 return self.create(local, calendar, &event, now);
             }
             Some(Job::Change(local, edit)) => return self.change(local, &edit, now),
-            Some(Job::Delete(local, calendar, event)) => {
-                return self.delete(local, calendar, &event, now);
+            Some(Job::Delete(local, calendar, event, notify)) => {
+                return self.delete(local, calendar, &event, notify, now);
             }
-            Some(Job::Restore(local, calendar, event)) => {
-                return self.restore(local, calendar, &event, now);
+            Some(Job::Restore(local, calendar, event, notify)) => {
+                return self.restore(local, calendar, &event, notify, now);
             }
             Some(Job::ChangeSeries(local, edit, scope)) => {
                 return self.change_series(local, &edit, scope, now);
             }
-            Some(Job::DeleteSeries(local, calendar, event, scope)) => {
-                return self.delete_series(local, calendar, &event, scope, now);
+            Some(Job::DeleteSeries(local, calendar, event, scope, notify)) => {
+                return self.delete_series(local, calendar, &event, scope, notify, now);
             }
             Some(Job::Suggest(account, query, reach)) => {
                 // An account not signed in yet finds nobody.
@@ -699,12 +708,12 @@ impl Engine {
         let (calendar, id) = (&edit.calendar, &edit.event.id);
         let mut changed = Ok(edit.event.etag.clone());
         if !edit.patch.is_empty() {
-            changed = session.update(calendar, id, &edit.event.etag, &edit.patch);
+            changed = session.update(calendar, id, &edit.event.etag, &edit.patch, edit.notify);
         }
         let mut updates = vec![match (changed, &edit.to) {
             (Err(error), _) => Update::NotChanged(local, refusal(error)),
             (Ok(etag), None) => Update::Changed(local, etag),
-            (Ok(_), Some(to)) => match session.move_to(calendar, id, to) {
+            (Ok(_), Some(to)) => match session.move_to(calendar, id, to, edit.notify) {
                 Ok(etag) => Update::Changed(local, etag),
                 // What was patched stays; only the move is told of.
                 Err(error) if edit.patch.is_empty() => Update::NotChanged(local, error.0),
@@ -732,12 +741,14 @@ impl Engine {
         local: u64,
         calendar: Calendar,
         event: &Event,
+        notify: bool,
         now: Instant,
     ) -> Vec<Update> {
         let Some(session) = self.sessions.get(&calendar.account_id) else {
             return vec![Update::NotDeleted(local, NOT_SIGNED_IN.to_string())];
         };
-        let mut updates = vec![match session.delete(&calendar, &event.id, &event.etag) {
+        let deleted = session.delete(&calendar, &event.id, &event.etag, notify);
+        let mut updates = vec![match deleted {
             Ok(()) => Update::Deleted(local),
             Err(error) => Update::NotDeleted(local, refusal(error)),
         }];
@@ -751,12 +762,13 @@ impl Engine {
         local: u64,
         calendar: Calendar,
         event: &Event,
+        notify: bool,
         now: Instant,
     ) -> Vec<Update> {
         let Some(session) = self.sessions.get(&calendar.account_id) else {
             return vec![Update::NotChanged(local, NOT_SIGNED_IN.to_string())];
         };
-        let mut updates = vec![match session.restore(&calendar, &event.id) {
+        let mut updates = vec![match session.restore(&calendar, &event.id, notify) {
             Ok(etag) => Update::Changed(local, etag),
             Err(error) => Update::NotChanged(local, refusal(error)),
         }];
@@ -779,7 +791,7 @@ impl Engine {
         match plan {
             Some(Plan::Change(edit)) => self.change(local, &edit, now),
             Some(Plan::Split(split)) => {
-                let mut updates = vec![match self.split(&split) {
+                let mut updates = vec![match self.split(&split, edit.notify) {
                     Ok(etag) => Update::Changed(local, etag),
                     Err(why) => Update::NotChanged(local, why),
                 }];
@@ -798,6 +810,7 @@ impl Engine {
         calendar: Calendar,
         event: &Event,
         scope: Scope,
+        notify: bool,
         now: Instant,
     ) -> Vec<Update> {
         let plan = self
@@ -808,10 +821,10 @@ impl Engine {
         match plan {
             Some(Plan::Delete(deleted)) => {
                 let (calendar, event) = *deleted;
-                self.delete(local, calendar, &event, now)
+                self.delete(local, calendar, &event, notify, now)
             }
             Some(Plan::Split(split)) => {
-                let mut updates = vec![match self.split(&split) {
+                let mut updates = vec![match self.split(&split, notify) {
                     Ok(_) => Update::Deleted(local),
                     Err(why) => Update::NotDeleted(local, why),
                 }];
@@ -844,8 +857,9 @@ impl Engine {
 
     /// Ends the series before the occurrence at Google, against its version, then starts the new
     /// series from the occurrence as a copy of it, if any, and deletes the occurrences from there
-    /// on changed on their own; the series' new version, or why not.
-    fn split(&self, split: &Split) -> Result<String, String> {
+    /// on changed on their own, each e-mailing the guests or not as `notify` says; the series'
+    /// new version, or why not.
+    fn split(&self, split: &Split, notify: bool) -> Result<String, String> {
         let Some(session) = self.sessions.get(&split.calendar.account_id) else {
             return Err(NOT_SIGNED_IN.to_string());
         };
@@ -854,11 +868,11 @@ impl Engine {
             ..Patch::default()
         };
         let etag = session
-            .update(&split.calendar, &split.id, &split.etag, &ended)
+            .update(&split.calendar, &split.id, &split.etag, &ended, notify)
             .map_err(refusal)?;
         if let Some(new) = &split.new {
             session
-                .copy(&split.calendar, &split.id, new)
+                .copy(&split.calendar, &split.id, new, notify)
                 .map_err(|error| {
                     format!(
                         "the series now ends before this event, but the following events could \
@@ -869,7 +883,7 @@ impl Engine {
         }
         // The series' end won against its version; Google may have changed these with it.
         let failed = (split.changed.iter())
-            .filter_map(|(id, _)| session.delete(&split.calendar, id, "").err())
+            .filter_map(|(id, _)| session.delete(&split.calendar, id, "", notify).err())
             .last();
         if let Some(error) = failed {
             return Err(format!(
@@ -1136,6 +1150,7 @@ mod tests {
     use calendar_core::guests::{self, Person};
     use calendar_core::model::{Access, Calendar, Kind, Protected, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
+    use calendar_core::notify::{self, Pending};
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
@@ -3377,9 +3392,12 @@ mod tests {
 
         // 1. "Gym" is deleted with no question: it is gone, and the Undo notice stays 5 seconds.
         let local = saving.delete(&gym);
-        last.deleting(local, &calendar, &gym);
+        last.deleting(local, &calendar, &gym, false);
         assert!(saving.shown(&now_shown(&engine)).is_empty());
-        let updates = engine.handle(Some(Job::Delete(local, calendar, gym.clone())), start);
+        let updates = engine.handle(
+            Some(Job::Delete(local, calendar, gym.clone(), false)),
+            start,
+        );
         assert_eq!(saved_changes(&updates), [Saved::Deleted(local)]);
         let deleted_at = Instant::now();
         saving.deleted(local);
@@ -3397,7 +3415,7 @@ mod tests {
 
         // 2. Undo within the 5 seconds: "Gym" is back at 18:00–19:00, also in Google.
         assert!(last.notice(deleted_at + Duration::from_secs(3)).is_some());
-        let Some(Undo::Restore(deleted)) = last.undo() else {
+        let Some(Undo::Restore(deleted, notify)) = last.undo() else {
             panic!("the deletion is undone");
         };
         let (calendar, event) = *deleted;
@@ -3411,7 +3429,7 @@ mod tests {
                 "2026-11-12 19:00".to_string()
             )]
         );
-        let updates = engine.handle(Some(Job::Restore(local, calendar, event)), start);
+        let updates = engine.handle(Some(Job::Restore(local, calendar, event, notify)), start);
         let changes = saved_changes(&updates);
         let [Saved::Changed(confirmed, etag)] = changes.as_slice() else {
             panic!("Google did not restore the event");
@@ -3588,7 +3606,7 @@ mod tests {
         let local = saving.delete(&gym);
 
         let updates = engine.handle(
-            Some(Job::Delete(local, calendar.clone(), gym.clone())),
+            Some(Job::Delete(local, calendar.clone(), gym.clone(), false)),
             start,
         );
 
@@ -3607,7 +3625,7 @@ mod tests {
         );
         // An account not signed in in this run deletes nothing either.
         engine.stop(ACCOUNT_ID);
-        let updates = engine.handle(Some(Job::Delete(2, calendar, gym)), start);
+        let updates = engine.handle(Some(Job::Delete(2, calendar, gym, false)), start);
         assert!(matches!(
             saved_changes(&updates).as_slice(),
             [Saved::NotDeleted(2, _)]
@@ -4016,12 +4034,18 @@ mod tests {
 
         // This event: the 2nd occurrence alone, without a version of its own.
         let (calendar, second) = deleting(&engine, d(2026, 11, 23));
-        let updates = engine.handle(Some(Job::Delete(1, calendar, second)), start);
+        let updates = engine.handle(Some(Job::Delete(1, calendar, second, false)), start);
         assert_eq!(saved_changes(&updates), [Saved::Deleted(1)]);
         // This and following: from the 8th on.
         let (calendar, eighth) = deleting(&engine, d(2027, 1, 4));
         let updates = engine.handle(
-            Some(Job::DeleteSeries(2, calendar, eighth, Scope::Following)),
+            Some(Job::DeleteSeries(
+                2,
+                calendar,
+                eighth,
+                Scope::Following,
+                false,
+            )),
             start,
         );
         assert_eq!(saved_changes(&updates), [Saved::Deleted(2)]);
@@ -4039,7 +4063,7 @@ mod tests {
         // All events: the whole series.
         let (calendar, third) = deleting(&engine, d(2026, 11, 30));
         let updates = engine.handle(
-            Some(Job::DeleteSeries(3, calendar, third, Scope::All)),
+            Some(Job::DeleteSeries(3, calendar, third, Scope::All, false)),
             start,
         );
         assert_eq!(saved_changes(&updates), [Saved::Deleted(3)]);
@@ -4117,7 +4141,13 @@ mod tests {
         let moved = fifth_moved_alone(&google, &mut engine, start);
 
         let updates = engine.handle(
-            Some(Job::DeleteSeries(2, calendar, moved, Scope::Following)),
+            Some(Job::DeleteSeries(
+                2,
+                calendar,
+                moved,
+                Scope::Following,
+                false,
+            )),
             start,
         );
 
@@ -4457,5 +4487,203 @@ mod tests {
             .map(|g| (g.email, g.optional))
             .collect();
         assert_eq!(guests, [("adam@example.com".to_string(), true)]);
+    }
+
+    /// "Sync" on 12 November 10:00–10:30, organized by the user, with guest Adam
+    /// (`TC-06-04`), and the engine after the first synchronization.
+    fn sync_with_adam(name: &str) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "sync",
+                "status": "confirmed",
+                "summary": "Sync",
+                "start": {"dateTime": "2026-11-12T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-12T10:30:00+01:00", "timeZone": "Europe/Warsaw"},
+                "organizer": {"email": EMAIL, "self": true},
+                "attendees": [
+                    {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+                    {"email": "adam@example.com", "displayName": "Adam Kowalski", "responseStatus": "needsAction"}
+                ],
+            }),
+        );
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    /// The writes the fake Google received, in order.
+    fn writes(google: &Google) -> Vec<String> {
+        (google.fake.requests().into_iter())
+            .filter(|r| !r.starts_with("GET ") && r.contains("/calendar/v3/calendars/"))
+            .collect()
+    }
+
+    /// "Sync" dropped at 11:00, the change the drop asks to save.
+    fn sync_dropped_at_11(engine: &Engine) -> Pending {
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let sync = (now_shown(engine).into_iter())
+            .find(|e| e.id == "sync")
+            .unwrap();
+        let drop = Target::Moved {
+            days: 0,
+            minutes: 60,
+        };
+        let timing = drag::dropped(&sync, drop, Warsaw, 60).unwrap();
+        // Not an occurrence of a series: no scope is asked first.
+        let Ok(edit) = Question::changing(drag::edit(&sync, calendar, timing)) else {
+            panic!("no scope question");
+        };
+        Pending::Change(Box::new(edit), Scope::This)
+    }
+
+    #[test]
+    fn tc_06_04_dragging_an_event_with_guests_asks_once_whether_to_notify_them_and_no_sends_no_update()
+     {
+        let (google, mut engine, start) = sync_with_adam("tc-06-04");
+
+        // 1. "Sync" dragged to 11:00: the app asks once whether to send the guests an update.
+        let pending = sync_dropped_at_11(&engine);
+        assert_eq!(pending.asks(), Some(notify::UPDATE));
+
+        // 2. "No": Google receives the new time with guest notifications turned off.
+        let Pending::Change(mut edit, Scope::This) = pending else {
+            panic!("a change of this event");
+        };
+        edit.notify = false;
+        let updates = engine.handle(Some(Job::Change(1, edit)), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "sync").unwrap();
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T11:00:00+01:00");
+        assert_eq!(kept["end"]["dateTime"], "2026-11-12T11:30:00+01:00");
+        let [patched] = writes(&google).try_into().unwrap();
+        assert!(patched.starts_with("PATCH "), "{patched}");
+        assert!(
+            patched.ends_with("/events/sync?sendUpdates=none"),
+            "{patched}"
+        );
+    }
+
+    #[test]
+    fn answering_yes_to_a_dragged_meeting_has_google_notify_its_guests() {
+        let (google, mut engine, start) = sync_with_adam("notify-yes");
+        let Pending::Change(mut edit, _) = sync_dropped_at_11(&engine) else {
+            panic!("a change");
+        };
+
+        edit.notify = true;
+        engine.handle(Some(Job::Change(1, edit)), start);
+
+        let [patched] = writes(&google).try_into().unwrap();
+        assert!(
+            patched.ends_with("/events/sync?sendUpdates=all"),
+            "{patched}"
+        );
+    }
+
+    #[test]
+    fn saving_a_change_in_the_editor_and_deleting_the_event_ask_the_same_question() {
+        let (google, mut engine, start) = sync_with_adam("notify-editor-delete");
+        let regional = polish();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let sync = (now_shown(&engine).into_iter())
+            .find(|e| e.id == "sync")
+            .unwrap();
+
+        // A new title saved in the editor asks, and "Yes" notifies the guests.
+        let mut editor = Editor::of(&sync, calendar.clone(), &regional);
+        editor.title = "Weekly sync".to_string();
+        let Ok(mut edit) = Question::changing(*edit(&editor, &regional)) else {
+            panic!("no scope question");
+        };
+        let asked = Pending::Change(Box::new(edit.clone()), Scope::This).asks();
+        assert_eq!(asked, Some(notify::UPDATE));
+        edit.notify = true;
+        engine.handle(Some(Job::Change(1, Box::new(edit))), start);
+        assert_eq!(
+            google.fake.event(ACCOUNT_ID, EMAIL, "sync").unwrap()["summary"],
+            "Weekly sync"
+        );
+
+        // Deleting it asks too, and "No" deletes it without notifying them.
+        let sync = (now_shown(&engine).into_iter())
+            .find(|e| e.id == "sync")
+            .unwrap();
+        let Ok(deleted) = Question::deleting(calendar, sync) else {
+            panic!("no scope question");
+        };
+        let asked = Pending::Delete(Box::new(deleted.clone()), Scope::This).asks();
+        assert_eq!(asked, Some(notify::CANCELLATION));
+        let (calendar, sync) = deleted;
+        let updates = engine.handle(
+            Some(Job::Delete(2, calendar.clone(), sync.clone(), false)),
+            start,
+        );
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(2)]);
+
+        // Its undo tells the guests as the deletion did.
+        let updates = engine.handle(Some(Job::Restore(3, calendar, sync, false)), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(3, _)]
+        ));
+        let writes: Vec<String> = (writes(&google).into_iter())
+            .map(|r| r.replace(&format!("/calendar/v3/calendars/{EMAIL}"), ""))
+            .collect();
+        assert_eq!(
+            writes,
+            [
+                "PATCH /events/sync?sendUpdates=all",
+                "DELETE /events/sync?sendUpdates=none",
+                "PATCH /events/sync?sendUpdates=none",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_change_to_the_following_events_of_a_series_with_guests_tells_google_with_each_request() {
+        let (google, mut engine, start) = standup_series("notify-series");
+        let mut standup = google.fake.event(ACCOUNT_ID, EMAIL, "standup").unwrap();
+        standup["attendees"] = json!([{"email": "adam@example.com", "responseStatus": "accepted"}]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, standup);
+        engine.handle(Some(Job::Refresh), start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let fifth = standup_on(&engine, d(2026, 12, 14));
+        let retitled = Edit {
+            patch: Patch {
+                title: Some("Daily".to_string()),
+                ..Patch::default()
+            },
+            ..drag::edit(&fifth, calendar, fifth.timing)
+        };
+        let Err(question) = Question::changing(retitled) else {
+            panic!("the scope is asked first");
+        };
+        let pending = Pending::of(question, Scope::Following);
+        assert_eq!(pending.asks(), Some(notify::UPDATE));
+        let Pending::Change(mut edit, scope) = pending else {
+            panic!("a change");
+        };
+
+        edit.notify = true;
+        let updates = engine.handle(Some(Job::ChangeSeries(1, edit, scope)), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let writes = writes(&google);
+        assert_eq!(writes.len(), 2, "{writes:?}");
+        assert!(
+            writes.iter().all(|r| r.ends_with("sendUpdates=all")),
+            "{writes:?}"
+        );
     }
 }

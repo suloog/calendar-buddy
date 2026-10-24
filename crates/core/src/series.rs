@@ -170,6 +170,7 @@ pub fn change(
                 ..patch.clone()
             },
             to: edit.to.clone(),
+            notify: edit.notify,
         })),
         Scope::Following => {
             let timing = patch.timing.unwrap_or_else(|| regular(first, original));
@@ -489,6 +490,7 @@ mod tests {
             calendar: calendar(),
             patch,
             to: None,
+            notify: false,
         }
     }
 
@@ -841,9 +843,15 @@ mod tests {
         );
         let third = occurrence(&old, d(2027, 1, 12));
 
-        let all = changed(change(&retitled(&third), Scope::All, &old, &[]));
+        let notified = Edit {
+            notify: true,
+            ..retitled(&third)
+        };
+        let all = changed(change(&notified, Scope::All, &old, &[]));
         let split = split(change(&retitled(&third), Scope::Following, &old, &[]));
 
+        // The guests are e-mailed of the series' change as the user answered (`MOD-06-F12`).
+        assert!(all.notify);
         assert_eq!(all.patch.recurrence, None);
         assert_eq!(all.patch.title.as_deref(), Some("Daily"));
         assert_eq!(

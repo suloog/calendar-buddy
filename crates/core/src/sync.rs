@@ -161,7 +161,16 @@ pub trait Provider {
     /// Creates a copy of the calendar's event `id` with everything the provider keeps of it, its
     /// guests and reminders included, but the fields of `new` in place of its own, and returns
     /// the copy's ID: the new series of a split (`MOD-05-F20`).
-    fn copy(&self, calendar: &Calendar, id: &str, new: &NewEvent) -> Result<String, SyncError>;
+    ///
+    /// Here and in the changes and deletions below, `notify` says whether the provider e-mails
+    /// the event's guests about it, as the user answered (`MOD-06-F12`).
+    fn copy(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        new: &NewEvent,
+        notify: bool,
+    ) -> Result<String, SyncError>;
     /// Changes what the patch holds of the calendar's event, unless the event changed at the
     /// provider since the version `etag` (`SyncError::changed_elsewhere`); returns the event's
     /// new version (`MOD-05-F11`). An empty `etag`, of an occurrence of a series not changed
@@ -172,6 +181,7 @@ pub trait Provider {
         id: &str,
         etag: &str,
         patch: &Patch,
+        notify: bool,
     ) -> Result<String, SyncError>;
     /// Moves the event to another calendar of the same account and returns its new version
     /// (`MOD-05-F15`).
@@ -180,13 +190,20 @@ pub trait Provider {
         calendar: &Calendar,
         id: &str,
         destination: &Calendar,
+        notify: bool,
     ) -> Result<String, SyncError>;
     /// Deletes the calendar's event, unless it changed at the provider since the version `etag`
     /// (`SyncError::changed_elsewhere`) (`MOD-05-F12`); an empty `etag` as `update` says.
-    fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError>;
+    fn delete(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        etag: &str,
+        notify: bool,
+    ) -> Result<(), SyncError>;
     /// Brings back the calendar's event deleted just now, whole, and returns its new version
     /// (`MOD-05-F27`).
-    fn restore(&self, calendar: &Calendar, id: &str) -> Result<String, SyncError>;
+    fn restore(&self, calendar: &Calendar, id: &str, notify: bool) -> Result<String, SyncError>;
     /// How long, in minutes, a new event started without a range is, as the account's settings at
     /// the provider say (`MOD-05-F09`).
     fn default_length(&self) -> Result<u32, SyncError>;
@@ -417,11 +434,24 @@ mod tests {
             Ok(Some(fetched))
         }
 
-        fn update(&self, _: &Calendar, _: &str, _: &str, _: &Patch) -> Result<String, SyncError> {
+        fn update(
+            &self,
+            _: &Calendar,
+            _: &str,
+            _: &str,
+            _: &Patch,
+            _: bool,
+        ) -> Result<String, SyncError> {
             unreachable!("synchronization changes nothing")
         }
 
-        fn move_to(&self, _: &Calendar, _: &str, _: &Calendar) -> Result<String, SyncError> {
+        fn move_to(
+            &self,
+            _: &Calendar,
+            _: &str,
+            _: &Calendar,
+            _: bool,
+        ) -> Result<String, SyncError> {
             unreachable!("synchronization moves nothing")
         }
 
@@ -429,15 +459,15 @@ mod tests {
             unreachable!("synchronization creates nothing")
         }
 
-        fn copy(&self, _: &Calendar, _: &str, _: &NewEvent) -> Result<String, SyncError> {
+        fn copy(&self, _: &Calendar, _: &str, _: &NewEvent, _: bool) -> Result<String, SyncError> {
             unreachable!("synchronization creates nothing")
         }
 
-        fn delete(&self, _: &Calendar, _: &str, _: &str) -> Result<(), SyncError> {
+        fn delete(&self, _: &Calendar, _: &str, _: &str, _: bool) -> Result<(), SyncError> {
             unreachable!("synchronization deletes nothing")
         }
 
-        fn restore(&self, _: &Calendar, _: &str) -> Result<String, SyncError> {
+        fn restore(&self, _: &Calendar, _: &str, _: bool) -> Result<String, SyncError> {
             unreachable!("synchronization restores nothing")
         }
 

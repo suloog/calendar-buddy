@@ -1148,7 +1148,7 @@ fn a_guests_copy_the_organizer_does_not_let_guests_change_is_for_the_organizer_o
         title: Some("Mine now".into()),
         ..Patch::default()
     };
-    let refused = session.update(&work, "theirs", &theirs.etag, &patch);
+    let refused = session.update(&work, "theirs", &theirs.etag, &patch, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert_eq!(synced, Ok(()));
@@ -1312,9 +1312,10 @@ fn an_events_colour_is_patched_and_taken_away() {
         "standup",
         &etag(&google),
         &recolour(Some(EventColor::Peacock)),
+        false,
     );
     let painted_to = google.event(ACCOUNT_ID, "work", "standup").unwrap()["colorId"].clone();
-    let cleared = session.update(&work, "standup", &etag(&google), &recolour(None));
+    let cleared = session.update(&work, "standup", &etag(&google), &recolour(None), false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(painted.is_ok() && cleared.is_ok());
@@ -1370,7 +1371,7 @@ fn a_change_is_sent_as_a_patch_of_what_changed_against_the_version_opened() {
     };
 
     let etag = session
-        .update(&work, "review", &opened.etag, &patch)
+        .update(&work, "review", &opened.etag, &patch, false)
         .unwrap();
 
     let changed = google.event(ACCOUNT_ID, "work", "review").unwrap();
@@ -1396,9 +1397,9 @@ fn a_change_is_sent_as_a_patch_of_what_changed_against_the_version_opened() {
     );
     assert_eq!(google.patched().last().unwrap().0, opened.etag);
     assert!(
-        google
-            .requests()
-            .contains(&"PATCH /calendar/v3/calendars/work/events/review".to_string())
+        google.requests().contains(
+            &"PATCH /calendar/v3/calendars/work/events/review?sendUpdates=none".to_string()
+        )
     );
 
     // And back to a timed event, in another zone.
@@ -1411,7 +1412,9 @@ fn a_change_is_sent_as_a_patch_of_what_changed_against_the_version_opened() {
         description: Some("Agenda".into()),
         ..Patch::default()
     };
-    session.update(&work, "review", &etag, &patch).unwrap();
+    session
+        .update(&work, "review", &etag, &patch, false)
+        .unwrap();
     let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
     std::fs::remove_dir_all(&dir).unwrap();
 
@@ -1449,14 +1452,14 @@ fn a_change_to_an_event_changed_elsewhere_meanwhile_is_refused_as_such() {
         ..Patch::default()
     };
 
-    let refused = session.update(&work, "review", &opened.etag, &patch);
+    let refused = session.update(&work, "review", &opened.etag, &patch, false);
     // Nor can the account change a calendar it may only read.
     google.set_access_role("work", "reader");
     let current = google.event(ACCOUNT_ID, "work", "review").unwrap()["etag"]
         .as_str()
         .unwrap()
         .to_string();
-    let read_only = session.update(&work, "review", &current, &patch);
+    let read_only = session.update(&work, "review", &current, &patch, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(refused.unwrap_err().is_changed_elsewhere());
@@ -1480,10 +1483,10 @@ fn an_event_moved_to_another_calendar_of_the_account_leaves_the_first_for_the_ot
     let (work, team) = (&calendars[0], &calendars[1]);
     let opened = cached(&cache, "work", "review").unwrap();
 
-    let etag = session.move_to(work, "review", team).unwrap();
+    let etag = session.move_to(work, "review", team, false).unwrap();
 
     assert!(google.requests().contains(
-        &"POST /calendar/v3/calendars/work/events/review/move?destination=team".to_string()
+        &"POST /calendar/v3/calendars/work/events/review/move?destination=team&sendUpdates=none".to_string()
     ));
     let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -1503,13 +1506,13 @@ fn a_deleted_event_leaves_the_calendar_and_restoring_it_brings_it_back_whole() {
     let work = cache.calendar_list().unwrap().remove(0);
     let opened = cached(&cache, "work", "review").unwrap();
 
-    session.delete(&work, "review", &opened.etag).unwrap();
+    session
+        .delete(&work, "review", &opened.etag, false)
+        .unwrap();
 
-    assert!(
-        google
-            .requests()
-            .contains(&"DELETE /calendar/v3/calendars/work/events/review".to_string())
-    );
+    assert!(google.requests().contains(
+        &"DELETE /calendar/v3/calendars/work/events/review?sendUpdates=none".to_string()
+    ));
     assert_eq!(
         google.event(ACCOUNT_ID, "work", "review").unwrap()["status"],
         "cancelled"
@@ -1518,7 +1521,7 @@ fn a_deleted_event_leaves_the_calendar_and_restoring_it_brings_it_back_whole() {
     assert_eq!(synced, Ok(()));
     assert!(cached(&cache, "work", "review").is_none());
 
-    let etag = session.restore(&work, "review").unwrap();
+    let etag = session.restore(&work, "review", false).unwrap();
 
     assert_eq!(
         google.patched().last().unwrap().1,
@@ -1551,14 +1554,14 @@ fn a_deletion_of_an_event_changed_elsewhere_meanwhile_is_refused_as_such() {
         ),
     );
 
-    let refused = session.delete(&work, "review", &opened.etag);
+    let refused = session.delete(&work, "review", &opened.etag, false);
     // Nor can the account delete from a calendar it may only read.
     google.set_access_role("work", "reader");
     let current = google.event(ACCOUNT_ID, "work", "review").unwrap()["etag"]
         .as_str()
         .unwrap()
         .to_string();
-    let read_only = session.delete(&work, "review", &current);
+    let read_only = session.delete(&work, "review", &current, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(refused.unwrap_err().is_changed_elsewhere());
@@ -1599,10 +1602,10 @@ fn an_occurrence_is_changed_and_deleted_alone_by_its_id_without_a_version_of_its
     };
 
     let etag = session
-        .update(&work, "weekly_20261123T080000Z", "", &patch)
+        .update(&work, "weekly_20261123T080000Z", "", &patch, false)
         .unwrap();
     session
-        .delete(&work, "weekly_20261130T080000Z", "")
+        .delete(&work, "weekly_20261130T080000Z", "", false)
         .unwrap();
     let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -1642,7 +1645,7 @@ fn a_series_rule_is_sent_whole_in_a_patch_against_its_version() {
     };
 
     session
-        .update(&work, "weekly", &master.etag, &patch)
+        .update(&work, "weekly", &master.etag, &patch, false)
         .unwrap();
     let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -1708,8 +1711,8 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
         ..following.clone()
     };
 
-    let id = session.copy(&work, "weekly", &following).unwrap();
-    let without = session.copy(&work, "weekly", &uncoloured).unwrap();
+    let id = session.copy(&work, "weekly", &following, false).unwrap();
+    let without = session.copy(&work, "weekly", &uncoloured, false).unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
 
     let copy = google.event(ACCOUNT_ID, "work", &id).unwrap();
@@ -1853,7 +1856,7 @@ fn an_events_guests_are_patched_whole_and_those_google_has_no_entry_for_go_unans
         ..Patch::default()
     };
 
-    let patched = session.update(&work, "standup", &etag, &patch);
+    let patched = session.update(&work, "standup", &etag, &patch, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(patched.is_ok());
@@ -1865,12 +1868,69 @@ fn an_events_guests_are_patched_whole_and_those_google_has_no_entry_for_go_unans
             {"email": "adam@example.com", "displayName": "Adam", "responseStatus": "needsAction"}
         ]})
     );
-    // Without the notify question of `US-06-03`, Google is not asked to e-mail the guests.
+    // The user said not to e-mail the guests (`MOD-06-F12`).
     assert!(
         (google.requests().iter())
             .filter(|r| r.starts_with("PATCH "))
-            .all(|r| !r.contains("sendUpdates"))
+            .all(|r| r.ends_with("?sendUpdates=none"))
     );
+}
+
+#[test]
+fn whether_google_emails_the_guests_is_sent_with_every_change_and_deletion() {
+    let (google, store, dir, client_file, cache) = synchronized_once("send-updates");
+    google.add_calendar(ACCOUNT_ID, entry("team", "Team", "#7bd148", "writer"));
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let team = Calendar {
+        id: "team".into(),
+        ..work.clone()
+    };
+    let retitled = Patch {
+        title: Some("Daily".into()),
+        ..Patch::default()
+    };
+    let sent = |google: &FakeGoogle| google.requests().pop().unwrap();
+
+    session
+        .update(&work, "standup", "", &retitled, true)
+        .unwrap();
+    let all = sent(&google);
+    session
+        .update(&work, "standup", "", &retitled, false)
+        .unwrap();
+    let none = sent(&google);
+    assert_eq!(
+        [all, none],
+        [
+            "PATCH /calendar/v3/calendars/work/events/standup?sendUpdates=all",
+            "PATCH /calendar/v3/calendars/work/events/standup?sendUpdates=none",
+        ]
+    );
+
+    session.delete(&work, "review", "", true).unwrap();
+    let deleted = sent(&google);
+    session.restore(&work, "review", false).unwrap();
+    let restored = sent(&google);
+    session.delete(&work, "review", "", false).unwrap();
+    assert_eq!(
+        [deleted, restored, sent(&google)],
+        [
+            "DELETE /calendar/v3/calendars/work/events/review?sendUpdates=all",
+            "PATCH /calendar/v3/calendars/work/events/review?sendUpdates=none",
+            "DELETE /calendar/v3/calendars/work/events/review?sendUpdates=none",
+        ]
+    );
+
+    session.move_to(&work, "standup", &team, true).unwrap();
+    assert_eq!(
+        sent(&google),
+        "POST /calendar/v3/calendars/work/events/standup/move?destination=team&sendUpdates=all"
+    );
+
+    session.copy(&team, "standup", &planning(), false).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(sent(&google).ends_with("&sendUpdates=none"));
 }
 
 #[test]
@@ -1987,7 +2047,7 @@ fn a_guest_change_keeps_what_google_keeps_of_each_guest_but_optional_and_their_n
         ..Patch::default()
     };
 
-    let patched = session.update(&work, "standup", &etag, &patch);
+    let patched = session.update(&work, "standup", &etag, &patch, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(patched.is_ok());

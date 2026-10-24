@@ -125,6 +125,9 @@ pub struct Edit {
     pub patch: Patch,
     /// Another calendar of the same account it moves to.
     pub to: Option<Calendar>,
+    /// Whether Google e-mails the event's guests about the change, as the user answered
+    /// (`MOD-06-F12`).
+    pub notify: bool,
 }
 
 impl Edit {
@@ -574,6 +577,7 @@ impl Editor {
             calendar: opened_in.clone(),
             patch,
             to: moved.then_some(calendar),
+            notify: false,
         })))
     }
 }

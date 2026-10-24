@@ -22,8 +22,9 @@ pub const SAVED: &str = "Event saved.";
 /// What undoes a change Google took.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Undo {
-    /// Brings back the event deleted from the calendar.
-    Restore(Box<(Calendar, Event)>),
+    /// Brings back the event deleted from the calendar, e-mailing its guests or not as the user
+    /// answered for the deletion (`MOD-06-F12`).
+    Restore(Box<(Calendar, Event)>, bool),
     /// Puts the changed event back as it was.
     Revert(Box<Edit>),
 }
@@ -59,6 +60,8 @@ impl Undo {
                 guests: (patch.guests.as_ref()).map(|_| before.about.guests.clone()),
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
+            // As the user answered for the change it undoes (`MOD-06-F12`).
+            notify: edit.notify,
             event,
         }))
     }
@@ -68,7 +71,7 @@ impl Undo {
 #[derive(Clone, Debug)]
 enum Sent {
     Change(Box<Edit>),
-    Delete(Box<(Calendar, Event)>),
+    Delete(Box<(Calendar, Event)>, bool),
 }
 
 /// The last change to an event and what undoes it.
@@ -89,10 +92,11 @@ impl LastChange {
         self.undo = None;
     }
 
-    /// The user deleted the event, told by `local`; it becomes the last change.
-    pub fn deleting(&mut self, local: u64, calendar: &Calendar, event: &Event) {
+    /// The user deleted the event, told by `local`, its guests e-mailed or not as `notify`
+    /// says; it becomes the last change.
+    pub fn deleting(&mut self, local: u64, calendar: &Calendar, event: &Event, notify: bool) {
         let deleted = Box::new((calendar.clone(), event.clone()));
-        self.sent = Some((local, Sent::Delete(deleted)));
+        self.sent = Some((local, Sent::Delete(deleted, notify)));
         self.undo = None;
     }
 
@@ -111,8 +115,10 @@ impl LastChange {
 
     /// Google deleted the event told by `local`: the deletion can be undone.
     pub fn deleted(&mut self, local: u64, now: Instant) {
-        if let Some((_, Sent::Delete(deleted))) = self.sent.take_if(|(sent, _)| *sent == local) {
-            self.undo = Some((Undo::Restore(deleted), DELETED, now));
+        if let Some((_, Sent::Delete(deleted, notify))) =
+            self.sent.take_if(|(sent, _)| *sent == local)
+        {
+            self.undo = Some((Undo::Restore(deleted, notify), DELETED, now));
         }
     }
 
@@ -183,6 +189,7 @@ mod tests {
                 ..Patch::default()
             },
             to: None,
+            notify: false,
         }
     }
 
@@ -236,12 +243,15 @@ mod tests {
                 })]),
             },
             to: Some(calendar("team")),
+            notify: true,
         };
 
         let Undo::Revert(undo) = Undo::revert(&edit, "\"2\"") else {
             panic!("a change is reverted");
         };
 
+        // The guests are e-mailed of the undo as they were of the change (`MOD-06-F12`).
+        assert!(undo.notify);
         // An untitled event gets its empty title back, not "(No title)".
         assert_eq!(
             undo.patch,
@@ -275,6 +285,7 @@ mod tests {
             calendar: calendar("personal"),
             patch: Patch::default(),
             to: Some(calendar("team")),
+            notify: false,
         };
 
         let Undo::Revert(undo) = Undo::revert(&edit, "\"2\"") else {
@@ -299,7 +310,7 @@ mod tests {
         );
         let mut last = LastChange::default();
         let start = Instant::now();
-        last.deleting(3, &personal, &gym);
+        last.deleting(3, &personal, &gym, true);
         // Nothing to undo until Google deleted it.
         assert_eq!(last.notice(start), None);
 
@@ -313,7 +324,11 @@ mod tests {
         );
         assert_eq!(last.notice(start + NOTICE), None);
         // Ctrl+Z still undoes it after the notice went.
-        assert_eq!(last.undo(), Some(Undo::Restore(Box::new((personal, gym)))));
+        // E-mailing the guests as the deletion did (`MOD-06-F12`).
+        assert_eq!(
+            last.undo(),
+            Some(Undo::Restore(Box::new((personal, gym)), true))
+        );
         assert_eq!(last.undo(), None);
         assert_eq!(last.notice(start), None);
     }
@@ -335,7 +350,7 @@ mod tests {
         last.changing(2, &edit);
         last.changed(2, "\"3\"", now);
         // Another change sent: until Google takes it, nothing is undone.
-        last.deleting(4, &calendar("personal"), &call);
+        last.deleting(4, &calendar("personal"), &call, false);
         assert_eq!(last.undo(), None);
         // A refused change leaves nothing to undo.
         last.refused(4);

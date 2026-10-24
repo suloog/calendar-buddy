@@ -1500,3 +1500,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-124] When and how the app asks whether to notify guests
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-03
+- **Affects:** `US-06-03`, `MOD-06-F08`, `MOD-06-F12`, `MOD-05-F20`, `MOD-05-F21`, `MOD-05-F28`, `DEC-40`, `DEC-121`
+- **Decision:** The question is asked when the event has a guest other than the account itself, before or after the change, so inviting the first guest or removing the last one asks too; it comes after the scope question for an occurrence of a series. A change asks "Send update e-mails to the guests?", a deletion "Send cancellation e-mails to the guests?", with the buttons Back, Don't send and Send; Back (or Escape) saves nothing and returns to the editor the change was made in, and a dragged event stays where it was. The answer goes to Google as `sendUpdates=all` or `none` on every request the change makes: the patch, the move to another calendar, the series' end, its copy and the deletions of a split, the deletion and the restore. A change or deletion of an event without guests asks nothing and is sent with `sendUpdates=none`. An undo asks nothing and tells the guests as the change it undoes did. Refines `DEC-121`: changes to existing events are no longer sent without `sendUpdates`; a new event with guests is still created with `sendUpdates=all`.
+- **Why:** As in Google Calendar, which asks after the scope with Back / Don't send / Send and words the question for an update or a cancellation (`DEC-62`). Applying one answer to every request keeps the guests told, or not, of the whole change; an undo that reverts a change the guests were told of has to reach them too.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

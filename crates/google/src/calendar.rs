@@ -461,6 +461,13 @@ fn times(timing: &Timing, clear: bool) -> (Value, Value) {
     (start, end)
 }
 
+/// Whether Google e-mails the event's guests about the change, as the user answered
+/// (`MOD-06-F12`).
+fn send_updates(url: &mut Url, notify: bool) {
+    let send = if notify { "all" } else { "none" };
+    url.query_pairs_mut().append_pair("sendUpdates", send);
+}
+
 /// Google's `transparency`.
 fn transparency(show: Show) -> &'static str {
     match show {
@@ -572,7 +579,13 @@ impl Provider for Session {
     /// The event as Google keeps it, but what Google gives an event of its own and what made it
     /// a series or an occurrence of one; with its conference and attachments, which Google takes
     /// only when asked to.
-    fn copy(&self, calendar: &Calendar, id: &str, new: &NewEvent) -> Result<String, SyncError> {
+    fn copy(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        new: &NewEvent,
+        notify: bool,
+    ) -> Result<String, SyncError> {
         let url = self.url(&["calendars", &calendar.id, "events", id]);
         let Some(Value::Object(mut event)) = self.get::<Value>(url)? else {
             return Err(SyncError("Google refused (gone)".into()));
@@ -606,6 +619,7 @@ impl Provider for Session {
         url.query_pairs_mut()
             .append_pair("conferenceDataVersion", "1")
             .append_pair("supportsAttachments", "true");
+        send_updates(&mut url, notify);
         Ok(self.post::<Created>(url, Some(&Value::Object(event)))?.id)
     }
 
@@ -615,6 +629,7 @@ impl Provider for Session {
         id: &str,
         etag: &str,
         patch: &Patch,
+        notify: bool,
     ) -> Result<String, SyncError> {
         let mut change = serde_json::Map::new();
         let mut set = |field: &str, value: Option<Value>| {
@@ -638,9 +653,8 @@ impl Provider for Session {
             "colorId",
             patch.color.map(|color| json!(color.map(color_id))),
         );
-        let url = self.url(&["calendars", &calendar.id, "events", id]);
-        // Sent without e-mails to the guests: asking whether to send them is `US-06-03`'s. What
-        // Google keeps of each guest is read first, as the list is replaced whole.
+        let mut url = self.url(&["calendars", &calendar.id, "events", id]);
+        // What Google keeps of each guest is read first, as the list is replaced whole.
         if let Some(guests) = &patch.guests {
             let kept = self.get::<Value>(url.clone())?.unwrap_or_default();
             set(
@@ -648,6 +662,7 @@ impl Provider for Session {
                 Some(attendees(guests, kept_list(&kept["attendees"]))),
             );
         }
+        send_updates(&mut url, notify);
         Ok(self
             .patch::<Version>(url, &Value::Object(change), version(etag))?
             .etag)
@@ -658,24 +673,34 @@ impl Provider for Session {
         calendar: &Calendar,
         id: &str,
         destination: &Calendar,
+        notify: bool,
     ) -> Result<String, SyncError> {
         let mut url = self.url(&["calendars", &calendar.id, "events", id, "move"]);
         url.query_pairs_mut()
             .append_pair("destination", &destination.id);
+        send_updates(&mut url, notify);
         Ok(self.post::<Version>(url, None)?.etag)
     }
 
     /// Google answers a deletion of an event already deleted with 410 Gone: it is deleted.
-    fn delete(&self, calendar: &Calendar, id: &str, etag: &str) -> Result<(), SyncError> {
-        let url = self.url(&["calendars", &calendar.id, "events", id]);
+    fn delete(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        etag: &str,
+        notify: bool,
+    ) -> Result<(), SyncError> {
+        let mut url = self.url(&["calendars", &calendar.id, "events", id]);
+        send_updates(&mut url, notify);
         self.send::<()>(url, Request::Delete(version(etag)))
             .map(|_| ())
     }
 
     /// Google keeps a deleted event, cancelled, for a while: confirming it again brings it back
     /// with everything it had.
-    fn restore(&self, calendar: &Calendar, id: &str) -> Result<String, SyncError> {
-        let url = self.url(&["calendars", &calendar.id, "events", id]);
+    fn restore(&self, calendar: &Calendar, id: &str, notify: bool) -> Result<String, SyncError> {
+        let mut url = self.url(&["calendars", &calendar.id, "events", id]);
+        send_updates(&mut url, notify);
         let change = json!({"status": "confirmed"});
         Ok(self.patch::<Version>(url, &change, None)?.etag)
     }

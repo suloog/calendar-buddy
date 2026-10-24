@@ -134,6 +134,7 @@ pub fn edit(event: &Event, calendar: Calendar, timing: Timing) -> Edit {
             ..Patch::default()
         },
         to: None,
+        notify: false,
     }
 }
 
