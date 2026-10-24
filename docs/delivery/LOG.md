@@ -332,3 +332,14 @@
   - one squash commit: one logical change.
 - Manual checks: TC-06-10 (US-06-07#2 against real Google), TC-06-11 (US-06-07#3), the no-Meet edge case
 - Commits on main: 26fe73d feat(meet): add Google Meet switch and Join button [US-06-07]
+
+## US-06-08 — review — 2026-10-24 05:05
+- What: the editor shows an "Availability" row under the time: one strip per guest (first 20) with their busy blocks for the event's day, from Google's `freeBusy.query` run off the UI thread, the chosen time as a band across the strips, "Conflict" for a guest busy then and "No data" for one who does not share; no preview offline, when Google does not answer, for all-day events, out of office and focus time.
+- Decisions: DEC-134, DEC-135
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - fixed after code review: no preview for out of office / focus time; an existing event's saved time is cut only for invited, not-declined guests of an event shown as busy;
+  - left: a failed free/busy query is not retried until the day, guests or calendar change or the editor reopens; the same query is sent again after the time field passes through an unreadable state; the row disappears until a changed query is answered; the strips are UI, not unit-tested (manual checks);
+  - calendar-provider interface change: new `Provider::busy` method (default answers "no data" for everyone); no SQLite schema change;
+  - one squash commit: one logical change.
+- Manual checks: TC-06-12 (US-06-08#1, #2 against real Google), US-06-08#3, US-06-08#5
+- Commits on main: 15a45d2 feat(guests): show guests' availability in the editor [US-06-08]
