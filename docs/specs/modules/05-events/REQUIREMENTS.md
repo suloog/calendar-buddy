@@ -75,7 +75,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 ### Recurring events
 
-- [MOD-05-F18] The user can make an event recurring with one of these patterns: daily, every weekday, weekly on chosen days, monthly, yearly. — *source: `DEC-36`*
+- [MOD-05-F18] The user can make an event recurring with one of these patterns: daily, every weekday, weekly on chosen days, monthly, yearly; since `DEC-165` they are offered through Google's repeat menu and "Custom…" (`MOD-05-F32`, `F33`). — *source: `DEC-36`, `DEC-165`*
 - [MOD-05-F19] A recurring event ends on a chosen date, after a chosen number of occurrences, or never. — *source: `DEC-36`*
 - [MOD-05-F20] Changing an occurrence of a series — in the editor or by dragging or resizing — asks whether the change applies to this event, this and following events, or all events. — *source: `DEC-36`*
 - [MOD-05-F21] Deleting an occurrence of a series asks the same three-way question. — *source: `DEC-36`*

@@ -32,7 +32,7 @@ The editor's repeat menu becomes Google Calendar's, with "Custom…" opening Goo
 - [ ] For weeks the dialog shows the weekdays with the start's weekday chosen and does not allow none; for days, months and years it shows no weekdays.
 - [ ] A series created in Google as "every 3 months on the second Monday, until 30 June 2027" shows that rule in the menu, opens filled in "Custom…", and its rule can be changed in the app.
 - [ ] Changing the rule of an occurrence asks "This and following events" or "All events", without "This event", and the change follows the answer.
-- [ ] A series from Google with a rule the dialog cannot express (e.g. `BYSETPOS`) keeps its rule when its title is changed, and the app offers to open it in Google Calendar to change the rule.
+- [ ] A series from Google with a rule the dialog cannot express (e.g. "the first Monday or Tuesday of the month") keeps its rule when its title is changed, and the app offers to open it in Google Calendar to change the rule.
 - [ ] A series set in "Custom…" shows the same occurrences in Google Calendar in the browser.
 
 ## Out of scope / what not to worry about

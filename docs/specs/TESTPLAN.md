@@ -43,14 +43,14 @@ that module. Numbers are never reused or renumbered.
 
 | Module | Story criteria | Covered | TC (auto / manual) | Written |
 | ------ | -------------- | ------- | ------------------ | ------- |
-| `MOD-01` Google accounts and sign-in | 19 | 8 | 2 / 2 | written |
+| `MOD-01` Google accounts and sign-in | 19 | 7 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
-| `MOD-03` Views and navigation | 41 | 28 | 12 / 2 | written |
+| `MOD-03` Views and navigation | 46 | 28 | 12 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
-| `MOD-05` Creating and editing events | 42 | 26 | 12 / 3 | written |
+| `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 19 | 11 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **195** | **120** | **55 / 14** | 7 / 7 modules written |
+| **Total** | **202** | **119** | **55 / 14** | 7 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -69,7 +69,7 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 
 | TC | Title | Verifies | Layer | Type | Automation | Status |
 | -- | ----- | -------- | ----- | ---- | ---------- | ------ |
-| `TC-01-01` | A first Google account is connected from the welcome screen and its calendar appears | `US-01-01#1`, `US-01-01#2`, `US-01-01#3` | desktop | happy-path | manual-only | ready |
+| `TC-01-01` | A first Google account is connected from the welcome screen and its calendar appears | `US-01-01#1`, `US-01-01#3` | desktop | happy-path | manual-only | ready |
 | `TC-01-02` | A second account is connected from the settings and both are listed with their state | `US-01-02#1`, `US-01-02#2` | desktop | happy-path | manual-only | ready |
 | `TC-01-03` | Connected accounts stay connected after a restart without opening the browser | `US-01-03#1` | desktop | happy-path | auto | ready |
 | `TC-01-04` | Removing an account deletes all its local data and withdraws the app's access | `US-01-04#2`, `US-01-04#3` | desktop | happy-path | auto | ready |
@@ -108,8 +108,8 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-03-10` | A disabled calendar is absent from the side panel, the calendar pickers and the views, and returns when enabled | `US-03-07#1`, `US-03-07#2` | desktop | happy-path | auto | ready |
 | `TC-03-11` | Google Calendar's keys switch views, move between periods and show the shortcut list | `US-03-08#1`, `US-03-08#2`, `US-03-08#4` | desktop | happy-path | auto | ready |
 | `TC-03-12` | A Sunday-first locale and a change of system time zone are followed by the views | `US-03-09#1`, `US-03-09#2` | desktop | happy-path | auto | ready |
-| `TC-03-13` | Ctrl + wheel and Ctrl + plus / minus / 0 zoom the hours around the pointer or the middle, within 50–300 % | `US-03-10#1`, `US-03-10#2`, `US-03-10#3`, `US-03-10#5` | desktop | happy-path | auto | draft |
-| `TC-03-14` | The hour height is a slider in the settings, shared by the three views and kept after a restart | `US-03-10#6`, `US-03-10#7` | desktop | happy-path | auto | draft |
+| `TC-03-13` | Ctrl + wheel and Ctrl + plus / minus / 0 zoom the hours around the pointer or the middle, within 50–300 % | `US-03-10#1`, `US-03-10#2`, `US-03-10#3`, `US-03-10#5` | desktop | happy-path | auto | ready |
+| `TC-03-14` | The hour height is a slider in the settings, shared by the three views and kept after a restart | `US-03-10#6`, `US-03-10#7` | desktop | happy-path | auto | ready |
 
 ## [MOD-04] Appearance and themes
 

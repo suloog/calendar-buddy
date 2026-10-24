@@ -97,6 +97,7 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-03#1` | The month view shows each day of the month with its events. | `TC-03-06` | auto | — |
 | `US-03-03#2` | A day with more events than fit shows how many more there are; choo… | `TC-03-06` | auto | — |
 | `US-03-03#3` | Today is highlighted, and calendars shared as free/busy only appear… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-03#4` | An all-day or multi-day event is one bar across the days it covers… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-04#1` | The agenda lists events from now on, grouped by day, without empty… | `TC-03-07` | auto | — |
 | `US-03-04#2` | More events load as the user scrolls down. | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-04#3` | With nothing ahead, the agenda says there are no upcoming events. | `TC-03-07` | auto | — |
@@ -105,6 +106,8 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-05#2` | Next and previous move by the period of the current view; "Today" b… | `TC-03-08` | auto | — |
 | `US-03-05#3` | The mini calendar marks the period on screen and jumps to any date… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-05#4` | After a restart, the app opens in the view used last, on today's date. | `TC-03-08` | auto | — |
+| `US-03-05#5` | In the mini calendar, every day with an event shown in the views (n… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-05#6` | A button in the top bar, beside next and previous, opens "Go to dat… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-06#1` | The side panel lists each connected account and, under it, its cale… | `TC-03-09` | auto | — |
 | `US-03-06#2` | A quick toggle next to a calendar hides or shows its events; the ca… | `TC-03-09` | auto | — |
 | `US-03-06#3` | The panel can be collapsed and expanded, and the app remembers whic… | — | — | smoke depth — not tested yet (`DEC-65`) |
@@ -117,6 +120,7 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-08#3` | `c` starts a new event. | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-08#4` | `?` shows the list of shortcuts. | `TC-03-11` | auto | — |
 | `US-03-08#5` | Without a mouse, the user moves between the side panel, the calenda… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-03-08#6` | A help button ("?" in a circle) in the top bar, beside the settings… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-03-09#1` | With a system locale whose week starts on Sunday, the day, 3-day an… | `TC-03-12` | auto | — |
 | `US-03-09#2` | After the system's time zone changes, events are shown at their new… | `TC-03-12` | auto | — |
 | `US-03-09#3` | Opening an event stored in another time zone shows its time in that… | — | — | smoke depth — not tested yet (`DEC-65`) |

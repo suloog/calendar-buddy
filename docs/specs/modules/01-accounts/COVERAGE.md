@@ -66,7 +66,7 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | Criterion | Text (short) | Covered by | Automation | Note |
 | --------- | ------------ | ---------- | ---------- | ---- |
 | `US-01-01#1` | first run with network | `TC-01-01` | manual-only | manual — checked by the product owner (`DEC-65`) |
-| `US-01-01#2` | Before the browser opens, the app explains that Google will show an… | `TC-01-01` | manual-only | manual — checked by the product owner (`DEC-65`) |
+| `US-01-01#2` | ~~Before the browser opens, the app explains that Google will show an…~~ | — | — | withdrawn — `DEC-163` |
 | `US-01-01#3` | After consenting in the browser, the account appears in the app wit… | `TC-01-01` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-01-01#4` | Google's consent screen asks only for calendar, contacts and — on W… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-01-01#5` | first run without network | — | — | smoke depth — not tested yet (`DEC-65`) |

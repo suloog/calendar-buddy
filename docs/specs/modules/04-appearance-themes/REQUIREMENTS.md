@@ -41,7 +41,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 ## UI/UX requirements
 
-- [MOD-04-U01] The day and week grids are compact: at 100% scale, in a window 1080 pixels high, the hours from 8:00 to 18:00 are visible without scrolling. — *source: `DEC-57`, `DEC-58`*
+- [MOD-04-U01] The day and week grids are compact: at 100% scale, in a window 1080 pixels high, the hours from 8:00 to 18:00 are visible without scrolling at the usual height of an hour (100 %, `MOD-03-F27`). — *source: `DEC-57`, `DEC-58`, `DEC-166`*
 - [MOD-04-U02] An event in the day, 3-day and week views shows only its title and time; everything else appears when it is opened. — *source: `DEC-58`*
 - [MOD-04-U03] Apart from calendar colours, the interface uses neutral tones and one fixed accent colour. — *source: `DEC-57`*
 - [MOD-04-U04] Events are drawn in their calendar's colour, with text that stays readable on that colour in both themes.

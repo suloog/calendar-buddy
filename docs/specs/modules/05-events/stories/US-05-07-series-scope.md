@@ -34,7 +34,7 @@ Working with occurrences of a series — in the editor and by dragging or resizi
 
 - [ ] Changing an occurrence — in the editor, by dragging or by resizing — asks: this event, this and following events, or all events.
 - [ ] Deleting an occurrence asks the same three-way question, and the result matches in Google.
-- [ ] A series created in Google with a rule the presets cannot express keeps its rule when its other fields are edited, and the app offers to open it in Google Calendar to change the rule.
+- [ ] A series created in Google with a rule the presets cannot express keeps its rule when its other fields are edited, and the app offers to open it in Google Calendar to change the rule. Narrowed by `US-05-11` to rules the custom recurrence dialog cannot express (`DEC-165`).
 
 ## Edge cases
 

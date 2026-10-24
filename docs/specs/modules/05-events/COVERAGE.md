@@ -91,6 +91,8 @@
 | `US-05-02#4` | The user can set the location, whether the event shows them as busy… | `TC-05-02` | auto | — |
 | `US-05-02#5` | Any field of an event the user may edit can be changed later in the… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-05-02#6` | Choosing another calendar of the same account moves the event there. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#7` | Opening an event shows its location and description; a description… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-05-02#8` | In the editor such a description is shown formatted and saved uncha… | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-05-03#1` | Dragging an event moves it in 15-minute steps, shows the new time w… | `TC-05-03` | auto | — |
 | `US-05-03#2` | An event can be dragged to another day in the 3-day and week views. | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-05-03#3` | Dragging the end of an event changes its length, in 15-minute steps. | — | — | smoke depth — not tested yet (`DEC-65`) |
@@ -120,7 +122,7 @@
 | `US-05-11#4` | For weeks the dialog shows the weekdays with the start's weekday c… | `TC-05-13` | auto | — |
 | `US-05-11#5` | A series created in Google as "every 3 months on the second Monday… | `TC-05-14` | auto | — |
 | `US-05-11#6` | Changing the rule of an occurrence asks "This and following events… | `TC-05-14` | auto | — |
-| `US-05-11#7` | A series from Google with a rule the dialog cannot express (e.g. `… | `TC-05-14` | auto | — |
+| `US-05-11#7` | A series from Google with a rule the dialog cannot express (e.g. "… | `TC-05-14` | auto | — |
 | `US-05-11#8` | A series set in "Custom…" shows the same occurrences in Google Cal… | `TC-05-15` | manual-only | manual — checked by the product owner (`DEC-65`) |
 
 ### Module constraints and edge cases

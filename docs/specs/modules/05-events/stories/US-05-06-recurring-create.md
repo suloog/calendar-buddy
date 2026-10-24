@@ -32,7 +32,7 @@ Making an event recurring in the editor with the presets Google offers for every
 
 ## Out of scope / what not to worry about
 
-- A full recurrence-rule editor (every N weeks, second Tuesday…) — `DEC-36`.
+- Google's repeat menu and custom recurrence (every N weeks, the second Tuesday…) — `US-05-11` (`DEC-165`).
 
 ## Technical notes
 

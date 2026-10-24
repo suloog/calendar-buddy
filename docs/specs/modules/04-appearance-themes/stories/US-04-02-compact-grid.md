@@ -26,7 +26,7 @@ The density and readability of the day, 3-day and week grids: a working day fits
 
 ## Acceptance criteria
 
-- [ ] At 100% scale, in a window 1080 pixels high, the week view shows 8:00–18:00 without scrolling.
+- [ ] At 100% scale, in a window 1080 pixels high, the week view shows 8:00–18:00 without scrolling at the usual height of an hour (100 %, `DEC-166`).
 - [ ] Event blocks in the day, 3-day and week views show only the title and the time.
 - [ ] Text inside events of a very light and a very dark calendar colour is readable in both themes, with a contrast of at least 4.5:1.
 - [ ] All interface text has a contrast of at least 4.5:1 against its background, in both themes.

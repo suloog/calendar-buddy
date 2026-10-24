@@ -1,7 +1,7 @@
 ---
 id: TC-01-01 # TC-NN-MM — NN is the parent module, MM a counter within it; never reused
 module: MOD-01
-covers: [US-01-01#1, US-01-01#2, US-01-01#3] # what this test proves — `#n` is the acceptance criterion's number in the story
+covers: [US-01-01#1, US-01-01#3] # what this test proves — `#n` is the acceptance criterion's number in the story
 layer: desktop # desktop — the project's own layer (`DEC-65`)
 type: happy-path # happy-path | edge | negative | nfr
 automation: manual-only # auto | manual-only — manual-only is never green in the report
@@ -15,7 +15,7 @@ depends_on: [] # test case IDs that must pass first
 |  |  |
 | --- | --- |
 | **Layer** | desktop |
-| **Verifies** | `US-01-01#1`, `US-01-01#2`, `US-01-01#3` |
+| **Verifies** | `US-01-01#1`, `US-01-01#3` |
 | **Role** | User |
 | **Type** | happy-path |
 | **Automation** | manual-only |
