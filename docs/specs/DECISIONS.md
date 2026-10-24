@@ -1512,3 +1512,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-125] Which invitations the side panel counts and lists
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-04
+- **Affects:** `US-06-04`, `MOD-06-F09`, `MOD-06-F10`, `MOD-06-F21`, `DEC-41`, `DEC-61`
+- **Decision:** An invitation awaits an answer when the account's own entry among the guests (Google's `self` attendee) has `responseStatus: needsAction`. The side panel counts, and its list shows, those not over yet (an all-day one until its last day ends), a recurring invitation once, by its next occurrence, earliest first; those of calendars disabled in the settings are left out, while those of calendars only hidden by the quick toggle are still counted and listed (as `MOD-06-F21` names only disabled calendars), though the views do not show them. The counter, "N invitations awaiting an answer", sits under the mini calendar and is shown only while at least one invitation awaits; choosing it opens the list "Invitations", each row its title and when, which opens the invitation's details, where it is answered (`US-06-05`).
+- **Why:** The simplest reading of `DEC-61` that keeps the counter useful: past invitations can no longer be attended, and counting every occurrence of a weekly series would drown the rest. Hiding a calendar for a moment should not hide that someone is waiting for an answer.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-126] How an invitation awaiting an answer is drawn
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-04
+- **Affects:** `US-06-04`, `MOD-06-U04`, `DEC-63`
+- **Decision:** In the day, 3-day, week and month views, an invitation awaiting an answer is filled with its colour at a fifth of its strength over the view's background, inside a 1-point dashed outline in its full colour, its text in the view's text colour. In the month view's rows of timed events and in the agenda, which draw no box, the row gets the same fill and dashed outline, its coloured dot kept.
+- **Why:** `MOD-06-U04` asks for a dashed outline and a light fill without fixing their look; this mirrors how Google Calendar draws unanswered invitations (an outline in the calendar's colour over a pale fill) and reads in light and dark themes alike.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-127] Only the account's own unanswered invitations are counted
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-04
+- **Affects:** `US-06-04`, `MOD-06-F09`, `MOD-06-F10`, `DEC-125`
+- **Decision:** Google marks as `self` the guest whose calendar the event's copy is on, which in a colleague's calendar shared with the user is the colleague. The views draw an event dashed whenever that guest has not answered, also in a colleague's calendar; the side panel counts and lists an invitation only when that guest's address is the address of the account the calendar is listed under, so a colleague's unanswered invitations, and a second copy of the user's own in a shared calendar, are not counted. Refines `DEC-125`.
+- **Why:** As in Google Calendar, which shows other people's calendars with their owners' answers (`DEC-62`); only the user's own invitations wait for the user's answer.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

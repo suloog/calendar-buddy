@@ -20,6 +20,9 @@ pub struct MonthItem {
     pub read_only: bool,
     /// Google has not confirmed the new event yet (`MOD-05-U03`).
     pub saving: bool,
+    /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
+    /// (`MOD-06-U04`).
+    pub awaiting: bool,
     /// Start of a timed event; `None` for all-day and multi-day events.
     pub start: Option<DateTime<Utc>>,
 }
@@ -137,6 +140,7 @@ pub fn month_view(
                         color: event.shown_color(),
                         read_only: event.read_only,
                         saving: event.saving,
+                        awaiting: event.about.awaiting(),
                         start: timed_start(event),
                     }
                 })

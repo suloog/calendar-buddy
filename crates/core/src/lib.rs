@@ -10,6 +10,7 @@ pub mod drag;
 pub mod editor;
 pub mod fixtures;
 pub mod guests;
+pub mod invitations;
 pub mod layout;
 pub mod model;
 pub mod month;

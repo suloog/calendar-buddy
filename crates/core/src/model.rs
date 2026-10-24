@@ -2,7 +2,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::colors::EventColor;
-use crate::guests::Guest;
+use crate::guests::{Guest, Response};
 use crate::sync::Start;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,6 +182,14 @@ pub struct About {
     /// The people invited to it, the account itself included when it is one of them
     /// (`MOD-06-F01`).
     pub guests: Vec<Guest>,
+}
+
+impl About {
+    /// An invitation awaiting an answer, drawn so in the views (`MOD-06-F09`): the guest whose
+    /// calendar the event is on (Google's `self`) has not answered yet (`needsAction`).
+    pub fn awaiting(&self) -> bool {
+        (self.guests.iter()).any(|guest| guest.own && guest.response == Response::Awaiting)
+    }
 }
 
 /// A file attached to an event, listed by name and opened in the browser (`MOD-05-F26`).
