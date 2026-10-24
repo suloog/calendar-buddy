@@ -371,3 +371,23 @@ Not proven: real Google making the call, the Join buttons opening the browser, a
 - [ ] `TC-06-10` / `US-06-07#2` (real Google, a person's eyes): run `cargo run -p calendar-buddy`, create "Design review" in the editor, add a guest: "Add Google Meet" ticks itself; save. Open Google Calendar in the browser as the account: "Design review" has a Google Meet link. Edit it in the app, untick "Add Google Meet", save: the link goes from Google Calendar too; tick it again, save: a new link appears.
 - [ ] `TC-06-11` / `US-06-07#3` (real Google, KDE session, a person's eyes): open the details of a test event this week with a Google Meet link: **Join with Google Meet** opens the meeting in the browser. In **Agenda**, the same event's row has **Join** at its right end: it opens the same meeting; clicking elsewhere on the row still opens the details. Delete the test event afterwards.
 - [ ] `US-06-07` edge case (real Google, an account or calendar where Meet is not allowed, if one is available): save an event with "Add Google Meet" ticked: it is saved, without a link, and the app says "The event was saved without Google Meet: Google could not add a Meet call for this account."
+
+## US-06-08
+
+Needs a connected real Google account (Workspace, to see colleagues' free/busy), the KDE session and a person's eyes. The fake Google stands in for Google in the tests below. They prove:
+- the guests' busy times for the day are asked with `freeBusy.query`;
+- each guest gets a strip, a guest busy at the chosen time is a conflict, and one who does not share is "no data";
+- at most the first 20 guests are shown, and there is no preview offline or when Google does not answer.
+
+The tests:
+- app: `tc_06_12_the_editor_shows_each_guests_busy_blocks_for_the_day_and_marks_a_conflict`, `a_guest_who_does_not_share_their_availability_shows_no_data`, `without_network_the_preview_is_not_shown`, `the_guests_day_is_asked_once_and_again_when_the_editor_asks_anew`;
+- core: `availability::tests::*`, including `of_many_guests_the_first_20_are_asked_for`;
+- google: `guests_busy_times_are_asked_with_free_busy_for_the_day_and_one_not_shared_has_none`, `busy_times_google_does_not_answer_are_an_error`.
+
+Not proven: real Google's free/busy answers, and how the strips look. Choices to ratify:
+- `DEC-134`: an "Availability" row under the time zone, for the day the event starts, midnight to midnight; "Conflict" and "No data" beside the strips; nothing for all-day events, out of office and focus time;
+- `DEC-135`: an existing event's own saved time is not counted as busy for the guests it invites.
+
+- [ ] `TC-06-12` / `US-06-08#1`, `#2` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy`, open a new event on a day a colleague has a meeting, at a time overlapping it, and add the colleague and someone free then. Under the time, an "Availability" row shows one horizontal strip per guest with their busy blocks filled in. The chosen time is one band across all strips, lined up with them, readable in both a light and a dark desktop theme. The colleague is marked "Conflict", the other guest is not. Change the start time: the band moves and the conflict mark follows.
+- [ ] `US-06-08#3` (real Google, a person's eyes): add a personal Gmail address whose calendar does not share free/busy: its strip reads "No data".
+- [ ] `US-06-08#5` (KDE session): with the guests added, turn the network off: the "Availability" row disappears; turn it back on: it returns.

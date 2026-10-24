@@ -1620,3 +1620,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-134] What the guests' availability preview shows, and when
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-08
+- **Affects:** `US-06-08`, `MOD-06-F19`, `MOD-06-F20`, `MOD-06-U02`
+- **Decision:** The editor shows an "Availability" row under the time zone, for a timed event with guests, online. The preview covers the day the event starts, midnight to midnight in the editor's time zone. It has one strip per guest the editor lists (the account itself is not one), for the first 20. Each strip fills in the guest's busy times and is followed by the guest's name, or address when there is none. A guest busy at any moment of the chosen time is marked "Conflict"; busy times that only touch it are not. A guest whose calendar does not share free/busy, or whom Google does not know, shows "No data". The chosen time is one band across all strips. Google is asked with `freeBusy.query` through the account of the calendar picked, again whenever the day, the guests or the calendar change and each time the editor opens. Until Google answers, and when the query fails, no preview is shown. An all-day event shows no preview, nor do out of office and focus time, which take no guests.
+- **Why:** The requirements say "the chosen day" and "the chosen time", which an all-day event does not have. The editor's own time zone is the one its times are typed in. Hiding the preview when Google does not answer is the same as offline (`MOD-06-F20`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-135] An existing event's own time is not a conflict
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-08
+- **Affects:** `US-06-08`, `MOD-06-F19`
+- **Decision:** In the editor of an existing timed event shown as busy, the time it was saved at is taken out of the busy times of each guest it invites who has not declined. Google's free/busy counts the event itself for them, and each would otherwise show a conflict with it. The cost: another event of such a guest at exactly that saved time is not shown there either.
+- **Why:** Free/busy cannot tell the event apart from others. Without this, the conflict mark would be wrong for every saved meeting whose time is not changed.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

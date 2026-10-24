@@ -2,14 +2,17 @@
 //! app's own model: the calendar list with Google's colours, and each calendar's events within the
 //! cache window, series as master plus exceptions (not expanded by Google), then only what changed
 //! since (`syncToken`). People to invite are searched for in the account's contacts and its
-//! organization's directory with the Google People API (`MOD-06`).
+//! organization's directory with the Google People API (`MOD-06`), and guests' busy times are
+//! asked with `freeBusy.query` (`US-06-08`).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use calendar_core::availability::{Availability, Span};
 use calendar_core::cache::{Cache, parse_access, parse_color};
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
@@ -856,6 +859,60 @@ impl Provider for Session {
         found
             .into_iter()
             .flat_map(GooglePerson::into_people)
+            .collect()
+    }
+
+    /// `freeBusy.query` with the addresses as items; Google answers an address whose calendar
+    /// does not share its free/busy, or that it does not know, with errors instead.
+    fn busy(&self, emails: &[String], (from, until): Span) -> Result<Vec<Availability>, SyncError> {
+        #[derive(Deserialize)]
+        struct Answer {
+            #[serde(default)]
+            calendars: HashMap<String, Shared>,
+        }
+        #[derive(Deserialize)]
+        struct Shared {
+            #[serde(default)]
+            busy: Vec<Busy>,
+            #[serde(default)]
+            errors: Vec<Value>,
+        }
+        #[derive(Deserialize)]
+        struct Busy {
+            start: String,
+            end: String,
+        }
+        let at = |text: &str| {
+            DateTime::parse_from_rfc3339(text)
+                .map(|at| at.with_timezone(&Utc))
+                .map_err(|_| SyncError("Google's answer could not be read".into()))
+        };
+        let items: Vec<Value> = emails.iter().map(|email| json!({"id": email})).collect();
+        let query = json!({
+            "timeMin": from.to_rfc3339_opts(SecondsFormat::Secs, true),
+            "timeMax": until.to_rfc3339_opts(SecondsFormat::Secs, true),
+            "items": items,
+        });
+        let answer: Answer = self.post(self.url(&["freeBusy"]), Some(&query))?;
+        emails
+            .iter()
+            .map(|email| {
+                let shared = (answer.calendars.iter())
+                    .find(|(id, _)| same(id, email))
+                    .map(|(_, shared)| shared)
+                    .filter(|shared| shared.errors.is_empty());
+                let busy = shared
+                    .map(|shared| {
+                        (shared.busy.iter())
+                            .map(|busy| Ok((at(&busy.start)?, at(&busy.end)?)))
+                            .collect::<Result<Vec<Span>, SyncError>>()
+                    })
+                    .transpose()?;
+                Ok(Availability {
+                    email: email.clone(),
+                    busy,
+                })
+            })
             .collect()
     }
 

@@ -123,7 +123,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-06-05` | As a User, I can accept, decline or answer maybe — for one occurrence or a whole series — while guest rules are respected, so that organizers know whether I come | F11, F13, F15, U03 | must | review | `US-06-04` | — |
 | `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | review | `US-06-05` | — |
 | `US-06-07` | As a User, I can add Google Meet to a meeting and join it with one click, so that video calls start on time | F16, F17, F18 | must | review | `US-06-01` | — |
-| `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | ready | `US-06-01` | — |
+| `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | review | `US-06-01` | — |
 
 ## [MOD-07] Reminders and notifications
 

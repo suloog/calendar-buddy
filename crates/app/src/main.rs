@@ -13,6 +13,7 @@ mod sync;
 
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
+use calendar_core::availability;
 use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
@@ -630,8 +631,10 @@ impl CalendarApp {
         let can_change = self.connect.idle() && self.removal.idle();
         let can_remove = self.connect.idle();
         // Changes need Google (`MOD-02-F15`).
-        let refused = offline::refused(self.online.get());
+        let online = self.online.get();
+        let refused = offline::refused(online);
         let Some(dialog) = &mut self.dialog else {
+            self.sync.ask_busy(None);
             return;
         };
         let mut open = true;
@@ -650,6 +653,7 @@ impl CalendarApp {
         let mut attachment = None;
         let mut join = None;
         let mut search = None;
+        let mut busy = None;
         let mut invitation = None;
         let mut answered = None;
         let title = match dialog {
@@ -760,9 +764,25 @@ impl CalendarApp {
                     let own = editor.own_addresses(accounts);
                     let suggested = guests::suggestions(&typed, &found, &editor.guests, &own);
                     let regional = &self.regional;
-                    match editor::show(
-                        ui, editor, regional, &choices, accounts, refused, &suggested,
-                    ) {
+                    // The guests' day, once Google answered.
+                    let saved = editor.opened.as_ref().map(|(event, _)| event);
+                    let preview = (availability::asked(editor, regional, online)).and_then(
+                        |(asked, chosen)| {
+                            let answer = self.sync.busy(&asked)?;
+                            Some(availability::preview(
+                                &asked,
+                                chosen,
+                                &editor.guests,
+                                saved,
+                                answer,
+                            ))
+                        },
+                    );
+                    let google = editor::FromGoogle {
+                        suggested: &suggested,
+                        availability: preview.as_ref(),
+                    };
+                    match editor::show(ui, editor, regional, &choices, accounts, refused, google) {
                         Some(editor::Edited::Save(saved)) => save = Some(saved),
                         Some(editor::Edited::OpenSeries) => {
                             open_series = editor.opened.as_ref().map(|(event, _)| event.clone());
@@ -779,6 +799,8 @@ impl CalendarApp {
                     {
                         search = Some((id, now_typed.to_string()));
                     }
+                    // Asked again as the day, the guests or the calendar change (`MOD-06-F19`).
+                    busy = availability::asked(editor, regional, online).map(|(asked, _)| asked);
                 }
                 Dialog::Event(event, _, expanded) => {
                     // The event as last synchronized, which may have come since it was opened.
@@ -1058,6 +1080,7 @@ impl CalendarApp {
         if let Some(event) = open_series {
             self.open_series(&event);
         }
+        self.sync.ask_busy(busy);
         if let Some((id, query)) = search {
             // As far as the account allowed at sign-in (`DEC-52`).
             let reach = (self.accounts.list().iter())

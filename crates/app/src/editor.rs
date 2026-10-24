@@ -5,16 +5,18 @@
 //! the fields mean and what saving does is `calendar_core::editor`'s. The event's own colour is
 //! picked from Google's event colours (`US-05-09`). Guests are added by address or from the people
 //! suggested while typing, marked optional and removed (`US-06-01`); the "Add Google Meet" switch
-//! turns on with the first guest (`US-06-07`).
+//! turns on with the first guest (`US-06-07`). Under the time, the guests' availability that day
+//! (`US-06-08`).
 
 use calendar_core::accounts::Entry;
+use calendar_core::availability::{CONFLICT, NO_DATA, Preview};
 use calendar_core::colors::EventColor;
 use calendar_core::editor::{Editor, Ending, Save};
 use calendar_core::guests::Person;
 use calendar_core::model::{Calendar, Kind, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
-use eframe::egui::{self, Sense, Vec2};
+use eframe::egui::{self, CornerRadius, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::calendar_list;
 use crate::grid_view::{color, text_on};
@@ -26,6 +28,8 @@ const COUNT_WIDTH: f32 = 40.0;
 const SWATCH: f32 = 20.0;
 /// How tall the list of time zones grows before it scrolls.
 const ZONES_HEIGHT: f32 = 320.0;
+/// The size of a guest's strip of the day in the availability preview.
+const STRIP: Vec2 = Vec2::new(240.0, 14.0);
 
 fn show_label(show: Show) -> &'static str {
     match show {
@@ -211,10 +215,67 @@ fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[S
     });
 }
 
+/// One strip per guest, their busy times on the day filled in, and the chosen time highlighted
+/// across all strips (`MOD-06-U02`); beside each, the guest, and whether they are busy then or
+/// share no availability (`MOD-06-F19`, `F20`).
+fn availability(ui: &mut egui::Ui, preview: &Preview) {
+    let strips = ui
+        .vertical(|ui| {
+            let mut strips = Vec::new();
+            for strip in &preview.strips {
+                ui.horizontal(|ui| {
+                    let (rect, _) = ui.allocate_exact_size(STRIP, Sense::hover());
+                    let visuals = ui.visuals();
+                    let painter = ui.painter();
+                    painter.rect_filled(rect, CornerRadius::same(2), visuals.extreme_bg_color);
+                    for &(start, end) in strip.busy.iter().flatten() {
+                        let x = |part: f32| rect.left() + part * rect.width();
+                        let busy = Rect::from_x_y_ranges(x(start)..=x(end), rect.y_range());
+                        painter.rect_filled(busy, 0.0, visuals.widgets.inactive.fg_stroke.color);
+                    }
+                    strips.push(rect);
+                    ui.label(&strip.label);
+                    if strip.busy.is_none() {
+                        ui.weak(NO_DATA);
+                    } else if strip.conflict {
+                        ui.colored_label(ui.visuals().warn_fg_color, CONFLICT);
+                    }
+                });
+            }
+            strips
+        })
+        .inner;
+    if let (Some(first), Some(last)) = (strips.first(), strips.last()) {
+        let x = |part: f32| first.left() + part * first.width();
+        let (start, end) = preview.chosen;
+        // A moment still shows.
+        let chosen = Rect::from_x_y_ranges(
+            x(start)..=x(end).max(x(start) + 2.0),
+            first.top()..=last.bottom(),
+        );
+        let selection = ui.visuals().selection;
+        let painter = ui.painter();
+        painter.rect_filled(chosen, 0.0, selection.bg_fill.gamma_multiply(0.4));
+        painter.rect_stroke(
+            chosen,
+            0.0,
+            Stroke::new(2.0, selection.stroke.color),
+            StrokeKind::Outside,
+        );
+    }
+}
+
 /// A date or time field of the editor; says whether it changed.
 fn field(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
     ui.add(egui::TextEdit::singleline(text).desired_width(width))
         .changed()
+}
+
+/// What Google gave the editor: the people suggested as guests, and the guests' availability on
+/// the day chosen, once known.
+pub struct FromGoogle<'a> {
+    pub suggested: &'a [Person],
+    pub availability: Option<&'a Preview>,
 }
 
 /// What the user did in the editor.
@@ -228,7 +289,8 @@ pub enum Edited {
 /// accounts allow (`MOD-05-F24`), and why changes are refused now, if they are; what saving
 /// does once the user saves. Until the event can be saved, the editor says why and **Save** is
 /// unavailable. An occurrence of a series offers to change its repetition in Google Calendar, as
-/// the app does not (`DEC-111`). The people `suggested` are offered as guests.
+/// the app does not (`DEC-111`). The people suggested are offered as guests, and the guests'
+/// availability is shown under the time.
 pub fn show(
     ui: &mut egui::Ui,
     editor: &mut Editor,
@@ -236,7 +298,7 @@ pub fn show(
     choices: &[(String, Vec<Calendar>)],
     accounts: &[Entry],
     refused: Option<&str>,
-    suggested: &[Person],
+    google: FromGoogle,
 ) -> Option<Edited> {
     let own = editor.own_addresses(accounts);
     let mut open_series = false;
@@ -307,6 +369,12 @@ pub fn show(
                 ui.end_row();
             }
 
+            if let Some(preview) = google.availability {
+                ui.label("Availability");
+                availability(ui, preview);
+                ui.end_row();
+            }
+
             // An existing event's repetition is not changed here (`DEC-111`).
             match &editor.opened {
                 None => repeat(ui, editor, regional),
@@ -332,7 +400,7 @@ pub fn show(
             // Google takes no guests for out of office and focus time, nor a Meet call.
             if !editor.kind.timed_only() {
                 ui.label("Guests");
-                guests(ui, editor, suggested, &own);
+                guests(ui, editor, google.suggested, &own);
                 ui.end_row();
 
                 ui.label("");
