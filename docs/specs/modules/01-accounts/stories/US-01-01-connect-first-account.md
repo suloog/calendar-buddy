@@ -32,7 +32,7 @@ The first-run path: the welcome screen, signing in to one Google account in the 
 - **When** the app starts
 - **Then** a welcome screen shows one action, "Connect Google account"
 
-- [ ] Before the browser opens, the app explains that Google will show an "unverified app" screen and how to continue past it.
+- ~~Before the browser opens, the app explains that Google will show an "unverified app" screen and how to continue past it.~~ — withdrawn, `DEC-163`: once the checks pass the browser opens.
 - [ ] After consenting in the browser, the account appears in the app without the user typing any server setting or password, and the welcome screen gives way to the calendar.
 - [ ] Google's consent screen asks only for calendar, contacts and — on Workspace accounts — directory permissions.
 
@@ -66,4 +66,4 @@ The first-run path: the welcome screen, signing in to one Google account in the 
 ## Technical notes
 
 - See *Technical notes* of `MOD-01`: OAuth installed-app flow with PKCE, loopback redirect, scopes, tokens in the secret store (`NFR-04`, `DEC-47`, `DEC-10`).
-- Decisions: `DEC-19` (first run), `DEC-51` (unverified-app heads-up), `DEC-52` (partial consent), `DEC-77` (where the OAuth client file lives).
+- Decisions: `DEC-19` (first run), `DEC-51` (unverified-app heads-up, withdrawn by `DEC-163`), `DEC-52` (partial consent), `DEC-77` (where the OAuth client file lives).

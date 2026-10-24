@@ -1731,7 +1731,7 @@ impl CalendarApp {
     /// What the app does whether its window is shown or not: taking in what came from Google,
     /// the sign-ins and the notifications clicked.
     fn background(&mut self, ctx: &egui::Context) {
-        if let Some(account) = self.connect.poll() {
+        if let Some(account) = self.connect.poll(ctx) {
             self.connected = Some(account.clone());
             self.accounts.add(account);
             self.checks.signed_in();

@@ -1969,3 +1969,15 @@
 - **Resolves:** —
 - **Status:** accepted
 
+
+## [DEC-163] No heads-up about Google's "unverified app" screen
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("remove the warning about the test app from the app")
+- **Affects:** `MOD-01-U03` (withdrawn), `US-01-01`, `TC-01-01`, `DEC-51`, `DEC-79`, `DEC-81`, `DEC-84`
+- **Decision:** Connecting, adding an account and signing in again no longer show the app's own heads-up about Google's "unverified app" screen with "Continue in the browser" and "Cancel": once the checks pass (`DEC-79`), the browser opens straight away. `MOD-01-U03` is withdrawn; the rest of `DEC-51` stands.
+- **Why:** The product owner does not want the app to warn about Google's screen; the app is to be shared with other people through the owner's OAuth client, and Google's own screen says what to do.
+- **Scope effect:** reduction
+- **Resolves:** —
+- **Status:** accepted

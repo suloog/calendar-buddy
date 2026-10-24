@@ -17,12 +17,6 @@ pub const CONNECT: &str = "Connect Google account";
 pub const ADD_ACCOUNT: &str = "Add account";
 /// The action that signs in to an account again (`MOD-01-F06`).
 pub const SIGN_IN_AGAIN: &str = "Sign in again";
-/// Shown before the browser opens (`MOD-01-U03`).
-pub const UNVERIFIED_HEADS_UP: &str = "Google will now show a warning that it hasn't verified \
-     this app — Calendar Buddy is your own app, not one published to everyone. To continue, \
-     choose \"Advanced\" and then \"Go to … (unsafe)\". On the next screen leave calendar access \
-     ticked; contacts and your organization's directory are optional.";
-pub const CONTINUE_IN_BROWSER: &str = "Continue in the browser";
 /// Shown while the browser has the sign-in.
 pub const WAITING: &str = "Finish signing in in your browser. On a Workspace account Google asks \
      a second time, for your organization's directory.";

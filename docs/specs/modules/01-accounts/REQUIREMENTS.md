@@ -57,7 +57,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - [MOD-01-U01] Accounts are managed in one place in the app's settings, which lists every connected account by its e-mail address with its state (connected, needs sign-in) and offers adding, signing in again and removing. — *source: `DEC-51`*
 - [MOD-01-U02] Removing an account asks for confirmation and says what will be deleted from the device and that the Google account itself stays untouched. — *source: `DEC-51`*
-- [MOD-01-U03] Before opening the browser, the app tells the user that Google will show an "unverified app" warning and how to continue past it. — **priority: should** — *source: `DEC-51`*
+- ~~[MOD-01-U03] Before opening the browser, the app tells the user that Google will show an "unverified app" warning and how to continue past it. — **priority: should** — *source: `DEC-51`*~~ — withdrawn, `DEC-163`
 
 ## Non-functional requirements
 

@@ -19,17 +19,8 @@ enum Stage {
     Start(Option<ConnectError>),
     /// Checking the client file, the secret store and the network.
     Checking,
-    /// The heads-up about Google's "unverified app" screen, before the browser opens.
-    HeadsUp(Client),
     /// The browser has the sign-in; set the flag to cancel it.
     Waiting(Arc<AtomicBool>),
-}
-
-/// What the user chose on the screen.
-enum Action {
-    Check,
-    SignIn(Client),
-    Back,
 }
 
 enum Outcome {
@@ -115,12 +106,14 @@ impl Connect {
     }
 
     /// Takes what the work off the UI thread brought; returns the account once one is connected.
-    /// Called every frame, so an account connects even with its screen closed.
-    pub fn poll(&mut self) -> Option<Account> {
+    /// Called every frame, so an account connects even with its screen closed. The browser opens
+    /// as soon as the checks pass.
+    pub fn poll(&mut self, ctx: &egui::Context) -> Option<Account> {
         let mut connected = None;
-        for outcome in self.outcomes.try_iter() {
+        let outcomes: Vec<Outcome> = self.outcomes.try_iter().collect();
+        for outcome in outcomes {
             match outcome {
-                Outcome::Checked(Ok(client)) => self.stage = Stage::HeadsUp(client),
+                Outcome::Checked(Ok(client)) => self.sign_in(ctx, client),
                 Outcome::Connected(Ok(account)) => {
                     self.stage = Stage::Start(None);
                     self.again = None;
@@ -137,7 +130,7 @@ impl Connect {
     /// Back to the start when the screen showing connecting closes, so it opens afresh; a sign-in
     /// the browser has goes on.
     pub fn close(&mut self) {
-        if matches!(self.stage, Stage::Start(Some(_)) | Stage::HeadsUp(_)) {
+        if matches!(self.stage, Stage::Start(Some(_))) {
             self.stage = Stage::Start(None);
             self.again = None;
         }
@@ -145,7 +138,7 @@ impl Connect {
 
     /// Draws the current step; `start` names the action that begins connecting.
     pub fn show(&mut self, ui: &mut egui::Ui, start: &str) {
-        let mut chosen = None;
+        let mut check = false;
         if let Some(email) = &self.again
             && !matches!(self.stage, Stage::Start(None))
         {
@@ -162,23 +155,11 @@ impl Connect {
                     None => start,
                 };
                 if ui.add(crate::widgets::primary(ui, label)).clicked() {
-                    chosen = Some(Action::Check);
+                    check = true;
                 }
             }
             Stage::Checking => {
                 ui.spinner();
-            }
-            Stage::HeadsUp(client) => {
-                ui.label(texts::UNVERIFIED_HEADS_UP);
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button(texts::CONTINUE_IN_BROWSER).clicked() {
-                        chosen = Some(Action::SignIn(client.clone()));
-                    }
-                    if ui.button(texts::CANCEL).clicked() {
-                        chosen = Some(Action::Back);
-                    }
-                });
             }
             Stage::Waiting(cancel) => {
                 ui.spinner();
@@ -190,15 +171,8 @@ impl Connect {
                 }
             }
         }
-        let ctx = ui.ctx().clone();
-        match chosen {
-            Some(Action::Check) => self.check(&ctx),
-            Some(Action::SignIn(client)) => self.sign_in(&ctx, client),
-            Some(Action::Back) => {
-                self.stage = Stage::Start(None);
-                self.again = None;
-            }
-            None => {}
+        if check {
+            self.check(&ui.ctx().clone());
         }
     }
 }

@@ -45,7 +45,7 @@
 | ----------- | ---------- |
 | `MOD-01-U01` | `US-01-02` |
 | `MOD-01-U02` | `US-01-04` |
-| `MOD-01-U03` | `US-01-01` |
+| ~~`MOD-01-U03`~~ | withdrawn, `DEC-163` |
 
 ### Non-functional requirements
 

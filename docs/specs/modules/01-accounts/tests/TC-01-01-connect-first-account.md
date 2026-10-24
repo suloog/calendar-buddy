@@ -37,8 +37,8 @@ depends_on: [] # test case IDs that must pass first
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
 | 1 | Start the app. | The welcome screen shows one action, "Connect Google account". | screenshot |
-| 2 | Choose "Connect Google account". | Before the browser opens, the app explains that Google will show an "unverified app" screen and how to continue. | screenshot |
-| 3 | Continue, consent in the browser with the test account, and return to the app. | The app shows the connected account and the calendar instead of the welcome screen; no server setting or password was typed into the app. | screenshot |
+| 2 | Choose "Connect Google account". | The browser opens Google's sign-in; the app shows no screen of its own before it (`DEC-163`). | screenshot |
+| 3 | Consent in the browser with the test account, and return to the app. | The app shows the connected account and the calendar instead of the welcome screen; no server setting or password was typed into the app. | screenshot |
 
 ## Pass criterion
 
