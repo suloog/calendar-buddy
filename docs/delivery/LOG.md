@@ -424,3 +424,15 @@
   - one squash commit: one logical change.
 - Manual checks: TC-07-08 (US-07-05#1, #3, #4), US-07-05#2, TC-07-06 on real KDE (US-07-05#5)
 - Commits on main: 08ccb64 feat(reminders): keep reminding from the tray, start at login [US-07-05]
+
+## US-07-06 — review — 2026-10-24 06:41
+- What: a `webcal:` link launches the app, which opens Google Calendar's "add calendar from URL" page (`/calendar/r?cid=…`) in the browser and ends. The running app registers `~/.local/share/applications/calendar-buddy-webcal.desktop` (`x-scheme-handler/webcal`) behind a new `LinkHandler` platform interface.
+- Decisions: DEC-146
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - none blocking;
+  - `webcals:` is not handled (not in the spec);
+  - a failed browser launch is silent, because there is no window to report it in;
+  - no `update-desktop-database` (KDE reads the entries directly);
+  - the app does not change the user's default `webcal:` program.
+- Manual checks: TC-07-09 (US-07-06#1)
+- Commits on main: 4a14c9f feat(reminders): open webcal links in Google Calendar [US-07-06] (one squash commit: one logical change)
