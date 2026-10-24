@@ -2,6 +2,7 @@
 //! app, tests use fakes.
 
 use crate::accounts::Account;
+use crate::background::Signal;
 use crate::reminders::{Action, Notification};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,4 +54,28 @@ pub trait Notifier: Send {
     /// Whether the desktop's notifications show buttons; without them, Join and Snooze are
     /// reached by clicking the notification (`DEC-64`).
     fn buttons(&self) -> bool;
+}
+
+/// The desktop's system tray (`MOD-07-F14`, StatusNotifierItem on KDE).
+pub trait Tray {
+    /// Shows the app's icon in the tray, with a menu that opens the window and quits the app;
+    /// `chosen` is called with what the user does on it: `TrayClicked`, `Open` or `Quit`. False
+    /// when the desktop has no tray to show it in. At login the desktop's tray may not be there
+    /// yet: the icon is taken to be shown, and appears once the tray does.
+    fn show(&self, chosen: Box<dyn Fn(Signal) + Send + Sync>, at_login: bool) -> bool;
+}
+
+/// Starting the app at login, in the tray (`MOD-07-F16`).
+pub trait Autostart: Send + Sync {
+    /// Whether the app starts at login.
+    fn is_on(&self) -> bool;
+    fn set(&self, on: bool) -> std::io::Result<()>;
+}
+
+/// The one copy of the app that runs (`MOD-07-F17`).
+pub trait Instance {
+    /// Makes this copy the one that runs, and calls `launched` whenever the app is launched again
+    /// from then on. False when another copy already runs: it was told it was launched again, and
+    /// this copy is to end.
+    fn claim(&self, launched: Box<dyn Fn() + Send + Sync>) -> bool;
 }

@@ -1,12 +1,17 @@
 //! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
-//! handler, the desktop's notifications, and systemd-logind and NetworkManager on the system bus.
-//! Tests never use these; they use fakes.
+//! handler, the desktop's notifications, systemd-logind and NetworkManager on the system bus, the
+//! system tray, XDG autostart and the app's name on the session bus. Tests never use these; they
+//! use fakes, or a private bus and folder of their own.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use calendar_core::accounts::Account;
-use calendar_core::platform::{Browser, Network, Notifier, SecretStore, SecretStoreError, Wakeups};
+use calendar_core::background::{self, Signal};
+use calendar_core::platform::{
+    Autostart, Browser, Instance, Network, Notifier, SecretStore, SecretStoreError, Tray, Wakeups,
+};
 use calendar_core::reminders::{Action, Notification, SNOOZES};
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
@@ -339,6 +344,184 @@ impl Network for SystemNetwork {
     }
 }
 
+/// The app's icon in the system tray, as a StatusNotifierItem on the session bus (MOD-07
+/// *Technical notes*).
+pub struct SystemTray(OnceLock<ksni::blocking::Handle<TrayIcon>>);
+
+pub struct TrayIcon {
+    chosen: Box<dyn Fn(Signal) + Send + Sync>,
+}
+
+impl SystemTray {
+    pub fn new() -> Self {
+        SystemTray(OnceLock::new())
+    }
+}
+
+impl ksni::Tray for TrayIcon {
+    fn id(&self) -> String {
+        "calendar-buddy".into()
+    }
+
+    fn title(&self) -> String {
+        "Calendar Buddy".into()
+    }
+
+    fn icon_name(&self) -> String {
+        "x-office-calendar".into()
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        (self.chosen)(Signal::TrayClicked);
+    }
+
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::StandardItem;
+        vec![
+            StandardItem {
+                label: "Open Calendar Buddy".into(),
+                icon_name: "x-office-calendar".into(),
+                activate: Box::new(|tray: &mut Self| (tray.chosen)(Signal::Open)),
+                ..Default::default()
+            }
+            .into(),
+            ksni::MenuItem::Separator,
+            StandardItem {
+                label: "Quit".into(),
+                icon_name: "application-exit".into(),
+                activate: Box::new(|tray: &mut Self| (tray.chosen)(Signal::Quit)),
+                ..Default::default()
+            }
+            .into(),
+        ]
+    }
+}
+
+impl Tray for SystemTray {
+    fn show(&self, chosen: Box<dyn Fn(Signal) + Send + Sync>, at_login: bool) -> bool {
+        use ksni::blocking::TrayMethods;
+        match (TrayIcon { chosen }).assume_sni_available(at_login).spawn() {
+            Ok(handle) => self.0.set(handle).is_ok(),
+            // No session bus, or no tray on the desktop.
+            Err(_) => false,
+        }
+    }
+}
+
+/// Starting at login through an XDG autostart entry (MOD-07 *Technical notes*), in
+/// `$XDG_CONFIG_HOME/autostart`, or `~/.config/autostart` when that is not set.
+pub struct XdgAutostart {
+    /// The entry; `None` when there is no home directory.
+    entry: Option<PathBuf>,
+}
+
+impl XdgAutostart {
+    pub fn new() -> Self {
+        let config = calendar_core::settings::config_dir();
+        XdgAutostart::at(config.and_then(|dir| Some(dir.parent()?.join("autostart"))))
+    }
+
+    fn at(autostart: Option<PathBuf>) -> Self {
+        XdgAutostart {
+            entry: autostart.map(|dir| dir.join("calendar-buddy.desktop")),
+        }
+    }
+}
+
+impl Autostart for XdgAutostart {
+    fn is_on(&self) -> bool {
+        self.entry.as_ref().is_some_and(|entry| entry.exists())
+    }
+
+    fn set(&self, on: bool) -> std::io::Result<()> {
+        let Some(entry) = &self.entry else {
+            return Err(std::io::ErrorKind::NotFound.into());
+        };
+        if on {
+            if let Some(dir) = entry.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            // A program replaced while it runs, as by an upgrade, is named "… (deleted)".
+            let exe = std::env::current_exe()?;
+            let exe = exe.to_string_lossy();
+            let exe = Path::new(exe.strip_suffix(" (deleted)").unwrap_or(&exe));
+            std::fs::write(entry, background::autostart_entry(exe))
+        } else {
+            match std::fs::remove_file(entry) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                removed => removed,
+            }
+        }
+    }
+}
+
+/// The app's well-known name on the session bus, held by the copy that runs (MOD-07
+/// *Technical notes*).
+const INSTANCE: &str = "pl.ordergroup.CalendarBuddy";
+const INSTANCE_PATH: &str = "/pl/ordergroup/CalendarBuddy";
+
+/// The one copy of the app, through its name on the session bus, where a launch tells the running
+/// copy through the desktop's standard `org.freedesktop.Application` interface. Without a session
+/// bus every launch runs.
+pub struct SystemInstance(OnceLock<zbus::blocking::Connection>);
+
+impl SystemInstance {
+    pub fn new() -> Self {
+        SystemInstance(OnceLock::new())
+    }
+
+    /// Takes the app's name on `bus`, or tells the copy that holds it that it was launched
+    /// again; true when this copy took it.
+    fn claim_on(
+        &self,
+        bus: zbus::blocking::Connection,
+        launched: Box<dyn Fn() + Send + Sync>,
+    ) -> zbus::Result<bool> {
+        bus.object_server()
+            .at(INSTANCE_PATH, Application { launched })?;
+        let flags = zbus::fdo::RequestNameFlags::DoNotQueue.into();
+        match bus.request_name_with_flags(INSTANCE, flags) {
+            Ok(_) => {
+                // The name stays the app's while the connection lives.
+                let _ = self.0.set(bus);
+                Ok(true)
+            }
+            Err(zbus::Error::NameTaken) => {
+                let platform_data: HashMap<&str, zbus::zvariant::Value> = HashMap::new();
+                bus.call_method(
+                    Some(INSTANCE),
+                    INSTANCE_PATH,
+                    Some("org.freedesktop.Application"),
+                    "Activate",
+                    &(platform_data,),
+                )?;
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl Instance for SystemInstance {
+    fn claim(&self, launched: Box<dyn Fn() + Send + Sync>) -> bool {
+        zbus::blocking::Connection::session()
+            .and_then(|bus| self.claim_on(bus, launched))
+            .unwrap_or(true)
+    }
+}
+
+/// What a launch of the app tells the copy that runs.
+struct Application {
+    launched: Box<dyn Fn() + Send + Sync>,
+}
+
+#[zbus::interface(name = "org.freedesktop.Application")]
+impl Application {
+    fn activate(&self, _platform_data: HashMap<String, zbus::zvariant::OwnedValue>) {
+        (self.launched)();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,5 +552,84 @@ mod tests {
         }
         assert!(online(CONNECTED_GLOBAL));
         assert!(online(0));
+    }
+
+    #[test]
+    fn starting_at_login_is_off_until_turned_on_and_off_again_when_turned_off() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-autostart-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let autostart = XdgAutostart::at(Some(dir.join("autostart")));
+        assert!(!autostart.is_on());
+
+        autostart.set(true).unwrap();
+        assert!(autostart.is_on());
+        let entry = std::fs::read_to_string(dir.join("autostart/calendar-buddy.desktop")).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(entry, background::autostart_entry(&exe));
+
+        autostart.set(false).unwrap();
+        assert!(!autostart.is_on());
+        autostart.set(false).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A session bus of the test's own, gone when dropped.
+    struct PrivateBus(std::process::Child, String);
+
+    impl PrivateBus {
+        fn start() -> Self {
+            use std::io::BufRead;
+            let mut daemon = std::process::Command::new("dbus-daemon")
+                .args([
+                    "--session",
+                    "--nofork",
+                    "--print-address",
+                    "--address=unix:tmpdir=/tmp",
+                ])
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .expect("dbus-daemon");
+            let mut address = String::new();
+            std::io::BufReader::new(daemon.stdout.take().unwrap())
+                .read_line(&mut address)
+                .unwrap();
+            PrivateBus(daemon, address.trim().to_string())
+        }
+
+        fn connect(&self) -> zbus::blocking::Connection {
+            zbus::blocking::connection::Builder::address(self.1.as_str())
+                .unwrap()
+                .build()
+                .unwrap()
+        }
+    }
+
+    impl Drop for PrivateBus {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn tc_07_06_a_second_launch_tells_the_running_copy_and_does_not_run() {
+        let bus = PrivateBus::start();
+        let (told, launches) = std::sync::mpsc::channel();
+        let running = SystemInstance::new();
+        let first = running.claim_on(bus.connect(), Box::new(move || told.send(()).unwrap()));
+        assert!(first.unwrap());
+
+        let second = SystemInstance::new().claim_on(bus.connect(), Box::new(|| {}));
+        assert!(!second.unwrap());
+        launches
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the running copy is told");
+
+        let third = SystemInstance::new().claim_on(bus.connect(), Box::new(|| {}));
+        assert!(!third.unwrap());
+        launches
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("told again");
     }
 }

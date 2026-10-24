@@ -1716,3 +1716,51 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-142] The window, the tray icon and its menu
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-05
+- **Affects:** `US-07-05`, `MOD-07-F14`, `MOD-07-F15`, `MOD-07-U02`
+- **Decision:** Closing the window really closes it: the app keeps running in the tray, synchronizing as with a minimized window and reminding. It opens a new window, with everything as it was left, from the tray, from a new launch or from a clicked notification. The tray icon is the `x-office-calendar` icon, with the title "Calendar Buddy". Clicking it closes the open window, or opens it when it is closed. Its menu has "Open Calendar Buddy" (which opens the window, or brings it forward when it is open) and "Quit" (which ends the app and its reminders). When the desktop shows no tray icon (no StatusNotifierItem host), closing the window quits the app, as there would be nothing to open it from.
+- **Why:** On Wayland, KDE's default session, winit cannot hide a window, so the window is closed and opened again while the app's state stays. The menu items and the without-a-tray fallback are not set by the spec; the labels follow what KDE tray apps use.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-143] Starting at login and the single instance
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-05
+- **Affects:** `US-07-05`, `MOD-07-F16`, `MOD-07-F17`
+- **Decision:** "Start at login" is a checkbox in the settings' "Notifications" section. It is on exactly when the XDG autostart entry `calendar-buddy.desktop` exists in `$XDG_CONFIG_HOME/autostart` (`~/.config/autostart`). Ticking it writes the entry, which starts the running program's path with `--in-tray`; unticking it removes the entry. Like the settings, the entry is written off the UI thread, and a failed write is not reported. Started with `--in-tray`, the app opens no window, but it does open one when the desktop shows no tray icon. The one copy that runs holds the name `pl.ordergroup.CalendarBuddy` on the session bus. A new launch calls `Activate` on its `org.freedesktop.Application` interface, then ends. Without a session bus, every launch runs.
+- **Why:** The requirement names an XDG autostart entry and a well-known D-Bus name but not their details. The entry is the one source of truth, so removing it in KDE's autostart settings turns the switch off. `org.freedesktop.Application` is the desktop's standard activation interface.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-144] Bringing the window forward on Wayland, and the tray at login
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-05
+- **Affects:** `US-07-05`, `MOD-07-F14`, `MOD-07-F15`, `MOD-07-F16`, `MOD-07-F17`, `DEC-142`, `DEC-143`
+- **Decision:** A new launch, or "Open Calendar Buddy" chosen while the window is open, does nothing when the window has the keyboard. Otherwise the window is closed and opened again, in front, with everything as it was left. Started at login (`--in-tray`), the app takes its tray icon to be shown even if the desktop's tray is not there yet; the icon appears once the tray does, and no window opens.
+- **Why:** On Wayland, winit cannot unminimize or focus a window. A newly opened window comes to the front. At login the app can start before Plasma's tray, and without this it would open a window and quit when that window is closed (`DEC-142`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-145] "Start at login" only with a tray icon, and the window reopens as left
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-05
+- **Affects:** `US-07-05`, `MOD-07-F16`, `DEC-143`, `DEC-144`
+- **Decision:** The settings show "Start at login" only while the desktop shows the app's tray icon. A window that opens again keeps the size it last had and whether it was maximized, for as long as the app runs.
+- **Why:** Started at login, the app waits for a tray (`DEC-144`). On a desktop with no tray at all, it would run with no window and no way to quit it. Closing and reopening the window (`DEC-142`, `DEC-144`) should not undo how the user arranged it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
