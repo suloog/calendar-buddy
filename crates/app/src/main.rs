@@ -22,6 +22,7 @@ use calendar_core::guests::{self, Person, Reach};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
+use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
 use calendar_core::platform::Browser;
 use calendar_core::regional::Regional;
@@ -99,6 +100,9 @@ enum Dialog {
     /// (`MOD-05-F20`, `MOD-05-F21`), and the editor the change was made in, which Cancel goes
     /// back to.
     Scope(Question, Option<Box<Editor>>),
+    /// Whether Google e-mails the guests of the event changed or deleted (`MOD-06-F12`), and the
+    /// editor the change was made in, which Back goes back to.
+    Notify(Pending, Option<Box<Editor>>),
 }
 
 /// Ctrl+Z: undoes the last change to an event (`MOD-05-F28`); not Ctrl+Shift+Z, there is no redo.
@@ -360,11 +364,26 @@ impl CalendarApp {
         else {
             return;
         };
+        // The event stays where it was until the user answers what it asks.
         match Question::changing(drag::edit(event, calendar.clone(), timing)) {
-            Ok(edit) => self.change(Box::new(edit)),
-            // An occurrence stays where it was until the user says which events move.
+            Ok(edit) => {
+                // Saved at once, it leaves what is open as it is.
+                if let Some(asked) = self.save(Pending::Change(Box::new(edit), Scope::This), None) {
+                    self.dialog = Some(asked);
+                }
+            }
             Err(question) => self.dialog = Some(Dialog::Scope(question, None)),
         }
+    }
+
+    /// Saves the change or deletion at once, or first asks whether to e-mail the event's guests
+    /// (`MOD-06-F12`): the question to open, over `editor` when it was made there.
+    fn save(&mut self, pending: Pending, editor: Option<Box<Editor>>) -> Option<Dialog> {
+        if pending.asks().is_some() {
+            return Some(Dialog::Notify(pending, editor));
+        }
+        self.saved(pending, false);
+        None
     }
 
     /// Saves the change to the event: shown changed at once, marked "saving" until Google
@@ -376,27 +395,32 @@ impl CalendarApp {
         self.show_events(None);
     }
 
-    /// Saves the change to or deletion of an occurrence for the events the user chose
-    /// (`MOD-05-F20`, `MOD-05-F21`). One of the following or all events cannot be undone: as
-    /// after creating an event, nothing is left to undo.
-    fn answered(&mut self, question: Question, scope: Scope) {
-        match (question, scope) {
-            (Question::Change(edit), Scope::This) => self.change(edit),
-            (Question::Delete(deleted), Scope::This) => {
-                let (calendar, event) = *deleted;
-                self.delete(&event, calendar);
-            }
-            (Question::Change(edit), scope) => {
+    /// Saves the change to or deletion of the event, or of the events of its series the user
+    /// chose (`MOD-05-F20`, `MOD-05-F21`), Google e-mailing the guests as `notify` says
+    /// (`MOD-06-F12`). One of the following or all events cannot be undone: as after creating an
+    /// event, nothing is left to undo.
+    fn saved(&mut self, pending: Pending, notify: bool) {
+        match pending {
+            Pending::Change(mut edit, scope) => {
+                edit.notify = notify;
+                if scope == Scope::This {
+                    return self.change(edit);
+                }
                 let local = self.saving.change_series(&edit.event, edit.changed());
                 self.last.creating();
                 self.sync.change_series(local, edit, scope);
                 self.show_events(None);
             }
-            (Question::Delete(deleted), scope) => {
+            Pending::Delete(deleted, Scope::This) => {
+                let (calendar, event) = *deleted;
+                self.delete(&event, calendar, notify);
+            }
+            Pending::Delete(deleted, scope) => {
                 let (calendar, event) = *deleted;
                 let local = self.saving.delete(&event);
                 self.last.creating();
-                self.sync.delete_series(local, calendar, event, scope);
+                self.sync
+                    .delete_series(local, calendar, event, scope, notify);
                 self.show_events(None);
             }
         }
@@ -419,10 +443,10 @@ impl CalendarApp {
 
     /// Deletes the event from its calendar, without a question (`MOD-05-F12`, `MOD-05-F27`): gone
     /// at once, and back if Google refuses.
-    fn delete(&mut self, event: &Event, calendar: Calendar) {
+    fn delete(&mut self, event: &Event, calendar: Calendar, notify: bool) {
         let local = self.saving.delete(event);
-        self.last.deleting(local, &calendar, event);
-        self.sync.delete(local, calendar, event.clone());
+        self.last.deleting(local, &calendar, event, notify);
+        self.sync.delete(local, calendar, event.clone(), notify);
         self.show_events(None);
     }
 
@@ -430,10 +454,10 @@ impl CalendarApp {
     /// "saving" until Google confirms it (`MOD-05-F28`).
     fn undo(&mut self) {
         let local = match self.last.undo() {
-            Some(Undo::Restore(deleted)) => {
+            Some(Undo::Restore(deleted, notify)) => {
                 let (calendar, event) = *deleted;
                 let local = self.saving.change(&event, event.clone());
-                self.sync.restore(local, calendar, event);
+                self.sync.restore(local, calendar, event, notify);
                 local
             }
             Some(Undo::Revert(edit)) => {
@@ -519,12 +543,14 @@ impl CalendarApp {
     }
 
     /// Closes the open dialog; like Google Calendar, an event's details give the keyboard back to
-    /// the event, and the scope question goes back to the editor.
+    /// the event, and the scope and notify questions go back to the editor.
     fn close_dialog(&mut self, ctx: &egui::Context) {
         match self.dialog.take() {
             Some(Dialog::Event(_, Some(id), _)) => ctx.memory_mut(|m| m.request_focus(id)),
-            // The scope question goes back to the editor the change was made in.
-            Some(Dialog::Scope(_, Some(editor))) => self.dialog = Some(Dialog::Editor(editor)),
+            // The scope and notify questions go back to the editor the change was made in.
+            Some(Dialog::Scope(_, Some(editor)) | Dialog::Notify(_, Some(editor))) => {
+                self.dialog = Some(Dialog::Editor(editor))
+            }
             _ => {}
         }
     }
@@ -548,6 +574,7 @@ impl CalendarApp {
         let mut delete = None;
         let mut default_calendar = None;
         let mut scope = None;
+        let mut notify = None;
         let mut cancelled = false;
         let mut open_series = None;
         let mut attachment = None;
@@ -562,6 +589,7 @@ impl CalendarApp {
             Dialog::Settings => "Settings",
             Dialog::Scope(Question::Change(_), _) => "Edit recurring event",
             Dialog::Scope(Question::Delete(_), _) => "Delete recurring event",
+            Dialog::Notify(..) => "Notify guests",
         };
         egui::Window::new(title)
             .open(&mut open)
@@ -787,6 +815,22 @@ impl CalendarApp {
                     }
                     cancelled = ui.button("Cancel").clicked();
                 }
+                Dialog::Notify(pending, _) => {
+                    ui.label(pending.asks().unwrap_or_default());
+                    // Changes need Google (`MOD-02-F15`).
+                    if let Some(reason) = refused {
+                        ui.label(reason);
+                    }
+                    ui.horizontal(|ui| {
+                        cancelled = ui.button(notify::BACK).clicked();
+                        for (answer, send) in [(notify::DONT_SEND, false), (notify::SEND, true)] {
+                            let button = egui::Button::new(answer);
+                            if ui.add_enabled(refused.is_none(), button).clicked() {
+                                notify = Some(send);
+                            }
+                        }
+                    });
+                }
                 Dialog::Settings => {
                     ui.heading("Accounts");
                     egui::Grid::new("accounts").show(ui, |ui| {
@@ -862,29 +906,30 @@ impl CalendarApp {
                 open = false;
             }
             Some(Save::Change(change)) if change.is_empty() => open = false,
-            Some(Save::Change(change)) => match Question::changing(*change) {
-                Ok(change) => {
-                    self.change(Box::new(change));
-                    open = false;
-                }
-                Err(question) => {
-                    let editor = match self.dialog.take() {
-                        Some(Dialog::Editor(editor)) => Some(editor),
-                        _ => None,
-                    };
-                    self.dialog = Some(Dialog::Scope(question, editor));
-                }
-            },
+            Some(Save::Change(change)) => {
+                let editor = match self.dialog.take() {
+                    Some(Dialog::Editor(editor)) => Some(editor),
+                    _ => None,
+                };
+                self.dialog = match Question::changing(*change) {
+                    Ok(change) => self.save(Pending::Change(Box::new(change), Scope::This), editor),
+                    Err(question) => Some(Dialog::Scope(question, editor)),
+                };
+            }
             None => {}
         }
         if cancelled {
             open = false;
         }
         if let Some(chosen) = scope
-            && let Some(Dialog::Scope(question, _)) = self.dialog.take()
+            && let Some(Dialog::Scope(question, editor)) = self.dialog.take()
         {
-            self.answered(question, chosen);
-            open = false;
+            self.dialog = self.save(Pending::of(question, chosen), editor);
+        }
+        if let Some(send) = notify
+            && let Some(Dialog::Notify(pending, _)) = self.dialog.take()
+        {
+            self.saved(pending, send);
         }
         if let Some(event) = open_series {
             self.open_series(&event);
@@ -906,13 +951,10 @@ impl CalendarApp {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
         }
         if let Some((event, calendar)) = delete {
-            match Question::deleting(calendar, event) {
-                Ok((calendar, event)) => {
-                    self.delete(&event, calendar);
-                    open = false;
-                }
-                Err(question) => self.dialog = Some(Dialog::Scope(question, None)),
-            }
+            self.dialog = match Question::deleting(calendar, event) {
+                Ok(deleted) => self.save(Pending::Delete(Box::new(deleted), Scope::This), None),
+                Err(question) => Some(Dialog::Scope(question, None)),
+            };
         }
         if let Some(calendar) = toggled {
             // Disabled, it is no longer synchronized; enabled, it is synchronized at once (`DEC-94`).
