@@ -104,6 +104,8 @@ pub fn in_settings(
     egui::ScrollArea::vertical()
         .id_salt("calendars-in-settings")
         .max_height(SETTINGS_LIST_HEIGHT)
+        // As wide as the settings, not only as its longest name.
+        .auto_shrink([false, true])
         .show(ui, |ui| {
             for (email, calendars) in accounts {
                 ui.label(egui::RichText::new(email).strong());
