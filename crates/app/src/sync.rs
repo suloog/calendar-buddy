@@ -24,8 +24,8 @@
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use calendar_core::accounts::Check;
@@ -37,7 +37,7 @@ use calendar_core::guests::{Person, Reach};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{Browser, Notifier, SecretStore, Wakeups};
 use calendar_core::regional::Regional;
-use calendar_core::reminders::{Action, Alarms, EventId, ReminderId};
+use calendar_core::reminders::{Action, Alarms, EventId, ReminderId, Silenced};
 use calendar_core::schedule::Schedule;
 use calendar_core::series::{self, Plan, Scope, Split};
 use calendar_core::status::{Problem, Status};
@@ -189,6 +189,8 @@ pub struct Synchronization {
     /// The events of notifications clicked, not yet taken.
     opens: Sender<Opened>,
     opened: Receiver<Opened>,
+    /// The notifications not shown, shared with the worker so a change holds at once.
+    silenced: Arc<Mutex<Silenced>>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -216,6 +218,7 @@ impl Synchronization {
         account_ids: Vec<String>,
         window: Window,
         disabled: Disabled,
+        silenced: Silenced,
         regional: Regional,
     ) -> Self {
         let store: Arc<dyn SecretStore> = Arc::new(SystemSecretStore);
@@ -232,6 +235,7 @@ impl Synchronization {
         };
         let sync = Synchronization::with(ctx, open, sign_in, account_ids, window, disabled);
         sync.wake_on(&SystemWakeups);
+        sync.set_silenced(silenced);
         sync.remind_with(ctx, Box::new(SystemNotifier::new()), regional);
         sync
     }
@@ -247,6 +251,8 @@ impl Synchronization {
         let (jobs, received) = mpsc::channel();
         let (sender, updates) = mpsc::channel();
         let (opens, opened) = mpsc::channel();
+        let silenced = Arc::new(Mutex::new(Silenced::default()));
+        let shared = silenced.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let send = |update| {
@@ -254,6 +260,7 @@ impl Synchronization {
                 ctx.request_repaint();
             };
             let mut engine = Engine::new(open(), sign_in, window, disabled);
+            engine.silenced = shared;
             let _ = engine.cache.retain_accounts(&account_ids);
             engine.clear_disabled();
             send(engine.shown());
@@ -319,6 +326,7 @@ impl Synchronization {
             busy: None,
             opens,
             opened,
+            silenced,
         }
     }
 
@@ -350,6 +358,12 @@ impl Synchronization {
     /// Shows the reminder again in so many minutes; Google is not told (`MOD-07-F10`).
     pub fn snooze(&self, reminder: ReminderId, minutes: u32) {
         let _ = self.jobs.send(Job::Snooze(reminder, minutes, Utc::now()));
+    }
+
+    /// The notifications not to show from now on, as the settings say; Google is not told
+    /// (`MOD-07-F11`, `F12`).
+    pub fn set_silenced(&self, silenced: Silenced) {
+        *self.silenced.lock().unwrap() = silenced;
     }
 
     /// Synchronizes everything at once after waking from sleep and when the network returns.
@@ -612,6 +626,8 @@ struct Engine {
     clock: Box<dyn Fn() -> DateTime<Utc> + Send>,
     /// The reminders to show, once the app gave the desktop's notifications to show them with.
     reminding: Option<Reminding>,
+    /// The notifications not shown when their reminders come, as the app last set them.
+    silenced: Arc<Mutex<Silenced>>,
 }
 
 /// Reminders, and how they are shown.
@@ -640,6 +656,7 @@ impl Engine {
             last_synced: cache.last_synced().ok().flatten(),
             clock: Box::new(Utc::now),
             reminding: None,
+            silenced: Arc::default(),
             cache,
         }
     }
@@ -1253,12 +1270,15 @@ impl Engine {
     }
 
     /// Shows the reminders due now as desktop notifications, each once (`MOD-07-F07`), and the
-    /// snoozed ones due again; what the user chooses on one is done (`MOD-07-F08`–`F10`).
+    /// snoozed ones due again; what the user chooses on one is done (`MOD-07-F08`–`F10`). Those
+    /// silenced in the settings go by unshown (`MOD-07-F11`, `F12`).
     fn remind(&mut self) {
         let Some(reminding) = &mut self.reminding else {
             return;
         };
-        for notification in reminding.alarms.due((self.clock)()) {
+        let due = reminding.alarms.due((self.clock)());
+        let silenced = self.silenced.lock().unwrap().clone();
+        for notification in due.into_iter().filter(|n| !silenced.silences(n)) {
             let buttons = reminding.notifier.buttons();
             let (act, shown) = (reminding.act.clone(), notification.clone());
             let chosen = Box::new(move |action| match action {
@@ -1400,6 +1420,7 @@ mod tests {
     use calendar_core::reminders::Notification;
     use calendar_core::series::{Question, Scope};
     use calendar_core::settings::Settings;
+    use calendar_core::side_panel;
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_core::undo::{self, LastChange, Undo};
@@ -5775,6 +5796,113 @@ mod tests {
         assert_eq!(titles, ["Review"]);
     }
 
+    /// Google's calendars were only ever read, and the event's reminders there are as they were.
+    fn reminders_unchanged_in_google(google: &Google, calendar: &str, event: &Value) {
+        let requests = google.fake.requests();
+        let calendar_api: Vec<&String> = (requests.iter())
+            .filter(|request| request.contains(" /calendar/v3/"))
+            .collect();
+        assert!(!calendar_api.is_empty());
+        assert!(
+            calendar_api
+                .iter()
+                .all(|request| request.starts_with("GET "))
+        );
+        let id = event["id"].as_str().unwrap();
+        let now = google.fake.event(ACCOUNT_ID, calendar, id).unwrap();
+        assert_eq!(now["reminders"], event["reminders"]);
+    }
+
+    #[test]
+    fn tc_07_04_a_muted_calendar_still_shows_its_events_but_gives_no_notifications() {
+        let google = Google::start("tc-07-04");
+        work_calendar(&google, "work", "Work");
+        work_calendar(&google, "team", "Team");
+        let reminder = json!([{"method": "popup", "minutes": 10}]);
+        let review = at_ten("review", "Review", reminder.clone());
+        let sync = at_ten("sync", "Sync", reminder);
+        google.fake.add_event(ACCOUNT_ID, "work", review);
+        google.fake.add_event(ACCOUNT_ID, "team", sync.clone());
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        let (mut engine, _) = reminding(&google, &clock, &notifier, Disabled::new(), start);
+        let Update::Events(calendars, events) = engine.shown() else {
+            panic!("the views are told what to show");
+        };
+        let team = (calendars.iter())
+            .find(|calendar| calendar.id == "team")
+            .unwrap();
+
+        // 1. "Team" muted from its side-panel menu: "Sync" is still in the week view.
+        let mut settings = Settings::default();
+        side_panel::toggle(&mut settings.muted, team);
+        let settings = Settings::parse(&settings.to_text());
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings);
+        let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
+        let (Built::Grid(week), _) =
+            build(&events, &settings, navigation, 30, Warsaw, thursday(9, 0))
+        else {
+            panic!("the week view is built");
+        };
+        let mut titles: Vec<String> = (week.blocks.iter())
+            .filter_map(|block| block.title.clone())
+            .collect();
+        titles.sort();
+        assert_eq!(titles, ["Review", "Sync"]);
+
+        // 2. Up to 9:55, no notification of "Sync"; "Work"'s "Review" is still shown.
+        for minute in 50..=55 {
+            *clock.lock().unwrap() = thursday(9, minute);
+            engine.remind();
+        }
+        let shown: Vec<String> = notifier.shown().into_iter().map(|(t, _, _)| t).collect();
+        assert_eq!(shown, ["Review"]);
+        reminders_unchanged_in_google(&google, "team", &sync);
+    }
+
+    #[test]
+    fn notifications_turned_off_show_none_and_turned_on_again_those_still_to_come() {
+        let google = Google::start("reminders-off");
+        work_calendar(&google, "work", "Work");
+        let review = at_ten(
+            "review",
+            "Review",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        let retro = at_ten("retro", "Retro", json!([{"method": "popup", "minutes": 5}]));
+        google.fake.add_event(ACCOUNT_ID, "work", review.clone());
+        google.fake.add_event(ACCOUNT_ID, "work", retro);
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        let (mut engine, _) = reminding(&google, &clock, &notifier, Disabled::new(), start);
+
+        // Off in the settings: "Review"'s reminder at 9:50 shows nothing, even after a
+        // synchronization.
+        let mut settings = Settings {
+            notifications_off: true,
+            ..Settings::default()
+        };
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings);
+        *clock.lock().unwrap() = thursday(9, 50);
+        engine.remind();
+        engine.handle(Some(Job::Refresh), start + secs(60));
+        engine.remind();
+        assert_eq!(notifier.shown(), []);
+
+        // On again at 9:52: "Retro"'s reminder at 9:55 is shown, "Review"'s past one is not.
+        settings.notifications_off = false;
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings);
+        for minute in 52..=55 {
+            *clock.lock().unwrap() = thursday(9, minute);
+            engine.remind();
+        }
+        let shown: Vec<String> = notifier.shown().into_iter().map(|(t, _, _)| t).collect();
+        assert_eq!(shown, ["Retro"]);
+        reminders_unchanged_in_google(&google, "work", &review);
+    }
+
     #[test]
     fn clicking_a_notification_opens_its_event() {
         let google = Google::start("reminders-click");
@@ -5875,6 +6003,32 @@ mod tests {
         // 3. Google was told nothing.
         assert_eq!(google.fake.requests().len(), before);
         assert!(google.fake.patched().is_empty());
+    }
+
+    #[test]
+    fn a_snoozed_notification_of_a_calendar_muted_meanwhile_does_not_come_back() {
+        let google = Google::start("reminders-snooze-muted");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, chosen, start) = review_shown(&google, &clock, &notifier, false);
+        notifier.choose(0, Action::Snooze(5));
+        let Ok(Chosen::Snooze(reminder, 5)) = chosen.try_recv() else {
+            panic!("Snooze 5 minutes was not chosen");
+        };
+        engine.handle(Some(Job::Snooze(reminder, 5, thursday(9, 50))), start);
+
+        // "Work" muted before the snooze is due at 9:55, and unmuted after it: it is gone.
+        let muted = Silenced {
+            all: false,
+            muted: [(ACCOUNT_ID.to_string(), "work".to_string())].into(),
+        };
+        *engine.silenced.lock().unwrap() = muted;
+        *clock.lock().unwrap() = thursday(9, 55);
+        engine.remind();
+        *engine.silenced.lock().unwrap() = Silenced::default();
+        *clock.lock().unwrap() = thursday(10, 0);
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 1);
     }
 
     #[test]

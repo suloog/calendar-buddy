@@ -28,7 +28,7 @@ use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
 use calendar_core::platform::Browser;
 use calendar_core::regional::Regional;
-use calendar_core::reminders::{Action, ReminderId, SNOOZES};
+use calendar_core::reminders::{Action, ReminderId, SNOOZES, Silenced};
 use calendar_core::series::{Question, Scope};
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
@@ -119,6 +119,11 @@ fn undo_pressed(input: &mut egui::InputState) -> bool {
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
+
+/// The settings' switch of all notifications (`MOD-07-F11`), as Google Calendar names it.
+const NOTIFICATIONS: &str = "Desktop notifications";
+const NOTIFICATIONS_HINT: &str = "Reminders of events are shown as desktop notifications; \
+     turning them off leaves the reminders in Google as they are";
 
 /// The view's model, of the events of calendars neither hidden in the side panel
 /// (`MOD-03-F12`) nor disabled in the settings (`MOD-03-F13`), each in its calendar's local
@@ -288,6 +293,7 @@ impl CalendarApp {
             account_ids,
             Window::around(today, zone),
             settings.disabled.clone(),
+            Silenced::of(&settings),
             regional,
         );
         // Accounts Google turned away in an earlier run are not checked, nor synchronized: their
@@ -682,6 +688,7 @@ impl CalendarApp {
         let mut edit = None;
         let mut delete = None;
         let mut default_calendar = None;
+        let mut notifications = None;
         let mut scope = None;
         let mut notify = None;
         let mut cancelled = false;
@@ -1077,6 +1084,17 @@ impl CalendarApp {
                             default_calendar = picked;
                         }
                     });
+                    ui.add_space(8.0);
+                    // All of them, on or off (`MOD-07-F11`); the reminders in Google stay.
+                    ui.heading("Notifications");
+                    let mut on = !self.settings.notifications_off;
+                    if ui
+                        .checkbox(&mut on, NOTIFICATIONS)
+                        .on_hover_text(NOTIFICATIONS_HINT)
+                        .changed()
+                    {
+                        notifications = Some(on);
+                    }
                 }
             });
         if let Some(email) = again {
@@ -1088,6 +1106,11 @@ impl CalendarApp {
         if let Some(calendar) = default_calendar {
             self.settings.default_calendar = Some((calendar.account_id, calendar.id));
             self.save_settings();
+        }
+        if let Some(on) = notifications {
+            self.settings.notifications_off = !on;
+            self.save_settings();
+            self.sync.set_silenced(Silenced::of(&self.settings));
         }
         match save {
             Some(Save::Create(calendar, event)) => {
@@ -1207,6 +1230,7 @@ impl CalendarApp {
             if self.settings.disabled != disabled {
                 self.sync.set_disabled(self.settings.disabled.clone());
             }
+            self.sync.set_silenced(Silenced::of(&self.settings));
         }
         let window = self.window();
         self.sync.forget(id, window);
@@ -1576,6 +1600,11 @@ impl eframe::App for CalendarApp {
                     }
                     Some(calendar_list::Action::Toggled(calendar)) => {
                         side_panel::toggle(&mut self.settings.hidden, &calendar)
+                    }
+                    // Its events stay in the views (`MOD-07-F12`).
+                    Some(calendar_list::Action::Muted(calendar)) => {
+                        side_panel::toggle(&mut self.settings.muted, &calendar);
+                        self.sync.set_silenced(Silenced::of(&self.settings));
                     }
                     None => return,
                 }
