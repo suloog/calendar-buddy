@@ -258,6 +258,8 @@ impl Saving {
             saving: true,
             recurring: !event.recurrence.is_empty(),
             series: None,
+            recurrence: Vec::new(),
+            series_first: None,
             about: event.about.clone(),
             etag: String::new(),
         };

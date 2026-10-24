@@ -464,6 +464,17 @@ pub const SERIES_ENDS: &str = "Series ends";
 pub const NEVER: &str = "Never";
 pub const AFTER: &str = "After";
 pub const OCCURRENCES: &str = "occurrences";
+pub const CUSTOM: &str = "Custom…";
+/// Google Calendar's custom recurrence dialog (`MOD-05-F33`).
+pub const CUSTOM_RECURRENCE: &str = "Custom recurrence";
+pub const REPEAT_EVERY: &str = "Repeat every";
+pub const REPEAT_ON: &str = "Repeat on";
+pub const DAY_UNIT: &str = "day";
+pub const WEEK_UNIT: &str = "week";
+pub const MONTH_UNIT: &str = "month";
+pub const YEAR_UNIT: &str = "year";
+pub const DONE: &str = "Done";
+pub const INTERVAL_UNREADABLE: &str = "The number to repeat every can't be read.";
 pub const CHANGED_IN_GOOGLE: &str = "Changed in Google Calendar";
 pub const OPEN_IN_GOOGLE: &str = "Open in Google Calendar";
 
@@ -485,6 +496,9 @@ pub const ALL_EVENTS: &str = "All events";
 /// Why the following or all events cannot move to another day, or between all-day and timed.
 pub const OTHER_DAY: &str = "Moving the following or all events to another day changes how the \
      series repeats; that is done in Google Calendar.";
+/// Why a new rule, set from an occurrence, cannot be for all events (`DEC-172`).
+pub const RULE_FROM_FIRST: &str = "From the series' first event this rule falls on other days; \
+     it can be set for this and following events.";
 /// Why an occurrence, or those following it, cannot move to another calendar.
 pub const OTHER_CALENDAR: &str = "Only all events of a series can move to another calendar.";
 

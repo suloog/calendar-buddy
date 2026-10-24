@@ -847,6 +847,11 @@ impl CalendarApp {
     fn close_dialog(&mut self, ctx: &egui::Context) {
         match self.dialog.take() {
             Some(Dialog::Event(_, Some(id), ..)) => ctx.memory_mut(|m| m.request_focus(id)),
+            // The custom recurrence dialog closes alone, back to the editor (`MOD-05-F33`).
+            Some(Dialog::Editor(mut editor)) if editor.custom.is_some() => {
+                editor.custom = None;
+                self.dialog = Some(Dialog::Editor(editor));
+            }
             // The scope and notify questions go back to the editor the change was made in.
             Some(Dialog::Scope(_, Some(editor)) | Dialog::Notify(_, Some(editor))) => {
                 self.dialog = Some(Dialog::Editor(editor))

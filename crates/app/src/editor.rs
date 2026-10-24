@@ -1,6 +1,7 @@
 //! Draws the full event editor (`US-05-02`): the title, start and end, all-day, time zone,
 //! location, description, calendar, busy or free and visibility of a new or an existing event,
-//! and how a new one repeats (`US-05-06`); a series' repetition opens in Google Calendar
+//! and how it repeats, through Google Calendar's repeat menu and custom recurrence dialog
+//! (`US-05-06`, `US-05-11`); a series' rule the dialog cannot express opens in Google Calendar
 //! (`US-05-07`); out of office and focus time where the account allows them (`US-05-08`). What
 //! the fields mean and what saving does is `calendar_core::editor`'s. The event's own colour is
 //! picked from Google's event colours (`US-05-09`). Guests are added by address or from the people
@@ -11,13 +12,11 @@
 use calendar_core::accounts::Entry;
 use calendar_core::availability::Preview;
 use calendar_core::colors::EventColor;
-use calendar_core::editor::{
-    Editor, Ending, LONGEST_REMINDER, MOST_REMINDERS, ReminderField, Save, Unit,
-};
+use calendar_core::editor::{Editor, LONGEST_REMINDER, MOST_REMINDERS, ReminderField, Save, Unit};
 use calendar_core::guests::Person;
 use calendar_core::model::{Calendar, Kind, Method, Show, Visibility};
 use calendar_core::regional::Regional;
-use calendar_core::repeat::Pattern;
+use calendar_core::repeat::{self, Ending, Frequency};
 use calendar_core::texts::{self, CONFLICT, NO_DATA};
 use eframe::egui::{self, CornerRadius, Rect, Sense, Stroke, StrokeKind, Vec2};
 
@@ -28,6 +27,8 @@ use crate::widgets::{close_button, form_row, section, text_field};
 const DATE_WIDTH: f32 = 100.0;
 const TIME_WIDTH: f32 = 70.0;
 const COUNT_WIDTH: f32 = 40.0;
+/// The width of the custom recurrence dialog.
+const CUSTOM_WIDTH: f32 = 320.0;
 const SWATCH: f32 = 20.0;
 /// How tall the list of time zones grows before it scrolls.
 const ZONES_HEIGHT: f32 = 320.0;
@@ -69,17 +70,6 @@ fn unit_label(unit: Unit) -> &'static str {
     }
 }
 
-fn repeat_label(repeat: Option<&Pattern>) -> &'static str {
-    match repeat {
-        None => texts::DOES_NOT_REPEAT,
-        Some(Pattern::Daily) => texts::DAILY,
-        Some(Pattern::Weekdays) => texts::EVERY_WEEKDAY,
-        Some(Pattern::Weekly(_)) => texts::WEEKLY,
-        Some(Pattern::Monthly) => texts::MONTHLY,
-        Some(Pattern::Yearly) => texts::ANNUALLY,
-    }
-}
-
 fn ending_label(ends: Ending) -> &'static str {
     match ends {
         Ending::Never => texts::NEVER,
@@ -88,68 +78,123 @@ fn ending_label(ends: Ending) -> &'static str {
     }
 }
 
-/// How a new event repeats and how its series ends (`MOD-05-F18`, `F19`), as rows of the form.
+/// Google Calendar's repeat menu (`MOD-05-F32`): "Does not repeat" for a new event, the presets
+/// for the start's day, the rule chosen in words when it is none of them (`MOD-05-F34`), and
+/// "Custom…", which opens the custom recurrence dialog (`MOD-05-F33`).
 fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
-    let weekly = editor.weekly();
-    let choices = [
-        None,
-        Some(Pattern::Daily),
-        Some(Pattern::Weekdays),
-        Some(weekly),
-        Some(Pattern::Monthly),
-        Some(Pattern::Yearly),
-    ];
+    let choices = editor.repeat_choices(regional);
+    let chosen = editor.repeat_label(regional);
     form_row(ui, texts::REPEATS, |ui| {
         egui::ComboBox::from_id_salt("editor-repeat")
-            .selected_text(repeat_label(editor.repeat.as_ref()))
+            .selected_text(&chosen)
+            .width(ui.available_width())
             .show_ui(ui, |ui| {
-                for choice in choices {
-                    let label = repeat_label(choice.as_ref());
-                    let chosen = repeat_label(editor.repeat.as_ref()) == label;
-                    if ui.selectable_label(chosen, label).clicked() && !chosen {
-                        editor.repeat = choice;
+                for (rule, words) in choices {
+                    let is_chosen = words == chosen;
+                    if ui.selectable_label(is_chosen, &words).clicked() && !is_chosen {
+                        editor.repeat = rule;
                     }
+                }
+                if ui.selectable_label(false, texts::CUSTOM).clicked() {
+                    editor.open_custom(regional);
                 }
             });
     });
-    let Some(pattern) = &editor.repeat else {
+    custom(ui, editor, regional);
+}
+
+/// Google Calendar's custom recurrence dialog over the editor, while open (`MOD-05-F33`): repeat
+/// every N days, weeks, months or years, on the weekdays for weeks and on a day of the month for
+/// months, the other units showing neither (`MOD-05-U05`), and how the series ends. **Done**
+/// takes the rule, or says why it cannot; **Cancel**, Esc or a click outside leave the rule as it
+/// was.
+fn custom(ui: &egui::Ui, editor: &mut Editor, regional: &Regional) {
+    let Some(custom) = &mut editor.custom else {
         return;
     };
-    if let Pattern::Weekly(days) = pattern {
-        let days = days.clone();
-        form_row(ui, texts::ON, |ui| {
-            ui.horizontal(|ui| {
-                let mut day = regional.week_start;
-                for letter in regional.weekday_letters() {
-                    if ui.selectable_label(days.contains(&day), letter).clicked() {
-                        editor.toggle_day(day);
-                    }
-                    day = day.succ();
-                }
-            });
-        });
-    }
-    form_row(ui, texts::SERIES_ENDS, |ui| {
+    let (mut done, mut cancelled) = (false, false);
+    let modal = egui::Modal::new(egui::Id::unique("editor-custom")).show(ui.ctx(), |ui| {
+        ui.set_width(CUSTOM_WIDTH);
+        crate::widgets::heading(ui, texts::CUSTOM_RECURRENCE);
         ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("editor-ends")
-                .selected_text(ending_label(editor.ends))
+            ui.label(texts::REPEAT_EVERY);
+            field(ui, &mut custom.interval, COUNT_WIDTH);
+            let mut frequency = custom.frequency();
+            egui::ComboBox::from_id_salt("custom-unit")
+                .selected_text(frequency.label())
                 .show_ui(ui, |ui| {
-                    for ends in [Ending::Never, Ending::OnDate, Ending::AfterCount] {
-                        ui.selectable_value(&mut editor.ends, ends, ending_label(ends));
+                    for each in Frequency::EACH {
+                        ui.selectable_value(&mut frequency, each, each.label());
                     }
                 });
-            match editor.ends {
-                Ending::Never => {}
-                Ending::OnDate => {
-                    field(ui, &mut editor.last_date, DATE_WIDTH);
-                }
-                Ending::AfterCount => {
-                    field(ui, &mut editor.count, COUNT_WIDTH);
-                    ui.label(texts::OCCURRENCES);
-                }
+            if frequency != custom.frequency() {
+                custom.set_frequency(frequency);
             }
         });
+        match custom.frequency() {
+            Frequency::Weekly => {
+                ui.label(texts::REPEAT_ON);
+                ui.horizontal(|ui| {
+                    let mut day = regional.week_start;
+                    for letter in regional.weekday_letters() {
+                        let chosen = custom.days().contains(&day);
+                        let clicked = (ui.selectable_label(chosen, letter))
+                            .on_hover_text(repeat::day_name(day))
+                            .clicked();
+                        if clicked {
+                            custom.toggle_day(day);
+                        }
+                        day = day.succ();
+                    }
+                });
+            }
+            Frequency::Monthly => {
+                let choices = custom.month_days();
+                let chosen = (choices.iter())
+                    .find(|(month_day, _)| *month_day == custom.month_day)
+                    .map(|(_, words)| words.clone())
+                    .unwrap_or_default();
+                egui::ComboBox::from_id_salt("custom-month-day")
+                    .selected_text(chosen)
+                    .show_ui(ui, |ui| {
+                        for (month_day, words) in choices {
+                            ui.selectable_value(&mut custom.month_day, month_day, words);
+                        }
+                    });
+            }
+            Frequency::Daily | Frequency::Yearly => {}
+        }
+        ui.add_space(4.0);
+        ui.label(texts::SERIES_ENDS);
+        for ends in [Ending::Never, Ending::OnDate, Ending::AfterCount] {
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut custom.ends, ends, ending_label(ends));
+                match ends {
+                    Ending::Never => {}
+                    Ending::OnDate => {
+                        field(ui, &mut custom.last_date, DATE_WIDTH);
+                    }
+                    Ending::AfterCount => {
+                        field(ui, &mut custom.count, COUNT_WIDTH);
+                        ui.label(texts::OCCURRENCES);
+                    }
+                }
+            });
+        }
+        if let Some(problem) = &custom.problem {
+            ui.colored_label(ui.visuals().warn_fg_color, problem);
+        }
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            cancelled = ui.button(texts::CANCEL).clicked();
+            done = ui.add(crate::widgets::primary(ui, texts::DONE)).clicked();
+        });
     });
+    if done {
+        editor.custom_done(regional);
+    } else if cancelled || modal.should_close() {
+        editor.custom = None;
+    }
 }
 
 /// The event's own colour, one of Google's event colours, or none for its calendar's, as Google
@@ -486,8 +531,8 @@ pub enum Edited {
 /// Draws the editor with the calendars it can save to, under their accounts, the types the
 /// accounts allow (`MOD-05-F24`), and why changes are refused now, if they are; what saving
 /// does once the user saves. Until the event can be saved, the editor says why and **Save** is
-/// unavailable. An occurrence of a series offers to change its repetition in Google Calendar, as
-/// the app does not (`DEC-111`). The people suggested are offered as guests, and the guests'
+/// unavailable. An occurrence of a series whose rule the custom dialog cannot express offers to
+/// change it in Google Calendar (`MOD-05-F29`). The people suggested are offered as guests, and the guests'
 /// availability is shown under the time.
 pub fn show(
     ui: &mut egui::Ui,
@@ -582,18 +627,18 @@ pub fn show(
     if let Some(preview) = google.availability {
         form_row(ui, texts::AVAILABILITY, |ui| availability(ui, preview));
     }
-    // An existing event's repetition is not changed here (`DEC-111`).
-    match &editor.opened {
-        None => repeat(ui, editor, regional),
-        Some((event, _)) if event.series.is_some() => {
-            form_row(ui, texts::REPEATS, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(texts::CHANGED_IN_GOOGLE);
-                    open_series = ui.button(texts::OPEN_IN_GOOGLE).clicked();
-                });
+    // An existing event not of a series is not made one here (`DEC-111`); a series' rule the
+    // custom dialog cannot express is changed in Google Calendar (`MOD-05-F29`).
+    let series = matches!(&editor.opened, Some((event, _)) if event.series.is_some());
+    if editor.rule_kept() {
+        form_row(ui, texts::REPEATS, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(texts::CHANGED_IN_GOOGLE);
+                open_series = ui.button(texts::OPEN_IN_GOOGLE).clicked();
             });
-        }
-        Some(_) => {}
+        });
+    } else if editor.opened.is_none() || series {
+        repeat(ui, editor, regional);
     }
     section(ui);
 

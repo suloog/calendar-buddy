@@ -2053,3 +2053,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-170] How a series' rule is read, compared and changed in the app
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-11
+- **Affects:** `US-05-11`, `MOD-05-F29`, `MOD-05-F34`, `MOD-05-F35`, `DEC-111`, `DEC-113`, `DEC-165`, the calendar-provider interface (none), the view model
+- **Decision:** The editor of an occurrence takes the series' rule lines from the occurrence (**model change:** `Event::recurrence`, the series' lines on each occurrence, changed or not; no SQLite schema or provider-interface change). A rule is expressible when it is one `RRULE` line (with any `EXDATE` lines) whose parts the custom dialog sets, with its weekday of the month or day of the month those of the occurrence's start by the rule; anything else is complex and keeps `DEC-113`'s path. The menu's and dialog's day- and weekday-based choices of an occurrence follow the day the rule starts it on, not a start moved in the editor; only a new event's rule follows its start. A rule ending on a date (`UNTIL`) reads as the last day an occurrence can start on in the series' zone. A rule is sent only when what it says changed — compared as the app writes it — so a rule left as it was is never rewritten; a changed one is written as Google Calendar writes it (`UNTIL` the last second of the day, `WKST` kept as it came) with the series' `EXDATE` lines kept. "All events" puts the new rule on the master. "This and following" ends the old series as `DEC-113` does and starts the following events afresh with the new rule as set in the dialog, its count counted from the occurrence, without the old series' exceptions. "Does not repeat" is offered only for a new event: a series is not made a single event in the app, and an existing single event is still not made a series (`DEC-111` stands for both).
+- **Why:** The spec fixes the expressible rules, the menu words and the two scopes (`DEC-165`, MOD-05 *Technical notes*) but not how an occurrence's choices are anchored, what counts as a change, or what the following events get. Anchoring on the occurrence by its rule and comparing written rules keeps Google's own rules untouched until the user changes them (`MOD-05-F29`); a fresh rule for the following events is what the dialog shows the user. Turning a series into one event, or one event into a series, has no criterion and would need an undo the spec does not describe.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-171] The repeat menu's words and the custom dialog's defaults
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-11
+- **Affects:** `US-05-11`, `MOD-05-F32`, `MOD-05-F33`, `MOD-05-U05`, `DEC-29`, `DEC-112`, `DEC-165`
+- **Decision:** The menu puts a rule in Google Calendar's English words — "Daily", "Every 3 days", "Weekly on Monday, Wednesday", "Every weekday (Monday to Friday)", "Monthly on day 17", "Every 3 months on the second Monday", "Annually on November 17", followed by ", 10 times", ", once" or ", until June 30, 2027" — with dates in the system's regional format (`DEC-29`); a rule that is none of the presets is listed in its words above "Custom…". "Custom…" opens a dialog over the editor: on weekly on the start's weekday for an event that does not repeat, as Google Calendar opens it, otherwise filled with the rule chosen; switching to weeks with no day chosen chooses the start's weekday, switching to months starts on the same day of the month. Its ends start as `DEC-112`'s (the start's date, 13 occurrences). **Done** takes the rule or keeps the dialog open saying why ("The number to repeat every can't be read." for an interval that is not a whole number of at least 1, and `DEC-112`'s messages for the end); **Cancel**, Esc or a click outside leave the rule as it was. The weekdays are the regional letters from the first day of the week, each named on hover.
+- **Why:** The spec names the menu's entries and the dialog's fields (`MOD-05-F32`, `F33`, `U05`) but not the words for intervals and ends, the dialog's starting state or how it is left; these follow Google Calendar (`DEC-62`) and the editor's existing formats and messages.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-172] A new rule falling on other days from the series' first event is for the following events alone
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-05-11 (code review)
+- **Affects:** `US-05-11`, `MOD-05-F35`, `DEC-170`, the view model
+- **Decision:** A rule set from an occurrence takes its day of the month, week of the month or date of the year from that occurrence (`DEC-170`), but "all events" starts it from the series' first event. When the two fall on other days — monthly on day 8 set from 8 February for a series starting on 9 November, the second Monday set from a series' first Tuesday, annually from another date — "All events" is unavailable in the question, with "From the series' first event this rule falls on other days; it can be set for this and following events."; "This and following events" stays. Daily rules and weekly ones on chosen days fall on the same days from either and can take both. **Model change:** `Event::series_first`, the series' first occurrence on each of its occurrences.
+- **Why:** Sent for all events, such a rule would put the series on other days than the menu showed. Google keeps a series' days from its start, and the question already explains a scope it cannot take (`DEC-114`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

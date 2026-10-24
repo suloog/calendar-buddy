@@ -49,6 +49,12 @@ pub struct Event {
     /// For an occurrence of a series, changed or not: the series' ID and where the occurrence
     /// starts by the series' rule (`MOD-05-F20`).
     pub series: Option<(String, Start)>,
+    /// For an occurrence of a series: the series' `RRULE`, `EXDATE` and `RDATE` lines, empty
+    /// when its series is not known (`MOD-05-F34`).
+    pub recurrence: Vec<String>,
+    /// For an occurrence of a series: the series' first occurrence, which its rule starts from;
+    /// `None` when its series is not known.
+    pub series_first: Option<Timing>,
     pub about: About,
     /// The version of the event at the provider, which a change is sent against; empty when not
     /// known yet.

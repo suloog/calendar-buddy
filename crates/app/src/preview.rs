@@ -551,6 +551,20 @@ fn preview() {
             app.sync.answered_busy(asked, busy);
         },
     );
+    // Google's custom recurrence dialog over a new event's editor, on months (`MOD-05-F33`).
+    picture("custom-recurrence-light", week, Theme::Light, |app, _| {
+        let Timing::Timed { start, end, zone } = app.events[titled(app, "Sprint demo")].timing
+        else {
+            unreachable!("a timed event")
+        };
+        let entry = calendar_core::create::QuickEntry::new((start, end), zone, None);
+        let mut editor = calendar_core::editor::Editor::from_quick(&entry, &app.regional);
+        editor.open_custom(&app.regional);
+        if let Some(custom) = &mut editor.custom {
+            custom.set_frequency(calendar_core::repeat::Frequency::Monthly);
+        }
+        app.dialog = Some(Dialog::Editor(Box::new(editor)));
+    });
     picture("go-to-date-light", week, Theme::Light, |app, _| {
         app.go_to_date()
     });

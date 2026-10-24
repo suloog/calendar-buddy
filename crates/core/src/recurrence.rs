@@ -2,7 +2,7 @@
 //! occurrences inside the cache window by the `rrule` library, changed occurrences in place of the
 //! ones they replace, cancelled ones left out (`MOD-02-F22`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use chrono_tz::Tz;
@@ -15,6 +15,10 @@ use crate::texts::NO_TITLE;
 /// Every event and occurrence of the calendar that falls inside the window, in the calendar's
 /// colour.
 pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Vec<Event> {
+    let masters: HashMap<&str, &SyncedEvent> = (events.iter())
+        .filter(|event| !event.recurrence.is_empty())
+        .map(|event| (event.id.as_str(), event))
+        .collect();
     let replaced: HashSet<(&str, Start)> = events
         .iter()
         .filter_map(|event| event.instance_of.as_ref())
@@ -43,6 +47,19 @@ pub fn expand(calendar: &Calendar, events: &[SyncedEvent], window: Window) -> Ve
         series: occurrence
             .map(|start| (event.id.clone(), start))
             .or_else(|| event.instance_of.clone()),
+        // A changed occurrence's are its series'.
+        recurrence: match &event.instance_of {
+            Some((series, _)) => (masters.get(series.as_str()))
+                .map(|master| master.recurrence.clone())
+                .unwrap_or_default(),
+            None => event.recurrence.clone(),
+        },
+        series_first: match &event.instance_of {
+            Some((series, _)) => masters
+                .get(series.as_str())
+                .and_then(|master| master.timing),
+            None => occurrence.and(event.timing),
+        },
         about: event.about.clone(),
         etag: if occurrence.is_some() {
             String::new()
@@ -555,6 +572,73 @@ mod tests {
         let shown = expand(&calendar(), &[lone], window());
 
         assert_eq!(local_starts(&shown), ["2026-11-03 10:00"]);
+    }
+
+    #[test]
+    fn tc_05_13_monthly_on_the_last_thursday_falls_on_the_last_thursday_of_each_month() {
+        let master = series(
+            "last",
+            timed(Warsaw, d(2026, 11, 26), (10, 0), (10, 30)),
+            &["RRULE:FREQ=MONTHLY;BYDAY=-1TH;COUNT=3"],
+        );
+
+        let shown = expand(&calendar(), &[master], window());
+
+        assert_eq!(
+            local_starts(&shown),
+            ["2026-11-26 10:00", "2026-12-31 10:00", "2027-01-28 10:00"]
+        );
+    }
+
+    #[test]
+    fn monthly_on_day_31_skips_the_months_without_it() {
+        let master = series(
+            "end",
+            timed(Warsaw, d(2026, 10, 31), (10, 0), (10, 30)),
+            &["RRULE:FREQ=MONTHLY;COUNT=3"],
+        );
+
+        let shown = expand(&calendar(), &[master], window());
+
+        assert_eq!(
+            local_starts(&shown),
+            ["2026-10-31 10:00", "2026-12-31 10:00", "2027-01-31 10:00"]
+        );
+    }
+
+    #[test]
+    fn occurrences_changed_or_not_carry_their_series_rule() {
+        let rules = ["RRULE:FREQ=WEEKLY;COUNT=2", "EXDATE:20261116T080000Z"];
+        let master = series(
+            "weekly",
+            timed(Warsaw, d(2026, 11, 2), (9, 0), (10, 0)),
+            &rules,
+        );
+        let moved = SyncedEvent {
+            instance_of: Some((
+                "weekly".into(),
+                Start::At(at(Warsaw, d(2026, 11, 9), (9, 0))),
+            )),
+            ..event(
+                "weekly_20261109T080000Z",
+                timed(Warsaw, d(2026, 11, 9), (11, 0), (12, 0)),
+            )
+        };
+        let single = event("single", timed(Warsaw, d(2026, 11, 3), (9, 0), (10, 0)));
+
+        let shown = expand(&calendar(), &[master, moved, single], window());
+
+        let of = |id: &str| {
+            shown
+                .iter()
+                .find(|e| e.id == id)
+                .unwrap()
+                .recurrence
+                .clone()
+        };
+        assert_eq!(of("weekly_20261102T080000Z"), rules);
+        assert_eq!(of("weekly_20261109T080000Z"), rules);
+        assert!(of("single").is_empty());
     }
 
     #[test]

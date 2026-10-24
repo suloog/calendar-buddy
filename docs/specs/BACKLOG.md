@@ -110,7 +110,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-05-08` | As a User, I can see out-of-office, focus-time and similar events at a glance and create out-of-office and focus time, so that my availability is clear | F23, F24, U01 | must | review | `US-05-02` | — |
 | `US-05-09` | As a User, I can see and change an event's own colour, so that it matches how I colour events in Google | F25 | must | review | `US-05-02` | — |
 | `US-05-10` | As a User, I can open an event's attachments, so that the documents for a meeting are one click away | F26 | must | review | `US-05-02` | — |
-| `US-05-11` | As a User, I can set how an event repeats as freely as in Google Calendar's "Custom", so that meetings every two weeks or on the last Friday are set in the app too | F29, F32, F33, F34, F35, U05 | must | ready | `US-05-06`, `US-05-07` | — |
+| `US-05-11` | As a User, I can set how an event repeats as freely as in Google Calendar's "Custom", so that meetings every two weeks or on the last Friday are set in the app too | F29, F32, F33, F34, F35, U05 | must | review | `US-05-06`, `US-05-07` | — |
 
 ## [MOD-06] Guests, invitations, RSVP and Google Meet
 

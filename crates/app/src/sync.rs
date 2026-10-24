@@ -3198,10 +3198,12 @@ mod tests {
         );
         let mut editor = Editor::from_quick(&entry, &regional);
         editor.title = "Training".to_string();
-        editor.repeat = Some(editor.weekly());
-        editor.toggle_day(chrono::Weekday::Wed);
-        editor.ends = calendar_core::editor::Ending::AfterCount;
-        editor.count = "10".to_string();
+        editor.open_custom(&regional);
+        let custom = editor.custom.as_mut().unwrap();
+        custom.toggle_day(chrono::Weekday::Wed);
+        custom.ends = calendar_core::repeat::Ending::AfterCount;
+        custom.count = "10".to_string();
+        editor.custom_done(&regional);
         let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
             panic!("a new event");
         };
@@ -4276,6 +4278,284 @@ mod tests {
         assert!(saving.is_empty());
         assert_eq!(standups(&events), expected);
         assert_eq!(standups_in_google(&google, &engine), expected);
+    }
+
+    fn us() -> Regional {
+        Regional::from_env(|var| (var == "LANG").then(|| "en_US.UTF-8".into()))
+    }
+
+    /// The editor of a new event "Sync" on `date`, 10:00–10:30, in the default calendar.
+    fn new_sync(engine: &Engine, date: chrono::NaiveDate) -> Editor {
+        let calendars = engine.cache.calendar_list().unwrap();
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let entry = QuickEntry::new(create::clicked(date, 10 * 60, 30, Warsaw), Warsaw, default);
+        let mut editor = Editor::from_quick(&entry, &us());
+        editor.title = "Sync".to_string();
+        editor
+    }
+
+    /// Creates the event of the editor at the fake Google: its rule lines there, and the events
+    /// then shown.
+    fn create_at_google(
+        google: &Google,
+        engine: &mut Engine,
+        editor: &Editor,
+        start: Instant,
+    ) -> (Value, Vec<Event>) {
+        let Ok(Save::Create(calendar, event)) = editor.save(&us()) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the series");
+        };
+        let sent = google.fake.event(ACCOUNT_ID, EMAIL, id).unwrap();
+        (sent["recurrence"].clone(), shown(&updates).unwrap())
+    }
+
+    /// The days of the month the custom dialog offers, in words.
+    fn month_words(custom: &calendar_core::repeat::Custom) -> Vec<String> {
+        (custom.month_days().into_iter())
+            .map(|(_, words)| words)
+            .collect()
+    }
+
+    /// The local start days of the events titled so, in order.
+    fn days_of(events: &[Event], title: &str) -> Vec<String> {
+        let mut days: Vec<String> = (events.iter())
+            .filter(|e| e.title == title)
+            .map(|e| match e.timing {
+                Timing::Timed { start, .. } => local(start),
+                Timing::AllDay { start, .. } => start.to_string(),
+            })
+            .collect();
+        days.sort();
+        days
+    }
+
+    #[test]
+    fn tc_05_13_googles_repeat_menu_and_custom_dialog_save_every_2_weeks_and_last_weekday_rules() {
+        let google = Google::start("tc-05-13");
+        personal(&google);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let words = |choices: Vec<(Option<_>, String)>| -> Vec<String> {
+            choices.into_iter().map(|(_, words)| words).collect()
+        };
+
+        // 1. A new "Sync" on Tuesday 17 November 2026: Google's repeat menu ("Custom…" is drawn
+        //    after these).
+        let mut editor = new_sync(&engine, d(2026, 11, 17));
+        assert_eq!(
+            words(editor.repeat_choices(&us())),
+            [
+                "Does not repeat",
+                "Daily",
+                "Weekly on Tuesday",
+                "Monthly on the third Tuesday",
+                "Annually on November 17",
+                "Every weekday (Monday to Friday)",
+            ]
+        );
+
+        // 2. "Custom…", unit "week": Tuesday is chosen and stays so as the only day.
+        editor.open_custom(&us());
+        let custom = editor.custom.as_mut().unwrap();
+        custom.set_frequency(calendar_core::repeat::Frequency::Weekly);
+        assert_eq!(custom.days(), [chrono::Weekday::Tue]);
+        custom.toggle_day(chrono::Weekday::Tue);
+        assert_eq!(custom.days(), [chrono::Weekday::Tue]);
+
+        // 3. Every 2 weeks on Monday and Wednesday, after 10 occurrences: the rule reaches Google,
+        //    and reopened the menu shows it in words.
+        custom.interval = "2".to_string();
+        custom.toggle_day(chrono::Weekday::Mon);
+        custom.toggle_day(chrono::Weekday::Wed);
+        custom.toggle_day(chrono::Weekday::Tue);
+        custom.ends = calendar_core::repeat::Ending::AfterCount;
+        custom.count = "10".to_string();
+        editor.custom_done(&us());
+        let (rules, events) = create_at_google(&google, &mut engine, &editor, start);
+        assert_eq!(
+            rules,
+            json!(["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10"])
+        );
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let first = (events.iter()).find(|e| e.title == "Sync").unwrap();
+        let reopened = Editor::of(first, calendar.clone(), &us());
+        assert_eq!(
+            reopened.repeat_label(&us()),
+            "Every 2 weeks on Monday, Wednesday, 10 times"
+        );
+        assert_eq!(days_of(&events, "Sync").len(), 10);
+
+        // 4. A new event on Thursday 26 November, unit "month": the day, the fourth and the last
+        //    Thursday; days and years show no weekdays, as months do not.
+        let mut editor = new_sync(&engine, d(2026, 11, 26));
+        editor.title = "Last".to_string();
+        editor.open_custom(&us());
+        let custom = editor.custom.as_mut().unwrap();
+        custom.set_frequency(calendar_core::repeat::Frequency::Monthly);
+        assert_eq!(
+            month_words(custom),
+            [
+                "Monthly on day 26",
+                "Monthly on the fourth Thursday",
+                "Monthly on the last Thursday"
+            ]
+        );
+        for unit in [
+            calendar_core::repeat::Frequency::Daily,
+            calendar_core::repeat::Frequency::Yearly,
+            calendar_core::repeat::Frequency::Monthly,
+        ] {
+            custom.set_frequency(unit);
+            assert!(custom.rule(&us()).unwrap().days.is_empty());
+        }
+
+        // 5. "Monthly on the last Thursday": the rule reaches Google, and the views show it on 26
+        //    November, 31 December 2026 and 28 January 2027.
+        custom.month_day = calendar_core::repeat::MonthDay::Last;
+        editor.custom_done(&us());
+        let (rules, events) = create_at_google(&google, &mut engine, &editor, start);
+        assert_eq!(rules, json!(["RRULE:FREQ=MONTHLY;BYDAY=-1TH"]));
+        assert_eq!(
+            days_of(&events, "Last")[..3],
+            ["2026-11-26 10:00", "2026-12-31 10:00", "2027-01-28 10:00"]
+        );
+
+        // 6. On Tuesday 29 December, the fifth Tuesday: the menu reads "the last Tuesday", and the
+        //    dialog offers only the day and the last Tuesday.
+        let mut editor = new_sync(&engine, d(2026, 12, 29));
+        assert_eq!(
+            words(editor.repeat_choices(&us()))[3],
+            "Monthly on the last Tuesday"
+        );
+        editor.open_custom(&us());
+        let custom = editor.custom.as_mut().unwrap();
+        custom.set_frequency(calendar_core::repeat::Frequency::Monthly);
+        assert_eq!(
+            month_words(custom),
+            ["Monthly on day 29", "Monthly on the last Tuesday"]
+        );
+    }
+
+    #[test]
+    fn tc_05_14_a_rule_from_google_the_dialog_can_express_is_changed_and_one_it_cannot_is_kept() {
+        let google = Google::start("tc-05-14");
+        personal(&google);
+        let series = |id: &str, title: &str, (from, to): (&str, &str), rule: &str| {
+            json!({
+                "id": id,
+                "status": "confirmed",
+                "summary": title,
+                "start": {"dateTime": from, "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": to, "timeZone": "Europe/Warsaw"},
+                "recurrence": [rule],
+            })
+        };
+        let odd_rule = "RRULE:FREQ=MONTHLY;BYDAY=MO,TU;BYSETPOS=1";
+        for event in [
+            series(
+                "quarterly",
+                "Quarterly",
+                ("2026-11-09T10:00:00+01:00", "2026-11-09T11:00:00+01:00"),
+                "RRULE:FREQ=MONTHLY;INTERVAL=3;BYDAY=2MO;UNTIL=20270630T235959Z",
+            ),
+            series(
+                "odd",
+                "Odd",
+                ("2026-11-02T09:00:00+01:00", "2026-11-02T09:15:00+01:00"),
+                odd_rule,
+            ),
+        ] {
+            google.fake.add_event(ACCOUNT_ID, EMAIL, event);
+        }
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let on = |engine: &Engine, title: &str, date| {
+            (now_shown(engine).into_iter())
+                .find(|e| {
+                    e.title == title
+                        && matches!(e.timing, Timing::Timed { start, .. }
+                            if start.with_timezone(&Warsaw).date_naive() == date)
+                })
+                .unwrap()
+        };
+
+        // 1. The occurrence of 8 February 2027: the rule in words, and "Custom…" filled with it.
+        let february = on(&engine, "Quarterly", d(2027, 2, 8));
+        let mut editor = Editor::of(&february, calendar.clone(), &us());
+        assert_eq!(
+            editor.repeat_label(&us()),
+            "Every 3 months on the second Monday, until June 30, 2027"
+        );
+        editor.open_custom(&us());
+        let custom = editor.custom.as_mut().unwrap();
+        assert_eq!(custom.interval, "3");
+        assert_eq!(
+            custom.frequency(),
+            calendar_core::repeat::Frequency::Monthly
+        );
+        assert_eq!(custom.month_day, calendar_core::repeat::MonthDay::Weekday);
+        assert_eq!(custom.ends, calendar_core::repeat::Ending::OnDate);
+        assert_eq!(custom.last_date, "06/30/2027");
+
+        // 2. Every 2 months, saved: only "this and following" or "all events" are asked.
+        custom.interval = "2".to_string();
+        editor.custom_done(&us());
+        let Err(question) = Question::changing(*edit(&editor, &us())) else {
+            panic!("the scope is asked first");
+        };
+        assert_eq!(
+            question.scopes(),
+            [(Scope::Following, None), (Scope::All, None)]
+        );
+
+        // 3. "All events": the master's rule changes at Google; no series is split.
+        let Question::Change(change) = question else {
+            panic!("a change");
+        };
+        let updates = engine.handle(Some(Job::ChangeSeries(1, change, Scope::All)), start);
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(1, _)]
+        ));
+        let quarterly = google.fake.event(ACCOUNT_ID, EMAIL, "quarterly").unwrap();
+        assert_eq!(
+            quarterly["recurrence"],
+            json!(["RRULE:FREQ=MONTHLY;INTERVAL=2;BYDAY=2MO;UNTIL=20270630T215959Z"])
+        );
+        let quarterly_writes: Vec<String> = (writes(&google).into_iter())
+            .filter(|r| !r.contains("/events/odd"))
+            .collect();
+        assert_eq!(quarterly_writes.len(), 1, "{quarterly_writes:?}");
+        assert!(quarterly_writes[0].starts_with("PATCH "));
+        assert_eq!(
+            days_of(&shown(&updates).unwrap(), "Quarterly")[..4],
+            [
+                "2026-11-09 10:00",
+                "2027-01-11 10:00",
+                "2027-03-08 10:00",
+                "2027-05-10 10:00"
+            ]
+        );
+
+        // 4. "Odd" renamed with "all events": its rule goes to Google unchanged, and the editor
+        //    offers Google Calendar to change it.
+        let odd = on(&engine, "Odd", d(2026, 11, 2));
+        let mut editor = Editor::of(&odd, calendar, &us());
+        assert!(editor.rule_kept());
+        editor.title = "Odd 2".to_string();
+        let Err(Question::Change(change)) = Question::changing(*edit(&editor, &us())) else {
+            panic!("the scope is asked first");
+        };
+        engine.handle(Some(Job::ChangeSeries(2, change, Scope::All)), start);
+        let odd = google.fake.event(ACCOUNT_ID, EMAIL, "odd").unwrap();
+        assert_eq!(odd["summary"], "Odd 2");
+        assert_eq!(odd["recurrence"], json!([odd_rule]));
     }
 
     #[test]

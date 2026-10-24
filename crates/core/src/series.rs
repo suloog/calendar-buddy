@@ -3,8 +3,9 @@
 //! and what each asks of Google. "This event" changes or deletes the occurrence alone; "all
 //! events" changes or deletes the series' master; "this and following" ends the series before the
 //! occurrence and, for a change, starts a new series there (MOD-05 *Technical notes*). A series'
-//! rule is never rewritten but for its end, so one the presets cannot express keeps it
-//! (`MOD-05-F29`).
+//! rule is rewritten only when the user changed it, for the following or all events
+//! (`MOD-05-F35`), and otherwise but for its end, so one the custom dialog cannot express keeps
+//! it (`MOD-05-F29`).
 
 use chrono::Duration;
 
@@ -13,6 +14,7 @@ use crate::drag::{at, local};
 use crate::editor::{Edit, Patch};
 use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::{before, count_before, excluded, start_of};
+use crate::repeat;
 use crate::sync::{Start, SyncedEvent};
 use crate::texts::{self, OTHER_CALENDAR, OTHER_DAY};
 
@@ -39,24 +41,47 @@ impl Scope {
 }
 
 /// The scopes a change of an occurrence can be saved with, in the order asked, each with why it
-/// cannot be when it cannot (`MOD-05-F20`).
+/// cannot be when it cannot (`MOD-05-F20`); a new rule is for the following or all events alone,
+/// as Google Calendar asks it (`MOD-05-F35`).
 pub fn scopes(edit: &Edit) -> Vec<(Scope, Option<&'static str>)> {
     let other_day = match (&edit.event.series, &edit.patch.timing) {
         (Some((_, original)), Some(timing)) => !same_day(*original, &edit.event.timing, timing),
         _ => false,
     };
     let other_calendar = edit.to.is_some();
-    Scope::EACH
+    let new_rule = edit.patch.recurrence.is_some();
+    let other_days = new_rule && falls_elsewhere(&edit.event, &edit.patch);
+    (Scope::EACH.into_iter())
+        .filter(|scope| !(new_rule && *scope == Scope::This))
         .map(|scope| {
             let why = match scope {
                 Scope::This => other_calendar.then_some(OTHER_CALENDAR),
                 _ if other_day => Some(OTHER_DAY),
                 Scope::Following => other_calendar.then_some(OTHER_CALENDAR),
-                Scope::All => None,
+                Scope::All => other_days.then_some(texts::RULE_FROM_FIRST),
             };
             (scope, why)
         })
-        .to_vec()
+        .collect()
+}
+
+/// Whether the new rule of `patch`, set from the occurrence `event`, falls on other days from
+/// the series' first occurrence, which "all events" would start it from: on another day of the
+/// month or date of the year, or another week of the month (`DEC-172`).
+fn falls_elsewhere(event: &Event, patch: &Patch) -> bool {
+    let (Some(rules), Some(first), Some((_, original))) =
+        (&patch.recurrence, event.series_first, &event.series)
+    else {
+        return false;
+    };
+    let occurrence = regular(first, *original);
+    match repeat::parse(rules, &occurrence) {
+        Some(rule) => {
+            let days = (repeat::first_day(&occurrence), repeat::first_day(&first));
+            !repeat::same_days(&rule, days)
+        }
+        None => false,
+    }
 }
 
 /// Whether `new` starts on the day the occurrence starts by the series' rule, `original`, and is
@@ -192,7 +217,14 @@ pub fn change(
                     meet: about.meet.clone(),
                     reminders: (patch.reminders.clone()).unwrap_or_else(|| about.reminders.clone()),
                 },
-                recurrence: following(master, first, original, timing, exceptions),
+                recurrence: match &patch.recurrence {
+                    // A new rule starts the following events afresh.
+                    Some(rules) => (rules.iter())
+                        .filter(|line| line.starts_with("RRULE:"))
+                        .cloned()
+                        .collect(),
+                    None => following(master, first, original, timing, exceptions),
+                },
                 // The series' call is copied with it, unless switched off or on here.
                 meet: patch.meet.unwrap_or(about.meet.is_some()),
             };
@@ -882,6 +914,117 @@ mod tests {
         assert_eq!(
             delete(&calendar(), &fifth, Scope::This, &old, &[]),
             Some(Plan::Delete(Box::new((calendar(), fifth))))
+        );
+    }
+
+    fn new_rule(event: &Event, rules: &[&str]) -> Edit {
+        edit(
+            event,
+            Patch {
+                recurrence: Some(rules.iter().map(|rule| rule.to_string()).collect()),
+                ..Patch::default()
+            },
+        )
+    }
+
+    #[test]
+    fn tc_05_14_a_new_rule_asks_only_following_or_all_events() {
+        let fifth = occurrence(&standup(), d(2026, 12, 14));
+        let every_2 = new_rule(&fifth, &["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=10"]);
+
+        let asked = Question::changing(every_2).unwrap_err();
+
+        assert_eq!(
+            asked.scopes(),
+            [(Scope::Following, None), (Scope::All, None)]
+        );
+    }
+
+    #[test]
+    fn a_new_rule_falling_on_other_days_from_the_first_event_is_for_the_following_ones_alone() {
+        // From Monday 16 November, opened on Monday 14 December: monthly on day 14, or on the
+        // second Monday, would fall on the 16th or the third Monday from the series' start.
+        let fifth = occurrence(&standup(), d(2026, 12, 14));
+        for rule in [
+            "RRULE:FREQ=MONTHLY",
+            "RRULE:FREQ=MONTHLY;BYDAY=2MO",
+            "RRULE:FREQ=YEARLY",
+        ] {
+            assert_eq!(
+                scopes(&new_rule(&fifth, &[rule])),
+                [
+                    (Scope::Following, None),
+                    (Scope::All, Some(texts::RULE_FROM_FIRST))
+                ],
+                "{rule}"
+            );
+        }
+        // Weekly on chosen days, or daily, falls on the same days from either.
+        for rule in ["RRULE:FREQ=WEEKLY;BYDAY=MO,WE", "RRULE:FREQ=DAILY;COUNT=3"] {
+            assert_eq!(
+                scopes(&new_rule(&fifth, &[rule])),
+                [(Scope::Following, None), (Scope::All, None)],
+                "{rule}"
+            );
+        }
+    }
+
+    #[test]
+    fn tc_05_14_a_new_rule_for_all_events_changes_the_masters_rule_and_splits_nothing() {
+        let old = standup();
+        let fifth = occurrence(&old, d(2026, 12, 14));
+        let rules = [
+            "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=10",
+            "EXDATE:20261221T080000Z",
+        ];
+
+        let all = changed(change(&new_rule(&fifth, &rules), Scope::All, &old, &[]));
+
+        assert_eq!(all.event.id, "standup");
+        assert_eq!(all.event.etag, "\"3\"");
+        assert_eq!(all.patch.recurrence, Some(rules.map(String::from).to_vec()));
+    }
+
+    #[test]
+    fn a_new_rule_for_the_following_events_starts_them_afresh_with_it() {
+        let old = master(
+            timed(Warsaw, d(2026, 11, 16), (9, 0), (9, 15)),
+            &[
+                "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10",
+                "EXDATE:20261228T080000Z",
+            ],
+        );
+        let fifth = occurrence(&old, d(2026, 12, 14));
+        let rules = [
+            "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;COUNT=3",
+            "EXDATE:20261228T080000Z",
+        ];
+
+        let split = split(change(
+            &new_rule(&fifth, &rules),
+            Scope::Following,
+            &old,
+            &[],
+        ));
+
+        assert_eq!(
+            split.recurrence,
+            [
+                "RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261214T075959Z",
+                "EXDATE:20261228T080000Z"
+            ]
+        );
+        let new = split.new.clone().unwrap();
+        assert_eq!(new.recurrence, [rules[0]]);
+        assert_eq!(new.timing, timed(Warsaw, d(2026, 12, 14), (9, 0), (9, 15)));
+        assert_eq!(
+            local_starts(&after(&old, &split))[3..],
+            [
+                "2026-12-07 09:00",
+                "2026-12-14 09:00",
+                "2026-12-28 09:00",
+                "2027-01-11 09:00"
+            ]
         );
     }
 
