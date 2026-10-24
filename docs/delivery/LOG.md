@@ -399,3 +399,28 @@
   - one squash commit: one logical change.
 - Manual checks: US-07-04#1, US-07-04#2/#3, US-07-04#4, duplicate-reminder edge case (real Google)
 - Commits on main: 86cf4e6 feat(reminders): edit an event's reminders in the editor [US-07-04]
+
+## US-07-05 — review — 2026-10-24 06:35
+- What: closing the window leaves the app in the KDE tray (ksni StatusNotifierItem), where it keeps synchronizing and reminding. Clicking the icon shows or hides the window; the menu has "Open Calendar Buddy" and "Quit". "Start at login" writes an XDG autostart entry that starts the app with `--in-tray`. A single instance holds the D-Bus name `pl.ordergroup.CalendarBuddy` and is reached through `org.freedesktop.Application.Activate`. On Wayland a window cannot be hidden, so it is closed and reopened (`run_native_ext` with one shared egui context), and the app's state is kept.
+- Decisions: DEC-142, DEC-143, DEC-144, DEC-145
+- Reviews: code 2 round(s), spec 1 round(s); open notes:
+  - round 1 found nothing blocking. Fixed:
+    - "bring forward" did nothing on Wayland; the window is now closed and reopened;
+    - an autostart race with Plasma's tray at login; the app now waits for the tray;
+    - time-zone changes and the sync window are now applied while in the tray;
+    - "Start at login" changes are now written in order by one writer thread;
+    - `%` in the Exec path is doubled, and " (deleted)" is stripped from the program's path.
+  - round 2 fixed: "Start at login" is hidden when there is no tray; a reopened window keeps its size and maximized state.
+  - left as is:
+    - a double "Open" may reopen the window twice (one extra flicker);
+    - each reopen adds one font provider to the shared egui context;
+    - the single-instance test needs `dbus-daemon` installed;
+    - the reopen loop in `main()` has no automated test.
+  - follow-up outside this story: `open_notified` (US-07-01) still uses `Minimized(false)`/`Focus`, which do nothing on Wayland. A notification clicked while the window is open but behind other windows does not bring it forward.
+  - smoke run on real KDE without accounts:
+    - the start in the tray and the second launch were confirmed;
+    - hide and re-show could not be watched, because the screen was off (DPMS).
+  - no SQLite schema change and no calendar-provider change. The platform interfaces gained `Tray`, `Autostart` and `Instance`, and there is a new dependency, `ksni` 0.3.7.
+  - one squash commit: one logical change.
+- Manual checks: TC-07-08 (US-07-05#1, #3, #4), US-07-05#2, TC-07-06 on real KDE (US-07-05#5)
+- Commits on main: 08ccb64 feat(reminders): keep reminding from the tray, start at login [US-07-05]
