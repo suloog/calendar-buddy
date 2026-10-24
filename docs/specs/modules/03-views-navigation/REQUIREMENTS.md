@@ -26,7 +26,7 @@ How the user looks at the calendar and moves around it: day, 3-day, week, month 
 | `SRC-01-40` Agenda / upcoming events view. | informal | `MOD-03-F05` |
 | `SRC-01-41` Navigate quickly between days, weeks, and months. | informal | `MOD-03-F06`, `MOD-03-F07` |
 | `SRC-01-42` Jump back to Today. | informal | `MOD-03-F08` |
-| `SRC-01-43` Provide a mini calendar and sidebar listing accounts and calendars. | informal | `MOD-03-F09`, `MOD-03-F10` |
+| `SRC-01-43` Provide a mini calendar and sidebar listing accounts and calendars. | informal | `MOD-03-F09`, `MOD-03-F10`, `MOD-03-F25` |
 | `SRC-01-44` Allow the sidebar to be collapsed. | informal | `MOD-03-F11` |
 | `SRC-01-45` Highlight the current day and current-time indicator. | informal | `MOD-03-F14` |
 | `SRC-01-46` Support keyboard shortcuts and keyboard-first navigation. | informal | `MOD-03-F23`, `MOD-03-F24` |
@@ -52,7 +52,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-F06] The user can switch between views at any time, and the selected date stays in view.
 - [MOD-03-F07] The user can move to the next or previous period of the current view.
 - [MOD-03-F08] One action brings the user back to today.
-- [MOD-03-F09] A mini calendar shows a month at a time, marks the period on screen, and jumps to any date the user picks.
+- [MOD-03-F09] A mini calendar shows a month at a time, marks the period on screen except in the month view, and jumps to any date the user picks. — *source: `DEC-158`*
 - [MOD-03-F10] The side panel lists the connected accounts and, under each, its calendars. — *source: `DEC-28`*
 - [MOD-03-F11] The side panel can be collapsed and expanded, and the app remembers which. — *source: `DEC-56`*
 - [MOD-03-F12] A quick toggle next to each calendar in the side panel hides or shows its events; the calendar stays listed. — *source: `DEC-28`*
@@ -68,6 +68,8 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-F22] Calendars shared as free/busy only appear as "busy" blocks in every view. — *source: `DEC-22`*
 - [MOD-03-F23] Every view, period change, "today", "go to date", "new event" and the list of shortcuts has a keyboard shortcut, using Google Calendar's keys. — *source: `DEC-55`*
 - [MOD-03-F24] The user can move between the side panel, the calendar and its events, and open an event, without a mouse.
+- [MOD-03-F25] In the mini calendar, a day with events shown in the views has a dot under its number. — *source: `DEC-158`*
+- [MOD-03-F26] In the month view, an all-day or multi-day event is one bar across the days it covers in each week, above the days' timed events. — *source: `DEC-159`*
 
 ## UI/UX requirements
 
@@ -76,6 +78,8 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-U03] When the window becomes too narrow, the side panel collapses on its own. — *source: `DEC-56`*
 - [MOD-03-U04] Pressing "?" shows the list of keyboard shortcuts. — *source: `DEC-55`*
 - [MOD-03-U05] The day, 3-day and week views open scrolled to the current time. — *source: `DEC-56`*
+- [MOD-03-U06] "Go to date" also opens from a button in the top bar, beside next and previous. — *source: `DEC-161`*
+- [MOD-03-U07] The list of keyboard shortcuts also opens from a help button in the top bar, beside the settings, and shows the shortcuts in groups, keys doing the same thing on one row. — *source: `DEC-162`*
 
 ## Non-functional requirements
 

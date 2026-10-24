@@ -38,6 +38,7 @@
 | `MOD-04-U03` | `US-04-03` |
 | `MOD-04-U04` | `US-04-02` |
 | `MOD-04-U05` | `US-04-03` |
+| `MOD-04-U06` | `US-04-03` |
 
 ### Non-functional requirements
 

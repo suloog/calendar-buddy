@@ -92,6 +92,11 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-05-F28] The user can undo the last change to an event with Ctrl+Z or with the Undo in the notice that follows the change. — *source: `DEC-59`*
 - [MOD-05-F29] A series created in Google with a rule the presets cannot express keeps its rule when its other fields are edited; to change the rule, the app offers to open the event in Google Calendar in the browser. — *source: `DEC-36`, `DEC-60`*
 
+### Details
+
+- [MOD-05-F30] An event's details show its location and its description, as set in the app or in Google; a description written in Google with formatting is shown with its bold, italics, underlines, lists and links, and a link opens in the browser. — *source: `DEC-156`, `DEC-157`*
+- [MOD-05-F31] In the editor, a description with formatting from Google is shown formatted and saved unchanged; when the user starts to edit it, the app says that editing removes the formatting and turns it into plain text only if the user agrees. — *source: `DEC-157`*
+
 ## UI/UX requirements
 
 - [MOD-05-U01] Out-of-office events are hatched, focus-time events carry an icon, working-location and birthday events are shown as labels in the all-day strip. — *source: `DEC-60`*

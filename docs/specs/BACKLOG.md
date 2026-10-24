@@ -75,12 +75,12 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-03-01` | As a User, I can see my week as a clear, smoothly scrolling grid, so that I see at a glance what my week looks like | F02, F14, F19, F21, F22, U01, U02, U05, NFR-01 | must | done | — | — |
 | `US-03-02` | As a User, I can look at a single day or three days, so that I can focus on today or use a smaller screen | F01, F04, F14, F22 | must | done | `US-03-01` | — |
-| `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20, F14, F22 | must | done | `US-03-01` | — |
+| `US-03-03` | As a User, I can look at a whole month, so that I can plan further ahead | F03, F20, F14, F22, F26 | must | done | `US-03-01` | — |
 | `US-03-04` | As a User, I can see my upcoming events as a list, so that I know what is next without reading a grid | F05, F14, F22 | must | done | `US-03-01` | — |
-| `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15 | must | done | `US-03-01` | — |
+| `US-03-05` | As a User, I can move between views and dates quickly, so that I get to any day in a moment | F06, F07, F08, F09, F15, F25, U06 | must | done | `US-03-01` | — |
 | `US-03-06` | As a User, I can see my calendars grouped by account in a side panel and hide any of them quickly, so that I see only what matters now | F10, F11, F12, U03, MOD-02-U01 | must | review | `US-03-01`, `US-02-01` | — |
 | `US-03-07` | As a User, I can disable calendars I never want to see, so that they do not clutter my lists | F13 | must | review | `US-03-06` | — |
-| `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04 | must | done | `US-03-05` | — |
+| `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04, U07 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
 
 ## [MOD-04] Appearance and themes
@@ -91,7 +91,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-04-01` | As a User, I can use the app in a light or dark theme that follows my system, so that it fits my desktop day and night | F01, F02, F03 | must | review | — | — |
 | `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | review | `US-04-01`, `US-03-01` | — |
-| `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05 | must | review | `US-04-01`, `US-03-01` | — |
+| `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05, U06 | must | review | `US-04-01`, `US-03-01` | — |
 
 ## [MOD-05] Creating and editing events
 
@@ -100,7 +100,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-05-01` | As a User, I can create an event by clicking or selecting a time and typing a title, so that adding a meeting takes seconds | F01, F02, F09, F10, F16, U03 | must | review | `US-03-01`, `US-02-01` | — |
-| `US-05-02` | As a User, I can set all the details of an event in a full editor, so that the event says everything it needs to | F03, F04, F05, F06, F07, F08, F11, F15, F16, U03 | must | review | `US-05-01` | — |
+| `US-05-02` | As a User, I can set all the details of an event in a full editor, so that the event says everything it needs to | F03, F04, F05, F06, F07, F08, F11, F15, F16, F30, F31, U03 | must | review | `US-05-01` | — |
 | `US-05-03` | As a User, I can drag an event to another time and stretch it to change its length, so that rescheduling is one gesture | F13, F14, F16, U02, U03 | must | review | `US-05-01` | — |
 | `US-05-04` | As a User, I can delete an event and undo my last change, so that mistakes cost nothing | F12, F16, F27, F28, U04 | must | review | `US-05-01` | — |
 | `US-05-05` | As a User, I am stopped from changing what I may not change and told why when Google refuses, so that I never break someone else's event | F17, F22 | must | review | `US-05-03` | — |

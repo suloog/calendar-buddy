@@ -1884,3 +1884,88 @@
 - **Scope effect:** extension
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-156] Event details laid out as in Google Calendar, with the location and the description
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's requests of 2026-10-24 ("the event details are too generic and everything blends together"; "yes, add the description and the location to the details")
+- **Affects:** `MOD-05-F30` (new), `MOD-05-F17`, `MOD-05-F26`, `MOD-06-F05`, `MOD-06-F18`, `MOD-06-U01`, `MOD-06-U03`, `MOD-04-U02`, `US-05-02`, `DEC-153`
+- **Decision:** An event's details have no window title: they open with a square of the event's colour, its title in large semibold, and Edit, Delete and Close as icons beside it (Edit and Delete only where the event may be changed, `MOD-05-F17`). An invitation's answers follow at once, on a light card, the answer given filled with the accent (`MOD-06-U03`). Below, one row each with its icon in a column of its own: when, with the event's own zone under it; its location; Join with Google Meet as the main button; its description; its guests, closer together; its attachments; and its calendar's name. Why the event cannot be changed or answered now closes the details in small gray text. The details show the event's location and description (new `MOD-05-F30`); a description written in Google, which Google keeps as HTML, is shown as text: line breaks and paragraphs as new lines, other formatting left out. The settings dialog is wider, with the calendars last, each account's calendars folded under it until opened, and scrolls as a whole.
+- **Why:** The product owner found the details generic and hard to read. The location and the description are set in the editor (`MOD-05-F04`, `MOD-05-F06`) and are what Google Calendar shows when an event is opened; `MOD-04-U02` already says everything besides the title and time appears when the event is opened.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-157] A description formatted in Google is shown formatted, and kept unless edited as plain text
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's ruling of 2026-10-24 ("can you show formatted text? and when someone edits and clicks a description that is HTML, do they get a message that the formatting will be removed? that's how Google Calendar's mobile app works")
+- **Affects:** `MOD-05-F30`, `MOD-05-F31` (new), `MOD-05-F04`, `US-05-02`, `DEC-156`
+- **Decision:** A description Google keeps as HTML, as its web app writes it, is shown in the details with its bold, italics, underlines, line breaks, paragraphs, list items (as bullets) and links, which open in the browser; other markup is left out (supersedes the plain-text part of `DEC-156`). In the editor it is shown formatted in place of the field, and saving the event leaves it unchanged. Clicking it says that the app cannot edit the formatting and that editing removes it; **Edit as plain text** turns it into plain text in the field, **Cancel** keeps it as it is. A description without formatting is edited as before.
+- **Why:** As Google Calendar's mobile app does. The app does not edit rich text, and turning the description into plain text without asking would silently drop the formatting another person wrote in Google.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-158] The mini calendar marks the period as one band, today in a circle, and days with events with a dot
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's requests of 2026-10-24 ("the highlight could be neater: instead of each day, a rectangle that highlights"; "do 1, 2, 3": no marking in the month view, dots under days with events, the neighbouring months' days weaker)
+- **Affects:** `MOD-03-F09`, `MOD-03-F25` (new), `MOD-04-NFR-01`, `US-03-05`
+- **Decision:** The period on screen is one rounded band under its days in each week, not a box a day; today is a filled circle in the accent, ringed under the pointer. In the month view no period is marked, as the month on screen is the one the mini calendar shows (`MOD-03-F09` revised). A day with any event the views show, on every day the event covers, has a small dot under its number in the number's colour (new `MOD-03-F25`); events of hidden or disabled calendars, and declined events while those are hidden, give no dot. The days of the neighbouring months are drawn smaller; their colour stays at the contrast `MOD-04-NFR-01` requires.
+- **Why:** The product owner found the marking heavy and wanted the mini calendar neater, and to see at a glance which days have events, as Morgen shows them. Google Calendar's mini calendar has no dots, so this goes beyond following Google (`DEC-62`) at the product owner's word.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-159] Multi-day events as bars across the month view, and notices in the bottom corner that go on their own
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's requests of 2026-10-24 ("improve the week view"; "improve the month view"; "the notice at the top has a strange button instead of an x"; "yes, do the continuous bars; the notice had better appear at the bottom, as now it moves the interface, and turn itself off after X seconds (5? 10?)")
+- **Affects:** `MOD-03-F20`, `MOD-03-F26` (new), `MOD-04-U06` (new), `MOD-05-U04`, `MOD-02-F21`, `US-03-03`, `US-04-03`
+- **Decision:** In the month view an all-day or multi-day event is one bar across the days it covers in each week, in a row of its own for the week as in the week view's strip, and goes on in the next week's row; a day's timed events follow under the bars it has; when not all fit, the bars that do not are broken off on that day and "+N more" counts them with the timed events left out (new `MOD-03-F26`). The notices that were bars along the top (an account connected, a change not saved or not allowed, calendars gone, the Undo) are cards in the bottom-left corner over the view, which no longer moves; each but the Undo has the dialogs' close cross and goes on its own 10 seconds after it was shown or after its last new message; the Undo keeps its 5 seconds (`MOD-05-U04`) (new `MOD-04-U06`). The persistent states (offline, an account's problem, signing in again) stay along the top. With it: the views' grid lines are fainter, side-by-side events further apart, and a title that does not fit ends in "…"; the month view has one line between days, today on the accent's disc and the weekdays as above the week view.
+- **Why:** As Google Calendar draws multi-day events and shows its notices (snackbars, bottom left). Ten seconds rather than five, so a reason can be read; the Undo's five are a recorded requirement.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-160] The top bar's icons drawn alike, the declined switch struck through while off
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's requests of 2026-10-24 ("improve the agenda view"; "improve the side panel"; "improve the top bar"; "improve the settings window"; "improve the event edit window"; "improve the event details window"; "the optional checkbox by the guests had better be an icon, it takes much room"; "improve the new event window"; "improve the welcome screen; the gear is clearly smaller now, the top bar's icons had better be of one size"; "the optional that appears jumps too much; Google shows a filled person icon on hover, outlined once clicked, and \"optional\" under the guest in the details")
+- **Affects:** `MOD-06-F22`, `MOD-03-F10`, `MOD-03-F05`, `MOD-01-F11`, `MOD-04-F03`, `MOD-05-F04`, `MOD-06-F06`, `DEC-155`
+- **Decision:** The bars' icons (main menu, previous and next, go to date, the declined switch, refresh, help, settings, and the dialogs' close cross) are drawn by the app in thin lines of one weight in one 16-point box, rather than taken from the emoji font, whose icons differ in size and weight; refresh turns while synchronizing. The switch showing declined events is a plain eye like its neighbours, no longer a filled tile; while declined events are hidden it is struck through (supersedes "filled while they are shown" of `DEC-155`); its hover text still says what it does. In the side panel the calendars' rows are closer together, a row under the pointer is lit, its "…" menu shows only then (or while focused or open), and each account stands apart from the one above it. The agenda keeps off the window's edges, its rows are taller, each day's number is as in the other views' headers, and the titles are semibold. The settings' accounts are rows with the address over its state and Remove (or Sign in again) at the row's end; its sections are set apart by a line under small semibold titles; the theme is picked in a segmented control as the views are, and Theme and Default calendar stand in the label column of the editor's form. In the event editor and the settings, the drop-downs and plain buttons are outlined on the window's fill as the text fields are, rather than gray tiles. In the editor a guest's optional switch is a person icon, as in Google Calendar, rather than a checkbox and its word on every row: filled while the guest's row is under the pointer, outlined and shown all the time once the guest is optional, its hint "Mark optional" or "Mark required"; nothing beside the guest moves. In the event's details an optional guest has "Optional" under their name. The event's details have larger row icons and their rows a little apart. The box of a new event is wider, its title large as the editor's, the time and the calendar on rows with the details' icons, More options at its start and Save at its end. The welcome screen shows the app's icon over a larger title and a gray line under it, in the middle of the window.
+- **Why:** The product owner asked for a calmer, more consistent interface; the filled tile drew the eye more than the view picker beside it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-161] "Go to date" from a button too, its dialog as the editor's fields
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("is there a go to date window?" — "yes, improve it and add a button")
+- **Affects:** `MOD-03-U06` (new), `MOD-03-F23`, `US-03-05`
+- **Decision:** Besides `g`, "Go to date" opens from a calendar icon in the top bar, right of next and previous, its hover text "Go to date" (new `MOD-03-U06`). The dialog is narrow, with the date's format small above an outlined field filled with the selected date, and Go in the accent at its end; Enter goes there too, a wrong date keeps the dialog open.
+- **Why:** The product owner wanted it reachable without knowing the shortcut. Google Calendar's web app reaches a date through its mini calendar and has no such button, so this goes beyond following Google (`DEC-62`) at the product owner's word.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-162] The shortcuts' list in groups, and a help button for it
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("improve the keyboard shortcuts window and maybe add a help icon to see that window")
+- **Affects:** `MOD-03-U07` (new), `MOD-03-F23`, `MOD-03-U04`, `US-03-08`
+- **Decision:** A "?" in a thin circle in the top bar, left of the settings' gear, where Google Calendar has its help, opens the list of keyboard shortcuts as `?` does (new `MOD-03-U07`). The list is a narrow dialog with the shortcuts under Views, Navigation and Actions, set apart by lines; each key is drawn as a small key, and keys doing the same thing share a row (`j`/`n`, `k`/`p`).
+- **Why:** The product owner wanted the list reachable without knowing `?`. Google Calendar's help menu holds its shortcuts list among other things; the app has no other help, so the button opens the list directly.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+

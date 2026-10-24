@@ -46,6 +46,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-04-U03] Apart from calendar colours, the interface uses neutral tones and one fixed accent colour. — *source: `DEC-57`*
 - [MOD-04-U04] Events are drawn in their calendar's colour, with text that stays readable on that colour in both themes.
 - [MOD-04-U05] Changing views and periods happens without transition animations. — *source: `DEC-58`*
+- [MOD-04-U06] Notices of what happened (an account connected, a change not saved or not allowed, calendars gone, the Undo) appear in the bottom corner of the window over the view, which does not move; each but the Undo has a close cross and goes on its own after 10 seconds. — *source: `DEC-159`*
 
 ## Non-functional requirements
 
