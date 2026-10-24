@@ -1755,6 +1755,21 @@ fn the_series_opens_in_google_calendars_editor_as_the_account() {
 }
 
 #[test]
+fn a_webcal_link_opens_google_calendars_page_for_adding_a_calendar_from_its_address() {
+    let page = subscribe_page("webcal://example.com/holidays.ics?lang=pl&x=1");
+
+    assert_eq!(
+        page,
+        "https://calendar.google.com/calendar/r?cid=webcal%3A%2F%2Fexample.com%2Fholidays.ics%3Flang%3Dpl%26x%3D1"
+    );
+    let page = Url::parse(&page).unwrap();
+    let cid: Vec<_> = page.query_pairs().collect();
+    assert_eq!(cid.len(), 1);
+    assert_eq!(cid[0].0, "cid");
+    assert_eq!(cid[0].1, "webcal://example.com/holidays.ics?lang=pl&x=1");
+}
+
+#[test]
 fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fields() {
     let (google, store, dir, client_file, cache) = synchronized_once("copy");
     let mut weekly = timed(

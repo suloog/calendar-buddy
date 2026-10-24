@@ -63,6 +63,14 @@ pub fn edit_page(calendar_id: &str, event_id: &str, email: &str) -> String {
     page.to_string()
 }
 
+/// The page where Google Calendar in the browser adds a calendar from the address of the
+/// `webcal:` `link` (`MOD-07-F18`); the Calendar API cannot subscribe to an address (`DEC-46`).
+pub fn subscribe_page(link: &str) -> String {
+    let mut page = Url::parse("https://calendar.google.com/calendar/r").unwrap();
+    page.query_pairs_mut().append_pair("cid", link);
+    page.to_string()
+}
+
 /// Synchronizes one connected account: signs in with its refresh token from the secret store,
 /// then fetches every calendar and its events within the window into the cache, or only what
 /// changed in a calendar since its last synchronization.

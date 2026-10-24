@@ -1,18 +1,20 @@
 //! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
 //! handler, the desktop's notifications, systemd-logind and NetworkManager on the system bus, the
-//! system tray, XDG autostart and the app's name on the session bus. Tests never use these; they
-//! use fakes, or a private bus and folder of their own.
+//! system tray, XDG autostart, the handler of `webcal:` links and the app's name on the session
+//! bus. Tests never use these; they use fakes, or a private bus and folder of their own.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use calendar_core::accounts::Account;
 use calendar_core::background::{self, Signal};
 use calendar_core::platform::{
-    Autostart, Browser, Instance, Network, Notifier, SecretStore, SecretStoreError, Tray, Wakeups,
+    Autostart, Browser, Instance, LinkHandler, Network, Notifier, SecretStore, SecretStoreError,
+    Tray, Wakeups,
 };
 use calendar_core::reminders::{Action, Notification, SNOOZES};
+use calendar_core::webcal;
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
@@ -441,17 +443,64 @@ impl Autostart for XdgAutostart {
             if let Some(dir) = entry.parent() {
                 std::fs::create_dir_all(dir)?;
             }
-            // A program replaced while it runs, as by an upgrade, is named "… (deleted)".
-            let exe = std::env::current_exe()?;
-            let exe = exe.to_string_lossy();
-            let exe = Path::new(exe.strip_suffix(" (deleted)").unwrap_or(&exe));
-            std::fs::write(entry, background::autostart_entry(exe))
+            std::fs::write(entry, background::autostart_entry(&running_exe()?))
         } else {
             match std::fs::remove_file(entry) {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 removed => removed,
             }
         }
+    }
+}
+
+/// The program that runs; one replaced while it runs, as by an upgrade, is named "… (deleted)".
+fn running_exe() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    let exe = exe.to_string_lossy();
+    Ok(PathBuf::from(
+        exe.strip_suffix(" (deleted)").unwrap_or(&exe),
+    ))
+}
+
+/// The app as the handler of `webcal:` links (MOD-07 *Technical notes*), through a desktop entry
+/// in `$XDG_DATA_HOME/applications`, or `~/.local/share/applications` when that is not set.
+pub struct XdgLinkHandler {
+    /// The entry; `None` when there is no home directory.
+    entry: Option<PathBuf>,
+}
+
+impl XdgLinkHandler {
+    pub fn new() -> Self {
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
+            });
+        XdgLinkHandler::at(data.map(|dir| dir.join("applications")))
+    }
+
+    fn at(applications: Option<PathBuf>) -> Self {
+        XdgLinkHandler {
+            entry: applications.map(|dir| dir.join("calendar-buddy-webcal.desktop")),
+        }
+    }
+}
+
+impl LinkHandler for XdgLinkHandler {
+    fn register(&self) -> std::io::Result<()> {
+        let Some(entry) = &self.entry else {
+            return Err(std::io::ErrorKind::NotFound.into());
+        };
+        let wanted = webcal::handler_entry(&running_exe()?);
+        // Written only when it changes, as the desktop rereads its entries after every write.
+        if std::fs::read_to_string(entry).is_ok_and(|kept| kept == wanted) {
+            return Ok(());
+        }
+        if let Some(dir) = entry.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(entry, wanted)
     }
 }
 
@@ -571,6 +620,30 @@ mod tests {
         autostart.set(false).unwrap();
         assert!(!autostart.is_on());
         autostart.set(false).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_app_registers_as_the_handler_of_webcal_links_and_keeps_the_entry_current() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-webcal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let handler = XdgLinkHandler::at(Some(dir.join("applications")));
+        let path = dir.join("applications/calendar-buddy-webcal.desktop");
+
+        handler.register().unwrap();
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            webcal::handler_entry(&exe)
+        );
+
+        std::fs::write(&path, "[Desktop Entry]\nExec=/old/calendar-buddy %u\n").unwrap();
+        handler.register().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            webcal::handler_entry(&exe)
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -78,7 +78,7 @@ pub fn autostart_entry(exe: &Path) -> String {
 /// The argument quoted for an entry's `Exec` key: the characters the desktop entry
 /// specification reserves inside quotes take a backslash, which is itself written doubled as the
 /// key's value escapes it again; a percent sign is doubled, not to be read as a field code.
-fn exec_argument(argument: &str) -> String {
+pub(crate) fn exec_argument(argument: &str) -> String {
     let mut quoted = String::from("\"");
     for c in argument.chars() {
         match c {
