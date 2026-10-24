@@ -16,9 +16,6 @@ const TOGGLE: f32 = 14.0;
 const PALETTE_SWATCH: f32 = 20.0;
 const PALETTE_COLUMNS: usize = 6;
 
-/// How tall the settings' list of calendars grows before it scrolls.
-const SETTINGS_LIST_HEIGHT: f32 = 320.0;
-
 /// The calendar a new event goes to, picked from `choices`, under their accounts (`MOD-05-F10`);
 /// says whether another one was picked.
 pub fn picker(
@@ -101,29 +98,23 @@ pub fn in_settings(
     accounts: &[(String, Vec<(Calendar, bool)>)],
 ) -> Option<Calendar> {
     let mut used = None;
-    egui::ScrollArea::vertical()
-        .id_salt("calendars-in-settings")
-        .max_height(SETTINGS_LIST_HEIGHT)
-        // As wide as the settings, not only as its longest name.
-        .auto_shrink([false, true])
-        .show(ui, |ui| {
-            for (email, calendars) in accounts {
-                ui.label(egui::RichText::new(email).strong());
-                for (calendar, enabled) in calendars {
-                    let mut ticked = *enabled;
-                    ui.push_id((&calendar.account_id, &calendar.id), |ui| {
-                        if ui
-                            .checkbox(&mut ticked, &calendar.name)
-                            .on_hover_text(ENABLED_HINT)
-                            .clicked()
-                        {
-                            used = Some(calendar.clone());
-                        }
-                    });
+    // Not a scroll of its own: the settings scroll as a whole.
+    for (email, calendars) in accounts {
+        ui.label(egui::RichText::new(email).strong());
+        for (calendar, enabled) in calendars {
+            let mut ticked = *enabled;
+            ui.push_id((&calendar.account_id, &calendar.id), |ui| {
+                if ui
+                    .checkbox(&mut ticked, &calendar.name)
+                    .on_hover_text(ENABLED_HINT)
+                    .clicked()
+                {
+                    used = Some(calendar.clone());
                 }
-                ui.add_space(6.0);
-            }
-        });
+            });
+        }
+        ui.add_space(6.0);
+    }
     used
 }
 

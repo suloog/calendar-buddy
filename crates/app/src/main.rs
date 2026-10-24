@@ -132,7 +132,9 @@ fn undo_pressed(input: &mut egui::InputState) -> bool {
 }
 
 /// Room kept above and below a dialog, besides its title bar.
-const DIALOG_MARGIN: f32 = 48.0;
+const DIALOG_MARGIN: f32 = 32.0;
+/// About how tall a dialog's title bar is, with the margins under it.
+const DIALOG_TITLE: f32 = 72.0;
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
@@ -767,413 +769,445 @@ impl CalendarApp {
             Dialog::Notify(..) => texts::NOTIFY_GUESTS,
             Dialog::Invitations => texts::INVITATIONS,
         };
-        // A dialog taller than the window scrolls, so all of it can be reached.
-        let room = ctx.content_rect().height() - 2.0 * DIALOG_MARGIN;
+        // A dialog taller than the window scrolls, so all of it can be reached; its title bar
+        // takes some of the room.
+        let room = ctx.content_rect().height() - 2.0 * DIALOG_MARGIN - DIALOG_TITLE;
         egui::Window::new(title)
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .vscroll(true)
-            .max_height(room)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .show(ctx, |ui| match dialog {
-                Dialog::Shortcuts => {
-                    egui::Grid::new("shortcuts").show(ui, |ui| {
-                        for (key, _, description) in SHORTCUTS {
-                            ui.monospace(key.to_string());
-                            ui.label(description);
-                            ui.end_row();
+            .show(ctx, |ui| {
+                // As tall as what it holds, up to the room there is.
+                egui::ScrollArea::vertical()
+                    .max_height(room)
+                    .show(ui, |ui| match dialog {
+                        Dialog::Shortcuts => {
+                            egui::Grid::new("shortcuts").show(ui, |ui| {
+                                for (key, _, description) in SHORTCUTS {
+                                    ui.monospace(key.to_string());
+                                    ui.label(description);
+                                    ui.end_row();
+                                }
+                            });
                         }
-                    });
-                }
-                Dialog::GoToDate(text, focused) => {
-                    ui.label(texts::date_as(
-                        &self.regional.numeric_date(self.navigation.selected),
-                    ));
-                    let field = ui.text_edit_singleline(text);
-                    let date = self.regional.parse_date(text);
-                    let entered =
-                        field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    // The field takes the keyboard when the dialog opens and after a wrong date.
-                    if !*focused || (entered && date.is_none()) {
-                        field.request_focus();
-                        *focused = true;
-                    }
-                    if ui
-                        .add_enabled(date.is_some(), egui::Button::new(texts::GO))
-                        .clicked()
-                        || entered
-                    {
-                        go_to = date;
-                    }
-                }
-                Dialog::QuickEntry(entry, focused) => {
-                    let field = ui.add(
-                        egui::TextEdit::singleline(&mut entry.title).hint_text(texts::ADD_TITLE),
-                    );
-                    // The title takes the keyboard when the box opens.
-                    if !*focused {
-                        field.request_focus();
-                        *focused = true;
-                    }
-                    ui.label(entry.when().describe(&self.regional));
-                    let choices = create::choices(
-                        self.accounts.list(),
-                        self.sync.calendars(),
-                        &self.settings,
-                    );
-                    calendar_list::picker(ui, "new-event-calendar", &choices, &mut entry.calendar);
-                    // No network, no calendar: creating is unavailable, and the box says why.
-                    let unavailable = refused.or(entry.calendar.is_none().then_some(NO_CALENDAR));
-                    if let Some(reason) = unavailable {
-                        ui.label(reason);
-                    }
-                    let entered =
-                        field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    let clicked = ui
-                        .horizontal(|ui| {
-                            // The full editor, keeping what was typed (`MOD-05-F03`).
-                            if ui.button(texts::MORE_OPTIONS).clicked() {
-                                edit = Some(Editor::from_quick(entry, &self.regional));
+                        Dialog::GoToDate(text, focused) => {
+                            ui.label(texts::date_as(
+                                &self.regional.numeric_date(self.navigation.selected),
+                            ));
+                            let field = ui.text_edit_singleline(text);
+                            let date = self.regional.parse_date(text);
+                            let entered =
+                                field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            // The field takes the keyboard when the dialog opens and after a wrong date.
+                            if !*focused || (entered && date.is_none()) {
+                                field.request_focus();
+                                *focused = true;
                             }
-                            let button = widgets::primary(ui, texts::SAVE);
-                            ui.add_enabled(unavailable.is_none(), button).clicked()
-                        })
-                        .inner;
-                    if (clicked || entered) && unavailable.is_none() {
-                        save = entry
-                            .new_event()
-                            .map(|(calendar, event)| Save::Create(calendar, Box::new(event)));
-                    }
-                }
-                Dialog::Editor(editor) => {
-                    let choices = editor.choices(create::choices(
-                        self.accounts.list(),
-                        self.sync.calendars(),
-                        &self.settings,
-                    ));
-                    let accounts = self.accounts.list();
-                    let typed = editor.guest_field.trim().to_string();
-                    let account = editor.calendar.as_ref().map(|c| c.account_id.clone());
-                    // The people Google found, then the account's recent guests (`MOD-06-F03`).
-                    let found: Vec<Person> = match &account {
-                        Some(id) if !typed.is_empty() => (self.sync.people(id).iter().cloned())
-                            .chain(guests::recent(&self.cached, id))
-                            .collect(),
-                        _ => Vec::new(),
-                    };
-                    let own = editor.own_addresses(accounts);
-                    let suggested = guests::suggestions(&typed, &found, &editor.guests, &own);
-                    let regional = &self.regional;
-                    // The guests' day, once Google answered.
-                    let saved = editor.opened.as_ref().map(|(event, _)| event);
-                    let preview = (availability::asked(editor, regional, online)).and_then(
-                        |(asked, chosen)| {
-                            let answer = self.sync.busy(&asked)?;
-                            Some(availability::preview(
-                                &asked,
-                                chosen,
-                                &editor.guests,
-                                saved,
-                                answer,
-                            ))
-                        },
-                    );
-                    let google = editor::FromGoogle {
-                        suggested: &suggested,
-                        availability: preview.as_ref(),
-                    };
-                    match editor::show(ui, editor, regional, &choices, accounts, refused, google) {
-                        Some(editor::Edited::Save(saved)) => save = Some(saved),
-                        Some(editor::Edited::OpenSeries) => {
-                            open_series = editor.opened.as_ref().map(|(event, _)| event.clone());
+                            if ui
+                                .add_enabled(date.is_some(), egui::Button::new(texts::GO))
+                                .clicked()
+                                || entered
+                            {
+                                go_to = date;
+                            }
                         }
-                        None => {}
-                    }
-                    // What is typed is searched for at Google as it changes, and in the account of
-                    // another calendar picked (`MOD-06-F02`).
-                    let now_typed = editor.guest_field.trim();
-                    let now_account = editor.calendar.as_ref().map(|c| c.account_id.clone());
-                    if let Some(id) = now_account
-                        && (now_typed != typed || account.as_ref() != Some(&id))
-                        && !now_typed.is_empty()
-                    {
-                        search = Some((id, now_typed.to_string()));
-                    }
-                    // Asked again as the day, the guests or the calendar change (`MOD-06-F19`).
-                    busy = availability::asked(editor, regional, online).map(|(asked, _)| asked);
-                }
-                Dialog::Event(event, _, expanded, snooze) => {
-                    // The event as last synchronized, which may have come since it was opened.
-                    let event = self
-                        .events
-                        .iter()
-                        .find(|e| {
-                            e.id == event.id
-                                && e.calendar_id == event.calendar_id
-                                && e.account_id == event.account_id
-                        })
-                        .unwrap_or(event);
-                    let details = event_details(event, self.zone);
-                    let not_yet = self.saving.holds(event).then_some(texts::SAVING);
-                    // An invitation opens with its answers at the top (`MOD-06-U03`).
-                    let own_answer = invitations::own_answer(event);
-                    if let Some(own) = own_answer {
-                        let enabled = refused.is_none() && not_yet.is_none();
-                        ui.horizontal(|ui| {
-                            ui.label(texts::GOING);
-                            if let Some(response) = answer_buttons(ui, own, enabled) {
-                                answered = Some((event.clone(), response));
+                        Dialog::QuickEntry(entry, focused) => {
+                            let field = ui.add(
+                                egui::TextEdit::singleline(&mut entry.title)
+                                    .hint_text(texts::ADD_TITLE),
+                            );
+                            // The title takes the keyboard when the box opens.
+                            if !*focused {
+                                field.request_focus();
+                                *focused = true;
                             }
-                        });
-                    }
-                    ui.heading(details.title.as_deref().unwrap_or(texts::BUSY));
-                    ui.label(details.when.describe(&self.regional));
-                    if let Some(own) = details.in_own_zone(&self.regional) {
-                        ui.label(own);
-                    }
-                    // Join opens its Google Meet call in the browser (`MOD-06-F18`).
-                    if let Some(link) = &details.meet
-                        && ui.button(texts::JOIN_WITH_MEET).clicked()
-                    {
-                        join = Some(link.clone());
-                    }
-                    // The Snooze of a notification without buttons (`DEC-64`).
-                    if let Some(reminder) = snooze {
-                        ui.horizontal(|ui| {
-                            for minutes in SNOOZES {
-                                if ui.button(Action::Snooze(minutes).label()).clicked() {
-                                    snoozed = Some((reminder.clone(), minutes));
+                            ui.label(entry.when().describe(&self.regional));
+                            let choices = create::choices(
+                                self.accounts.list(),
+                                self.sync.calendars(),
+                                &self.settings,
+                            );
+                            calendar_list::picker(
+                                ui,
+                                "new-event-calendar",
+                                &choices,
+                                &mut entry.calendar,
+                            );
+                            // No network, no calendar: creating is unavailable, and the box says why.
+                            let unavailable =
+                                refused.or(entry.calendar.is_none().then_some(NO_CALENDAR));
+                            if let Some(reason) = unavailable {
+                                ui.label(reason);
+                            }
+                            let entered =
+                                field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            let clicked = ui
+                                .horizontal(|ui| {
+                                    // The full editor, keeping what was typed (`MOD-05-F03`).
+                                    if ui.button(texts::MORE_OPTIONS).clicked() {
+                                        edit = Some(Editor::from_quick(entry, &self.regional));
+                                    }
+                                    let button = widgets::primary(ui, texts::SAVE);
+                                    ui.add_enabled(unavailable.is_none(), button).clicked()
+                                })
+                                .inner;
+                            if (clicked || entered) && unavailable.is_none() {
+                                save = entry.new_event().map(|(calendar, event)| {
+                                    Save::Create(calendar, Box::new(event))
+                                });
+                            }
+                        }
+                        Dialog::Editor(editor) => {
+                            let choices = editor.choices(create::choices(
+                                self.accounts.list(),
+                                self.sync.calendars(),
+                                &self.settings,
+                            ));
+                            let accounts = self.accounts.list();
+                            let typed = editor.guest_field.trim().to_string();
+                            let account = editor.calendar.as_ref().map(|c| c.account_id.clone());
+                            // The people Google found, then the account's recent guests (`MOD-06-F03`).
+                            let found: Vec<Person> = match &account {
+                                Some(id) if !typed.is_empty() => {
+                                    (self.sync.people(id).iter().cloned())
+                                        .chain(guests::recent(&self.cached, id))
+                                        .collect()
+                                }
+                                _ => Vec::new(),
+                            };
+                            let own = editor.own_addresses(accounts);
+                            let suggested =
+                                guests::suggestions(&typed, &found, &editor.guests, &own);
+                            let regional = &self.regional;
+                            // The guests' day, once Google answered.
+                            let saved = editor.opened.as_ref().map(|(event, _)| event);
+                            let preview = (availability::asked(editor, regional, online)).and_then(
+                                |(asked, chosen)| {
+                                    let answer = self.sync.busy(&asked)?;
+                                    Some(availability::preview(
+                                        &asked,
+                                        chosen,
+                                        &editor.guests,
+                                        saved,
+                                        answer,
+                                    ))
+                                },
+                            );
+                            let google = editor::FromGoogle {
+                                suggested: &suggested,
+                                availability: preview.as_ref(),
+                            };
+                            match editor::show(
+                                ui, editor, regional, &choices, accounts, refused, google,
+                            ) {
+                                Some(editor::Edited::Save(saved)) => save = Some(saved),
+                                Some(editor::Edited::OpenSeries) => {
+                                    open_series =
+                                        editor.opened.as_ref().map(|(event, _)| event.clone());
+                                }
+                                None => {}
+                            }
+                            // What is typed is searched for at Google as it changes, and in the account of
+                            // another calendar picked (`MOD-06-F02`).
+                            let now_typed = editor.guest_field.trim();
+                            let now_account =
+                                editor.calendar.as_ref().map(|c| c.account_id.clone());
+                            if let Some(id) = now_account
+                                && (now_typed != typed || account.as_ref() != Some(&id))
+                                && !now_typed.is_empty()
+                            {
+                                search = Some((id, now_typed.to_string()));
+                            }
+                            // Asked again as the day, the guests or the calendar change (`MOD-06-F19`).
+                            busy = availability::asked(editor, regional, online)
+                                .map(|(asked, _)| asked);
+                        }
+                        Dialog::Event(event, _, expanded, snooze) => {
+                            // The event as last synchronized, which may have come since it was opened.
+                            let event = self
+                                .events
+                                .iter()
+                                .find(|e| {
+                                    e.id == event.id
+                                        && e.calendar_id == event.calendar_id
+                                        && e.account_id == event.account_id
+                                })
+                                .unwrap_or(event);
+                            let details = event_details(event, self.zone);
+                            let not_yet = self.saving.holds(event).then_some(texts::SAVING);
+                            // An invitation opens with its answers at the top (`MOD-06-U03`).
+                            let own_answer = invitations::own_answer(event);
+                            if let Some(own) = own_answer {
+                                let enabled = refused.is_none() && not_yet.is_none();
+                                ui.horizontal(|ui| {
+                                    ui.label(texts::GOING);
+                                    if let Some(response) = answer_buttons(ui, own, enabled) {
+                                        answered = Some((event.clone(), response));
+                                    }
+                                });
+                            }
+                            ui.heading(details.title.as_deref().unwrap_or(texts::BUSY));
+                            ui.label(details.when.describe(&self.regional));
+                            if let Some(own) = details.in_own_zone(&self.regional) {
+                                ui.label(own);
+                            }
+                            // Join opens its Google Meet call in the browser (`MOD-06-F18`).
+                            if let Some(link) = &details.meet
+                                && ui.button(texts::JOIN_WITH_MEET).clicked()
+                            {
+                                join = Some(link.clone());
+                            }
+                            // The Snooze of a notification without buttons (`DEC-64`).
+                            if let Some(reminder) = snooze {
+                                ui.horizontal(|ui| {
+                                    for minutes in SNOOZES {
+                                        if ui.button(Action::Snooze(minutes).label()).clicked() {
+                                            snoozed = Some((reminder.clone(), minutes));
+                                        }
+                                    }
+                                });
+                            }
+                            // Each attachment opens in the browser (`MOD-05-F26`).
+                            for listed in &details.attachments {
+                                if ui.link(format!("📎 {}", listed.title)).clicked() {
+                                    attachment = Some(listed.url.clone());
                                 }
                             }
-                        });
-                    }
-                    // Each attachment opens in the browser (`MOD-05-F26`).
-                    for listed in &details.attachments {
-                        if ui.link(format!("📎 {}", listed.title)).clicked() {
-                            attachment = Some(listed.url.clone());
-                        }
-                    }
-                    // Each guest with their answer as an icon (`MOD-06-F05`, `MOD-06-U01`).
-                    match details.guests.len() {
-                        0 => {}
-                        n => {
-                            ui.label(texts::guests(n));
-                        }
-                    }
-                    for guest in details.listed_guests(*expanded) {
-                        ui.horizontal(|ui| {
-                            let answer = guest.response;
-                            ui.label(answer.icon()).on_hover_text(answer.label());
-                            if !guest.name.is_empty() {
-                                ui.label(&guest.name);
+                            // Each guest with their answer as an icon (`MOD-06-F05`, `MOD-06-U01`).
+                            match details.guests.len() {
+                                0 => {}
+                                n => {
+                                    ui.label(texts::guests(n));
+                                }
                             }
-                            ui.weak(&guest.email);
-                        });
-                    }
-                    let more = details.more_guests();
-                    if more > 0 {
-                        let toggle = if *expanded {
-                            texts::SHOW_FEWER.to_string()
-                        } else {
-                            texts::show_more(more)
-                        };
-                        if ui.link(toggle).clicked() {
-                            *expanded = !*expanded;
-                        }
-                    }
-                    // Editing is not offered for an event the user may not change (`MOD-05-F17`),
-                    // though a guest still answers it (`MOD-06-F15`).
-                    let protected = event.protected();
-                    if let Some(protected) = protected {
-                        ui.label(protected.why());
-                    }
-                    if let Some(reason) =
-                        refused.filter(|_| protected.is_none() || own_answer.is_some())
-                    {
-                        ui.label(reason);
-                    }
-                    let calendar = self.sync.calendars().iter().find(|calendar| {
-                        calendar.account_id == event.account_id && calendar.id == event.calendar_id
-                    });
-                    if let (None, Some(calendar)) = (protected, calendar) {
-                        let can_edit = refused.is_none() && not_yet.is_none();
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add_enabled(can_edit, egui::Button::new(texts::EDIT))
-                                .clicked()
+                            for guest in details.listed_guests(*expanded) {
+                                ui.horizontal(|ui| {
+                                    let answer = guest.response;
+                                    ui.label(answer.icon()).on_hover_text(answer.label());
+                                    if !guest.name.is_empty() {
+                                        ui.label(&guest.name);
+                                    }
+                                    ui.weak(&guest.email);
+                                });
+                            }
+                            let more = details.more_guests();
+                            if more > 0 {
+                                let toggle = if *expanded {
+                                    texts::SHOW_FEWER.to_string()
+                                } else {
+                                    texts::show_more(more)
+                                };
+                                if ui.link(toggle).clicked() {
+                                    *expanded = !*expanded;
+                                }
+                            }
+                            // Editing is not offered for an event the user may not change (`MOD-05-F17`),
+                            // though a guest still answers it (`MOD-06-F15`).
+                            let protected = event.protected();
+                            if let Some(protected) = protected {
+                                ui.label(protected.why());
+                            }
+                            if let Some(reason) =
+                                refused.filter(|_| protected.is_none() || own_answer.is_some())
                             {
-                                edit = Some(Editor::of(event, calendar.clone(), &self.regional));
+                                ui.label(reason);
                             }
-                            // Also Delete or Backspace, as in Google Calendar.
-                            let keyed = ui.input(|i| {
-                                i.key_pressed(egui::Key::Delete)
-                                    || i.key_pressed(egui::Key::Backspace)
+                            let calendar = self.sync.calendars().iter().find(|calendar| {
+                                calendar.account_id == event.account_id
+                                    && calendar.id == event.calendar_id
                             });
-                            let clicked = ui
-                                .add_enabled(can_edit, egui::Button::new(texts::DELETE))
-                                .clicked();
-                            if can_edit && (clicked || keyed) {
-                                delete = Some((event.clone(), calendar.clone()));
-                            }
-                        });
-                        if let Some(why) = not_yet {
-                            ui.label(why);
-                        }
-                    }
-                }
-                Dialog::Scope(question, _) => {
-                    let scopes = question.scopes();
-                    for (choice, why) in &scopes {
-                        let button = egui::Button::new(choice.label());
-                        if ui
-                            .add_enabled(why.is_none() && refused.is_none(), button)
-                            .clicked()
-                        {
-                            scope = Some(*choice);
-                        }
-                    }
-                    let mut reasons: Vec<&str> =
-                        scopes.iter().filter_map(|(_, why)| *why).collect();
-                    reasons.dedup();
-                    for why in reasons.into_iter().chain(refused) {
-                        ui.label(why);
-                    }
-                    cancelled = ui.button(texts::CANCEL).clicked();
-                }
-                Dialog::Notify(pending, _) => {
-                    ui.label(pending.asks().unwrap_or_default());
-                    // Changes need Google (`MOD-02-F15`).
-                    if let Some(reason) = refused {
-                        ui.label(reason);
-                    }
-                    ui.horizontal(|ui| {
-                        cancelled = ui.button(texts::BACK).clicked();
-                        for (answer, send) in [(texts::DONT_SEND, false), (texts::SEND, true)] {
-                            let button = egui::Button::new(answer);
-                            if ui.add_enabled(refused.is_none(), button).clicked() {
-                                notify = Some(send);
+                            if let (None, Some(calendar)) = (protected, calendar) {
+                                let can_edit = refused.is_none() && not_yet.is_none();
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .add_enabled(can_edit, egui::Button::new(texts::EDIT))
+                                        .clicked()
+                                    {
+                                        edit = Some(Editor::of(
+                                            event,
+                                            calendar.clone(),
+                                            &self.regional,
+                                        ));
+                                    }
+                                    // Also Delete or Backspace, as in Google Calendar.
+                                    let keyed = ui.input(|i| {
+                                        i.key_pressed(egui::Key::Delete)
+                                            || i.key_pressed(egui::Key::Backspace)
+                                    });
+                                    let clicked = ui
+                                        .add_enabled(can_edit, egui::Button::new(texts::DELETE))
+                                        .clicked();
+                                    if can_edit && (clicked || keyed) {
+                                        delete = Some((event.clone(), calendar.clone()));
+                                    }
+                                });
+                                if let Some(why) = not_yet {
+                                    ui.label(why);
+                                }
                             }
                         }
-                    });
-                }
-                Dialog::Invitations => {
-                    if self.invitations.is_empty() {
-                        ui.label(texts::NO_INVITATIONS);
-                    }
-                    // Each is answered here, or opens its details (`MOD-06-F10`).
-                    for &i in &self.invitations {
-                        let event = &self.events[i];
-                        let details = event_details(event, self.zone);
-                        let enabled = refused.is_none() && !self.saving.holds(event);
-                        ui.horizontal(|ui| {
-                            if ui
-                                .link(details.title.as_deref().unwrap_or(texts::BUSY))
-                                .clicked()
-                            {
-                                invitation = Some(i);
-                            }
-                            ui.weak(details.when.describe(&self.regional));
-                            if let Some(own) = invitations::own_answer(event)
-                                && let Some(response) = answer_buttons(ui, own, enabled)
-                            {
-                                answered = Some((event.clone(), response));
-                            }
-                        });
-                    }
-                    if let Some(reason) = refused.filter(|_| !self.invitations.is_empty()) {
-                        ui.label(reason);
-                    }
-                }
-                Dialog::Settings => {
-                    ui.heading(texts::ACCOUNTS);
-                    egui::Grid::new("accounts").show(ui, |ui| {
-                        for entry in self.accounts.list() {
-                            ui.label(&entry.account.email);
-                            // An account's problem is shown on the account (`MOD-01-F11`).
-                            ui.label(entry.state.label());
-                            if entry.state == AccountState::NeedsSignIn {
+                        Dialog::Scope(question, _) => {
+                            let scopes = question.scopes();
+                            for (choice, why) in &scopes {
+                                let button = egui::Button::new(choice.label());
                                 if ui
-                                    .add_enabled(
-                                        can_change,
-                                        egui::Button::new(texts::SIGN_IN_AGAIN),
-                                    )
+                                    .add_enabled(why.is_none() && refused.is_none(), button)
                                     .clicked()
                                 {
-                                    again = Some(entry.account.email.clone());
+                                    scope = Some(*choice);
                                 }
-                            } else {
-                                ui.label("");
                             }
+                            let mut reasons: Vec<&str> =
+                                scopes.iter().filter_map(|(_, why)| *why).collect();
+                            reasons.dedup();
+                            for why in reasons.into_iter().chain(refused) {
+                                ui.label(why);
+                            }
+                            cancelled = ui.button(texts::CANCEL).clicked();
+                        }
+                        Dialog::Notify(pending, _) => {
+                            ui.label(pending.asks().unwrap_or_default());
+                            // Changes need Google (`MOD-02-F15`).
+                            if let Some(reason) = refused {
+                                ui.label(reason);
+                            }
+                            ui.horizontal(|ui| {
+                                cancelled = ui.button(texts::BACK).clicked();
+                                for (answer, send) in
+                                    [(texts::DONT_SEND, false), (texts::SEND, true)]
+                                {
+                                    let button = egui::Button::new(answer);
+                                    if ui.add_enabled(refused.is_none(), button).clicked() {
+                                        notify = Some(send);
+                                    }
+                                }
+                            });
+                        }
+                        Dialog::Invitations => {
+                            if self.invitations.is_empty() {
+                                ui.label(texts::NO_INVITATIONS);
+                            }
+                            // Each is answered here, or opens its details (`MOD-06-F10`).
+                            for &i in &self.invitations {
+                                let event = &self.events[i];
+                                let details = event_details(event, self.zone);
+                                let enabled = refused.is_none() && !self.saving.holds(event);
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .link(details.title.as_deref().unwrap_or(texts::BUSY))
+                                        .clicked()
+                                    {
+                                        invitation = Some(i);
+                                    }
+                                    ui.weak(details.when.describe(&self.regional));
+                                    if let Some(own) = invitations::own_answer(event)
+                                        && let Some(response) = answer_buttons(ui, own, enabled)
+                                    {
+                                        answered = Some((event.clone(), response));
+                                    }
+                                });
+                            }
+                            if let Some(reason) = refused.filter(|_| !self.invitations.is_empty()) {
+                                ui.label(reason);
+                            }
+                        }
+                        Dialog::Settings => {
+                            ui.heading(texts::ACCOUNTS);
+                            egui::Grid::new("accounts").show(ui, |ui| {
+                                for entry in self.accounts.list() {
+                                    ui.label(&entry.account.email);
+                                    // An account's problem is shown on the account (`MOD-01-F11`).
+                                    ui.label(entry.state.label());
+                                    if entry.state == AccountState::NeedsSignIn {
+                                        if ui
+                                            .add_enabled(
+                                                can_change,
+                                                egui::Button::new(texts::SIGN_IN_AGAIN),
+                                            )
+                                            .clicked()
+                                        {
+                                            again = Some(entry.account.email.clone());
+                                        }
+                                    } else {
+                                        ui.label("");
+                                    }
+                                    if ui
+                                        .add_enabled(can_change, egui::Button::new(texts::REMOVE))
+                                        .clicked()
+                                    {
+                                        remove = Some(entry.account.clone());
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                            self.removal.show(ui, can_remove);
+                            if self.removal.idle() {
+                                ui.add_space(8.0);
+                                self.connect.show(ui, texts::ADD_ACCOUNT);
+                            }
+                            ui.add_space(8.0);
+                            ui.heading(texts::CALENDARS);
+                            let calendars = side_panel::in_settings(
+                                self.accounts.list(),
+                                self.sync.calendars(),
+                                &self.settings,
+                            );
+                            toggled = calendar_list::in_settings(ui, &calendars);
+                            ui.add_space(8.0);
+                            // Where new events go (`MOD-05-F10`).
+                            ui.horizontal(|ui| {
+                                ui.label(texts::DEFAULT_CALENDAR);
+                                let list = (self.accounts.list(), self.sync.calendars());
+                                let choices = create::choices(list.0, list.1, &self.settings);
+                                let mut picked =
+                                    create::default_calendar(list.0, list.1, &self.settings);
+                                if calendar_list::picker(
+                                    ui,
+                                    "default-calendar",
+                                    &choices,
+                                    &mut picked,
+                                ) {
+                                    default_calendar = picked;
+                                }
+                            });
+                            ui.add_space(8.0);
+                            // All of them, on or off (`MOD-07-F11`); the reminders in Google stay.
+                            ui.heading(texts::NOTIFICATIONS);
+                            let mut on = !self.settings.notifications_off;
                             if ui
-                                .add_enabled(can_change, egui::Button::new(texts::REMOVE))
-                                .clicked()
+                                .checkbox(&mut on, texts::DESKTOP_NOTIFICATIONS)
+                                .on_hover_text(texts::DESKTOP_NOTIFICATIONS_HINT)
+                                .changed()
                             {
-                                remove = Some(entry.account.clone());
+                                notifications = Some(on);
                             }
-                            ui.end_row();
+                            // Off until the user turns it on (`MOD-07-F16`, `DEC-64`); without a tray
+                            // icon there would be nothing to open the app from at login.
+                            let mut on = self.start_at_login;
+                            if self.tray
+                                && ui
+                                    .checkbox(&mut on, texts::START_AT_LOGIN)
+                                    .on_hover_text(texts::START_AT_LOGIN_HINT)
+                                    .changed()
+                            {
+                                start_at_login = Some(on);
+                            }
+                            ui.add_space(8.0);
+                            // System, Light or Dark (`MOD-04-F03`), where Google Calendar has its theme.
+                            ui.heading(texts::APPEARANCE);
+                            ui.horizontal(|ui| {
+                                ui.label(texts::THEME);
+                                let mut chosen = self.settings.theme;
+                                for choice in Theme::ALL {
+                                    ui.radio_value(&mut chosen, choice, choice.label());
+                                }
+                                if chosen != self.settings.theme {
+                                    theme = Some(chosen);
+                                }
+                            });
                         }
-                    });
-                    self.removal.show(ui, can_remove);
-                    if self.removal.idle() {
-                        ui.add_space(8.0);
-                        self.connect.show(ui, texts::ADD_ACCOUNT);
-                    }
-                    ui.add_space(8.0);
-                    ui.heading(texts::CALENDARS);
-                    let calendars = side_panel::in_settings(
-                        self.accounts.list(),
-                        self.sync.calendars(),
-                        &self.settings,
-                    );
-                    toggled = calendar_list::in_settings(ui, &calendars);
-                    ui.add_space(8.0);
-                    // Where new events go (`MOD-05-F10`).
-                    ui.horizontal(|ui| {
-                        ui.label(texts::DEFAULT_CALENDAR);
-                        let list = (self.accounts.list(), self.sync.calendars());
-                        let choices = create::choices(list.0, list.1, &self.settings);
-                        let mut picked = create::default_calendar(list.0, list.1, &self.settings);
-                        if calendar_list::picker(ui, "default-calendar", &choices, &mut picked) {
-                            default_calendar = picked;
-                        }
-                    });
-                    ui.add_space(8.0);
-                    // All of them, on or off (`MOD-07-F11`); the reminders in Google stay.
-                    ui.heading(texts::NOTIFICATIONS);
-                    let mut on = !self.settings.notifications_off;
-                    if ui
-                        .checkbox(&mut on, texts::DESKTOP_NOTIFICATIONS)
-                        .on_hover_text(texts::DESKTOP_NOTIFICATIONS_HINT)
-                        .changed()
-                    {
-                        notifications = Some(on);
-                    }
-                    // Off until the user turns it on (`MOD-07-F16`, `DEC-64`); without a tray
-                    // icon there would be nothing to open the app from at login.
-                    let mut on = self.start_at_login;
-                    if self.tray
-                        && ui
-                            .checkbox(&mut on, texts::START_AT_LOGIN)
-                            .on_hover_text(texts::START_AT_LOGIN_HINT)
-                            .changed()
-                    {
-                        start_at_login = Some(on);
-                    }
-                    ui.add_space(8.0);
-                    // System, Light or Dark (`MOD-04-F03`), where Google Calendar has its theme.
-                    ui.heading(texts::APPEARANCE);
-                    ui.horizontal(|ui| {
-                        ui.label(texts::THEME);
-                        let mut chosen = self.settings.theme;
-                        for choice in Theme::ALL {
-                            ui.radio_value(&mut chosen, choice, choice.label());
-                        }
-                        if chosen != self.settings.theme {
-                            theme = Some(chosen);
-                        }
-                    });
-                }
+                    })
             });
         if let Some(email) = again {
             self.sign_in_again(ctx, &email);
