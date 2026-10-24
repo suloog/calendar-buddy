@@ -343,3 +343,19 @@
   - one squash commit: one logical change.
 - Manual checks: TC-06-12 (US-06-08#1, #2 against real Google), US-06-08#3, US-06-08#5
 - Commits on main: 15a45d2 feat(guests): show guests' availability in the editor [US-06-08]
+
+## US-07-01 — review — 2026-10-24 05:25
+- What: reminders set in Google (an event's own, or its calendar's defaults) are read, cached and shown as KDE notifications through `org.freedesktop.Notifications`. Each shows once, with title, start time and location, from the sync worker, so they also come while the window is minimized. E-mail reminders, declined events and disabled calendars give none. Reminders from before the app started are skipped; those that fell during sleep show on waking if the event has not started. Clicking a notification brings the window forward and opens the event on its day.
+- Decisions: DEC-136, DEC-137, DEC-138
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - fixed after code review: reminders are checked before the jobs a wake-up starts, so a slow sync after sleep does not drop them; `Job::Remind` no longer shows "synchronizing"; D-Bus signals are filtered by sender;
+  - left:
+    - on Wayland, un-minimizing and focusing from a click may be refused (no xdg-activation token), to be seen in TC-07-07;
+    - a reminder whose time comes while a long job (e.g. a full sync) runs waits for it;
+    - the body is always markup-escaped;
+    - timed working-location events using the defaults remind like other events;
+    - the worker loop's reminder wake-up has no loop-level test;
+  - **SQLite schema change:** `calendars.reminders` and `events.reminders`; cache version 8 also drops the calendars, so they are fetched again. No calendar-provider interface change; `Calendar` gains `default_reminders`, `About` gains `reminders`;
+  - one squash commit: one logical change.
+- Manual checks: TC-07-07 (US-07-01#3), US-07-01#1, #2 on real KDE, US-07-01#7 (real sleep)
+- Commits on main: 4257d1e feat(reminders): show desktop notifications for reminders [US-07-01]
