@@ -9,15 +9,10 @@ use std::time::{Duration, Instant};
 
 use crate::editor::{Edit, Patch, own_title};
 use crate::model::{Calendar, Event};
+use crate::texts::{DELETED, SAVED};
 
 /// How long the notice with Undo stays (`MOD-05-U04`).
 pub const NOTICE: Duration = Duration::from_secs(5);
-
-/// What the notice says after a deletion.
-pub const DELETED: &str = "Event deleted.";
-
-/// What the notice says after a change.
-pub const SAVED: &str = "Event saved.";
 
 /// What undoes a change Google took.
 #[derive(Clone, Debug, PartialEq)]
@@ -158,10 +153,10 @@ impl LastChange {
 mod tests {
     use super::*;
     use crate::colors::EventColor;
-    use crate::create::NO_TITLE;
     use crate::fixtures::{d, timed};
     use crate::guests::{Guest, Person};
     use crate::model::{Access, Reminders, Rgb, Show, Timing};
+    use crate::texts::NO_TITLE;
     use chrono_tz::Europe::Warsaw;
 
     fn calendar(id: &str) -> Calendar {

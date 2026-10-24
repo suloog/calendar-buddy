@@ -61,11 +61,6 @@ pub fn starts_shown(args: &[String], tray: bool) -> bool {
     !(tray && at_login(args))
 }
 
-/// The name of the setting that starts the app at login (`MOD-07-F16`).
-pub const START_AT_LOGIN: &str = "Start at login";
-pub const START_AT_LOGIN_HINT: &str = "Calendar Buddy starts in the system tray when you log in, \
-                                       so reminders arrive without opening it.";
-
 /// The XDG autostart entry that starts the app at `exe` in the tray at login.
 pub fn autostart_entry(exe: &Path) -> String {
     format!(

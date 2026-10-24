@@ -9,12 +9,10 @@ use chrono::{DateTime, Utc};
 
 use crate::accounts::Account;
 use crate::model::{Event, Timing};
+use crate::texts;
 
 /// How many people are suggested at most while the user types.
 pub const SUGGESTIONS: usize = 8;
-
-/// What the guest field says when what was typed is not an e-mail address.
-pub const NOT_AN_ADDRESS: &str = "This is not a valid e-mail address.";
 
 /// A guest of an event, as the provider keeps them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,10 +66,10 @@ impl Response {
     /// What the icon means, in words.
     pub fn label(self) -> &'static str {
         match self {
-            Response::Accepted => "Accepted",
-            Response::Declined => "Declined",
-            Response::Maybe => "Maybe",
-            Response::Awaiting => "Awaiting",
+            Response::Accepted => texts::ACCEPTED,
+            Response::Declined => texts::DECLINED,
+            Response::Maybe => texts::MAYBE,
+            Response::Awaiting => texts::AWAITING,
         }
     }
 }

@@ -15,6 +15,7 @@ use calendar_core::platform::{
     SecretStoreError, Tray, Wakeups,
 };
 use calendar_core::reminders::{Action, Notification, SNOOZES};
+use calendar_core::texts;
 use calendar_core::theme::{self, Scheme};
 use calendar_core::webcal;
 use secret_service::blocking::SecretService;
@@ -25,7 +26,7 @@ pub struct SystemSecretStore;
 
 fn failed(error: Error) -> SecretStoreError {
     SecretStoreError::Failed(match error {
-        Error::Prompt => "unlocking it was declined".to_string(),
+        Error::Prompt => texts::UNLOCKING_DECLINED.to_string(),
         error => error.to_string(),
     })
 }
@@ -47,7 +48,7 @@ impl SecretStore for SystemSecretStore {
         }
         collection
             .create_item(
-                &format!("Calendar Buddy: {}", account.email),
+                &format!("{}: {}", texts::APP_NAME, account.email),
                 HashMap::from([("application", "calendar-buddy"), ("account", &account.id)]),
                 refresh_token.as_bytes(),
                 true,
@@ -76,7 +77,7 @@ impl SecretStore for SystemSecretStore {
         let secret = item.get_secret().map_err(failed)?;
         String::from_utf8(secret)
             .map(Some)
-            .map_err(|_| SecretStoreError::Failed("the saved sign-in could not be read".into()))
+            .map_err(|_| SecretStoreError::Failed(texts::SECRET_NOT_READ.into()))
     }
 
     fn take(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
@@ -286,7 +287,7 @@ impl Notifier for SystemNotifier {
             Some(NOTIFICATIONS),
             "Notify",
             &(
-                "Calendar Buddy",
+                texts::APP_NAME,
                 0u32,
                 "x-office-calendar",
                 notification.title.as_str(),
@@ -420,7 +421,7 @@ impl ksni::Tray for TrayIcon {
     }
 
     fn title(&self) -> String {
-        "Calendar Buddy".into()
+        texts::APP_NAME.into()
     }
 
     fn icon_name(&self) -> String {
@@ -435,7 +436,7 @@ impl ksni::Tray for TrayIcon {
         use ksni::menu::StandardItem;
         vec![
             StandardItem {
-                label: "Open Calendar Buddy".into(),
+                label: texts::OPEN_APP.into(),
                 icon_name: "x-office-calendar".into(),
                 activate: Box::new(|tray: &mut Self| (tray.chosen)(Signal::Open)),
                 ..Default::default()
@@ -443,7 +444,7 @@ impl ksni::Tray for TrayIcon {
             .into(),
             ksni::MenuItem::Separator,
             StandardItem {
-                label: "Quit".into(),
+                label: texts::QUIT.into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|tray: &mut Self| (tray.chosen)(Signal::Quit)),
                 ..Default::default()

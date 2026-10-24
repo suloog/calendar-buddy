@@ -2,10 +2,11 @@
 //! here; what goes where is decided in `calendar_core::view_model`.
 
 use calendar_core::contrast;
-use calendar_core::create::{SAVING, STEP, snapped};
+use calendar_core::create::{STEP, snapped};
 use calendar_core::drag::{self, Target};
 use calendar_core::model::Rgb;
 use calendar_core::regional::Regional;
+use calendar_core::texts::{self, SAVING};
 use calendar_core::view_model::GridViewModel;
 use chrono::{DateTime, Duration, Utc};
 use eframe::egui::{
@@ -41,7 +42,7 @@ fn background(painter: &egui::Painter) -> Rgb {
 /// as free/busy only, after a lock when its calendar cannot be changed (`MOD-02-U01`), and marked
 /// while Google has not confirmed a new event (`MOD-05-U03`).
 pub fn event_label(title: Option<&str>, read_only: bool, saving: bool) -> String {
-    let title = title.unwrap_or("Busy");
+    let title = title.unwrap_or(texts::BUSY);
     match (read_only, saving) {
         (true, _) => format!("🔒 {title}"),
         (false, true) => format!("{title} · {SAVING}"),
@@ -730,12 +731,10 @@ pub fn show(
         if let Some(now) = view.now {
             let x = grid.left() + GUTTER + now.day as f32 * day_width;
             let y = minute_y(now.minute as f32);
-            painter.hline(
-                x..=(x + day_width),
-                y,
-                Stroke::new(2.0, Color32::from_rgb(0xEA, 0x43, 0x35)),
-            );
-            painter.circle_filled(Pos2::new(x, y), 4.0, Color32::from_rgb(0xEA, 0x43, 0x35));
+            // In the accent, the one colour of the interface (`MOD-04-U03`).
+            let accent = visuals.selection.stroke.color;
+            painter.hline(x..=(x + day_width), y, Stroke::new(2.0, accent));
+            painter.circle_filled(Pos2::new(x, y), 4.0, accent);
         }
     });
     // A drag ends with the button released, wherever that was.
@@ -892,6 +891,38 @@ mod tests {
         for scheme in [Scheme::Light, Scheme::Dark] {
             let ratio = contrast_of(&drawn(&[], FULL_HD, 1.0, scheme), &today);
             assert!(ratio >= AA, "{scheme:?}: {ratio}");
+        }
+    }
+
+    #[test]
+    fn apart_from_calendar_colours_the_week_draws_in_grays_and_the_accent_in_both_themes() {
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = drawn(&[], FULL_HD, 1.0, scheme);
+            let mut colors = Vec::new();
+            for (_, shape) in screen::in_order(&shapes) {
+                match shape {
+                    Shape::Rect(r) => colors.extend([r.fill, r.stroke.color]),
+                    Shape::Circle(c) => colors.extend([c.fill, c.stroke.color]),
+                    Shape::LineSegment { stroke, .. } => colors.push(stroke.color),
+                    Shape::Path(p) => {
+                        colors.push(p.fill);
+                        if let egui::epaint::ColorMode::Solid(c) = p.stroke.color {
+                            colors.push(c);
+                        }
+                    }
+                    Shape::Text(t) => colors.push(color(screen::ink(&t))),
+                    _ => {}
+                }
+            }
+            // The current time's line is drawn, in the accent.
+            let accent = crate::appearance::visuals(scheme).selection.stroke.color;
+            assert!(
+                colors.contains(&accent),
+                "{scheme:?}: no line in the accent"
+            );
+            for c in colors {
+                assert!(screen::neutral_or_accent(c), "{scheme:?}: {c:?}");
+            }
         }
     }
 

@@ -4,6 +4,7 @@
 use chrono::NaiveDate;
 
 use crate::navigation::{Navigation, View};
+use crate::texts;
 use crate::week::GridView;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,27 +22,31 @@ pub enum Command {
 /// Every shortcut with what it does, in the order the list shows them. `/` (search) is not bound:
 /// there is no search (`DEC-30`).
 pub const SHORTCUTS: [(char, Command, &str); 13] = [
-    ('d', Command::Switch(View::Grid(GridView::Day)), "Day view"),
+    (
+        'd',
+        Command::Switch(View::Grid(GridView::Day)),
+        texts::DAY_VIEW,
+    ),
     (
         'x',
         Command::Switch(View::Grid(GridView::ThreeDays)),
-        "3-day view",
+        texts::THREE_DAY_VIEW,
     ),
     (
         'w',
         Command::Switch(View::Grid(GridView::Week)),
-        "Week view",
+        texts::WEEK_VIEW,
     ),
-    ('m', Command::Switch(View::Month), "Month view"),
-    ('a', Command::Switch(View::Agenda), "Agenda view"),
-    ('j', Command::Next, "Next period"),
-    ('n', Command::Next, "Next period"),
-    ('k', Command::Previous, "Previous period"),
-    ('p', Command::Previous, "Previous period"),
-    ('t', Command::Today, "Today"),
-    ('g', Command::GoToDate, "Go to date"),
-    ('c', Command::NewEvent, "New event"),
-    ('?', Command::ShowShortcuts, "Keyboard shortcuts"),
+    ('m', Command::Switch(View::Month), texts::MONTH_VIEW),
+    ('a', Command::Switch(View::Agenda), texts::AGENDA_VIEW),
+    ('j', Command::Next, texts::NEXT_PERIOD),
+    ('n', Command::Next, texts::NEXT_PERIOD),
+    ('k', Command::Previous, texts::PREVIOUS_PERIOD),
+    ('p', Command::Previous, texts::PREVIOUS_PERIOD),
+    ('t', Command::Today, texts::TODAY),
+    ('g', Command::GoToDate, texts::GO_TO_DATE),
+    ('c', Command::NewEvent, texts::NEW_EVENT),
+    ('?', Command::ShowShortcuts, texts::KEYBOARD_SHORTCUTS),
 ];
 
 /// The command of a typed character, if it is a shortcut.

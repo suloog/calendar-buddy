@@ -18,6 +18,7 @@ use chrono_tz::Tz;
 use crate::model::{Calendar, Event, Method, Reminders, Timing};
 use crate::regional::Regional;
 use crate::settings::Settings;
+use crate::texts;
 use crate::week::day_start;
 
 /// How long after its time a reminder is still shown once its event has started: a reminder at
@@ -67,10 +68,10 @@ impl Action {
     /// What its button says.
     pub fn label(self) -> String {
         match self {
-            Action::Open => "Open".to_string(),
-            Action::Join => "Join".to_string(),
-            Action::Snooze(minutes) => format!("Snooze {minutes} minutes"),
-            Action::Dismiss => "Dismiss".to_string(),
+            Action::Open => texts::OPEN.to_string(),
+            Action::Join => texts::JOIN.to_string(),
+            Action::Snooze(minutes) => texts::snooze(minutes),
+            Action::Dismiss => texts::DISMISS.to_string(),
         }
     }
 }

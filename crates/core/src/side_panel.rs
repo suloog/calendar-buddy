@@ -146,9 +146,6 @@ pub fn nothing_shown(calendars: &[Calendar], settings: &Settings) -> bool {
         })
 }
 
-/// What the empty view says when no calendar is shown.
-pub const NOTHING_SHOWN: &str = "No calendars are shown. Choose calendars in the side panel.";
-
 fn key(calendar: &Calendar) -> (String, String) {
     (calendar.account_id.clone(), calendar.id.clone())
 }

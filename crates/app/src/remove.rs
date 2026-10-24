@@ -7,6 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use calendar_core::accounts::{self, Account};
 use calendar_core::platform::{SecretStore, SecretStoreError};
+use calendar_core::texts;
 use calendar_google::Endpoints;
 use eframe::egui;
 
@@ -115,19 +116,19 @@ impl Removal {
         match &self.stage {
             Stage::Idle => return,
             Stage::Confirm(account) => {
-                ui.label(accounts::confirm_removal(&account.email));
-                remove = buttons(ui, accounts::REMOVE, can_start);
+                ui.label(texts::confirm_removal(&account.email));
+                remove = buttons(ui, texts::REMOVE, can_start);
             }
             Stage::Removing(account) => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.label(format!("Removing {}…", account.email));
+                    ui.label(texts::removing(&account.email));
                 });
             }
             Stage::Failed(account, error) => {
                 let warn = ui.visuals().warn_fg_color;
                 ui.colored_label(warn, accounts::not_removed(&account.email, error));
-                remove = buttons(ui, "Try again", can_start);
+                remove = buttons(ui, texts::TRY_AGAIN, can_start);
             }
         }
         match remove {
@@ -148,7 +149,7 @@ impl Removal {
 fn buttons(ui: &mut egui::Ui, go: &str, enabled: bool) -> Option<bool> {
     ui.horizontal(|ui| {
         let go = ui.add_enabled(enabled, egui::Button::new(go)).clicked();
-        let cancel = ui.button("Cancel").clicked();
+        let cancel = ui.button(texts::CANCEL).clicked();
         if go {
             Some(true)
         } else if cancel {

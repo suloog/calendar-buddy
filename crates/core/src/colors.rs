@@ -6,36 +6,37 @@
 use std::collections::BTreeMap;
 
 use crate::model::{Calendar, Event, Rgb};
+use crate::texts;
 
 /// Local colours by account ID and calendar ID (`DEC-99`).
 pub type LocalColors = BTreeMap<(String, String), Rgb>;
 
 /// The colours Google Calendar offers in a calendar's menu, with their names.
 pub const CALENDAR_COLORS: [(&str, Rgb); 24] = [
-    ("Radicchio", Rgb(0xAD, 0x14, 0x57)),
-    ("Tangerine", Rgb(0xF4, 0x51, 0x1E)),
-    ("Citron", Rgb(0xE4, 0xC4, 0x41)),
-    ("Basil", Rgb(0x0B, 0x80, 0x43)),
-    ("Blueberry", Rgb(0x3F, 0x51, 0xB5)),
-    ("Grape", Rgb(0x8E, 0x24, 0xAA)),
-    ("Cherry blossom", Rgb(0xD8, 0x1B, 0x60)),
-    ("Pumpkin", Rgb(0xEF, 0x6C, 0x00)),
-    ("Avocado", Rgb(0xC0, 0xCA, 0x33)),
-    ("Eucalyptus", Rgb(0x00, 0x96, 0x88)),
-    ("Lavender", Rgb(0x79, 0x86, 0xCB)),
-    ("Cocoa", Rgb(0x79, 0x55, 0x48)),
-    ("Tomato", Rgb(0xD5, 0x00, 0x00)),
-    ("Mango", Rgb(0xF0, 0x93, 0x00)),
-    ("Pistachio", Rgb(0x7C, 0xB3, 0x42)),
-    ("Peacock", Rgb(0x03, 0x9B, 0xE5)),
-    ("Wisteria", Rgb(0xB3, 0x9D, 0xDB)),
-    ("Graphite", Rgb(0x61, 0x61, 0x61)),
-    ("Flamingo", Rgb(0xE6, 0x7C, 0x73)),
-    ("Banana", Rgb(0xF6, 0xBF, 0x26)),
-    ("Sage", Rgb(0x33, 0xB6, 0x79)),
-    ("Cobalt", Rgb(0x42, 0x85, 0xF4)),
-    ("Amethyst", Rgb(0x9E, 0x69, 0xAF)),
-    ("Birch", Rgb(0xA7, 0x9B, 0x8E)),
+    (texts::RADICCHIO, Rgb(0xAD, 0x14, 0x57)),
+    (texts::TANGERINE, Rgb(0xF4, 0x51, 0x1E)),
+    (texts::CITRON, Rgb(0xE4, 0xC4, 0x41)),
+    (texts::BASIL, Rgb(0x0B, 0x80, 0x43)),
+    (texts::BLUEBERRY, Rgb(0x3F, 0x51, 0xB5)),
+    (texts::GRAPE, Rgb(0x8E, 0x24, 0xAA)),
+    (texts::CHERRY_BLOSSOM, Rgb(0xD8, 0x1B, 0x60)),
+    (texts::PUMPKIN, Rgb(0xEF, 0x6C, 0x00)),
+    (texts::AVOCADO, Rgb(0xC0, 0xCA, 0x33)),
+    (texts::EUCALYPTUS, Rgb(0x00, 0x96, 0x88)),
+    (texts::LAVENDER, Rgb(0x79, 0x86, 0xCB)),
+    (texts::COCOA, Rgb(0x79, 0x55, 0x48)),
+    (texts::TOMATO, Rgb(0xD5, 0x00, 0x00)),
+    (texts::MANGO, Rgb(0xF0, 0x93, 0x00)),
+    (texts::PISTACHIO, Rgb(0x7C, 0xB3, 0x42)),
+    (texts::PEACOCK, Rgb(0x03, 0x9B, 0xE5)),
+    (texts::WISTERIA, Rgb(0xB3, 0x9D, 0xDB)),
+    (texts::GRAPHITE, Rgb(0x61, 0x61, 0x61)),
+    (texts::FLAMINGO, Rgb(0xE6, 0x7C, 0x73)),
+    (texts::BANANA, Rgb(0xF6, 0xBF, 0x26)),
+    (texts::SAGE, Rgb(0x33, 0xB6, 0x79)),
+    (texts::COBALT, Rgb(0x42, 0x85, 0xF4)),
+    (texts::AMETHYST, Rgb(0x9E, 0x69, 0xAF)),
+    (texts::BIRCH, Rgb(0xA7, 0x9B, 0x8E)),
 ];
 
 /// Google's event colours, as Google Calendar names and shows them (`DEC-118`).
@@ -72,17 +73,17 @@ impl EventColor {
 
     pub fn name(self) -> &'static str {
         match self {
-            EventColor::Tomato => "Tomato",
-            EventColor::Flamingo => "Flamingo",
-            EventColor::Tangerine => "Tangerine",
-            EventColor::Banana => "Banana",
-            EventColor::Sage => "Sage",
-            EventColor::Basil => "Basil",
-            EventColor::Peacock => "Peacock",
-            EventColor::Blueberry => "Blueberry",
-            EventColor::Lavender => "Lavender",
-            EventColor::Grape => "Grape",
-            EventColor::Graphite => "Graphite",
+            EventColor::Tomato => texts::TOMATO,
+            EventColor::Flamingo => texts::FLAMINGO,
+            EventColor::Tangerine => texts::TANGERINE,
+            EventColor::Banana => texts::BANANA,
+            EventColor::Sage => texts::SAGE,
+            EventColor::Basil => texts::BASIL,
+            EventColor::Peacock => texts::PEACOCK,
+            EventColor::Blueberry => texts::BLUEBERRY,
+            EventColor::Lavender => texts::LAVENDER,
+            EventColor::Grape => texts::GRAPE,
+            EventColor::Graphite => texts::GRAPHITE,
         }
     }
 
@@ -177,17 +178,17 @@ mod tests {
         assert_eq!(
             colors,
             [
-                ("Tomato", Rgb(0xD5, 0x00, 0x00)),
-                ("Flamingo", Rgb(0xE6, 0x7C, 0x73)),
-                ("Tangerine", Rgb(0xF4, 0x51, 0x1E)),
-                ("Banana", Rgb(0xF6, 0xBF, 0x26)),
-                ("Sage", Rgb(0x33, 0xB6, 0x79)),
-                ("Basil", Rgb(0x0B, 0x80, 0x43)),
-                ("Peacock", Rgb(0x03, 0x9B, 0xE5)),
-                ("Blueberry", Rgb(0x3F, 0x51, 0xB5)),
-                ("Lavender", Rgb(0x79, 0x86, 0xCB)),
-                ("Grape", Rgb(0x8E, 0x24, 0xAA)),
-                ("Graphite", Rgb(0x61, 0x61, 0x61)),
+                (texts::TOMATO, Rgb(0xD5, 0x00, 0x00)),
+                (texts::FLAMINGO, Rgb(0xE6, 0x7C, 0x73)),
+                (texts::TANGERINE, Rgb(0xF4, 0x51, 0x1E)),
+                (texts::BANANA, Rgb(0xF6, 0xBF, 0x26)),
+                (texts::SAGE, Rgb(0x33, 0xB6, 0x79)),
+                (texts::BASIL, Rgb(0x0B, 0x80, 0x43)),
+                (texts::PEACOCK, Rgb(0x03, 0x9B, 0xE5)),
+                (texts::BLUEBERRY, Rgb(0x3F, 0x51, 0xB5)),
+                (texts::LAVENDER, Rgb(0x79, 0x86, 0xCB)),
+                (texts::GRAPE, Rgb(0x8E, 0x24, 0xAA)),
+                (texts::GRAPHITE, Rgb(0x61, 0x61, 0x61)),
             ]
         );
     }

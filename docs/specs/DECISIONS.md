@@ -1812,3 +1812,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-150] The accent colour and what is drawn in it
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-03
+- **Affects:** `US-04-03`, `TC-04-05`, `MOD-04-U03`, `MOD-03-F14`, `DEC-57`, `DEC-148`
+- **Decision:** The accent is Google Calendar's blue, one hue in a tone for each theme: `#0B57D0` in the light theme and `#A8C7FA` in the dark one, with the pale fills `#D3E3FD` and `#0842A0` for what is selected (today's mark, the selected days). Links, the outline of what is selected or has the keyboard, the text cursor, warnings and errors, and the line at the current time are drawn in the accent. Everything else in the interface keeps egui's neutral grays, with the weak text of `DEC-148`. This replaces the interim link and warning colours of `DEC-148`, as it foresaw.
+- **Why:** The interface may show only neutral tones and one accent apart from calendar colours (`MOD-04-U03`), so warnings and the current-time line cannot keep their own orange and red; Google Calendar draws its current-time line red, but the requirement wins over `DEC-62` here. The tones reach 4.5:1 as text on the panels and on their fills (`MOD-04-NFR-01`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-151] No transition animations anywhere in the interface
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-03
+- **Affects:** `US-04-03`, `TC-04-05`, `MOD-04-U05`
+- **Decision:** egui's animation time is set to zero in both themes, so nothing in the interface animates: views and periods change at once, as they already did, and windows, menus and toggles also appear without fading or sliding. Scrolling the grid with the mouse wheel stays smooth (`US-03-01`); that is scrolling, not a transition.
+- **Why:** The simplest way to keep any transition from appearing when views and periods change (`MOD-04-U05`), and in line with avoiding unnecessary animations (`SRC-01-53`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-152] What the table of interface texts holds
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-03
+- **Affects:** `US-04-03`, `MOD-04-F04`, `DEC-31`
+- **Decision:** Every text the user reads is in one table, `calendar_core::texts`: the window, its dialogs and notices, the reasons put into error messages (also those of the Google adapter and the secret store), the desktop notifications, the tray menu, the page the browser shows after signing in, the names of Google's colours, and the decline messages of out-of-office and focus-time events. A text with a value in it is a function of the table, so a translation can change the order of words. The views and view models only refer to the table. Dates, times and numbers are not in it: they follow the system (`DEC-29`). The app's name in the desktop entries it writes stays in those entries, and the cache keeps an event's colour under a fixed English key, not under its name in the table.
+- **Why:** Texts kept in one place so translations can be added later without touching the views (`DEC-31`, `MOD-04` *Technical notes*); a translation then replaces one file.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

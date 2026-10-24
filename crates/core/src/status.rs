@@ -8,6 +8,7 @@ use chrono_tz::Tz;
 
 use crate::model::Calendar;
 use crate::regional::Regional;
+use crate::texts;
 
 /// What keeps a calendar from being up to date.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,11 +79,11 @@ impl Status {
 
 pub fn label(state: State) -> &'static str {
     match state {
-        State::Synchronizing => "Synchronizing…",
-        State::UpToDate => "Up to date",
-        State::Offline => "Offline",
-        State::Delayed => "Synchronization delayed: Google asked to slow down",
-        State::Error => "Synchronization error",
+        State::Synchronizing => texts::SYNCHRONIZING,
+        State::UpToDate => texts::UP_TO_DATE,
+        State::Offline => texts::OFFLINE,
+        State::Delayed => texts::SYNC_DELAYED,
+        State::Error => texts::SYNC_ERROR,
     }
 }
 
@@ -94,24 +95,24 @@ pub fn last_synced(
     regional: &Regional,
 ) -> String {
     let Some(at) = at else {
-        return "Not synchronized yet".to_string();
+        return texts::NOT_SYNCHRONIZED_YET.to_string();
     };
     let local = at.with_timezone(&zone);
     let time = regional.time(local.time());
     if local.date_naive() == today {
-        format!("Last synchronized at {time}")
+        texts::last_synchronized_at(&time)
     } else {
         let date = regional.short_date(local.date_naive());
-        format!("Last synchronized on {date} at {time}")
+        texts::last_synchronized_on(&date, &time)
     }
 }
 
 /// A problem as its calendar's row in the side panel says it (`DEC-97`).
 pub fn on_row(problem: Problem) -> &'static str {
     match problem {
-        Problem::Failed => "Could not be synchronized; trying again.",
-        Problem::Delayed => "Synchronized later: Google asked to slow down.",
-        Problem::NotSynchronizing => "Not synchronizing: its account needs sign-in.",
+        Problem::Failed => texts::ROW_FAILED,
+        Problem::Delayed => texts::ROW_DELAYED,
+        Problem::NotSynchronizing => texts::ROW_NOT_SYNCHRONIZING,
     }
 }
 

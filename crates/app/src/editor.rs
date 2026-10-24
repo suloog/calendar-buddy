@@ -9,7 +9,7 @@
 //! (`US-06-08`). The event's reminders, starting from its calendar's defaults (`US-07-04`).
 
 use calendar_core::accounts::Entry;
-use calendar_core::availability::{CONFLICT, NO_DATA, Preview};
+use calendar_core::availability::Preview;
 use calendar_core::colors::EventColor;
 use calendar_core::editor::{
     Editor, Ending, LONGEST_REMINDER, MOST_REMINDERS, ReminderField, Save, Unit,
@@ -18,6 +18,7 @@ use calendar_core::guests::Person;
 use calendar_core::model::{Calendar, Kind, Method, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
+use calendar_core::texts::{self, CONFLICT, NO_DATA};
 use eframe::egui::{self, CornerRadius, Rect, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::calendar_list;
@@ -35,56 +36,56 @@ const STRIP: Vec2 = Vec2::new(240.0, 14.0);
 
 fn show_label(show: Show) -> &'static str {
     match show {
-        Show::Busy => "Busy",
-        Show::Free => "Free",
+        Show::Busy => texts::SHOW_BUSY,
+        Show::Free => texts::FREE,
     }
 }
 
 fn visibility_label(visibility: Visibility) -> &'static str {
     match visibility {
-        Visibility::Default => "Default visibility",
-        Visibility::Public => "Public",
-        Visibility::Private => "Private",
+        Visibility::Default => texts::DEFAULT_VISIBILITY,
+        Visibility::Public => texts::PUBLIC,
+        Visibility::Private => texts::PRIVATE,
     }
 }
 
 fn method_label(method: Method) -> &'static str {
     match method {
-        Method::Notification => "Notification",
-        Method::Email => "Email",
+        Method::Notification => texts::NOTIFICATION,
+        Method::Email => texts::EMAIL,
     }
 }
 
 fn unit_label(unit: Unit) -> &'static str {
     match unit {
-        Unit::Minutes => "minutes",
-        Unit::Hours => "hours",
-        Unit::Days => "days",
+        Unit::Minutes => texts::MINUTES,
+        Unit::Hours => texts::HOURS,
+        Unit::Days => texts::DAYS,
     }
 }
 
 fn repeat_label(repeat: Option<&Pattern>) -> &'static str {
     match repeat {
-        None => "Does not repeat",
-        Some(Pattern::Daily) => "Daily",
-        Some(Pattern::Weekdays) => "Every weekday (Monday to Friday)",
-        Some(Pattern::Weekly(_)) => "Weekly",
-        Some(Pattern::Monthly) => "Monthly",
-        Some(Pattern::Yearly) => "Annually",
+        None => texts::DOES_NOT_REPEAT,
+        Some(Pattern::Daily) => texts::DAILY,
+        Some(Pattern::Weekdays) => texts::EVERY_WEEKDAY,
+        Some(Pattern::Weekly(_)) => texts::WEEKLY,
+        Some(Pattern::Monthly) => texts::MONTHLY,
+        Some(Pattern::Yearly) => texts::ANNUALLY,
     }
 }
 
 fn ending_label(ends: Ending) -> &'static str {
     match ends {
-        Ending::Never => "Never",
-        Ending::OnDate => "On",
-        Ending::AfterCount => "After",
+        Ending::Never => texts::NEVER,
+        Ending::OnDate => texts::ON,
+        Ending::AfterCount => texts::AFTER,
     }
 }
 
 /// How a new event repeats and how its series ends (`MOD-05-F18`, `F19`), as rows of the grid.
 fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
-    ui.label("Repeats");
+    ui.label(texts::REPEATS);
     let weekly = editor.weekly();
     let choices = [
         None,
@@ -111,7 +112,7 @@ fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
     };
     if let Pattern::Weekly(days) = pattern {
         let days = days.clone();
-        ui.label("On");
+        ui.label(texts::ON);
         ui.horizontal(|ui| {
             let mut day = regional.week_start;
             for letter in regional.weekday_letters() {
@@ -123,7 +124,7 @@ fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
         });
         ui.end_row();
     }
-    ui.label("Series ends");
+    ui.label(texts::SERIES_ENDS);
     ui.horizontal(|ui| {
         egui::ComboBox::from_id_salt("editor-ends")
             .selected_text(ending_label(editor.ends))
@@ -139,7 +140,7 @@ fn repeat(ui: &mut egui::Ui, editor: &mut Editor, regional: &Regional) {
             }
             Ending::AfterCount => {
                 field(ui, &mut editor.count, COUNT_WIDTH);
-                ui.label("occurrences");
+                ui.label(texts::OCCURRENCES);
             }
         }
     });
@@ -153,7 +154,7 @@ fn event_color(ui: &mut egui::Ui, picked: &mut Option<EventColor>) {
     ui.horizontal(|ui| {
         for choice in std::iter::once(None).chain(EventColor::ALL.map(Some)) {
             let (rect, response) = ui.allocate_exact_size(Vec2::splat(SWATCH), Sense::click());
-            let name = choice.map_or("Calendar colour", EventColor::name);
+            let name = choice.map_or(texts::CALENDAR_COLOUR, EventColor::name);
             let chosen = *picked == choice;
             response.widget_info(|| {
                 egui::WidgetInfo::selected(egui::Role::RadioButton, true, chosen, name)
@@ -193,7 +194,7 @@ fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[S
     ui.vertical(|ui| {
         let field = ui.add(
             egui::TextEdit::singleline(&mut editor.guest_field)
-                .hint_text("Add guests")
+                .hint_text(texts::ADD_GUESTS)
                 .desired_width(FIELD_WIDTH),
         );
         if field.changed() {
@@ -220,8 +221,8 @@ fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[S
                     email: guest.email.clone(),
                 };
                 ui.label(shown.label());
-                ui.checkbox(&mut guest.optional, "Optional");
-                if ui.button("Remove").clicked() {
+                ui.checkbox(&mut guest.optional, texts::OPTIONAL);
+                if ui.button(texts::REMOVE).clicked() {
                     removed = Some(guest.email.clone());
                 }
             });
@@ -264,7 +265,7 @@ fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
                             ui.selectable_value(&mut field.unit, unit, unit_label(unit));
                         }
                     });
-                if ui.button("Remove").clicked() {
+                if ui.button(texts::REMOVE).clicked() {
                     removed = Some(i);
                 }
             });
@@ -273,10 +274,10 @@ fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
             fields.remove(i);
         }
         ui.horizontal(|ui| {
-            if fields.len() < MOST_REMINDERS && ui.button("Add notification").clicked() {
+            if fields.len() < MOST_REMINDERS && ui.button(texts::ADD_NOTIFICATION).clicked() {
                 fields.push(ReminderField::NEW);
             }
-            if editor.reminders.is_some() && ui.button("Use calendar defaults").clicked() {
+            if editor.reminders.is_some() && ui.button(texts::USE_CALENDAR_DEFAULTS).clicked() {
                 editor.reminders = None;
             } else if fields != shown {
                 editor.reminders = Some(fields);
@@ -379,7 +380,7 @@ pub fn show(
         .show(ui, |ui| {
             // As Google Calendar, where the calendar allows them; an existing event keeps its own.
             if !kinds.is_empty() {
-                ui.label("Type");
+                ui.label(texts::TYPE);
                 ui.horizontal(|ui| {
                     for kind in kinds {
                         ui.selectable_value(&mut editor.kind, kind, kind.label());
@@ -387,20 +388,20 @@ pub fn show(
                 });
                 ui.end_row();
             } else if editor.kind != Kind::Ordinary {
-                ui.label("Type");
+                ui.label(texts::TYPE);
                 ui.label(editor.kind.label());
                 ui.end_row();
             }
 
-            ui.label("Title");
+            ui.label(texts::TITLE);
             ui.add(
                 egui::TextEdit::singleline(&mut editor.title)
-                    .hint_text("Add title")
+                    .hint_text(texts::ADD_TITLE)
                     .desired_width(FIELD_WIDTH),
             );
             ui.end_row();
 
-            ui.label("Starts");
+            ui.label(texts::STARTS);
             let start_changed = ui
                 .horizontal(|ui| {
                     let date = field(ui, &mut editor.start_date, DATE_WIDTH);
@@ -413,7 +414,7 @@ pub fn show(
             }
             ui.end_row();
 
-            ui.label("Ends");
+            ui.label(texts::ENDS);
             ui.horizontal(|ui| {
                 field(ui, &mut editor.end_date, DATE_WIDTH);
                 if !editor.all_day {
@@ -423,11 +424,11 @@ pub fn show(
             ui.end_row();
 
             ui.label("");
-            ui.checkbox(&mut editor.all_day, "All day");
+            ui.checkbox(&mut editor.all_day, texts::ALL_DAY);
             ui.end_row();
 
             if !editor.all_day {
-                ui.label("Time zone");
+                ui.label(texts::TIME_ZONE);
                 egui::ComboBox::from_id_salt("editor-zone")
                     .selected_text(editor.zone.name())
                     .height(ZONES_HEIGHT)
@@ -440,7 +441,7 @@ pub fn show(
             }
 
             if let Some(preview) = google.availability {
-                ui.label("Availability");
+                ui.label(texts::AVAILABILITY);
                 availability(ui, preview);
                 ui.end_row();
             }
@@ -449,58 +450,58 @@ pub fn show(
             match &editor.opened {
                 None => repeat(ui, editor, regional),
                 Some((event, _)) if event.series.is_some() => {
-                    ui.label("Repeats");
+                    ui.label(texts::REPEATS);
                     ui.horizontal(|ui| {
-                        ui.label("Changed in Google Calendar");
-                        open_series = ui.button("Open in Google Calendar").clicked();
+                        ui.label(texts::CHANGED_IN_GOOGLE);
+                        open_series = ui.button(texts::OPEN_IN_GOOGLE).clicked();
                     });
                     ui.end_row();
                 }
                 Some(_) => {}
             }
 
-            ui.label("Location");
+            ui.label(texts::LOCATION);
             ui.add(
                 egui::TextEdit::singleline(&mut editor.location)
-                    .hint_text("Add location")
+                    .hint_text(texts::ADD_LOCATION)
                     .desired_width(FIELD_WIDTH),
             );
             ui.end_row();
 
             // Google takes no guests for out of office and focus time, nor a Meet call.
             if !editor.kind.timed_only() {
-                ui.label("Guests");
+                ui.label(texts::GUESTS);
                 guests(ui, editor, google.suggested, &own);
                 ui.end_row();
 
                 ui.label("");
-                ui.checkbox(&mut editor.meet, "Add Google Meet");
+                ui.checkbox(&mut editor.meet, texts::ADD_GOOGLE_MEET);
                 ui.end_row();
 
-                ui.label("Notifications");
+                ui.label(texts::NOTIFICATIONS);
                 reminders(ui, editor);
                 ui.end_row();
             }
 
-            ui.label("Description");
+            ui.label(texts::DESCRIPTION);
             ui.add(
                 egui::TextEdit::multiline(&mut editor.description)
-                    .hint_text("Add description")
+                    .hint_text(texts::ADD_DESCRIPTION)
                     .desired_width(FIELD_WIDTH),
             );
             ui.end_row();
 
-            ui.label("Calendar");
+            ui.label(texts::CALENDAR);
             calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
             ui.end_row();
 
-            ui.label("Colour");
+            ui.label(texts::COLOUR);
             event_color(ui, &mut editor.color);
             ui.end_row();
 
             // Out of office and focus time are always busy.
             if !editor.kind.timed_only() {
-                ui.label("Show as");
+                ui.label(texts::SHOW_AS);
                 egui::ComboBox::from_id_salt("editor-show")
                     .selected_text(show_label(editor.show))
                     .show_ui(ui, |ui| {
@@ -511,7 +512,7 @@ pub fn show(
                 ui.end_row();
             }
 
-            ui.label("Visibility");
+            ui.label(texts::VISIBILITY);
             egui::ComboBox::from_id_salt("editor-visibility")
                 .selected_text(visibility_label(editor.visibility))
                 .show_ui(ui, |ui| {
@@ -533,7 +534,7 @@ pub fn show(
         ui.colored_label(ui.visuals().warn_fg_color, problem);
     }
     let clicked = ui
-        .add_enabled(problem.is_none(), egui::Button::new("Save"))
+        .add_enabled(problem.is_none(), egui::Button::new(texts::SAVE))
         .clicked();
     if open_series {
         return Some(Edited::OpenSeries);

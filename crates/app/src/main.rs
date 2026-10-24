@@ -20,16 +20,16 @@ use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::availability;
 use calendar_core::background::{self, Signal};
 use calendar_core::colors::{self, LocalColors};
-use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
+use calendar_core::create::{self, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
-use calendar_core::editor::{Edit, Editor, Save, WITHOUT_MEET};
+use calendar_core::editor::{Edit, Editor, Save};
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
 use calendar_core::model::{Calendar, Event, Timing};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
-use calendar_core::notify::{self, Pending};
+use calendar_core::notify::Pending;
 use calendar_core::offline;
 use calendar_core::platform::{Autostart, Browser, Instance, LinkHandler, Tray};
 use calendar_core::regional::Regional;
@@ -40,6 +40,7 @@ use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::side_panel::{self, Panel};
 use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
+use calendar_core::texts::{self, NO_CALENDAR, WITHOUT_MEET};
 use calendar_core::theme::Theme;
 use calendar_core::undo::{LastChange, Undo};
 use calendar_core::view_model::{GridViewModel, grid_view};
@@ -129,11 +130,6 @@ fn undo_pressed(input: &mut egui::InputState) -> bool {
 
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
-
-/// The settings' switch of all notifications (`MOD-07-F11`), as Google Calendar names it.
-const NOTIFICATIONS: &str = "Desktop notifications";
-const NOTIFICATIONS_HINT: &str = "Reminders of events are shown as desktop notifications; \
-     turning them off leaves the reminders in Google as they are";
 
 /// The view's model, of the events of calendars neither hidden in the side panel
 /// (`MOD-03-F12`) nor disabled in the settings (`MOD-03-F13`), each in its calendar's local
@@ -584,7 +580,7 @@ impl CalendarApp {
     /// Join: opens the event's Google Meet call in the browser (`MOD-06-F18`).
     fn join(&mut self, link: &str) {
         if let Err(error) = SystemBrowser.open(link) {
-            (self.not_saved).push(format!("The meeting could not be opened: {error}."));
+            (self.not_saved).push(texts::meeting_not_opened(&error.to_string()));
         }
     }
 
@@ -599,7 +595,7 @@ impl CalendarApp {
         };
         let page = calendar_google::edit_page(&event.calendar_id, series, &entry.account.email);
         if let Err(error) = SystemBrowser.open(&page) {
-            (self.not_saved).push(format!("Google Calendar could not be opened: {error}."));
+            (self.not_saved).push(texts::google_calendar_not_opened(&error.to_string()));
         }
     }
 
@@ -752,18 +748,18 @@ impl CalendarApp {
         let mut invitation = None;
         let mut answered = None;
         let title = match dialog {
-            Dialog::Shortcuts => "Keyboard shortcuts",
-            Dialog::GoToDate(..) => "Go to date",
-            Dialog::QuickEntry(..) => "New event",
-            Dialog::Editor(editor) if editor.opened.is_none() => "New event",
-            Dialog::Editor(_) => "Edit event",
-            Dialog::Event(..) => "Event",
-            Dialog::Settings => "Settings",
-            Dialog::Scope(Question::Change(_), _) => "Edit recurring event",
-            Dialog::Scope(Question::Delete(_), _) => "Delete recurring event",
-            Dialog::Scope(Question::Respond(_), _) => "Respond to recurring event",
-            Dialog::Notify(..) => "Notify guests",
-            Dialog::Invitations => "Invitations",
+            Dialog::Shortcuts => texts::KEYBOARD_SHORTCUTS,
+            Dialog::GoToDate(..) => texts::GO_TO_DATE,
+            Dialog::QuickEntry(..) => texts::NEW_EVENT,
+            Dialog::Editor(editor) if editor.opened.is_none() => texts::NEW_EVENT,
+            Dialog::Editor(_) => texts::EDIT_EVENT,
+            Dialog::Event(..) => texts::EVENT,
+            Dialog::Settings => texts::SETTINGS,
+            Dialog::Scope(Question::Change(_), _) => texts::EDIT_RECURRING_EVENT,
+            Dialog::Scope(Question::Delete(_), _) => texts::DELETE_RECURRING_EVENT,
+            Dialog::Scope(Question::Respond(_), _) => texts::RESPOND_TO_RECURRING_EVENT,
+            Dialog::Notify(..) => texts::NOTIFY_GUESTS,
+            Dialog::Invitations => texts::INVITATIONS,
         };
         egui::Window::new(title)
             .open(&mut open)
@@ -781,9 +777,8 @@ impl CalendarApp {
                     });
                 }
                 Dialog::GoToDate(text, focused) => {
-                    ui.label(format!(
-                        "Date (as {})",
-                        self.regional.numeric_date(self.navigation.selected)
+                    ui.label(texts::date_as(
+                        &self.regional.numeric_date(self.navigation.selected),
                     ));
                     let field = ui.text_edit_singleline(text);
                     let date = self.regional.parse_date(text);
@@ -795,7 +790,7 @@ impl CalendarApp {
                         *focused = true;
                     }
                     if ui
-                        .add_enabled(date.is_some(), egui::Button::new("Go"))
+                        .add_enabled(date.is_some(), egui::Button::new(texts::GO))
                         .clicked()
                         || entered
                     {
@@ -803,8 +798,9 @@ impl CalendarApp {
                     }
                 }
                 Dialog::QuickEntry(entry, focused) => {
-                    let field =
-                        ui.add(egui::TextEdit::singleline(&mut entry.title).hint_text("Add title"));
+                    let field = ui.add(
+                        egui::TextEdit::singleline(&mut entry.title).hint_text(texts::ADD_TITLE),
+                    );
                     // The title takes the keyboard when the box opens.
                     if !*focused {
                         field.request_focus();
@@ -827,10 +823,10 @@ impl CalendarApp {
                     let clicked = ui
                         .horizontal(|ui| {
                             // The full editor, keeping what was typed (`MOD-05-F03`).
-                            if ui.button("More options").clicked() {
+                            if ui.button(texts::MORE_OPTIONS).clicked() {
                                 edit = Some(Editor::from_quick(entry, &self.regional));
                             }
-                            let button = egui::Button::new("Save");
+                            let button = egui::Button::new(texts::SAVE);
                             ui.add_enabled(unavailable.is_none(), button).clicked()
                         })
                         .inner;
@@ -909,26 +905,26 @@ impl CalendarApp {
                         })
                         .unwrap_or(event);
                     let details = event_details(event, self.zone);
-                    let not_yet = self.saving.holds(event).then_some(create::SAVING);
+                    let not_yet = self.saving.holds(event).then_some(texts::SAVING);
                     // An invitation opens with its answers at the top (`MOD-06-U03`).
                     let own_answer = invitations::own_answer(event);
                     if let Some(own) = own_answer {
                         let enabled = refused.is_none() && not_yet.is_none();
                         ui.horizontal(|ui| {
-                            ui.label("Going?");
+                            ui.label(texts::GOING);
                             if let Some(response) = answer_buttons(ui, own, enabled) {
                                 answered = Some((event.clone(), response));
                             }
                         });
                     }
-                    ui.heading(details.title.as_deref().unwrap_or("Busy"));
+                    ui.heading(details.title.as_deref().unwrap_or(texts::BUSY));
                     ui.label(details.when.describe(&self.regional));
                     if let Some(own) = details.in_own_zone(&self.regional) {
                         ui.label(own);
                     }
                     // Join opens its Google Meet call in the browser (`MOD-06-F18`).
                     if let Some(link) = &details.meet
-                        && ui.button("Join with Google Meet").clicked()
+                        && ui.button(texts::JOIN_WITH_MEET).clicked()
                     {
                         join = Some(link.clone());
                     }
@@ -951,11 +947,8 @@ impl CalendarApp {
                     // Each guest with their answer as an icon (`MOD-06-F05`, `MOD-06-U01`).
                     match details.guests.len() {
                         0 => {}
-                        1 => {
-                            ui.label("1 guest");
-                        }
                         n => {
-                            ui.label(format!("{n} guests"));
+                            ui.label(texts::guests(n));
                         }
                     }
                     for guest in details.listed_guests(*expanded) {
@@ -971,9 +964,9 @@ impl CalendarApp {
                     let more = details.more_guests();
                     if more > 0 {
                         let toggle = if *expanded {
-                            "Show fewer".to_string()
+                            texts::SHOW_FEWER.to_string()
                         } else {
-                            format!("Show {more} more")
+                            texts::show_more(more)
                         };
                         if ui.link(toggle).clicked() {
                             *expanded = !*expanded;
@@ -997,7 +990,7 @@ impl CalendarApp {
                         let can_edit = refused.is_none() && not_yet.is_none();
                         ui.horizontal(|ui| {
                             if ui
-                                .add_enabled(can_edit, egui::Button::new("Edit"))
+                                .add_enabled(can_edit, egui::Button::new(texts::EDIT))
                                 .clicked()
                             {
                                 edit = Some(Editor::of(event, calendar.clone(), &self.regional));
@@ -1008,7 +1001,7 @@ impl CalendarApp {
                                     || i.key_pressed(egui::Key::Backspace)
                             });
                             let clicked = ui
-                                .add_enabled(can_edit, egui::Button::new("Delete"))
+                                .add_enabled(can_edit, egui::Button::new(texts::DELETE))
                                 .clicked();
                             if can_edit && (clicked || keyed) {
                                 delete = Some((event.clone(), calendar.clone()));
@@ -1036,7 +1029,7 @@ impl CalendarApp {
                     for why in reasons.into_iter().chain(refused) {
                         ui.label(why);
                     }
-                    cancelled = ui.button("Cancel").clicked();
+                    cancelled = ui.button(texts::CANCEL).clicked();
                 }
                 Dialog::Notify(pending, _) => {
                     ui.label(pending.asks().unwrap_or_default());
@@ -1045,8 +1038,8 @@ impl CalendarApp {
                         ui.label(reason);
                     }
                     ui.horizontal(|ui| {
-                        cancelled = ui.button(notify::BACK).clicked();
-                        for (answer, send) in [(notify::DONT_SEND, false), (notify::SEND, true)] {
+                        cancelled = ui.button(texts::BACK).clicked();
+                        for (answer, send) in [(texts::DONT_SEND, false), (texts::SEND, true)] {
                             let button = egui::Button::new(answer);
                             if ui.add_enabled(refused.is_none(), button).clicked() {
                                 notify = Some(send);
@@ -1056,7 +1049,7 @@ impl CalendarApp {
                 }
                 Dialog::Invitations => {
                     if self.invitations.is_empty() {
-                        ui.label(invitations::NONE);
+                        ui.label(texts::NO_INVITATIONS);
                     }
                     // Each is answered here, or opens its details (`MOD-06-F10`).
                     for &i in &self.invitations {
@@ -1065,7 +1058,7 @@ impl CalendarApp {
                         let enabled = refused.is_none() && !self.saving.holds(event);
                         ui.horizontal(|ui| {
                             if ui
-                                .link(details.title.as_deref().unwrap_or("Busy"))
+                                .link(details.title.as_deref().unwrap_or(texts::BUSY))
                                 .clicked()
                             {
                                 invitation = Some(i);
@@ -1083,7 +1076,7 @@ impl CalendarApp {
                     }
                 }
                 Dialog::Settings => {
-                    ui.heading("Accounts");
+                    ui.heading(texts::ACCOUNTS);
                     egui::Grid::new("accounts").show(ui, |ui| {
                         for entry in self.accounts.list() {
                             ui.label(&entry.account.email);
@@ -1093,7 +1086,7 @@ impl CalendarApp {
                                 if ui
                                     .add_enabled(
                                         can_change,
-                                        egui::Button::new(accounts::SIGN_IN_AGAIN),
+                                        egui::Button::new(texts::SIGN_IN_AGAIN),
                                     )
                                     .clicked()
                                 {
@@ -1103,7 +1096,7 @@ impl CalendarApp {
                                 ui.label("");
                             }
                             if ui
-                                .add_enabled(can_change, egui::Button::new(accounts::REMOVE))
+                                .add_enabled(can_change, egui::Button::new(texts::REMOVE))
                                 .clicked()
                             {
                                 remove = Some(entry.account.clone());
@@ -1114,10 +1107,10 @@ impl CalendarApp {
                     self.removal.show(ui, can_remove);
                     if self.removal.idle() {
                         ui.add_space(8.0);
-                        self.connect.show(ui, "Add account");
+                        self.connect.show(ui, texts::ADD_ACCOUNT);
                     }
                     ui.add_space(8.0);
-                    ui.heading("Calendars");
+                    ui.heading(texts::CALENDARS);
                     let calendars = side_panel::in_settings(
                         self.accounts.list(),
                         self.sync.calendars(),
@@ -1127,7 +1120,7 @@ impl CalendarApp {
                     ui.add_space(8.0);
                     // Where new events go (`MOD-05-F10`).
                     ui.horizontal(|ui| {
-                        ui.label("Default calendar");
+                        ui.label(texts::DEFAULT_CALENDAR);
                         let list = (self.accounts.list(), self.sync.calendars());
                         let choices = create::choices(list.0, list.1, &self.settings);
                         let mut picked = create::default_calendar(list.0, list.1, &self.settings);
@@ -1137,11 +1130,11 @@ impl CalendarApp {
                     });
                     ui.add_space(8.0);
                     // All of them, on or off (`MOD-07-F11`); the reminders in Google stay.
-                    ui.heading("Notifications");
+                    ui.heading(texts::NOTIFICATIONS);
                     let mut on = !self.settings.notifications_off;
                     if ui
-                        .checkbox(&mut on, NOTIFICATIONS)
-                        .on_hover_text(NOTIFICATIONS_HINT)
+                        .checkbox(&mut on, texts::DESKTOP_NOTIFICATIONS)
+                        .on_hover_text(texts::DESKTOP_NOTIFICATIONS_HINT)
                         .changed()
                     {
                         notifications = Some(on);
@@ -1151,17 +1144,17 @@ impl CalendarApp {
                     let mut on = self.start_at_login;
                     if self.tray
                         && ui
-                            .checkbox(&mut on, background::START_AT_LOGIN)
-                            .on_hover_text(background::START_AT_LOGIN_HINT)
+                            .checkbox(&mut on, texts::START_AT_LOGIN)
+                            .on_hover_text(texts::START_AT_LOGIN_HINT)
                             .changed()
                     {
                         start_at_login = Some(on);
                     }
                     ui.add_space(8.0);
                     // System, Light or Dark (`MOD-04-F03`), where Google Calendar has its theme.
-                    ui.heading("Appearance");
+                    ui.heading(texts::APPEARANCE);
                     ui.horizontal(|ui| {
-                        ui.label("Theme");
+                        ui.label(texts::THEME);
                         let mut chosen = self.settings.theme;
                         for choice in Theme::ALL {
                             ui.radio_value(&mut chosen, choice, choice.label());
@@ -1246,7 +1239,7 @@ impl CalendarApp {
         if let Some(url) = attachment
             && let Err(error) = SystemBrowser.open(&url)
         {
-            (self.not_saved).push(format!("The attachment could not be opened: {error}."));
+            (self.not_saved).push(texts::attachment_not_opened(&error.to_string()));
         }
         if let Some(link) = join {
             self.join(&link);
@@ -1399,16 +1392,15 @@ impl CalendarApp {
                     self.saving.refused(*local);
                     self.last.refused(*local);
                     self.not_saved.push(if self.last.is_undo(*local) {
-                        format!("The change could not be undone: {reason}.")
+                        texts::not_undone(reason)
                     } else {
-                        format!("The event could not be saved: {reason}.")
+                        texts::not_saved(reason)
                     });
                 }
                 Saved::NotDeleted(local, reason) => {
                     self.saving.refused(*local);
                     self.last.refused(*local);
-                    self.not_saved
-                        .push(format!("The event could not be deleted: {reason}."));
+                    self.not_saved.push(texts::not_deleted(reason));
                 }
                 Saved::WithoutMeet(_) => {
                     self.not_saved.push(WITHOUT_MEET.to_string());
@@ -1499,15 +1491,15 @@ impl eframe::App for CalendarApp {
             ui.horizontal(|ui| {
                 // Google Calendar's main menu button, at the far left.
                 let hint = if self.panel.expanded() {
-                    "Hide the side panel"
+                    texts::HIDE_SIDE_PANEL
                 } else {
-                    "Show the side panel"
+                    texts::SHOW_SIDE_PANEL
                 };
                 if ui.button("☰").on_hover_text(hint).clicked() {
                     self.settings.side_panel_collapsed = self.panel.toggle();
                     self.save_settings();
                 }
-                if ui.button("Today").clicked() {
+                if ui.button(texts::TODAY).clicked() {
                     self.navigation.today(self.today());
                     // Brings back a mini calendar browsed away, even when the view stays put.
                     self.mini_month = self.navigation.selected;
@@ -1525,13 +1517,13 @@ impl eframe::App for CalendarApp {
                     (View::Month, _) => regional.month_year(self.navigation.selected),
                     (_, Some((first, last))) if first == last => regional.short_date(first),
                     (_, Some((first, last))) => regional.date_range(first, last),
-                    (_, None) => "Upcoming".to_string(),
+                    (_, None) => texts::UPCOMING.to_string(),
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Settings").clicked() {
+                    if ui.button(texts::SETTINGS).clicked() {
                         self.dialog = Some(Dialog::Settings);
                     }
-                    if ui.button("Refresh").clicked() {
+                    if ui.button(texts::REFRESH).clicked() {
                         self.sync.refresh();
                     }
                     // The synchronization indicator (`MOD-02-F17`, `MOD-02-U03`).
@@ -1564,7 +1556,7 @@ impl eframe::App for CalendarApp {
                     }
                     // One switch shows or hides declined events, shown by default (`MOD-06-F22`).
                     let mut declined = !self.settings.hide_declined;
-                    if ui.checkbox(&mut declined, "Show declined events").changed() {
+                    if ui.checkbox(&mut declined, texts::SHOW_DECLINED).changed() {
                         self.settings.hide_declined = !declined;
                         self.save_settings();
                         self.rebuild();
@@ -1577,7 +1569,7 @@ impl eframe::App for CalendarApp {
             egui::Panel::top("offline").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.colored_label(ui.visuals().warn_fg_color, indicator);
-                    ui.label(offline::NO_CHANGES);
+                    ui.label(texts::NO_CHANGES_OFFLINE);
                 });
             });
         }
@@ -1587,7 +1579,7 @@ impl eframe::App for CalendarApp {
             egui::Panel::top("account-problem").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.colored_label(ui.visuals().warn_fg_color, problem.message());
-                    again = ui.button("Try again").clicked();
+                    again = ui.button(texts::TRY_AGAIN).clicked();
                 });
             });
             if again {
@@ -1609,8 +1601,8 @@ impl eframe::App for CalendarApp {
                 for email in turned_away {
                     ui.horizontal_wrapped(|ui| {
                         let warn = ui.visuals().warn_fg_color;
-                        ui.colored_label(warn, accounts::needs_sign_in(email));
-                        let button = egui::Button::new(accounts::SIGN_IN_AGAIN);
+                        ui.colored_label(warn, texts::needs_sign_in(email));
+                        let button = egui::Button::new(texts::SIGN_IN_AGAIN);
                         let can_change = self.connect.idle() && self.removal.idle();
                         if ui.add_enabled(can_change, button).clicked() {
                             again = Some(email.to_string());
@@ -1626,13 +1618,10 @@ impl eframe::App for CalendarApp {
             let mut close = false;
             egui::Panel::top("connected-account").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(format!("Connected {}.", account.email));
+                    ui.label(texts::connected(&account.email));
                     let unavailable = account.unavailable();
                     if !unavailable.is_empty() {
-                        ui.label(format!(
-                            "Not available for this account: {}.",
-                            unavailable.join("; ")
-                        ));
+                        ui.label(texts::not_available(&unavailable));
                     }
                     close = ui.small_button("✕").clicked();
                 });
@@ -1647,7 +1636,9 @@ impl eframe::App for CalendarApp {
             egui::Panel::top("undo").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(says);
-                    undo = ui.add_enabled(online, egui::Button::new("Undo")).clicked();
+                    undo = ui
+                        .add_enabled(online, egui::Button::new(texts::UNDO))
+                        .clicked();
                 });
             });
             ui.ctx().request_repaint_after(left);
@@ -1678,7 +1669,7 @@ impl eframe::App for CalendarApp {
             egui::Panel::top("calendars-gone").show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for name in &self.gone {
-                        ui.label(format!("The calendar “{name}” is no longer available."));
+                        ui.label(texts::calendar_gone(name));
                     }
                     close = ui.small_button("✕").clicked();
                 });
@@ -1705,7 +1696,7 @@ impl eframe::App for CalendarApp {
                 // How many invitations await an answer; the counter opens their list
                 // (`MOD-06-F10`).
                 if !self.invitations.is_empty() {
-                    let counter = invitations::counter(self.invitations.len());
+                    let counter = texts::invitations_awaiting(self.invitations.len());
                     if ui.link(counter).clicked() {
                         self.dialog = Some(Dialog::Invitations);
                     }
@@ -1756,7 +1747,7 @@ impl eframe::App for CalendarApp {
                 ui.colored_label(ui.visuals().warn_fg_color, note);
             }
             if side_panel::nothing_shown(self.sync.calendars(), &self.settings) {
-                ui.label(side_panel::NOTHING_SHOWN);
+                ui.label(texts::NOTHING_SHOWN);
             }
             match &self.built {
                 Built::Grid(view) => {
@@ -1853,7 +1844,7 @@ fn window_options(placement: &Placement) -> eframe::NativeOptions {
     eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
-            .with_title("Calendar Buddy")
+            .with_title(texts::APP_NAME)
             .with_inner_size(placement.size)
             .with_maximized(placement.maximized)
             .with_min_inner_size([480.0, 360.0]),
@@ -1956,6 +1947,104 @@ mod tests {
         ] {
             let icon = answer.icon();
             assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, icon)), "{icon}");
+        }
+    }
+
+    /// The string literals of `source` before its tests, with the lines they start on; comments
+    /// and the messages of panics, which the user never reads, are left out.
+    fn literals(source: &str) -> Vec<(usize, String)> {
+        let code = source.split("#[cfg(test)]\nmod tests").next().unwrap();
+        let (mut found, mut line, mut chars) = (Vec::new(), 1, code.char_indices().peekable());
+        while let Some((at, c)) = chars.next() {
+            match c {
+                '\n' => line += 1,
+                '/' if chars.peek().is_some_and(|&(_, next)| next == '/') => {
+                    while chars.next_if(|&(_, c)| c != '\n').is_some() {}
+                }
+                '"' => {
+                    let (start, mut literal) = (line, String::new());
+                    while let Some((_, c)) = chars.next() {
+                        match c {
+                            '"' => break,
+                            '\\' => match chars.next() {
+                                // A line continued: the next line's indentation is not in it.
+                                Some((_, '\n')) => {
+                                    line += 1;
+                                    while chars.next_if(|&(_, c)| c == ' ').is_some() {}
+                                }
+                                Some((_, c)) => literal.push(c),
+                                None => {}
+                            },
+                            c => {
+                                line += usize::from(c == '\n');
+                                literal.push(c);
+                            }
+                        }
+                    }
+                    let before = code[..at].trim_end();
+                    let panic = ["unreachable!(", "expect(", "panic!("]
+                        .iter()
+                        .any(|p| before.ends_with(p));
+                    if !panic {
+                        found.push((start, literal));
+                    }
+                }
+                _ => {}
+            }
+        }
+        found
+    }
+
+    /// Whether a literal reads as words to the user: with its `{…}` arguments left out, a word
+    /// of two letters or more that is capitalized or followed by another. A single lowercase word
+    /// is not caught: it cannot be told from the IDs the views give egui.
+    fn is_text(literal: &str) -> bool {
+        let mut bare = String::new();
+        let mut depth = 0;
+        for c in literal.chars() {
+            match c {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                c if depth == 0 => bare.push(c),
+                _ => {}
+            }
+        }
+        let words: Vec<&str> = bare
+            .split(|c: char| !c.is_ascii_alphabetic())
+            .filter(|w| !w.is_empty())
+            .collect();
+        let capitalized = bare.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            && bare.chars().nth(1).is_some_and(|c| c.is_ascii_lowercase());
+        words.iter().any(|w| w.len() >= 2)
+            && (capitalized || words.len() >= 2 && bare.contains(' '))
+    }
+
+    #[test]
+    fn the_views_keep_no_interface_texts_of_their_own() {
+        // Every text the user reads comes from one table (`MOD-04-F04`, `DEC-31`).
+        assert!(is_text("Save") && is_text("No upcoming events") && is_text("{n} more events"));
+        assert!(!is_text("editor-repeat") && !is_text("{} {title}") && !is_text("☰"));
+        let sample = "let a = \"x-id\"; // \"Not this\"\nlet b = \"One \\\n    two\";\nx.expect(\"Not it\");";
+        assert_eq!(
+            literals(sample),
+            [(1, "x-id".into()), (2, "One two".into())]
+        );
+        let views = [
+            ("agenda_view.rs", include_str!("agenda_view.rs")),
+            ("appearance.rs", include_str!("appearance.rs")),
+            ("calendar_list.rs", include_str!("calendar_list.rs")),
+            ("connect.rs", include_str!("connect.rs")),
+            ("editor.rs", include_str!("editor.rs")),
+            ("grid_view.rs", include_str!("grid_view.rs")),
+            ("main.rs", include_str!("main.rs")),
+            ("mini_calendar.rs", include_str!("mini_calendar.rs")),
+            ("month_view.rs", include_str!("month_view.rs")),
+            ("remove.rs", include_str!("remove.rs")),
+        ];
+        for (file, source) in views {
+            for (line, literal) in literals(source) {
+                assert!(!is_text(&literal), "{file}:{line}: \"{literal}\"");
+            }
         }
     }
 }

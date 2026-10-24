@@ -15,12 +15,6 @@ use crate::week::day_span;
 /// How many guests the preview shows at most: the first ones listed (`DEC-63`).
 pub const SHOWN: usize = 20;
 
-/// What a strip says of a guest who does not share their availability.
-pub const NO_DATA: &str = "No data";
-
-/// What a strip says of a guest busy at the chosen time.
-pub const CONFLICT: &str = "Conflict";
-
 /// A time from its start to its end.
 pub type Span = (DateTime<Utc>, DateTime<Utc>);
 

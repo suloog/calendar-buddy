@@ -15,6 +15,7 @@ use crate::model::{
     Visibility,
 };
 use crate::sync::{Start, SyncError, SyncedEvent, Window};
+use crate::texts;
 
 /// The version of `SCHEMA`; a cache made with an earlier one has its calendars, events,
 /// synchronization states and time of the last synchronization dropped, so they are fetched
@@ -82,11 +83,11 @@ pub struct Cache {
 }
 
 fn failed(error: rusqlite::Error) -> SyncError {
-    SyncError(format!("the local cache could not be used ({error})"))
+    SyncError(texts::cache_not_used(&error.to_string()))
 }
 
 fn unreadable() -> SyncError {
-    SyncError("the local cache could not be read".into())
+    SyncError(texts::CACHE_NOT_READ.into())
 }
 
 impl Cache {
@@ -94,9 +95,8 @@ impl Cache {
     /// anew, as Google holds everything in it.
     pub fn open(path: &Path) -> Result<Cache, SyncError> {
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|error| {
-                SyncError(format!("the local cache could not be made ({error})"))
-            })?;
+            std::fs::create_dir_all(dir)
+                .map_err(|error| SyncError(texts::cache_not_made(&error.to_string())))?;
         }
         let damaged = |error: &rusqlite::Error| {
             matches!(
@@ -524,7 +524,7 @@ fn insert(
                 event.etag,
                 event.organizer_only,
                 kind_key(event.about.kind),
-                event.about.color.map(EventColor::name),
+                event.about.color.map(event_color_key),
                 attachments_text(&event.about.attachments),
                 guests_text(&event.about.guests),
                 event.about.meet,
@@ -719,10 +719,27 @@ pub fn parse_method(key: &str) -> Option<Method> {
     })
 }
 
-fn parse_event_color(name: &str) -> Option<EventColor> {
+/// How an event colour is kept: its English name, fixed whatever language the interface is in.
+fn event_color_key(color: EventColor) -> &'static str {
+    match color {
+        EventColor::Tomato => "Tomato",
+        EventColor::Flamingo => "Flamingo",
+        EventColor::Tangerine => "Tangerine",
+        EventColor::Banana => "Banana",
+        EventColor::Sage => "Sage",
+        EventColor::Basil => "Basil",
+        EventColor::Peacock => "Peacock",
+        EventColor::Blueberry => "Blueberry",
+        EventColor::Lavender => "Lavender",
+        EventColor::Grape => "Grape",
+        EventColor::Graphite => "Graphite",
+    }
+}
+
+fn parse_event_color(key: &str) -> Option<EventColor> {
     EventColor::ALL
         .into_iter()
-        .find(|color| color.name() == name)
+        .find(|&color| event_color_key(color) == key)
 }
 
 fn access_key(access: Access) -> &'static str {

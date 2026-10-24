@@ -12,6 +12,7 @@ use crate::editor::Patch;
 use crate::guests::{Person, Reach};
 use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::expand;
+use crate::texts::{CHANGED_ELSEWHERE, RATE_LIMITED};
 use crate::week::day_start;
 
 /// Where an event or an occurrence starts: an instant, or a date for all-day ones.
@@ -109,12 +110,6 @@ impl Window {
 /// contents (`NFR-07`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SyncError(pub String);
-
-/// Why a synchronization did not finish when the provider asked to slow down.
-const RATE_LIMITED: &str = "the provider asked to slow down (rate limit)";
-
-/// Why a change was not made: the event changed at the provider since the version it was made to.
-const CHANGED_ELSEWHERE: &str = "it was changed elsewhere in the meantime";
 
 impl SyncError {
     /// The provider asked to slow down: requests came too often (`MOD-02-F16`).

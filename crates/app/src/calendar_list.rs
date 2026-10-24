@@ -7,6 +7,7 @@
 use calendar_core::colors::{CALENDAR_COLORS, LocalColors};
 use calendar_core::model::{Calendar, Rgb};
 use calendar_core::side_panel::{Group, Row};
+use calendar_core::texts::{self, ENABLED_HINT, READ_ONLY};
 use eframe::egui::{self, CornerRadius, Sense, Stroke, StrokeKind, Vec2};
 
 use crate::grid_view::{color, text_on};
@@ -17,10 +18,6 @@ const PALETTE_COLUMNS: usize = 6;
 
 /// How tall the settings' list of calendars grows before it scrolls.
 const SETTINGS_LIST_HEIGHT: f32 = 320.0;
-
-/// What a calendar's checkbox in the settings says on hover.
-const ENABLED_HINT: &str =
-    "A disabled calendar is not shown in the side panel or the views, and is not synchronized";
 
 /// The calendar a new event goes to, picked from `choices`, under their accounts (`MOD-05-F10`);
 /// says whether another one was picked.
@@ -58,9 +55,6 @@ pub fn picker(
     }
     changed
 }
-
-/// What a calendar's lock says on hover.
-pub const READ_ONLY: &str = "Read-only: this calendar can't be changed";
 
 /// A local colour picked for a calendar, or `None` to bring back Google's, by account ID and
 /// calendar ID.
@@ -215,9 +209,9 @@ fn toggle(ui: &mut egui::Ui, row: &Row) -> egui::Response {
         );
     }
     let hint = if row.shown {
-        "Hide its events"
+        texts::HIDE_ITS_EVENTS
     } else {
-        "Show its events"
+        texts::SHOW_ITS_EVENTS
     };
     response.on_hover_text(hint)
 }
@@ -268,7 +262,7 @@ fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Chosen> {
             });
         // Google's colour comes back; nothing to reset while the calendar has it.
         if ui
-            .add_enabled(current.is_some(), egui::Button::new("Reset"))
+            .add_enabled(current.is_some(), egui::Button::new(texts::RESET))
             .clicked()
         {
             picked = Some(Chosen::Color(None));
@@ -286,11 +280,7 @@ fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Chosen> {
 
 /// What the menu's item muting the calendar's notifications says, as they are now.
 fn mute_label(muted: bool) -> &'static str {
-    if muted {
-        "Unmute notifications"
-    } else {
-        "Mute notifications"
-    }
+    if muted { texts::UNMUTE } else { texts::MUTE }
 }
 
 #[cfg(test)]
@@ -308,8 +298,8 @@ mod tests {
 
     #[test]
     fn a_calendars_menu_mutes_its_notifications_or_unmutes_them() {
-        assert_eq!(mute_label(false), "Mute notifications");
-        assert_eq!(mute_label(true), "Unmute notifications");
+        assert_eq!(mute_label(false), texts::MUTE);
+        assert_eq!(mute_label(true), texts::UNMUTE);
     }
 
     #[test]
