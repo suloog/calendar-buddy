@@ -132,7 +132,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-07-01` | As a User, I get a desktop notification before my events, as set in Google, so that I don't miss a meeting | F01, F02, F06, F07, F08, F13, F19, F20, U01 | must | review | `US-02-01` | — |
-| `US-07-02` | As a User, I can snooze or dismiss a reminder and join a Meet call straight from it, so that I act on a reminder without opening the app | F09, F10 | must | ready | `US-07-01`, `US-06-07` | — |
+| `US-07-02` | As a User, I can snooze or dismiss a reminder and join a Meet call straight from it, so that I act on a reminder without opening the app | F09, F10 | must | review | `US-07-01`, `US-06-07` | — |
 | `US-07-03` | As a User, I can turn notifications off or mute a single calendar, so that only reminders I care about reach me | F11, F12, U03 | must | ready | `US-07-01`, `US-03-06` | — |
 | `US-07-04` | As a User, I can set an event's reminders in the editor, starting from my calendar's defaults, so that my phone and computer remind me the same way | F03, F04, F05 | must | ready | `US-05-02` | — |
 | `US-07-05` | As a User, the app keeps reminding me from the tray when its window is closed and can start with my session, so that reminders don't depend on an open window | F14, F15, F16, F17, U02 | must | ready | `US-07-01` | — |

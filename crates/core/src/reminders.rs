@@ -4,9 +4,11 @@
 //! reminders are Google's to send (`MOD-07-F06`), and declined events remind of nothing
 //! (`MOD-07-F19`). Reminders whose time passed before the app started are not shown; those that
 //! fell while the computer slept are, on waking, if their event has not started (`MOD-07-F20`).
-//! They are scheduled from the events the cache holds, so they work offline.
+//! They are scheduled from the events the cache holds, so they work offline. A notification
+//! offers Join for an event with Google Meet, Snooze for 5 or 10 minutes, and Dismiss
+//! (`US-07-02`, `MOD-07-F09`, `F10`); a snooze is the app's own, Google is not told.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
@@ -36,7 +38,38 @@ pub struct Notification {
     pub when: String,
     /// Where it takes place; empty when it does not say.
     pub location: String,
-    pub event: EventId,
+    /// The web page of the event's Google Meet call, which Join opens (`MOD-07-F09`).
+    pub meet: Option<String>,
+    /// The reminder it is of, which Snooze shows again.
+    pub reminder: ReminderId,
+}
+
+/// What the user chooses on a notification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// Clicking it: opens its event in the app (`MOD-07-F08`).
+    Open,
+    /// Opens its event's Google Meet call in the browser (`MOD-07-F09`).
+    Join,
+    /// Shows it again in so many minutes (`MOD-07-F10`).
+    Snooze(u32),
+    /// Closes it.
+    Dismiss,
+}
+
+/// The minutes a notification can be snoozed for (`MOD-07-F10`).
+pub const SNOOZES: [u32; 2] = [5, 10];
+
+impl Action {
+    /// What its button says.
+    pub fn label(self) -> String {
+        match self {
+            Action::Open => "Open".to_string(),
+            Action::Join => "Join".to_string(),
+            Action::Snooze(minutes) => format!("Snooze {minutes} minutes"),
+            Action::Dismiss => "Dismiss".to_string(),
+        }
+    }
 }
 
 impl Notification {
@@ -48,24 +81,37 @@ impl Notification {
             format!("{}\n{}", self.when, self.location)
         }
     }
+
+    /// Its buttons: Join for an event with Google Meet, then Snooze for 5 and 10 minutes, and
+    /// Dismiss.
+    pub fn actions(&self) -> Vec<Action> {
+        let join = self.meet.as_ref().map(|_| Action::Join);
+        let snoozes = SNOOZES.map(Action::Snooze);
+        (join.into_iter())
+            .chain(snoozes)
+            .chain([Action::Dismiss])
+            .collect()
+    }
 }
 
 /// One reminder of an event or occurrence, by what tells it apart (MOD-07 *Technical notes*): a
 /// moved event's reminder is a new one.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Key {
-    event: EventId,
+pub struct ReminderId {
+    /// The event it is of, which clicking its notification opens (`MOD-07-F08`).
+    pub event: EventId,
     start: DateTime<Utc>,
     minutes: u32,
 }
 
-/// A reminder not shown yet.
+/// A reminder to show.
 #[derive(Clone, Debug)]
 struct Alarm {
     at: DateTime<Utc>,
-    key: Key,
+    key: ReminderId,
     title: String,
     location: String,
+    meet: Option<String>,
     timing: Timing,
 }
 
@@ -76,7 +122,7 @@ impl Alarm {
     }
 }
 
-/// The reminders to show, and those shown in this run.
+/// The reminders to show, those shown in this run, and those snoozed.
 pub struct Alarms {
     /// When the app started: reminders before are not shown.
     started: DateTime<Utc>,
@@ -85,8 +131,11 @@ pub struct Alarms {
     zone: Tz,
     /// The reminders not shown yet, the earliest first.
     pending: Vec<Alarm>,
-    /// The reminders shown, while they could come due again.
-    delivered: HashSet<Key>,
+    /// The reminders shown, while their events have them, as of the events last given.
+    delivered: HashMap<ReminderId, Alarm>,
+    /// The reminders snoozed, at the times they are shown again, the earliest first; they go
+    /// with their events' reminders.
+    snoozed: Vec<Alarm>,
 }
 
 impl Alarms {
@@ -96,7 +145,8 @@ impl Alarms {
             regional,
             zone,
             pending: Vec::new(),
-            delivered: HashSet::new(),
+            delivered: HashMap::new(),
+            snoozed: Vec::new(),
         }
     }
 
@@ -105,43 +155,81 @@ impl Alarms {
     /// all-day event starts.
     pub fn set(&mut self, calendars: &[Calendar], events: &[Event], zone: Tz, now: DateTime<Utc>) {
         self.zone = zone;
-        let mut alarms: Vec<Alarm> = events
+        let all: HashMap<ReminderId, Alarm> = events
             .iter()
             .filter(|event| !event.busy_only && !event.about.declined())
             .flat_map(|event| alarms(calendars, event, zone))
-            .filter(|alarm| alarm.at >= self.started && (alarm.at > now || alarm.live(now)))
+            .map(|alarm| (alarm.key.clone(), alarm))
             .collect();
         let delivered = std::mem::take(&mut self.delivered);
-        self.delivered = (alarms.iter())
-            .filter(|alarm| delivered.contains(&alarm.key))
-            .map(|alarm| alarm.key.clone())
+        self.delivered = (all.iter())
+            .filter(|(key, _)| delivered.contains_key(key))
+            .map(|(key, alarm)| (key.clone(), alarm.clone()))
             .collect();
-        alarms.retain(|alarm| !self.delivered.contains(&alarm.key));
+        // A snoozed reminder shows its event as it is now.
+        let snoozed = std::mem::take(&mut self.snoozed);
+        self.snoozed = (snoozed.into_iter())
+            .filter_map(|snoozed| {
+                let alarm = all.get(&snoozed.key)?;
+                Some(Alarm {
+                    at: snoozed.at,
+                    ..alarm.clone()
+                })
+            })
+            .collect();
+        let mut alarms: Vec<Alarm> = (all.into_values())
+            .filter(|alarm| alarm.at >= self.started && (alarm.at > now || alarm.live(now)))
+            .filter(|alarm| !self.delivered.contains_key(&alarm.key))
+            .collect();
         alarms.sort_by_key(|alarm| alarm.at);
         self.pending = alarms;
     }
 
-    /// When the next reminder is due; `None` when none is to come.
-    pub fn next(&self) -> Option<DateTime<Utc>> {
-        self.pending.first().map(|alarm| alarm.at)
+    /// Shows the reminder shown before again `minutes` after `now` (`MOD-07-F10`); nothing when
+    /// its event no longer has it.
+    pub fn snooze(&mut self, reminder: &ReminderId, minutes: u32, now: DateTime<Utc>) {
+        let Some(alarm) = self.delivered.get(reminder) else {
+            return;
+        };
+        let at = now + Duration::minutes(minutes.into());
+        let snoozed = Alarm {
+            at,
+            ..alarm.clone()
+        };
+        let place = self.snoozed.partition_point(|alarm| alarm.at <= at);
+        self.snoozed.insert(place, snoozed);
     }
 
-    /// The notifications due at `now`, each given once, in the order of their times. Those whose
-    /// time passed long ago, while the computer slept, only if their event has not started.
+    /// When the next reminder is due, snoozed ones too; `None` when none is to come.
+    pub fn next(&self) -> Option<DateTime<Utc>> {
+        let pending = self.pending.first().map(|alarm| alarm.at);
+        let snoozed = self.snoozed.first().map(|alarm| alarm.at);
+        pending.into_iter().chain(snoozed).min()
+    }
+
+    /// The notifications due at `now`, each given once, in the order of their times, and then
+    /// the snoozed ones due again. Those whose time passed long ago, while the computer slept,
+    /// only if their event has not started.
     pub fn due(&mut self, now: DateTime<Utc>) -> Vec<Notification> {
         let come = self.pending.partition_point(|alarm| alarm.at <= now);
         let mut shown = Vec::new();
         for alarm in self.pending.drain(..come) {
-            if alarm.live(now) && self.delivered.insert(alarm.key.clone()) {
-                shown.push(Notification {
-                    when: when(&alarm.timing, now, self.zone, &self.regional),
-                    title: alarm.title,
-                    location: alarm.location,
-                    event: alarm.key.event,
-                });
+            if alarm.live(now) && !self.delivered.contains_key(&alarm.key) {
+                self.delivered.insert(alarm.key.clone(), alarm.clone());
+                shown.push(alarm);
             }
         }
-        shown
+        let come = self.snoozed.partition_point(|alarm| alarm.at <= now);
+        shown.extend(self.snoozed.drain(..come).filter(|alarm| alarm.live(now)));
+        (shown.into_iter())
+            .map(|alarm| Notification {
+                when: when(&alarm.timing, now, self.zone, &self.regional),
+                title: alarm.title,
+                location: alarm.location,
+                meet: alarm.meet,
+                reminder: alarm.key,
+            })
+            .collect()
     }
 }
 
@@ -172,13 +260,14 @@ fn alarms(calendars: &[Calendar], event: &Event, zone: Tz) -> Vec<Alarm> {
         .filter(|reminder| reminder.method == Method::Notification)
         .map(|reminder| Alarm {
             at: start - Duration::minutes(reminder.minutes.into()),
-            key: Key {
+            key: ReminderId {
                 event: event_id.clone(),
                 start,
                 minutes: reminder.minutes,
             },
             title: event.title.clone(),
             location: event.about.location.clone(),
+            meet: event.about.meet.clone(),
             timing: event.timing,
         })
         .collect()
@@ -278,10 +367,15 @@ mod tests {
                 title: "Review".to_string(),
                 when: "10:00".to_string(),
                 location: "Room 2".to_string(),
-                event: EventId {
-                    account_id: "1".to_string(),
-                    calendar_id: "work".to_string(),
-                    id: "Review".to_string(),
+                meet: None,
+                reminder: ReminderId {
+                    event: EventId {
+                        account_id: "1".to_string(),
+                        calendar_id: "work".to_string(),
+                        id: "Review".to_string(),
+                    },
+                    start: at(10, 0),
+                    minutes: 10,
                 },
             }]
         );
@@ -300,21 +394,121 @@ mod tests {
         assert_eq!(alarms.next(), None);
     }
 
-    #[test]
-    fn a_notification_says_when_the_event_starts_and_where_under_its_title() {
-        let mut notification = Notification {
+    /// The notification of "Review" at 10:00 in Room 2, reminded of 10 minutes before.
+    fn review_notification() -> Notification {
+        Notification {
             title: "Review".to_string(),
             when: "10:00".to_string(),
             location: "Room 2".to_string(),
-            event: EventId {
-                account_id: "1".to_string(),
-                calendar_id: "work".to_string(),
-                id: "review".to_string(),
+            meet: None,
+            reminder: ReminderId {
+                event: EventId {
+                    account_id: "1".to_string(),
+                    calendar_id: "work".to_string(),
+                    id: "review".to_string(),
+                },
+                start: at(10, 0),
+                minutes: 10,
             },
-        };
+        }
+    }
+
+    #[test]
+    fn a_notification_says_when_the_event_starts_and_where_under_its_title() {
+        let mut notification = review_notification();
         assert_eq!(notification.body(), "10:00\nRoom 2");
         notification.location.clear();
         assert_eq!(notification.body(), "10:00");
+    }
+
+    #[test]
+    fn tc_07_03_a_notification_offers_dismiss_and_snooze_for_5_or_10_minutes() {
+        let notification = review_notification();
+        let actions = notification.actions();
+        assert_eq!(
+            actions,
+            [Action::Snooze(5), Action::Snooze(10), Action::Dismiss]
+        );
+        let labels: Vec<String> = actions.into_iter().map(Action::label).collect();
+        assert_eq!(labels, ["Snooze 5 minutes", "Snooze 10 minutes", "Dismiss"]);
+    }
+
+    #[test]
+    fn a_notification_of_an_event_with_google_meet_offers_join_first() {
+        let mut notification = review_notification();
+        notification.meet = Some("https://meet.google.com/abc-defg-hij".to_string());
+        assert_eq!(
+            notification.actions(),
+            [
+                Action::Join,
+                Action::Snooze(5),
+                Action::Snooze(10),
+                Action::Dismiss
+            ]
+        );
+        assert_eq!(Action::Join.label(), "Join");
+    }
+
+    #[test]
+    fn tc_07_03_a_snoozed_notification_is_shown_again_after_the_chosen_minutes() {
+        let mut review = event(
+            "Review",
+            (10, 0),
+            (11, 0),
+            vec![reminder(Method::Notification, 10)],
+        );
+        review.about.meet = Some("https://meet.google.com/abc-defg-hij".to_string());
+        let mut alarms = started(std::slice::from_ref(&review));
+        let shown = alarms.due(at(9, 50));
+        assert_eq!(titles(&shown), ["Review"]);
+
+        alarms.snooze(&shown[0].reminder, 5, at(9, 50));
+
+        assert_eq!(alarms.next(), Some(at(9, 55)));
+        assert_eq!(alarms.due(at(9, 54)), []);
+        let again = alarms.due(at(9, 55));
+        assert_eq!(again, shown);
+        assert_eq!(alarms.next(), None);
+        assert_eq!(alarms.due(at(10, 0)), []);
+    }
+
+    #[test]
+    fn a_snooze_outlives_synchronization_follows_the_event_and_can_be_repeated() {
+        let reminders = vec![reminder(Method::Notification, 0)];
+        let call = event("Call", (10, 0), (10, 30), reminders.clone());
+        let mut alarms = started(std::slice::from_ref(&call));
+        let shown = alarms.due(at(10, 0));
+
+        alarms.snooze(&shown[0].reminder, 10, at(10, 0));
+        // Synchronization brings the call renamed after it started.
+        let mut renamed = event("Call with Ann", (10, 0), (10, 30), reminders);
+        renamed.id = call.id.clone();
+        alarms.set(&[work()], std::slice::from_ref(&renamed), Warsaw, at(10, 5));
+
+        // Shown again after the event started, as it was snoozed past its start.
+        let again = alarms.due(at(10, 10));
+        assert_eq!(titles(&again), ["Call with Ann"]);
+        alarms.snooze(&again[0].reminder, 5, at(10, 11));
+        assert_eq!(titles(&alarms.due(at(10, 16))), ["Call with Ann"]);
+    }
+
+    #[test]
+    fn a_snooze_of_a_deleted_or_moved_events_reminder_goes_with_it() {
+        let reminders = vec![reminder(Method::Notification, 10)];
+        let review = event("Review", (10, 0), (11, 0), reminders.clone());
+        let standup = event("Standup", (10, 0), (10, 15), reminders.clone());
+        let mut alarms = started(&[review, standup]);
+        let shown = alarms.due(at(9, 50));
+        for notification in &shown {
+            alarms.snooze(&notification.reminder, 5, at(9, 50));
+        }
+
+        // Synchronization brings Review moved to 11:00 and Standup deleted.
+        let moved = event("Review", (11, 0), (12, 0), reminders);
+        alarms.set(&[work()], std::slice::from_ref(&moved), Warsaw, at(9, 52));
+
+        assert_eq!(alarms.due(at(9, 55)), []);
+        assert_eq!(alarms.next(), Some(at(10, 50)));
     }
 
     #[test]
@@ -453,7 +647,7 @@ mod tests {
 
         assert_eq!(titles(&alarms.due(at(9, 50))), ["Standup"]);
         let next = alarms.due(at(9, 50) + Duration::days(1));
-        assert_eq!(next[0].event.id, "standup_20261113T090000Z");
+        assert_eq!(next[0].reminder.event.id, "standup_20261113T090000Z");
         assert_eq!(next[0].when, "10:00");
     }
 
