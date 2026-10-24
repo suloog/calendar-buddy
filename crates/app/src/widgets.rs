@@ -11,6 +11,37 @@ pub fn icon_button(ui: &mut egui::Ui, icon: &str, hint: &str) -> Response {
         .on_hover_text(hint)
 }
 
+/// How long the refresh icon takes to turn once while synchronizing.
+const TURN: f64 = 1.2;
+
+/// An `icon_button` whose icon turns while `turning`: the refresh button while synchronizing.
+/// Not a transition (`MOD-04-U05`): it shows work under way, as long as it lasts (`DEC-154`).
+pub fn refresh_button(ui: &mut egui::Ui, icon: &str, hint: &str, turning: bool) -> Response {
+    if !turning {
+        return icon_button(ui, icon, hint);
+    }
+    // The button keeps its place and size; its icon is drawn turned over it.
+    let hidden = RichText::new(icon)
+        .size(16.0)
+        .color(egui::Color32::TRANSPARENT);
+    let response = ui
+        .add(Button::new(hidden).frame_when_inactive(false))
+        .on_hover_text(hint);
+    let color = ui.visuals().widgets.style(&response).text_color();
+    let galley =
+        ui.painter()
+            .layout_no_wrap(icon.to_owned(), egui::FontId::proportional(16.0), color);
+    let time = ui.input(|i| i.time);
+    let angle = (time % TURN / TURN) as f32 * std::f32::consts::TAU;
+    let at = response.rect.center() - galley.size() / 2.0;
+    ui.painter().add(
+        egui::epaint::TextShape::new(at, galley, color)
+            .with_angle_and_anchor(angle, egui::Align2::CENTER_CENTER),
+    );
+    ui.ctx().request_repaint();
+    response
+}
+
 /// A button outlined in the lines' gray, with no fill until hovered.
 pub fn outlined_button(ui: &mut egui::Ui, text: &str) -> Response {
     let line = ui.visuals().widgets.noninteractive.bg_stroke;

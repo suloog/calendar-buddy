@@ -87,6 +87,34 @@ pub fn label(state: State) -> &'static str {
     }
 }
 
+/// The synchronization indicator (`MOD-02-F17`, `MOD-02-U03`): the state with the time of the last
+/// synchronization after it, `Up to date (14:05)`, the date too when it was not today; only the
+/// state while synchronizing. `Not synchronized yet` before the first.
+pub fn indicator(
+    state: State,
+    at: Option<DateTime<Utc>>,
+    zone: Tz,
+    today: NaiveDate,
+    regional: &Regional,
+) -> String {
+    let label = label(state);
+    match (state, at) {
+        (State::Synchronizing, _) => label.to_string(),
+        (State::UpToDate, None) => texts::NOT_SYNCHRONIZED_YET.to_string(),
+        (_, None) => label.to_string(),
+        (_, Some(at)) => {
+            let local = at.with_timezone(&zone);
+            let time = regional.time(local.time());
+            let when = if local.date_naive() == today {
+                time
+            } else {
+                texts::date_time(&regional.short_date(local.date_naive()), &time)
+            };
+            texts::state_since(label, &when)
+        }
+    }
+}
+
 /// `Last synchronized at 14:05`, with the date when it was not today.
 pub fn last_synced(
     at: Option<DateTime<Utc>>,
@@ -214,6 +242,30 @@ mod tests {
             ]
         );
         assert_eq!(status.problem(&calendar("Other"), true), None);
+    }
+
+    #[test]
+    fn the_indicator_puts_the_last_synchronization_after_its_state_except_while_synchronizing() {
+        let regional = Regional::new(Locale::en_GB);
+        let at = Utc.with_ymd_and_hms(2026, 11, 11, 13, 5, 0).unwrap();
+        let today = d(2026, 11, 11);
+        let shown = |state, at, today| indicator(state, at, Warsaw, today, &regional);
+
+        assert_eq!(
+            shown(State::UpToDate, Some(at), today),
+            "Up to date (14:05)"
+        );
+        assert_eq!(
+            shown(State::Synchronizing, Some(at), today),
+            "Synchronizing…"
+        );
+        assert_eq!(shown(State::Offline, Some(at), today), "Offline (14:05)");
+        assert_eq!(
+            shown(State::Error, Some(at), d(2026, 11, 12)),
+            "Synchronization error (Wed 11 Nov 2026, 14:05)"
+        );
+        assert_eq!(shown(State::UpToDate, None, today), "Not synchronized yet");
+        assert_eq!(shown(State::Offline, None, today), "Offline");
     }
 
     #[test]

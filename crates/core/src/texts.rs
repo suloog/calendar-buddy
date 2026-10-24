@@ -322,6 +322,14 @@ pub const OFFLINE: &str = "Offline";
 pub const SYNC_DELAYED: &str = "Synchronization delayed: Google asked to slow down";
 pub const SYNC_ERROR: &str = "Synchronization error";
 pub const NOT_SYNCHRONIZED_YET: &str = "Not synchronized yet";
+/// The synchronization's state with the time of the last one: `Up to date (14:05)`.
+pub fn state_since(state: &str, when: &str) -> String {
+    format!("{state} ({when})")
+}
+/// A date and a time together: `Wed 11 Nov 2026, 14:05`.
+pub fn date_time(date: &str, time: &str) -> String {
+    format!("{date}, {time}")
+}
 pub fn last_synchronized_at(time: &str) -> String {
     format!("Last synchronized at {time}")
 }

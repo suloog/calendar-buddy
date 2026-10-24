@@ -351,12 +351,23 @@ fn out_dir() -> PathBuf {
 /// Draws the app until the cached events are shown, does `then` to it, then saves the picture
 /// as `name`.
 fn picture(name: &str, view: View, theme: Theme, then: impl FnOnce(&mut CalendarApp)) {
+    picture_sized(name, egui::vec2(1440.0, 900.0), view, theme, then);
+}
+
+/// `picture` in a window of `size`.
+fn picture_sized(
+    name: &str,
+    size: egui::Vec2,
+    view: View,
+    theme: Theme,
+    then: impl FnOnce(&mut CalendarApp),
+) {
     let egui_theme = match theme {
         Theme::Dark => egui::Theme::Dark,
         _ => egui::Theme::Light,
     };
     let mut harness = Harness::builder()
-        .with_size(egui::vec2(1440.0, 900.0))
+        .with_size(size)
         .with_pixels_per_point(1.0)
         .with_theme(egui_theme)
         .wgpu()
@@ -386,6 +397,8 @@ fn preview() {
     let nothing = |_: &mut CalendarApp| {};
     picture("week-light", week, Theme::Light, nothing);
     picture("week-dark", week, Theme::Dark, nothing);
+    let narrow = egui::vec2(960.0, 700.0);
+    picture_sized("week-narrow-light", narrow, week, Theme::Light, nothing);
     picture(
         "day-light",
         View::Grid(GridView::Day),

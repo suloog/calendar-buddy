@@ -1860,3 +1860,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-154] One synchronization indicator, a turning Refresh, and the declined switch in the side panel
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("Show declined events overlaps other controls; merge Up to date with the last synchronization, e.g. Up to date (hh:mm); while synchronizing, Synchronizing… and a turning refresh button")
+- **Affects:** `MOD-02-F17`, `MOD-02-U03`, `MOD-04-U05`, `MOD-06-F22`, `US-06-06`, `DEC-151`, `DEC-153`
+- **Decision:** The top bar shows one synchronization indicator: the state with the time of the last synchronization after it, `Up to date (14:05)` (with the date when it was not today), and only `Synchronizing…` while it runs; the full sentence, `Last synchronized at 14:05`, is its hover text. While synchronizing, the Refresh button's icon turns; this shows work under way for as long as it lasts and is not a transition, so `MOD-04-U05` and `DEC-151` still hold for views, periods, windows and menus. The switch showing declined events moves from the top bar to the side panel, over the list of calendars; the top bar lays out its right side first and cuts the period's title short in a window too narrow for both, so nothing is drawn under anything else.
+- **Why:** The switch was drawn over the other controls in narrower windows, and two separate status texts took room for one piece of information. The side panel is still in the views, one click away (`MOD-06-F22`); the time of the last synchronization is still shown (`MOD-02-U03`) except while a new one runs, when it is on hover.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
