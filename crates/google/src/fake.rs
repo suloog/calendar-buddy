@@ -937,6 +937,9 @@ fn insert_event(
     if let Err(refusal) = conference(state, account, id, &url, &mut event) {
         return refusal;
     }
+    if let Err(refusal) = reminders(&event) {
+        return refusal;
+    }
     event["kind"] = json!("calendar#event");
     event["id"] = json!(format!("created-{}", state.changes + 1));
     event["status"] = json!("confirmed");
@@ -1004,6 +1007,26 @@ fn conference(
     Ok(())
 }
 
+/// An event's reminders as Google takes them: its calendar's defaults without overrides, and at
+/// most five overrides.
+fn reminders(event: &Value) -> Result<(), (&'static str, String)> {
+    let reminders = &event["reminders"];
+    let overrides = (reminders["overrides"].as_array()).map_or(0, Vec::len);
+    let message = if reminders["useDefault"] == true && overrides > 0 {
+        "Cannot specify both default reminders and overrides at the same time."
+    } else if overrides > 5 {
+        "Too many reminders."
+    } else {
+        return Ok(());
+    };
+    Err((
+        "400 Bad Request",
+        json!({"error": {"code": 400, "message": message,
+            "errors": [{"domain": "global", "reason": "invalid", "message": message}]}})
+        .to_string(),
+    ))
+}
+
 /// The Calendar API's `events.patch`, also of a series' occurrence: the fields sent replace those
 /// kept, a null one goes; only when the version sent in `If-Match` is the one kept, and in a
 /// guest's copy the organizer does not let guests change only the guest's own answer. A deleted
@@ -1048,10 +1071,13 @@ fn patch_event(
                 .to_string(),
         );
     }
+    merge(&mut event, &patch);
+    if let Err(refusal) = reminders(&event) {
+        return refusal;
+    }
     state
         .patched
         .push((if_match.unwrap_or_default(), patch.clone()));
-    merge(&mut event, &patch);
     mark_self(&mut event, &calendar);
     let event = state.put_event(account, &calendar, event);
     ("200 OK", event.to_string())

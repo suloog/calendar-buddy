@@ -196,7 +196,7 @@ pub fn change(
                     attachments: about.attachments.clone(),
                     guests: (patch.guests.clone()).unwrap_or_else(|| about.guests.clone()),
                     meet: about.meet.clone(),
-                    reminders: about.reminders.clone(),
+                    reminders: (patch.reminders.clone()).unwrap_or_else(|| about.reminders.clone()),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
                 // The series' call is copied with it, unless switched off or on here.
@@ -420,7 +420,7 @@ mod tests {
     use super::*;
     use crate::colors::EventColor;
     use crate::fixtures::d;
-    use crate::model::{Access, Rgb};
+    use crate::model::{Access, Method, Reminder, Reminders, Rgb};
     use crate::recurrence::expand;
     use crate::sync::Window;
     use chrono::{DateTime, NaiveDate, TimeZone, Utc};
@@ -824,6 +824,30 @@ mod tests {
 
         assert_eq!(kept.new.unwrap().about.color, Some(EventColor::Sage));
         assert_eq!(picked.new.unwrap().about.color, Some(EventColor::Grape));
+    }
+
+    #[test]
+    fn this_and_following_keeps_the_series_reminders_or_takes_those_set() {
+        let mut old = standup();
+        let five = Reminders::Own(vec![Reminder {
+            method: Method::Notification,
+            minutes: 5,
+        }]);
+        old.about.reminders = five.clone();
+        let fifth = occurrence(&old, d(2026, 12, 14));
+
+        let kept = split(change(&retitled(&fifth), Scope::Following, &old, &[]));
+        let reset = edit(
+            &fifth,
+            Patch {
+                reminders: Some(Reminders::Default),
+                ..Patch::default()
+            },
+        );
+        let set = split(change(&reset, Scope::Following, &old, &[]));
+
+        assert_eq!(kept.new.unwrap().about.reminders, five);
+        assert_eq!(set.new.unwrap().about.reminders, Reminders::Default);
     }
 
     #[test]

@@ -1704,3 +1704,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-141] How reminders are edited in the event editor
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-04
+- **Affects:** `US-07-04`, `MOD-07-F03`, `MOD-07-F04`, `MOD-07-F05`
+- **Decision:** The editor has a "Notifications" section listing the event's reminders; while the event uses its calendar's defaults, it lists the defaults of the calendar picked. Each reminder is "Notification" or "Email", a number and "minutes", "hours" or "days"; an existing one is shown in the largest of these units its time is a whole number of. "Add notification" adds a notification 30 minutes before, up to five reminders; "Remove" takes one away, the last one included (the event then has no reminders). Changing, adding or removing a reminder makes the list the event's own; "Use calendar defaults", shown while the event has reminders of its own, sets it back to its calendar's defaults. A reminder can be at most 4 weeks before the event, and an event can have at most five; Save says so otherwise. A new event left with the defaults is sent to Google without reminders, so Google gives it its calendar's defaults; going back to the defaults sends `useDefault` true with no overrides. The time of an all-day event's reminder counts back from the start of its first day, as Google keeps it. Out of office and focus time show no reminders and are made with their calendar's defaults, as Google Calendar offers them none. A series split by "this and following" keeps the reminders of the series, or those set in the editor.
+- **Why:** `MOD-07-F04` names the forms, units and "Google's limit" but not the editor's controls. Five overrides and four weeks are the Calendar API's limits; the section, labels, 30-minute new notification and "Use calendar defaults" follow Google Calendar's editor (`DEC-62`). Google refuses default reminders together with overrides, so the overrides go with the reset.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

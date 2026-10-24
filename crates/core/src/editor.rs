@@ -9,7 +9,9 @@
 //! event colours (`US-05-09`, `MOD-05-F25`). Guests are added by address or from the people
 //! suggested, marked required or optional, and removed (`US-06-01`, `MOD-06-F01`, `F06`, `F07`).
 //! The "Add Google Meet" switch turns on by itself with the first guest (`US-06-07`,
-//! `MOD-06-F16`, `F17`).
+//! `MOD-06-F16`, `F17`). A new event starts with its calendar's default reminders; the user adds
+//! and removes notification and e-mail reminders and can go back to the defaults (`US-07-04`,
+//! `MOD-07-F03`…`F05`).
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike, Weekday};
 use chrono_tz::Tz;
@@ -18,7 +20,9 @@ use crate::accounts::Entry;
 use crate::colors::EventColor;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
 use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person, Response};
-use crate::model::{About, Access, Calendar, Event, Kind, Reminders, Show, Timing, Visibility};
+use crate::model::{
+    About, Access, Calendar, Event, Kind, Method, Reminder, Reminders, Show, Timing, Visibility,
+};
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
 
@@ -32,6 +36,18 @@ pub const WITHOUT_MEET: &str =
 
 /// What the editor says when a series is set to end before its first occurrence.
 pub const SERIES_ENDS_BEFORE_IT_STARTS: &str = "The series ends before it starts.";
+
+/// How many reminders an event can have: Google's limit (`MOD-07-F04`).
+pub const MOST_REMINDERS: usize = 5;
+
+/// How long before an event a reminder can be at most: Google's limit of four weeks.
+pub const LONGEST_REMINDER: u32 = 4 * 7 * 24 * 60;
+
+/// What the editor says when a reminder is set further before the event than Google allows.
+pub const REMINDER_TOO_EARLY: &str = "A reminder can be at most 4 weeks before the event.";
+
+/// What the editor says when an event is given more reminders than Google takes.
+pub const TOO_MANY_REMINDERS: &str = "An event can have at most 5 reminders.";
 
 /// How many occurrences a series ending after a number of them has until another is typed:
 /// Google Calendar's default.
@@ -83,8 +99,68 @@ pub struct Editor {
     /// The "Add Google Meet" switch: on for an event with a Meet call, and turned on by the
     /// first guest added (`MOD-06-F17`).
     pub meet: bool,
+    /// The event's own reminders; `None` while it uses its calendar's defaults (`MOD-07-F03`,
+    /// `F05`).
+    pub reminders: Option<Vec<ReminderField>>,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
+}
+
+/// A reminder as the editor shows it: how it reaches the user and how long before the event, in
+/// the unit chosen (`MOD-07-F04`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReminderField {
+    pub method: Method,
+    pub amount: u32,
+    pub unit: Unit,
+}
+
+/// The unit of how long before the event a reminder is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unit {
+    Minutes,
+    Hours,
+    Days,
+}
+
+impl Unit {
+    pub const ALL: [Unit; 3] = [Unit::Minutes, Unit::Hours, Unit::Days];
+
+    pub fn minutes(self) -> u32 {
+        match self {
+            Unit::Minutes => 1,
+            Unit::Hours => 60,
+            Unit::Days => 24 * 60,
+        }
+    }
+}
+
+impl ReminderField {
+    /// The reminder "Add notification" adds, as in Google Calendar.
+    pub const NEW: ReminderField = ReminderField {
+        method: Method::Notification,
+        amount: 30,
+        unit: Unit::Minutes,
+    };
+
+    /// The reminder in the largest unit its time is a whole number of; at the start, in minutes.
+    pub fn of(reminder: Reminder) -> Self {
+        let unit = (Unit::ALL.into_iter().rev())
+            .find(|unit| reminder.minutes > 0 && reminder.minutes.is_multiple_of(unit.minutes()))
+            .unwrap_or(Unit::Minutes);
+        ReminderField {
+            method: reminder.method,
+            amount: reminder.minutes / unit.minutes(),
+            unit,
+        }
+    }
+
+    pub fn reminder(self) -> Reminder {
+        Reminder {
+            method: self.method,
+            minutes: self.amount.saturating_mul(self.unit.minutes()),
+        }
+    }
 }
 
 /// How the series of a new event ends, as chosen in the editor.
@@ -124,6 +200,9 @@ pub struct Patch {
     /// Whether the event has a Google Meet call: `Some(true)` makes one, `Some(false)` takes it
     /// away (`MOD-06-F16`).
     pub meet: Option<bool>,
+    /// The event's reminders, its own replaced whole or its calendar's defaults (`MOD-07-F04`,
+    /// `F05`).
+    pub reminders: Option<Reminders>,
 }
 
 impl Patch {
@@ -184,6 +263,9 @@ impl Edit {
         if let Some(guests) = patch.guests {
             event.about.guests = guests;
         }
+        if let Some(reminders) = patch.reminders {
+            event.about.reminders = reminders;
+        }
         if let Some(response) = patch.response {
             for guest in event.about.guests.iter_mut().filter(|guest| guest.own) {
                 guest.response = response;
@@ -241,6 +323,7 @@ impl Editor {
             guest_field: String::new(),
             guest_problem: None,
             meet: false,
+            reminders: None,
             start: Some(start),
         }
     }
@@ -295,6 +378,10 @@ impl Editor {
             color: event.about.color,
             guests: event.about.guests.clone(),
             meet: event.about.meet.is_some(),
+            reminders: match &event.about.reminders {
+                Reminders::Default => None,
+                Reminders::Own(own) => Some(own.iter().copied().map(ReminderField::of).collect()),
+            },
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
@@ -469,6 +556,40 @@ impl Editor {
         self.guests.retain(|guest| guest.email != email);
     }
 
+    /// The reminders the editor shows: the event's own, or the defaults of the calendar picked
+    /// (`MOD-07-F03`).
+    pub fn reminder_fields(&self) -> Vec<ReminderField> {
+        match (&self.reminders, &self.calendar) {
+            (Some(own), _) => own.clone(),
+            (None, Some(calendar)) => (calendar.default_reminders.iter().copied())
+                .map(ReminderField::of)
+                .collect(),
+            (None, None) => Vec::new(),
+        }
+    }
+
+    /// The reminders as the fields say; why they cannot be saved otherwise. New out of office and
+    /// focus time are made with their calendar's defaults, as Google Calendar offers them no
+    /// reminders; an existing one keeps its own.
+    fn own_reminders(&self) -> Result<Reminders, String> {
+        match &self.reminders {
+            Some(own) if self.opened.is_some() || !self.kind.timed_only() => {
+                let own: Vec<Reminder> = own.iter().map(|field| field.reminder()).collect();
+                if own
+                    .iter()
+                    .any(|reminder| reminder.minutes > LONGEST_REMINDER)
+                {
+                    return Err(REMINDER_TOO_EARLY.to_string());
+                }
+                if own.len() > MOST_REMINDERS {
+                    return Err(TOO_MANY_REMINDERS.to_string());
+                }
+                Ok(Reminders::Own(own))
+            }
+            _ => Ok(Reminders::Default),
+        }
+    }
+
     /// The rule of the series the new event starts, as the repeat fields say; none when it does
     /// not repeat; why it cannot be saved otherwise.
     fn recurrence(&self, regional: &Regional, timing: &Timing) -> Result<Vec<String>, String> {
@@ -575,8 +696,8 @@ impl Editor {
             },
             // Its link is Google's to make.
             meet: None,
-            // A new event gets its calendar's defaults from Google (`MOD-07-F03`).
-            reminders: Reminders::Default,
+            // A new event left with them gets its calendar's defaults from Google (`MOD-07-F03`).
+            reminders: self.own_reminders()?,
         };
         // Nor a Google Meet call.
         let meet = self.meet && !self.kind.timed_only();
@@ -608,6 +729,7 @@ impl Editor {
             guests: changed(event.about.guests.clone(), about.guests),
             response: None,
             meet: changed(event.about.meet.is_some(), meet),
+            reminders: changed(event.about.reminders.clone(), about.reminders),
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {
@@ -1478,5 +1600,139 @@ mod tests {
         let emails: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
         assert_eq!(emails, ["adam@example.com", "a@b.co"]);
         assert_eq!(editor.guest_problem.as_deref(), Some(NOT_AN_ADDRESS));
+    }
+
+    fn reminder(method: Method, minutes: u32) -> Reminder {
+        Reminder { method, minutes }
+    }
+
+    /// "Plan" in a calendar reminding 15 minutes before by default.
+    fn plan_in_work() -> Editor {
+        let mut work = calendar("1", "work");
+        work.default_reminders = vec![reminder(Method::Notification, 15)];
+        let entry = QuickEntry {
+            calendar: Some(work),
+            ..quick()
+        };
+        Editor::from_quick(&entry, &regional())
+    }
+
+    #[test]
+    fn a_new_event_shows_and_keeps_its_calendars_default_reminders_until_they_are_changed() {
+        let mut editor = plan_in_work();
+        let fifteen = ReminderField {
+            method: Method::Notification,
+            amount: 15,
+            unit: Unit::Minutes,
+        };
+        assert_eq!(editor.reminder_fields(), [fifteen]);
+        assert_eq!(created(&editor).about.reminders, Reminders::Default);
+
+        let day = ReminderField {
+            method: Method::Email,
+            amount: 1,
+            unit: Unit::Days,
+        };
+        editor.reminders = Some(vec![fifteen, day]);
+        assert_eq!(
+            created(&editor).about.reminders,
+            Reminders::Own(vec![
+                reminder(Method::Notification, 15),
+                reminder(Method::Email, 1440)
+            ])
+        );
+        // No reminders at all is the event's own choice too.
+        editor.reminders = Some(Vec::new());
+        assert_eq!(created(&editor).about.reminders, Reminders::Own(Vec::new()));
+    }
+
+    #[test]
+    fn a_reminders_time_is_shown_in_the_largest_unit_it_is_a_whole_number_of() {
+        let shown = |minutes| {
+            let field = ReminderField::of(reminder(Method::Notification, minutes));
+            (field.amount, field.unit)
+        };
+        assert_eq!(shown(0), (0, Unit::Minutes));
+        assert_eq!(shown(10), (10, Unit::Minutes));
+        assert_eq!(shown(90), (90, Unit::Minutes));
+        assert_eq!(shown(120), (2, Unit::Hours));
+        assert_eq!(shown(2880), (2, Unit::Days));
+        let back = ReminderField {
+            method: Method::Email,
+            amount: 3,
+            unit: Unit::Hours,
+        };
+        assert_eq!(back.reminder(), reminder(Method::Email, 180));
+    }
+
+    #[test]
+    fn a_reminder_more_than_four_weeks_before_cannot_be_saved_and_the_editor_says_why() {
+        let mut editor = plan_in_work();
+        let mut field = ReminderField {
+            method: Method::Notification,
+            amount: 28,
+            unit: Unit::Days,
+        };
+        editor.reminders = Some(vec![field]);
+        assert!(editor.save(&regional()).is_ok());
+        field.amount = 29;
+        editor.reminders = Some(vec![field]);
+        assert_eq!(
+            editor.save(&regional()),
+            Err(REMINDER_TOO_EARLY.to_string())
+        );
+    }
+
+    #[test]
+    fn an_event_takes_five_reminders_and_no_more() {
+        let mut editor = plan_in_work();
+        editor.reminders = Some(vec![ReminderField::NEW; MOST_REMINDERS]);
+        assert!(editor.save(&regional()).is_ok());
+        editor.reminders = Some(vec![ReminderField::NEW; MOST_REMINDERS + 1]);
+        assert_eq!(
+            editor.save(&regional()),
+            Err(TOO_MANY_REMINDERS.to_string())
+        );
+    }
+
+    #[test]
+    fn an_events_own_reminders_are_changed_and_set_back_to_its_calendars_defaults() {
+        let mut work = calendar("1", "a@example.com");
+        work.default_reminders = vec![reminder(Method::Notification, 15)];
+        let mut event = standup();
+        event.about.reminders = Reminders::Own(vec![reminder(Method::Email, 60)]);
+        let mut editor = Editor::of(&event, work, &regional());
+        let hour = ReminderField {
+            method: Method::Email,
+            amount: 1,
+            unit: Unit::Hours,
+        };
+        assert_eq!(editor.reminder_fields(), [hour]);
+        assert!(change(&editor).is_empty());
+
+        editor.reminders = Some(vec![hour, ReminderField::NEW]);
+        let edit = change(&editor);
+        let own = Reminders::Own(vec![
+            reminder(Method::Email, 60),
+            reminder(Method::Notification, 30),
+        ]);
+        assert_eq!(edit.patch.reminders, Some(own.clone()));
+        assert_eq!(edit.changed().about.reminders, own);
+
+        // "Use calendar defaults".
+        editor.reminders = None;
+        assert_eq!(
+            editor.reminder_fields(),
+            [ReminderField::of(reminder(Method::Notification, 15))]
+        );
+        assert_eq!(change(&editor).patch.reminders, Some(Reminders::Default));
+    }
+
+    #[test]
+    fn new_out_of_office_is_made_with_its_calendars_default_reminders() {
+        let mut editor = plan_in_work();
+        editor.reminders = Some(vec![ReminderField::NEW]);
+        editor.kind = Kind::OutOfOffice;
+        assert_eq!(created(&editor).about.reminders, Reminders::Default);
     }
 }

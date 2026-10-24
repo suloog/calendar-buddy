@@ -1407,11 +1407,14 @@ mod tests {
     use calendar_core::create::{self, QuickEntry, Saving};
     use calendar_core::details::event_details;
     use calendar_core::drag::{self, Target};
-    use calendar_core::editor::{Editor, Save};
+    use calendar_core::editor::{Editor, ReminderField, Save, Unit};
     use calendar_core::fixtures::d;
     use calendar_core::guests::{self, Person};
     use calendar_core::invitations;
-    use calendar_core::model::{Access, Calendar, Kind, Protected, Rgb, Show, Timing, Visibility};
+    use calendar_core::model::{
+        Access, Calendar, Kind, Method, Protected, Reminder, Reminders, Rgb, Show, Timing,
+        Visibility,
+    };
     use calendar_core::navigation::Navigation;
     use calendar_core::notify::{self, Pending};
     use calendar_core::offline;
@@ -5732,6 +5735,101 @@ mod tests {
         *clock.lock().unwrap() = thursday(9, 55);
         engine.remind();
         assert_eq!(notifier.shown(), [review_shown]);
+    }
+
+    #[test]
+    fn tc_07_05_a_new_event_gets_its_calendars_default_reminders_an_added_one_reaches_google_and_use_calendar_defaults_resets()
+     {
+        let google = Google::start("tc-07-05");
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": "work",
+                "summary": "Work",
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#9fe1e7",
+                "accessRole": "owner",
+                "defaultReminders": [{"method": "popup", "minutes": 15}],
+            }),
+        );
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let regional = polish();
+        let work = engine.cache.calendar_list().unwrap().remove(0);
+        let fifteen = Reminder {
+            method: Method::Notification,
+            minutes: 15,
+        };
+        assert_eq!(work.default_reminders, [fifteen]);
+
+        // 1. "Plan" created in "Work" uses the calendar's defaults: a notification 15 minutes
+        //    before.
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 12), 600, 60, Warsaw),
+            Warsaw,
+            Some(work.clone()),
+        );
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.title = "Plan".to_string();
+        assert_eq!(editor.reminder_fields(), [ReminderField::of(fifteen)]);
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), start);
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("Google did not create the event");
+        };
+        let id = id.clone();
+        let kept = google.fake.event(ACCOUNT_ID, "work", &id).unwrap();
+        assert_eq!(kept.get("reminders"), None);
+        let plan = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.id == id)
+            .unwrap();
+        assert_eq!(plan.about.reminders, Reminders::Default);
+
+        // 2. An e-mail reminder 1 day before added in the editor and saved.
+        let mut editor = Editor::of(&plan, work.clone(), &regional);
+        let mut fields = editor.reminder_fields();
+        fields.push(ReminderField {
+            method: Method::Email,
+            amount: 1,
+            unit: Unit::Days,
+        });
+        editor.reminders = Some(fields);
+        let updates = engine.handle(Some(Job::Change(2, edit(&editor, &regional))), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(2, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, "work", &id).unwrap();
+        assert_eq!(
+            kept["reminders"],
+            json!({"useDefault": false, "overrides": [
+                {"method": "popup", "minutes": 15},
+                {"method": "email", "minutes": 1440},
+            ]})
+        );
+
+        // 3. "Use calendar defaults" and saved.
+        let plan = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.id == id)
+            .unwrap();
+        let mut editor = Editor::of(&plan, work, &regional);
+        assert!(editor.reminders.is_some());
+        editor.reminders = None;
+        let updates = engine.handle(Some(Job::Change(3, edit(&editor, &regional))), start);
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(3, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, "work", &id).unwrap();
+        assert_eq!(kept["reminders"]["useDefault"], true);
+        assert_eq!(kept["reminders"]["overrides"], json!([]));
+        let plan = (shown(&updates).unwrap().into_iter())
+            .find(|e| e.id == id)
+            .unwrap();
+        assert_eq!(plan.about.reminders, Reminders::Default);
     }
 
     #[test]
