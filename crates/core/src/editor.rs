@@ -15,7 +15,7 @@ use chrono_tz::Tz;
 use crate::accounts::Entry;
 use crate::colors::EventColor;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
-use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person};
+use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person, Response};
 use crate::model::{About, Access, Calendar, Event, Kind, Show, Timing, Visibility};
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
@@ -108,6 +108,9 @@ pub struct Patch {
     pub color: Option<Option<EventColor>>,
     /// The event's guests, replaced whole (`MOD-06-F07`).
     pub guests: Option<Vec<Guest>>,
+    /// The user's own answer to the invitation, given in their own guest entry alone
+    /// (`MOD-06-F11`).
+    pub response: Option<Response>,
 }
 
 impl Patch {
@@ -167,6 +170,11 @@ impl Edit {
         }
         if let Some(guests) = patch.guests {
             event.about.guests = guests;
+        }
+        if let Some(response) = patch.response {
+            for guest in event.about.guests.iter_mut().filter(|guest| guest.own) {
+                guest.response = response;
+            }
         }
         if let Some(to) = &self.to {
             event.calendar_id = to.id.clone();
@@ -570,6 +578,7 @@ impl Editor {
             recurrence: None,
             color: changed(event.about.color, about.color),
             guests: changed(event.about.guests.clone(), about.guests),
+            response: None,
         };
         let moved = calendar.account_id != opened_in.account_id || calendar.id != opened_in.id;
         Ok(Save::Change(Box::new(Edit {

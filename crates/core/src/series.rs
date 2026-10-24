@@ -84,6 +84,8 @@ fn same_day(original: Start, old: &Timing, new: &Timing) -> bool {
 pub enum Question {
     Change(Box<Edit>),
     Delete(Box<(Calendar, Event)>),
+    /// The user's answer to an occurrence of a recurring invitation (`MOD-06-F13`).
+    Respond(Box<Edit>),
 }
 
 impl Question {
@@ -108,17 +110,18 @@ impl Question {
     /// The occurrence asked about.
     pub fn event(&self) -> &Event {
         match self {
-            Question::Change(edit) => &edit.event,
+            Question::Change(edit) | Question::Respond(edit) => &edit.event,
             Question::Delete(deleted) => &deleted.1,
         }
     }
 
     /// The scopes the user can choose, in the order asked, each with why it cannot be chosen
-    /// when it cannot; a deletion can take any.
+    /// when it cannot; a deletion can take any, and an answer this event or all events.
     pub fn scopes(&self) -> Vec<(Scope, Option<&'static str>)> {
         match self {
             Question::Change(edit) => scopes(edit),
             Question::Delete(_) => Scope::EACH.map(|scope| (scope, None)).to_vec(),
+            Question::Respond(_) => vec![(Scope::This, None), (Scope::All, None)],
         }
     }
 }

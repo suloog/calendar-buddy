@@ -1148,6 +1148,7 @@ mod tests {
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
     use calendar_core::guests::{self, Person};
+    use calendar_core::invitations;
     use calendar_core::model::{Access, Calendar, Kind, Protected, Rgb, Show, Timing, Visibility};
     use calendar_core::navigation::Navigation;
     use calendar_core::notify::{self, Pending};
@@ -4685,5 +4686,299 @@ mod tests {
             writes.iter().all(|r| r.ends_with("sendUpdates=all")),
             "{writes:?}"
         );
+    }
+
+    /// The connected account as the views know it, for the invitations it is listed under.
+    fn connected() -> Vec<calendar_core::accounts::Entry> {
+        vec![calendar_core::accounts::Entry {
+            account: calendar_core::accounts::Account {
+                id: ACCOUNT_ID.to_string(),
+                email: EMAIL.to_string(),
+                workspace: false,
+                contacts: false,
+                directory: false,
+            },
+            state: calendar_core::accounts::AccountState::Connected,
+        }]
+    }
+
+    /// Thursday 2026-11-12 09:00 in Warsaw (`TC-06-06`…`TC-06-08`).
+    fn thursday_9() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 11, 12, 8, 0, 0).unwrap()
+    }
+
+    /// An invitation from boss@example.com, who does not let guests change it, awaiting the
+    /// user's answer.
+    fn invitation(id: &str, title: &str, start: &str, end: &str) -> Value {
+        json!({
+            "id": id,
+            "status": "confirmed",
+            "summary": title,
+            "start": {"dateTime": start, "timeZone": "Europe/Warsaw"},
+            "end": {"dateTime": end, "timeZone": "Europe/Warsaw"},
+            "organizer": {"email": "boss@example.com"},
+            "attendees": [
+                {"email": "boss@example.com", "organizer": true, "responseStatus": "accepted"},
+                {"email": EMAIL, "self": true, "responseStatus": "needsAction"}
+            ],
+        })
+    }
+
+    /// "Board" on Thursday 12 November 14:00–15:00, awaiting the user's answer, and the engine
+    /// after the first synchronization.
+    fn board(name: &str) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        let board = invitation(
+            "board",
+            "Board",
+            "2026-11-12T14:00:00+01:00",
+            "2026-11-12T15:00:00+01:00",
+        );
+        google.fake.add_event(ACCOUNT_ID, EMAIL, board);
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    /// The titles of the invitations awaiting the user's answer among the events.
+    fn awaiting(events: &[Event]) -> Vec<String> {
+        let settings = Settings::default();
+        (invitations::awaiting(events, &connected(), &settings, Warsaw, thursday_9()).into_iter())
+            .map(|i| events[i].title.clone())
+            .collect()
+    }
+
+    /// The user's own answer as Google keeps it in the event.
+    fn own_status(event: &Value) -> Value {
+        (event["attendees"].as_array().unwrap().iter())
+            .find(|attendee| attendee["email"] == EMAIL)
+            .unwrap()["responseStatus"]
+            .clone()
+    }
+
+    #[test]
+    fn tc_06_06_accepting_board_from_the_invitations_list_sends_the_answer_to_google() {
+        let (google, mut engine, start) = board("tc-06-06");
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let cached = now_shown(&engine);
+        assert_eq!(awaiting(&cached), ["Board"]);
+        let board = cached.iter().find(|e| e.title == "Board").unwrap();
+
+        // 1. Accept, Maybe and Decline are offered; Accept takes it off the list at once.
+        let offered: Vec<&str> = invitations::ANSWERS.iter().map(|(_, a)| *a).collect();
+        assert_eq!(offered, ["Accept", "Maybe", "Decline"]);
+        assert_eq!(
+            invitations::own_answer(board),
+            Some(guests::Response::Awaiting)
+        );
+        let Ok(edit) = invitations::answer(board, calendar, guests::Response::Accepted) else {
+            panic!("a single event asks no scope");
+        };
+        let mut saving = Saving::default();
+        let local = saving.change(board, edit.changed());
+        assert!(awaiting(&saving.shown(&cached)).is_empty());
+        let updates = engine.handle(Some(Job::Change(local, Box::new(edit))), start);
+
+        // 2. Google received the answer, and lets the organizer know (`DEC-128`).
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "board").unwrap();
+        assert_eq!(own_status(&kept), "accepted");
+        assert_eq!(kept["attendees"][0]["responseStatus"], "accepted");
+        let [patched] = writes(&google).try_into().unwrap();
+        assert!(
+            patched.ends_with("/events/board?sendUpdates=all"),
+            "{patched}"
+        );
+        // Back through synchronization, answered.
+        let synced = shown(&updates).unwrap();
+        saving.changed(local, "");
+        saving.synced(&synced);
+        assert!(saving.is_empty());
+        assert!(awaiting(&synced).is_empty());
+        let board = synced.iter().find(|e| e.title == "Board").unwrap();
+        assert_eq!(
+            invitations::own_answer(board),
+            Some(guests::Response::Accepted)
+        );
+    }
+
+    /// "Team call" weekly on Mondays 10:00–10:30, 4 occurrences from 16 November, awaiting the
+    /// user's answer (`TC-06-07`).
+    fn team_call(name: &str) -> (Google, Engine, Instant) {
+        let google = Google::start(name);
+        personal(&google);
+        let mut call = invitation(
+            "teamcall",
+            "Team call",
+            "2026-11-16T10:00:00+01:00",
+            "2026-11-16T10:30:00+01:00",
+        );
+        call["recurrence"] = json!(["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4"]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, call);
+        let start = Instant::now();
+        let engine = first_sync(&google, start);
+        (google, engine, start)
+    }
+
+    /// The user's answer to each occurrence of "Team call", in order.
+    fn team_call_answers(events: &[Event]) -> Vec<(String, guests::Response)> {
+        let mut calls: Vec<(String, guests::Response)> = (events.iter())
+            .filter(|e| e.title == "Team call")
+            .map(|e| {
+                let Timing::Timed { start, .. } = e.timing else {
+                    panic!("a timed occurrence");
+                };
+                (local(start), invitations::own_answer(e).unwrap())
+            })
+            .collect();
+        calls.sort_by(|a, b| a.0.cmp(&b.0));
+        calls
+    }
+
+    /// The question answering the occurrence of "Team call" on the day asks.
+    fn answering_team_call(
+        engine: &Engine,
+        date: chrono::NaiveDate,
+        response: guests::Response,
+    ) -> Question {
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let call = (now_shown(engine).into_iter())
+            .find(|e| {
+                e.title == "Team call"
+                    && matches!(e.timing, Timing::Timed { start, .. }
+                        if start.with_timezone(&Warsaw).date_naive() == date)
+            })
+            .unwrap();
+        let Err(question) = invitations::answer(&call, calendar, response) else {
+            panic!("an occurrence asks the scope first");
+        };
+        question
+    }
+
+    #[test]
+    fn tc_06_07_declining_the_second_team_call_for_this_event_leaves_the_others_unanswered() {
+        use guests::Response::{Awaiting, Declined};
+        let (google, mut engine, start) = team_call("tc-06-07");
+
+        // 1. Decline on the 2nd occurrence asks "this event or all events"; "this event".
+        let question = answering_team_call(&engine, d(2026, 11, 23), Declined);
+        let asked: Vec<&str> = (question.scopes().into_iter())
+            .map(|(scope, _)| scope.label())
+            .collect();
+        assert_eq!(asked, ["This event", "All events"]);
+        let pending = Pending::of(question, Scope::This);
+        assert_eq!(pending.asks(), None);
+        let Pending::Respond(edit, Scope::This) = pending else {
+            panic!("an answer to this event");
+        };
+        let updates = engine.handle(Some(Job::Change(1, edit)), start);
+
+        // 2. The 2nd is declined, in the app and in Google; the others still await an answer.
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        assert_eq!(
+            team_call_answers(&shown(&updates).unwrap()),
+            [
+                ("2026-11-16 10:00".to_string(), Awaiting),
+                ("2026-11-23 10:00".to_string(), Declined),
+                ("2026-11-30 10:00".to_string(), Awaiting),
+                ("2026-12-07 10:00".to_string(), Awaiting),
+            ]
+        );
+        let second = (google.fake)
+            .event(ACCOUNT_ID, EMAIL, "teamcall_20261123T090000Z")
+            .unwrap();
+        assert_eq!(own_status(&second), "declined");
+        let series = google.fake.event(ACCOUNT_ID, EMAIL, "teamcall").unwrap();
+        assert_eq!(own_status(&series), "needsAction");
+    }
+
+    #[test]
+    fn accepting_an_occurrence_for_all_events_answers_the_series() {
+        use guests::Response::Accepted;
+        let (google, mut engine, start) = team_call("answer-all-events");
+
+        let question = answering_team_call(&engine, d(2026, 11, 23), Accepted);
+        let Pending::Respond(edit, scope) = Pending::of(question, Scope::All) else {
+            panic!("an answer");
+        };
+        let updates = engine.handle(Some(Job::ChangeSeries(1, edit, scope)), start);
+
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let answers = team_call_answers(&shown(&updates).unwrap());
+        assert_eq!(answers.len(), 4);
+        assert!(answers.iter().all(|(_, answer)| *answer == Accepted));
+        let [patched] = writes(&google).try_into().unwrap();
+        assert!(
+            patched.ends_with("/events/teamcall?sendUpdates=all"),
+            "{patched}"
+        );
+    }
+
+    #[test]
+    fn tc_06_08_as_a_guest_board_cannot_be_dragged_or_edited_but_can_be_answered() {
+        let (google, mut engine, start) = board("tc-06-08");
+        let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
+        let events = now_shown(&engine);
+        let (Built::Grid(week), places) = build(
+            &events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            thursday_9(),
+        ) else {
+            panic!("the week view is built");
+        };
+
+        // 1. Dragged to another time, "Board" stays, and the app says only the organizer can
+        // change it.
+        let actions = mouse_drag(&week, grid_view::HOUR_HEIGHT * 2.0);
+        let [grid_view::Action::Unmovable { event }] = actions.as_slice() else {
+            panic!("the drag was not refused: {actions:?}");
+        };
+        let board = &events[places[*event]];
+        assert_eq!(board.title, "Board");
+        let mut notices = Vec::new();
+        tell_unmovable(&mut notices, board);
+        assert_eq!(
+            notices,
+            ["This event can't be changed: only its organizer can change it."]
+        );
+        assert!(google.fake.patched().is_empty());
+
+        // 2. Opened, it offers Accept, Maybe and Decline, but no editing of its time, details or
+        // guests.
+        assert_eq!(board.protected(), Some(Protected::OrganizerOnly));
+        assert_eq!(
+            invitations::own_answer(board),
+            Some(guests::Response::Awaiting)
+        );
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let Ok(edit) = invitations::answer(board, calendar, guests::Response::Maybe) else {
+            panic!("a single event asks no scope");
+        };
+        let updates = engine.handle(Some(Job::Change(1, Box::new(edit))), start);
+
+        // Google takes the answer alone: the event itself stays as the organizer made it.
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let [(_, sent)] = google.fake.patched().try_into().unwrap();
+        assert_eq!(sent.as_object().unwrap().len(), 1, "{sent}");
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "board").unwrap();
+        assert_eq!(own_status(&kept), "tentative");
+        assert_eq!(kept["summary"], "Board");
+        assert_eq!(kept["start"]["dateTime"], "2026-11-12T14:00:00+01:00");
     }
 }

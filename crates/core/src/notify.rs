@@ -24,6 +24,8 @@ pub const BACK: &str = "Back";
 pub enum Pending {
     Change(Box<Edit>, Scope),
     Delete(Box<(Calendar, Event)>, Scope),
+    /// The user's answer to an invitation (`MOD-06-F11`).
+    Respond(Box<Edit>, Scope),
 }
 
 impl Pending {
@@ -32,17 +34,20 @@ impl Pending {
         match question {
             Question::Change(edit) => Pending::Change(edit, scope),
             Question::Delete(deleted) => Pending::Delete(deleted, scope),
+            Question::Respond(edit) => Pending::Respond(edit, scope),
         }
     }
 
     /// The question saving it asks first, when the event has guests other than the account
-    /// itself, before or after the change; `None` when it is saved at once.
+    /// itself, before or after the change; `None` when it is saved at once, as an answer always
+    /// is.
     pub fn asks(&self) -> Option<&'static str> {
         match self {
             Pending::Change(edit, _) => (invites(&edit.event.about.guests)
                 || edit.patch.guests.as_deref().is_some_and(invites))
             .then_some(UPDATE),
             Pending::Delete(deleted, _) => invites(&deleted.1.about.guests).then_some(CANCELLATION),
+            Pending::Respond(..) => None,
         }
     }
 }

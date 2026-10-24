@@ -1548,3 +1548,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-128] An answer lets the organizer know and asks nothing first
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-05
+- **Affects:** `US-06-05`, `MOD-06-F11`, `MOD-06-F12`, `MOD-06-F13`
+- **Decision:** An answer (Accept, Maybe, Decline) is sent at once with `sendUpdates=all`, so Google lets the organizer know, without the question of `MOD-06-F12`, which stays for changes and deletions; the organizer's own answer to their event is sent with `sendUpdates=none`, e-mailing nobody. It patches the user's own attendee entry (`self`) alone, the other guests' entries sent back as Google keeps them, and a list Google left guests out of (`attendeesOmitted`) stays marked so. An occurrence of a series asks only "This event" or "All events" (`MOD-06-F13`), not "This and following events". An answer is not undone with Ctrl+Z and shows no "Event saved." notice; it is changed by answering again.
+- **Why:** In Google Calendar answering an invitation e-mails the organizer and asks nothing (`DEC-62`); `MOD-06-F12` speaks of changing and deleting events, and `MOD-06-F13` names the two scopes.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-129] Which events can be answered, and where
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-05
+- **Affects:** `US-06-05`, `MOD-06-F11`, `MOD-06-F15`, `MOD-06-U03`
+- **Decision:** Accept, Maybe and Decline are offered for every event whose guests include the guest whose calendar it is on (Google's `self`), in a calendar the account can change — also when only the organizer may change the event itself, and also an event the user organizes. They sit in a "Going?" row at the top of the event's details, the current answer marked, and in each row of the invitations list. Offline, or while the event is being saved, they are disabled and the reason is shown.
+- **Why:** As in Google Calendar, whose event details offer "Going?" whenever the user is a guest (`DEC-62`); the simplest rule that needs nothing from Google beyond the guest list the app already keeps.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

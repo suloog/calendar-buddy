@@ -58,6 +58,7 @@ impl Undo {
                 recurrence: None,
                 color: patch.color.map(|_| before.about.color),
                 guests: (patch.guests.as_ref()).map(|_| before.about.guests.clone()),
+                response: None,
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
             // As the user answered for the change it undoes (`MOD-06-F12`).
@@ -241,6 +242,7 @@ mod tests {
                     name: String::new(),
                     email: "adam@example.com".to_string(),
                 })]),
+                response: None,
             },
             to: Some(calendar("team")),
             notify: true,
@@ -265,6 +267,7 @@ mod tests {
                 recurrence: None,
                 color: Some(None),
                 guests: Some(Vec::new()),
+                response: None,
             }
         );
         assert_eq!(undo.calendar, calendar("team"));

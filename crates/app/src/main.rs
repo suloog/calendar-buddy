@@ -18,7 +18,7 @@ use calendar_core::create::{self, NO_CALENDAR, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
-use calendar_core::guests::{self, Person, Reach};
+use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
 use calendar_core::model::{Calendar, Event};
 use calendar_core::month::{MonthViewModel, month_view};
@@ -159,6 +159,18 @@ fn tell_unmovable(notices: &mut Vec<String>, event: &Event) {
             notices.push(why);
         }
     }
+}
+
+/// Accept, Maybe and Decline (`MOD-06-U03`), the user's own answer marked; the answer clicked.
+fn answer_buttons(ui: &mut egui::Ui, own: Response, enabled: bool) -> Option<Response> {
+    let mut clicked = None;
+    for (response, label) in invitations::ANSWERS {
+        let button = egui::Button::selectable(own == response, label);
+        if ui.add_enabled(enabled, button).clicked() {
+            clicked = Some(response);
+        }
+    }
+    clicked
 }
 
 /// Keeps a calendar's local colour picked in its menu, or forgets it on "Reset"; only in the
@@ -445,6 +457,35 @@ impl CalendarApp {
                     .delete_series(local, calendar, event, scope, notify);
                 self.show_events(None);
             }
+            Pending::Respond(edit, scope) => self.respond(edit, scope),
+        }
+    }
+
+    /// Sends the user's answer to the invitation to Google, to the occurrence alone or to all
+    /// events of its series as the user chose (`MOD-06-F11`, `MOD-06-F13`): shown at once, marked
+    /// "saving" until Google confirms it. An answer is no change to undo.
+    fn respond(&mut self, edit: Box<Edit>, scope: Scope) {
+        if scope == Scope::This {
+            let local = self.saving.change(&edit.event, edit.changed());
+            self.sync.change(local, edit);
+        } else {
+            let local = self.saving.change_series(&edit.event, edit.changed());
+            self.sync.change_series(local, edit, scope);
+        }
+        self.show_events(None);
+    }
+
+    /// Answers the invitation at once, or first asks whether the answer applies to this event or
+    /// to all events of its series (`MOD-06-F13`).
+    fn answer(&mut self, event: &Event, response: Response) {
+        let Some(calendar) = self.sync.calendars().iter().find(|calendar| {
+            calendar.account_id == event.account_id && calendar.id == event.calendar_id
+        }) else {
+            return;
+        };
+        match invitations::answer(event, calendar.clone(), response) {
+            Ok(edit) => self.respond(Box::new(edit), Scope::This),
+            Err(question) => self.dialog = Some(Dialog::Scope(question, None)),
         }
     }
 
@@ -602,6 +643,7 @@ impl CalendarApp {
         let mut attachment = None;
         let mut search = None;
         let mut invitation = None;
+        let mut answered = None;
         let title = match dialog {
             Dialog::Shortcuts => "Keyboard shortcuts",
             Dialog::GoToDate(..) => "Go to date",
@@ -612,6 +654,7 @@ impl CalendarApp {
             Dialog::Settings => "Settings",
             Dialog::Scope(Question::Change(_), _) => "Edit recurring event",
             Dialog::Scope(Question::Delete(_), _) => "Delete recurring event",
+            Dialog::Scope(Question::Respond(_), _) => "Respond to recurring event",
             Dialog::Notify(..) => "Notify guests",
             Dialog::Invitations => "Invitations",
         };
@@ -741,6 +784,18 @@ impl CalendarApp {
                         })
                         .unwrap_or(event);
                     let details = event_details(event, self.zone);
+                    let not_yet = self.saving.holds(event).then_some(create::SAVING);
+                    // An invitation opens with its answers at the top (`MOD-06-U03`).
+                    let own_answer = invitations::own_answer(event);
+                    if let Some(own) = own_answer {
+                        let enabled = refused.is_none() && not_yet.is_none();
+                        ui.horizontal(|ui| {
+                            ui.label("Going?");
+                            if let Some(response) = answer_buttons(ui, own, enabled) {
+                                answered = Some((event.clone(), response));
+                            }
+                        });
+                    }
                     ui.heading(details.title.as_deref().unwrap_or("Busy"));
                     ui.label(details.when.describe(&self.regional));
                     if let Some(own) = details.in_own_zone(&self.regional) {
@@ -783,17 +838,20 @@ impl CalendarApp {
                             *expanded = !*expanded;
                         }
                     }
-                    // Editing is not offered for an event the user may not change (`MOD-05-F17`).
+                    // Editing is not offered for an event the user may not change (`MOD-05-F17`),
+                    // though a guest still answers it (`MOD-06-F15`).
                     let protected = event.protected();
                     if let Some(protected) = protected {
                         ui.label(protected.why());
-                    } else if let Some(reason) = refused {
+                    }
+                    if let Some(reason) =
+                        refused.filter(|_| protected.is_none() || own_answer.is_some())
+                    {
                         ui.label(reason);
                     }
                     let calendar = self.sync.calendars().iter().find(|calendar| {
                         calendar.account_id == event.account_id && calendar.id == event.calendar_id
                     });
-                    let not_yet = self.saving.holds(event).then_some(create::SAVING);
                     if let (None, Some(calendar)) = (protected, calendar) {
                         let can_edit = refused.is_none() && not_yet.is_none();
                         ui.horizontal(|ui| {
@@ -859,9 +917,11 @@ impl CalendarApp {
                     if self.invitations.is_empty() {
                         ui.label(invitations::NONE);
                     }
-                    // Each opens the invitation's details, to answer from.
+                    // Each is answered here, or opens its details (`MOD-06-F10`).
                     for &i in &self.invitations {
-                        let details = event_details(&self.events[i], self.zone);
+                        let event = &self.events[i];
+                        let details = event_details(event, self.zone);
+                        let enabled = refused.is_none() && !self.saving.holds(event);
                         ui.horizontal(|ui| {
                             if ui
                                 .link(details.title.as_deref().unwrap_or("Busy"))
@@ -870,7 +930,15 @@ impl CalendarApp {
                                 invitation = Some(i);
                             }
                             ui.weak(details.when.describe(&self.regional));
+                            if let Some(own) = invitations::own_answer(event)
+                                && let Some(response) = answer_buttons(ui, own, enabled)
+                            {
+                                answered = Some((event.clone(), response));
+                            }
                         });
+                    }
+                    if let Some(reason) = refused.filter(|_| !self.invitations.is_empty()) {
+                        ui.label(reason);
                     }
                 }
                 Dialog::Settings => {
@@ -994,6 +1062,9 @@ impl CalendarApp {
         }
         if let Some(event) = invitation {
             self.open(event, None);
+        }
+        if let Some((event, response)) = answered {
+            self.answer(&event, response);
         }
         if let Some((event, calendar)) = delete {
             self.dialog = match Question::deleting(calendar, event) {
