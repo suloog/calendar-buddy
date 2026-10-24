@@ -3,6 +3,10 @@
 
 use chrono::{Datelike, Duration, Months, NaiveDate, Weekday};
 
+use chrono_tz::Tz;
+
+use crate::layout::strip_dates;
+use crate::model::Event;
 use crate::month::weeks_covering;
 use crate::texts;
 use crate::week::GridView;
@@ -145,8 +149,11 @@ pub struct MiniDay {
     /// False for the days of the previous and next month that fill the first and last week.
     pub in_month: bool,
     pub is_today: bool,
-    /// The day is on screen in the main view.
+    /// The day is on screen in the main view; never in the month view, whose month is the one
+    /// the mini calendar shows (`DEC-158`).
     pub in_period: bool,
+    /// Some event shown in the views is on the day (`MOD-03-F25`).
+    pub has_events: bool,
 }
 
 /// The mini calendar: one month in whole weeks from the first day of the week, marking the period
@@ -162,7 +169,9 @@ pub struct MiniCalendar {
 pub fn mini_calendar(month: NaiveDate, navigation: &Navigation, today: NaiveDate) -> MiniCalendar {
     let month = month.with_day(1).expect("day 1 exists");
     let (first_shown, week_count) = weeks_covering(month, navigation.week_start);
-    let period = navigation.period();
+    let period = navigation
+        .period()
+        .filter(|_| navigation.view != View::Month);
     let weeks = (0..week_count)
         .map(|week| {
             std::array::from_fn(|day| {
@@ -172,6 +181,7 @@ pub fn mini_calendar(month: NaiveDate, navigation: &Navigation, today: NaiveDate
                     in_month: date.month() == month.month(),
                     is_today: date == today,
                     in_period: period.is_some_and(|(first, last)| first <= date && date <= last),
+                    has_events: false,
                 }
             })
         })
@@ -179,10 +189,34 @@ pub fn mini_calendar(month: NaiveDate, navigation: &Navigation, today: NaiveDate
     MiniCalendar { month, weeks }
 }
 
+impl MiniCalendar {
+    /// Marks the days with any of `events` on them, each on every day it covers in `zone`.
+    pub fn with_events<'a>(
+        mut self,
+        events: impl IntoIterator<Item = &'a Event>,
+        zone: Tz,
+    ) -> Self {
+        let first = self.weeks[0][0].date;
+        let mut days: Vec<&mut MiniDay> = self.weeks.iter_mut().flatten().collect();
+        let last = first + Duration::days(days.len() as i64 - 1);
+        for event in events {
+            let (from, to) = strip_dates(event, zone);
+            // A zero-length event still sits on its day.
+            let mut date = from.max(first);
+            while date <= to.max(from).min(last) {
+                days[(date - first).num_days() as usize].has_events = true;
+                date += Duration::days(1);
+            }
+        }
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fixtures::d;
+    use crate::fixtures::{all_day, d, timed};
+    use chrono_tz::Europe::Warsaw;
 
     /// `TC-03-08`: the clock says Wednesday 11 November 2026; the week of 9–15 November is shown.
     fn tc_03_08_start() -> Navigation {
@@ -347,12 +381,36 @@ mod tests {
                 .chain((1..=6).map(|day| d(2026, 12, day)))
                 .collect::<Vec<_>>()
         );
+        // The month on screen is the month the mini calendar shows: nothing to mark (`DEC-158`).
         let month = Navigation::start(Some(View::Month), d(2026, 11, 11), Weekday::Mon);
         let mini = mini_calendar(d(2026, 11, 1), &month, d(2026, 11, 11));
-        assert_eq!(marked(&mini).len(), 30);
+        assert!(marked(&mini).is_empty());
         let agenda = Navigation::start(Some(View::Agenda), d(2026, 11, 11), Weekday::Mon);
         let mini = mini_calendar(d(2026, 11, 1), &agenda, d(2026, 11, 11));
         assert!(marked(&mini).is_empty());
+    }
+
+    #[test]
+    fn the_mini_calendar_marks_the_days_with_events_shown() {
+        let nav = tc_03_08_start();
+        let events = [
+            timed("Dentist", d(2026, 11, 3), (8, 0), (9, 0)),
+            // Past midnight: on both days.
+            timed("Night shift", d(2026, 11, 20), (22, 0), (26, 0)),
+            all_day("Trip", d(2026, 11, 25), 2),
+            // Outside the weeks the mini calendar shows.
+            timed("Later", d(2027, 1, 5), (8, 0), (9, 0)),
+        ];
+        let mini =
+            mini_calendar(d(2026, 11, 11), &nav, d(2026, 11, 11)).with_events(&events, Warsaw);
+        let busy: Vec<NaiveDate> = (mini.weeks.iter().flatten())
+            .filter(|day| day.has_events)
+            .map(|day| day.date)
+            .collect();
+        assert_eq!(
+            busy,
+            [3, 20, 21, 25, 26].map(|day| d(2026, 11, day)).to_vec()
+        );
     }
 
     #[test]
