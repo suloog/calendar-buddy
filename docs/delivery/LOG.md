@@ -320,3 +320,15 @@
   - One squash commit: one logical change.
 - Manual checks: TC-06-09 (US-06-06#1, #2)
 - Commits on main: 3e9a3b3 feat(guests): strike through and hide declined events [US-06-06]
+
+## US-06-07 — review — 2026-10-24 04:51
+- What: the editor has an "Add Google Meet" switch. It turns on with the first guest; a saved event with it on asks Google for a Meet call, and switching it adds or removes the call on an existing event. The Meet link is synchronized and cached, and opens from "Join with Google Meet" in the details and "Join" in the agenda. If Google refuses the call (400), the event is saved without it and the user is told.
+- Decisions: DEC-131, DEC-132, DEC-133
+- Reviews: code 2 round(s), spec 1 round(s); open notes:
+  - fixed in round 1: Join in the agenda moved egui's layout cursor (`ui.put` → `ui.place`); the retry without Meet is now limited to Google's 400; the "without Meet" notice now also appears when a move fails after the patch;
+  - left: "saved without Google Meet" is shown wrongly for a call Google is still making (`pending`), or when the synchronization right after a change fails (both rare, written down in DEC-132); every 400 from Google now reads "Google refused it as invalid (…)"; a long agenda title runs under the Join button; no notice after a "this and following" split;
+  - SQLite schema change: cache VERSION 6 → 7, new `events.meet` column (events are fetched again);
+  - calendar-provider interface: method signatures unchanged; new fields in the data it carries: `NewEvent.meet`, `Patch.meet`, `About.meet`;
+  - one squash commit: one logical change.
+- Manual checks: TC-06-10 (US-06-07#2 against real Google), TC-06-11 (US-06-07#3), the no-Meet edge case
+- Commits on main: 26fe73d feat(meet): add Google Meet switch and Join button [US-06-07]
