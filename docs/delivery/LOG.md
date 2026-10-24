@@ -284,3 +284,16 @@
   - One squash commit: one logical change.
 - Manual checks: TC-06-04 (US-06-03#1), US-06-03#2
 - Commits on main: d659348 feat(guests): ask whether to notify guests of a change [US-06-03]
+
+## US-06-04 — review — 2026-10-24 04:15
+- What: invitations whose own guest entry is `needsAction` get a pale fill and a dashed outline in the day/3-day/week, month and agenda views; the side panel shows "N invitations awaiting an answer" (only when N > 0), opening an "Invitations" list whose rows open the details; disabled calendars' invitations are neither shown nor counted.
+- Decisions: DEC-125, DEC-126, DEC-127
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - fixed after review: Google's `self` is the owner of the calendar the copy is on, so only entries with the account's own address are counted (`DEC-127`); a test now pins that hidden calendars stay counted; the fill is square like its dashes;
+  - not done: COVERAGE row `US-06-04#3` still says "not tested yet", though `invitations_of_a_calendar_disabled_in_the_settings_are_neither_shown_nor_counted` covers it (COVERAGE is written by /og:tests, left as earlier stories did);
+  - not done: TC-06-05's preconditions name a fake Google with contacts; the tests use fixtures, and the Google mapping is tested separately;
+  - not done: the drawing and the counter → list → details clicks are UI, not unit-tested (manual checks);
+  - no SQLite schema or provider-interface change.
+  - One squash commit: one logical change.
+- Manual checks: TC-06-05 (US-06-04#1, #2), US-06-04#3
+- Commits on main: 535fa1f feat(guests): mark and list invitations awaiting an answer [US-06-04]
