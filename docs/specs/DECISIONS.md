@@ -1572,3 +1572,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-130] Which events are declined, how they look, and the switch
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-06
+- **Affects:** `US-06-06`, `MOD-06-F14`, `MOD-06-F22`
+- **Decision:** An event is declined when the guest whose calendar it is on (Google's `self`) answered `declined`, as for an invitation awaiting an answer (`DEC-127`); so a colleague's declined event in their shared calendar is drawn declined too. In the day/3-day/week, month and agenda views its text (title, and in the hour grid also its time) is struck through and the whole event is faded under a half-transparent veil of the view's background, on top of whatever else marks it. The switch is a "Show declined events" checkbox in the view bar, on by default; turned off, declined events leave every view. The choice is kept in the app's settings and survives a restart.
+- **Why:** As in Google Calendar, which strikes through declined events and keeps "Show declined events" as a lasting view option (`DEC-62`); the simplest rule that reuses the guest list the app already keeps.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

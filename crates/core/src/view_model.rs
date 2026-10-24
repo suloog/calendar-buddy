@@ -28,6 +28,8 @@ pub struct Block {
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
+    /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
+    pub declined: bool,
     /// An out-of-office event, drawn hatched (`MOD-05-U01`).
     pub hatched: bool,
     pub start: DateTime<Utc>,
@@ -45,6 +47,8 @@ pub struct Bar {
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
+    /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
+    pub declined: bool,
     /// An all-day event, not a timed one lasting a day or longer.
     pub all_day: bool,
     /// An out-of-office event, drawn hatched (`MOD-05-U01`).
@@ -117,6 +121,7 @@ pub fn grid_view(
                 read_only: event.read_only,
                 saving: event.saving,
                 awaiting: event.about.awaiting(),
+                declined: event.about.declined(),
                 movable: movable(event),
                 hatched: event.about.kind == Kind::OutOfOffice,
                 start,
@@ -136,6 +141,7 @@ pub fn grid_view(
                 read_only: event.read_only,
                 saving: event.saving,
                 awaiting: event.about.awaiting(),
+                declined: event.about.declined(),
                 movable: movable(event),
                 all_day: matches!(event.timing, Timing::AllDay { .. }),
                 hatched: event.about.kind == Kind::OutOfOffice,

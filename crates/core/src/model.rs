@@ -188,7 +188,19 @@ impl About {
     /// An invitation awaiting an answer, drawn so in the views (`MOD-06-F09`): the guest whose
     /// calendar the event is on (Google's `self`) has not answered yet (`needsAction`).
     pub fn awaiting(&self) -> bool {
-        (self.guests.iter()).any(|guest| guest.own && guest.response == Response::Awaiting)
+        self.own_response() == Some(Response::Awaiting)
+    }
+
+    /// The guest whose calendar the event is on declined it: it stays in the views, struck
+    /// through and faded (`MOD-06-F14`), unless the switch hides declined events (`MOD-06-F22`).
+    pub fn declined(&self) -> bool {
+        self.own_response() == Some(Response::Declined)
+    }
+
+    fn own_response(&self) -> Option<Response> {
+        (self.guests.iter())
+            .find(|guest| guest.own)
+            .map(|guest| guest.response)
     }
 }
 

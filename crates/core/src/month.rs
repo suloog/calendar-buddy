@@ -23,6 +23,8 @@ pub struct MonthItem {
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
+    /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
+    pub declined: bool,
     /// Start of a timed event; `None` for all-day and multi-day events.
     pub start: Option<DateTime<Utc>>,
 }
@@ -141,6 +143,7 @@ pub fn month_view(
                         read_only: event.read_only,
                         saving: event.saving,
                         awaiting: event.about.awaiting(),
+                        declined: event.about.declined(),
                         start: timed_start(event),
                     }
                 })
