@@ -2,6 +2,7 @@
 //! app, tests use fakes.
 
 use crate::accounts::Account;
+use crate::reminders::Notification;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SecretStoreError {
@@ -41,4 +42,11 @@ pub trait Network {
     /// Calls `changed` with whether the computer is online, once the system answers and after
     /// every change from then on.
     fn watch(&self, changed: Box<dyn Fn(bool) + Send + Sync>);
+}
+
+/// The desktop's notification service (`MOD-07-F01`); the desktop decides what is shown, e.g.
+/// in "do not disturb" mode.
+pub trait Notifier: Send {
+    /// Shows the notification; `clicked` is called when the user clicks it (`MOD-07-F08`).
+    fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>);
 }

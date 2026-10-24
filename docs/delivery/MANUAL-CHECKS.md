@@ -391,3 +391,27 @@ Not proven: real Google's free/busy answers, and how the strips look. Choices to
 - [ ] `TC-06-12` / `US-06-08#1`, `#2` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy`, open a new event on a day a colleague has a meeting, at a time overlapping it, and add the colleague and someone free then. Under the time, an "Availability" row shows one horizontal strip per guest with their busy blocks filled in. The chosen time is one band across all strips, lined up with them, readable in both a light and a dark desktop theme. The colleague is marked "Conflict", the other guest is not. Change the start time: the band moves and the conflict mark follows.
 - [ ] `US-06-08#3` (real Google, a person's eyes): add a personal Gmail address whose calendar does not share free/busy: its strip reads "No data".
 - [ ] `US-06-08#5` (KDE session): with the guests added, turn the network off: the "Availability" row disappears; turn it back on: it returns.
+
+## US-07-01
+
+Needs a connected real Google account, the KDE session and a person's eyes. The tests below use a fake Google, fake desktop notifications and a clock the test moves. They prove:
+- reminders are read from Google (the event's own, or its calendar's defaults);
+- a notification reminder gives exactly one notification, with the title, the start time and the location, also across synchronizations;
+- e-mail reminders, declined events and disabled calendars give none;
+- reminders from before the app started are not shown, and those that fell during sleep are shown if the event has not started;
+- a moved event's reminder moves with it, several in the same minute each show, and a new time zone keeps the real times;
+- a click reaches the app as "open this event".
+
+The tests:
+- app: `tc_07_01_a_10_minute_reminder_gives_exactly_one_notification_across_synchronizations`, `tc_07_02_declined_events_and_e_mail_reminders_give_no_desktop_notification`, `events_of_calendars_disabled_in_the_settings_give_no_notifications`, `clicking_a_notification_opens_its_event`, `the_worker_wakes_for_the_next_reminder_or_within_a_minute_to_follow_the_clock`;
+- core: `reminders::tests::*`, including `tc_07_01_…`, `tc_07_02_…`, `a_reminder_whose_time_passed_before_the_app_started_is_not_shown` and `reminders_that_fell_during_sleep_are_shown_on_waking_if_their_event_has_not_started`;
+- google: `events_come_with_their_reminders_and_calendars_with_their_default_ones`.
+
+Not proven: the real KDE notification, the real click, and real sleep. Choices to ratify:
+- `DEC-136`: when a reminder is shown and when it is not;
+- `DEC-137`: all-day events using the calendar's defaults give no notification, because Google's API does not expose those defaults;
+- `DEC-138`: what a notification says and what clicking it does. **SQLite schema change:** cache version 8.
+
+- [ ] `TC-07-07` / `US-07-01#3` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy` and minimize the window. In Google Calendar, create "Join check" starting in 12 minutes with a 10-minute notification reminder and a location. When the notification comes, it shows "Join check", the start time and the location. Click its body: the window comes forward, un-minimized, on the event's day, with "Join check"'s details open. Watch on Wayland in particular: the code review warns that the window may stay minimized or not take focus there. If so, record it.
+- [ ] `US-07-01#1`, `#2` (real Google, KDE session): with the app running, an event with a 10-minute reminder gives exactly one KDE notification 10 minutes before it starts. None comes again while the app keeps synchronizing until the event starts.
+- [ ] `US-07-01#7` (KDE session, real sleep): with an event starting in 15 minutes and a 10-minute reminder, suspend the computer before the reminder and wake it after the reminder's time but before the event starts: the notification appears on waking.

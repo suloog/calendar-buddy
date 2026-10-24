@@ -228,6 +228,7 @@ mod tests {
             color: PALETTE[0],
             access,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 

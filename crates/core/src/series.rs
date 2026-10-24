@@ -196,6 +196,7 @@ pub fn change(
                     attachments: about.attachments.clone(),
                     guests: (patch.guests.clone()).unwrap_or_else(|| about.guests.clone()),
                     meet: about.meet.clone(),
+                    reminders: about.reminders.clone(),
                 },
                 recurrence: following(master, first, original, timing, exceptions),
                 // The series' call is copied with it, unless switched off or on here.
@@ -434,6 +435,7 @@ mod tests {
             color: Rgb(0x03, 0x9B, 0xE5),
             access: Access::Owner,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 

@@ -10,7 +10,9 @@ use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
 use calendar_core::guests::{Guest, Person, Reach, Response};
-use calendar_core::model::{About, Access, Attachment, Event, Kind, Rgb, Show, Visibility};
+use calendar_core::model::{
+    About, Access, Attachment, Event, Kind, Method, Reminder, Reminders, Rgb, Show, Visibility,
+};
 use calendar_core::sync::shown_events;
 use calendar_core::view_model::grid_view;
 use calendar_core::week::Week;
@@ -1016,6 +1018,7 @@ fn events_come_with_their_description_location_busy_or_free_visibility_and_versi
             attachments: Vec::new(),
             guests: Vec::new(),
             meet: None,
+            reminders: Reminders::Default,
         }
     );
     assert_eq!(
@@ -1113,6 +1116,80 @@ fn out_of_office_and_focus_time_are_sent_with_their_type_and_googles_defaults() 
 }
 
 #[test]
+fn events_come_with_their_reminders_and_calendars_with_their_default_ones() {
+    let google = FakeGoogle::start(None, &[]);
+    let store = FakeStore::default();
+    let (dir, client_file) = client_file("reminders");
+    let mut work = entry("work", "Work", "#9fe1e7", "owner");
+    work["defaultReminders"] = json!([
+        {"method": "popup", "minutes": 10},
+        {"method": "email", "minutes": 30},
+    ]);
+    google.add_calendar(ACCOUNT_ID, work);
+    for (id, reminders) in [
+        (
+            "review",
+            json!({"useDefault": false, "overrides": [
+                {"method": "popup", "minutes": 10},
+                {"method": "email", "minutes": 1440},
+            ]}),
+        ),
+        // Google ignores the overrides of an event that uses the defaults.
+        (
+            "standup",
+            json!({"useDefault": true, "overrides": [{"method": "popup", "minutes": 5}]}),
+        ),
+        ("silent", json!({"useDefault": false})),
+    ] {
+        let mut event = timed(
+            id,
+            id,
+            "2026-11-12T09:00:00+01:00",
+            "2026-11-12T10:00:00+01:00",
+        );
+        event["reminders"] = reminders;
+        google.add_event(ACCOUNT_ID, "work", event);
+    }
+    google.add_event(
+        ACCOUNT_ID,
+        "work",
+        timed(
+            "plain",
+            "Plain",
+            "2026-11-12T11:00:00+01:00",
+            "2026-11-12T12:00:00+01:00",
+        ),
+    );
+    signed_in(&google, &store, ACCOUNT_ID);
+    let mut cache = Cache::in_memory();
+
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    let reminder = |method, minutes| Reminder { method, minutes };
+    assert_eq!(
+        cache.calendar_list().unwrap()[0].default_reminders,
+        [
+            reminder(Method::Notification, 10),
+            reminder(Method::Email, 30)
+        ]
+    );
+    let reminders = |id| cached(&cache, "work", id).unwrap().about.reminders;
+    assert_eq!(
+        reminders("review"),
+        Reminders::Own(vec![
+            reminder(Method::Notification, 10),
+            reminder(Method::Email, 1440)
+        ])
+    );
+    assert_eq!(reminders("standup"), Reminders::Default);
+    assert_eq!(reminders("silent"), Reminders::Own(Vec::new()));
+    // Without a word from Google, as for an event it made, the defaults hold.
+    assert_eq!(reminders("plain"), Reminders::Default);
+}
+
+#[test]
 fn a_guests_copy_the_organizer_does_not_let_guests_change_is_for_the_organizer_only() {
     let (google, store, dir, client_file, mut cache) = synchronized_once("organizer-only");
     let copy = |id: &str, title: &str, guests_can_modify: Option<bool>| {
@@ -1190,6 +1267,7 @@ fn a_new_all_day_event_is_sent_with_every_field_set_in_the_editor() {
             attachments: Vec::new(),
             guests: Vec::new(),
             meet: None,
+            reminders: Reminders::Default,
         },
         recurrence: Vec::new(),
         meet: false,

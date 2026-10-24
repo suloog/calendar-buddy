@@ -13,12 +13,14 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::availability::{Availability, Span};
-use calendar_core::cache::{Cache, parse_access, parse_color};
+use calendar_core::cache::{Cache, parse_access, parse_color, parse_method};
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
 use calendar_core::guests::{Guest, Person, Reach, Response, same};
-use calendar_core::model::{About, Attachment, Calendar, Kind, Show, Timing, Visibility};
+use calendar_core::model::{
+    About, Attachment, Calendar, Kind, Reminder, Reminders, Show, Timing, Visibility,
+};
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
@@ -999,6 +1001,8 @@ struct CalendarEntry {
     background_color: Option<String>,
     access_role: String,
     time_zone: Option<String>,
+    #[serde(default)]
+    default_reminders: Vec<GoogleReminder>,
 }
 
 impl CalendarEntry {
@@ -1013,6 +1017,7 @@ impl CalendarEntry {
                 .time_zone
                 .and_then(|zone| zone.parse().ok())
                 .unwrap_or(Tz::UTC),
+            default_reminders: reminders(self.default_reminders),
         })
     }
 }
@@ -1047,6 +1052,36 @@ struct GoogleEvent {
     attendees: Vec<GoogleAttendee>,
     #[serde(default)]
     conference_data: Value,
+    reminders: Option<GoogleReminders>,
+}
+
+/// Google's `reminders` of an event: its calendar's defaults, or its own.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleReminders {
+    #[serde(default)]
+    use_default: bool,
+    #[serde(default)]
+    overrides: Vec<GoogleReminder>,
+}
+
+/// One of Google's reminders of an event or of a calendar's defaults.
+#[derive(Deserialize)]
+struct GoogleReminder {
+    method: String,
+    minutes: u32,
+}
+
+/// The reminders the app knows the method of; Google has had others (`sms`).
+fn reminders(reminders: Vec<GoogleReminder>) -> Vec<Reminder> {
+    (reminders.into_iter())
+        .filter_map(|reminder| {
+            Some(Reminder {
+                method: parse_method(&reminder.method)?,
+                minutes: reminder.minutes,
+            })
+        })
+        .collect()
 }
 
 /// One of Google's `attendees` of an event.
@@ -1202,6 +1237,11 @@ impl GoogleEvent {
                     .filter_map(GoogleAttendee::into_guest)
                     .collect(),
                 meet: meet_link(&self.conference_data),
+                // Without a word from Google the calendar's defaults hold, as for a new event.
+                reminders: match self.reminders {
+                    Some(own) if !own.use_default => Reminders::Own(reminders(own.overrides)),
+                    _ => Reminders::Default,
+                },
             },
             etag: self.etag,
             // A guest's copy, with the organizer's event elsewhere, as Google tells them apart.

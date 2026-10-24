@@ -16,7 +16,8 @@
 //! its first synchronization. People to invite are searched for at Google while the user types a
 //! guest (`US-06-01`). An event saved with Google Meet that comes back without a call is told of
 //! (`US-06-07`). The guests' busy times on the day chosen in the editor are asked of Google
-//! (`US-06-08`).
+//! (`US-06-08`). The reminders of the events the cache holds are shown as desktop notifications
+//! when due, and a click on one opens its event (`US-07-01`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -32,7 +33,9 @@ use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
 use calendar_core::guests::{Person, Reach};
 use calendar_core::model::{Calendar, Event};
-use calendar_core::platform::{SecretStore, Wakeups};
+use calendar_core::platform::{Notifier, SecretStore, Wakeups};
+use calendar_core::regional::Regional;
+use calendar_core::reminders::{Alarms, EventId};
 use calendar_core::schedule::Schedule;
 use calendar_core::series::{self, Plan, Scope, Split};
 use calendar_core::status::{Problem, Status};
@@ -44,7 +47,7 @@ use calendar_google::{Endpoints, Session};
 use chrono::{DateTime, Utc};
 use eframe::egui;
 
-use crate::platform::{SystemSecretStore, SystemWakeups};
+use crate::platform::{SystemNotifier, SystemSecretStore, SystemWakeups};
 
 enum Job {
     Sync(String, Window),
@@ -85,7 +88,13 @@ enum Job {
     Suggest(String, String, Reach),
     /// The guests' busy times the editor's preview asks for (`MOD-06-F19`).
     Busy(Asked),
+    /// Reminders are to be shown from now on (`MOD-07-F01`), their times written as the system
+    /// writes them.
+    Remind(Box<dyn Notifier>, Regional, Opens),
 }
+
+/// Tells the views to open an event, of a notification clicked (`MOD-07-F08`).
+type Opens = Arc<dyn Fn(EventId) + Send + Sync>;
 
 enum Update {
     /// The calendars listed in the cache, and the events to show.
@@ -153,6 +162,9 @@ pub struct Synchronization {
     asked: Option<Asked>,
     /// The guests' busy times Google last gave, and what they were asked for.
     busy: Option<(Asked, Option<Vec<Availability>>)>,
+    /// The events of notifications clicked, not yet taken.
+    opens: Sender<EventId>,
+    opened: Receiver<EventId>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -180,6 +192,7 @@ impl Synchronization {
         account_ids: Vec<String>,
         window: Window,
         disabled: Disabled,
+        regional: Regional,
     ) -> Self {
         let store: Arc<dyn SecretStore> = Arc::new(SystemSecretStore);
         let endpoints = Endpoints::google();
@@ -195,6 +208,7 @@ impl Synchronization {
         };
         let sync = Synchronization::with(ctx, open, sign_in, account_ids, window, disabled);
         sync.wake_on(&SystemWakeups);
+        sync.remind_with(ctx, Box::new(SystemNotifier::new()), regional);
         sync
     }
 
@@ -208,6 +222,7 @@ impl Synchronization {
     ) -> Self {
         let (jobs, received) = mpsc::channel();
         let (sender, updates) = mpsc::channel();
+        let (opens, opened) = mpsc::channel();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let send = |update| {
@@ -220,7 +235,10 @@ impl Synchronization {
             send(engine.shown());
             send(Update::Status(engine.status()));
             loop {
-                let job = match engine.schedule.next() {
+                let next = (engine.schedule.next().into_iter())
+                    .chain(engine.next_reminder(Instant::now()))
+                    .min();
+                let job = match next {
                     Some(next) => {
                         match received.recv_timeout(next.saturating_duration_since(Instant::now()))
                         {
@@ -234,17 +252,30 @@ impl Synchronization {
                         Err(_) => return,
                     },
                 };
-                let mut jobs = vec![job];
+                // Reminders due, e.g. on waking, do not wait for the synchronization it starts.
+                engine.remind();
+                // Woken for a reminder alone, nothing is polled.
+                let polled = engine
+                    .schedule
+                    .next()
+                    .is_some_and(|due| due <= Instant::now());
+                let mut jobs: Vec<Option<Job>> = match job {
+                    None if !polled => Vec::new(),
+                    job => vec![job],
+                };
                 jobs.extend(received.try_iter().map(Some));
-                if jobs.iter().any(synchronizes) {
-                    send(Update::Synchronizing);
-                }
-                for job in latest_only(jobs) {
-                    for update in engine.handle(job, Instant::now()) {
-                        send(update);
+                if !jobs.is_empty() {
+                    if jobs.iter().any(synchronizes) {
+                        send(Update::Synchronizing);
                     }
+                    for job in latest_only(jobs) {
+                        for update in engine.handle(job, Instant::now()) {
+                            send(update);
+                        }
+                    }
+                    send(Update::Status(engine.status()));
                 }
-                send(Update::Status(engine.status()));
+                engine.remind();
             }
         });
         Synchronization {
@@ -262,7 +293,25 @@ impl Synchronization {
             people: None,
             asked: None,
             busy: None,
+            opens,
+            opened,
         }
+    }
+
+    /// Shows the reminders of the cached events through the desktop's notifications from now
+    /// on; those whose time passed before are not shown (`MOD-07-F20`).
+    fn remind_with(&self, ctx: &egui::Context, notifier: Box<dyn Notifier>, regional: Regional) {
+        let (opens, ctx) = (self.opens.clone(), ctx.clone());
+        let open: Opens = Arc::new(move |event| {
+            let _ = opens.send(event);
+            ctx.request_repaint();
+        });
+        let _ = self.jobs.send(Job::Remind(notifier, regional, open));
+    }
+
+    /// The event of the notification the user last clicked since asked, to open (`MOD-07-F08`).
+    pub fn take_opened(&self) -> Option<EventId> {
+        self.opened.try_iter().last()
     }
 
     /// Synchronizes everything at once after waking from sleep and when the network returns.
@@ -523,7 +572,19 @@ struct Engine {
     /// When a synchronization last got through, kept in the cache too.
     last_synced: Option<DateTime<Utc>>,
     clock: Box<dyn Fn() -> DateTime<Utc> + Send>,
+    /// The reminders to show, once the app gave the desktop's notifications to show them with.
+    reminding: Option<Reminding>,
 }
+
+/// Reminders, and how they are shown.
+struct Reminding {
+    alarms: Alarms,
+    notifier: Box<dyn Notifier>,
+    open: Opens,
+}
+
+/// The longest wait for a reminder, so a changed system clock is followed.
+const REMINDER_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
 
 impl Engine {
     fn new(cache: Cache, sign_in: SignIn, window: Window, disabled: Disabled) -> Self {
@@ -540,13 +601,27 @@ impl Engine {
             stopped: HashSet::new(),
             last_synced: cache.last_synced().ok().flatten(),
             clock: Box::new(Utc::now),
+            reminding: None,
             cache,
         }
     }
 
     /// Does the job, or with none the polling round that is due; returns what the views are to
-    /// be told.
+    /// be told. The reminders follow the events the views are given, as they are now.
     fn handle(&mut self, job: Option<Job>, now: Instant) -> Vec<Update> {
+        let updates = self.handle_job(job, now);
+        if let Some(reminding) = &mut self.reminding {
+            for update in &updates {
+                if let Update::Events(calendars, events) = update {
+                    let now = (self.clock)();
+                    (reminding.alarms).set(calendars, events, self.window.zone, now);
+                }
+            }
+        }
+        updates
+    }
+
+    fn handle_job(&mut self, job: Option<Job>, now: Instant) -> Vec<Update> {
         let calendars = match job {
             None => self.schedule.due(now),
             Some(Job::Sync(id, window)) => {
@@ -635,6 +710,15 @@ impl Engine {
                 let busy = (self.sessions.get(&asked.account_id))
                     .and_then(|session| session.busy(&asked.emails, asked.day).ok());
                 return vec![Update::Busy(asked, busy)];
+            }
+            Some(Job::Remind(notifier, regional, open)) => {
+                let alarms = Alarms::new((self.clock)(), regional, self.window.zone);
+                self.reminding = Some(Reminding {
+                    alarms,
+                    notifier,
+                    open,
+                });
+                return vec![self.shown()];
             }
         };
         self.round(&calendars, now)
@@ -1123,6 +1207,25 @@ impl Engine {
         events.extend(outside);
         Update::Events(calendars, events)
     }
+
+    /// Shows the reminders due now as desktop notifications, each once (`MOD-07-F07`).
+    fn remind(&mut self) {
+        let Some(reminding) = &mut self.reminding else {
+            return;
+        };
+        for notification in reminding.alarms.due((self.clock)()) {
+            let (open, event) = (reminding.open.clone(), notification.event.clone());
+            let clicked = Box::new(move || open(event.clone()));
+            reminding.notifier.show(&notification, clicked);
+        }
+    }
+
+    /// When the worker is to wake for the next reminder, at most a minute from `now`.
+    fn next_reminder(&self, now: Instant) -> Option<Instant> {
+        let at = self.reminding.as_ref()?.alarms.next()?;
+        let wait = (at - (self.clock)()).to_std().unwrap_or_default();
+        Some(now + wait.min(REMINDER_WAIT))
+    }
 }
 
 /// Why a change to a series was not sent: its series is not in the cache, as for an invitation to
@@ -1185,6 +1288,7 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Window(_)
                 | Job::Suggest(..)
                 | Job::Busy(_)
+                | Job::Remind(..)
         )
     )
 }
@@ -1234,6 +1338,7 @@ mod tests {
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
+    use calendar_core::reminders::Notification;
     use calendar_core::series::{Question, Scope};
     use calendar_core::settings::Settings;
     use calendar_core::status::{self, State, label};
@@ -1271,6 +1376,7 @@ mod tests {
                     color: Rgb(0x9f, 0xe1, 0xe7),
                     access: Access::Owner,
                     zone: Warsaw,
+                    default_reminders: Vec::new(),
                 };
                 let start = Utc.with_ymd_and_hms(2026, 11, 10, 9, 0, 0).unwrap();
                 let event = SyncedEvent {
@@ -5408,5 +5514,243 @@ mod tests {
             assert!(Instant::now() < deadline, "not asked again");
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
+
+    /// The desktop's notifications, faked: what was shown, and what clicking each does.
+    #[derive(Clone, Default)]
+    struct FakeNotifier {
+        shown: Arc<Mutex<Vec<Shown>>>,
+    }
+
+    type Shown = (Notification, Box<dyn Fn() + Send + Sync>);
+
+    impl Notifier for FakeNotifier {
+        fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>) {
+            let shown = (notification.clone(), clicked);
+            self.shown.lock().unwrap().push(shown);
+        }
+    }
+
+    impl FakeNotifier {
+        /// Title, start time and location of each notification shown, in order.
+        fn shown(&self) -> Vec<(String, String, String)> {
+            (self.shown.lock().unwrap().iter())
+                .map(|(n, _)| (n.title.clone(), n.when.clone(), n.location.clone()))
+                .collect()
+        }
+
+        fn click(&self, index: usize) {
+            (self.shown.lock().unwrap()[index].1)();
+        }
+    }
+
+    /// Thursday 12 November 2026 at the time in Warsaw.
+    fn thursday(h: u32, m: u32) -> DateTime<Utc> {
+        Warsaw
+            .with_ymd_and_hms(2026, 11, 12, h, m, 0)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    /// The account's calendar "Work", as Google lists it.
+    fn work_calendar(google: &Google, id: &str, name: &str) {
+        google.fake.add_calendar(
+            ACCOUNT_ID,
+            json!({
+                "id": id,
+                "summary": name,
+                "timeZone": "Europe/Warsaw",
+                "backgroundColor": "#9fe1e7",
+                "accessRole": "owner",
+            }),
+        );
+    }
+
+    /// An event on Thursday 12 November from 10:00 to 11:00, with its reminders.
+    fn at_ten(id: &str, title: &str, overrides: Value) -> Value {
+        json!({
+            "id": id,
+            "status": "confirmed",
+            "summary": title,
+            "start": {"dateTime": "2026-11-12T10:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            "end": {"dateTime": "2026-11-12T11:00:00+01:00", "timeZone": "Europe/Warsaw"},
+            "reminders": {"useDefault": false, "overrides": overrides},
+        })
+    }
+
+    /// The app started at 9:00 on Thursday 12 November with the clock that the test moves,
+    /// reminders shown through the fake notifications, and the account's first synchronization
+    /// done; with what clicking a notification opens.
+    fn reminding(
+        google: &Google,
+        clock: &Arc<Mutex<DateTime<Utc>>>,
+        notifier: &FakeNotifier,
+        disabled: Disabled,
+        start: Instant,
+    ) -> (Engine, Receiver<EventId>) {
+        *clock.lock().unwrap() = thursday(9, 0);
+        let mut engine = Engine::new(Cache::in_memory(), google.sign_in(), window(), disabled);
+        let time = clock.clone();
+        engine.clock = Box::new(move || *time.lock().unwrap());
+        engine.clear_disabled();
+        let (opens, opened) = mpsc::channel();
+        let open: Opens = Arc::new(move |event| opens.send(event).unwrap());
+        let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+        let job = Job::Remind(Box::new(notifier.clone()), regional, open);
+        engine.handle(Some(job), start);
+        let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+        assert!(told(updates).is_some());
+        (engine, opened)
+    }
+
+    #[test]
+    fn tc_07_01_a_10_minute_reminder_gives_exactly_one_notification_across_synchronizations() {
+        let google = Google::start("tc-07-01");
+        work_calendar(&google, "work", "Work");
+        let mut review = at_ten(
+            "review",
+            "Review",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        review["location"] = json!("Room 2");
+        google.fake.add_event(ACCOUNT_ID, "work", review.clone());
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        let (mut engine, _) = reminding(&google, &clock, &notifier, Disabled::new(), start);
+        engine.remind();
+        assert_eq!(notifier.shown(), []);
+
+        // 1. At 9:50 one notification is shown, with "Review", 10:00 and "Room 2".
+        *clock.lock().unwrap() = thursday(9, 50);
+        engine.remind();
+        let review_shown = ("Review".into(), "10:00".into(), "Room 2".into());
+        assert_eq!(notifier.shown(), std::slice::from_ref(&review_shown));
+
+        // 2. Three more synchronizations, one bringing the event changed in Google, and 9:55: no
+        //    further notification.
+        review["description"] = json!("Q4 numbers");
+        google.fake.add_event(ACCOUNT_ID, "work", review);
+        for round in 1..=3 {
+            let updates = engine.handle(Some(Job::Refresh), start + secs(60 * round));
+            if round == 1 {
+                assert!(shown(&updates).is_some());
+            }
+            engine.remind();
+        }
+        *clock.lock().unwrap() = thursday(9, 55);
+        engine.remind();
+        assert_eq!(notifier.shown(), [review_shown]);
+    }
+
+    #[test]
+    fn tc_07_02_declined_events_and_e_mail_reminders_give_no_desktop_notification() {
+        let google = Google::start("tc-07-02");
+        work_calendar(&google, "work", "Work");
+        let mut offsite = at_ten(
+            "offsite",
+            "Offsite",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        offsite["organizer"] = json!({"email": "adam@example.com"});
+        offsite["attendees"] = json!([
+            {"email": "adam@example.com", "organizer": true, "responseStatus": "accepted"},
+            {"email": EMAIL, "self": true, "responseStatus": "declined"}
+        ]);
+        google.fake.add_event(ACCOUNT_ID, "work", offsite);
+        let report = at_ten(
+            "report",
+            "Report",
+            json!([{"method": "email", "minutes": 10}]),
+        );
+        google.fake.add_event(ACCOUNT_ID, "work", report);
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, _) =
+            reminding(&google, &clock, &notifier, Disabled::new(), Instant::now());
+
+        // 1. At 9:55 nothing was shown for "Offsite" or "Report".
+        for minute in 50..=55 {
+            *clock.lock().unwrap() = thursday(9, minute);
+            engine.remind();
+        }
+        assert_eq!(notifier.shown(), []);
+    }
+
+    #[test]
+    fn events_of_calendars_disabled_in_the_settings_give_no_notifications() {
+        let google = Google::start("reminders-disabled");
+        work_calendar(&google, "work", "Work");
+        work_calendar(&google, "team", "Team");
+        work_calendar(&google, "side", "Side project");
+        let reminder = json!([{"method": "popup", "minutes": 10}]);
+        for (calendar, title) in [("work", "Review"), ("team", "Retro"), ("side", "Pairing")] {
+            let event = at_ten(&title.to_lowercase(), title, reminder.clone());
+            google.fake.add_event(ACCOUNT_ID, calendar, event);
+        }
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        let disabled = Disabled::from([(ACCOUNT_ID.to_string(), "team".to_string())]);
+        let (mut engine, _) = reminding(&google, &clock, &notifier, disabled.clone(), start);
+
+        // "Side project" is disabled too while the app runs.
+        let mut more = disabled;
+        more.insert((ACCOUNT_ID.to_string(), "side".to_string()));
+        engine.handle(Some(Job::Disabled(more)), start);
+        *clock.lock().unwrap() = thursday(9, 50);
+        engine.remind();
+
+        let titles: Vec<String> = notifier.shown().into_iter().map(|(t, _, _)| t).collect();
+        assert_eq!(titles, ["Review"]);
+    }
+
+    #[test]
+    fn clicking_a_notification_opens_its_event() {
+        let google = Google::start("reminders-click");
+        work_calendar(&google, "work", "Work");
+        let review = at_ten(
+            "review",
+            "Review",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        google.fake.add_event(ACCOUNT_ID, "work", review);
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, opened) =
+            reminding(&google, &clock, &notifier, Disabled::new(), Instant::now());
+        *clock.lock().unwrap() = thursday(9, 50);
+        engine.remind();
+
+        notifier.click(0);
+
+        assert_eq!(
+            opened.try_recv(),
+            Ok(EventId {
+                account_id: ACCOUNT_ID.to_string(),
+                calendar_id: "work".to_string(),
+                id: "review".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn the_worker_wakes_for_the_next_reminder_or_within_a_minute_to_follow_the_clock() {
+        let google = Google::start("reminders-wake");
+        work_calendar(&google, "work", "Work");
+        let review = at_ten(
+            "review",
+            "Review",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        google.fake.add_event(ACCOUNT_ID, "work", review);
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let now = Instant::now();
+        let (engine, _) = reminding(&google, &clock, &notifier, Disabled::new(), now);
+
+        assert_eq!(engine.next_reminder(now), Some(now + secs(60)));
+        *clock.lock().unwrap() = thursday(9, 49) + chrono::Duration::seconds(30);
+        assert_eq!(engine.next_reminder(now), Some(now + secs(30)));
     }
 }

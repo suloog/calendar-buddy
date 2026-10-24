@@ -18,7 +18,7 @@ use crate::accounts::Entry;
 use crate::colors::EventColor;
 use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
 use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person, Response};
-use crate::model::{About, Access, Calendar, Event, Kind, Show, Timing, Visibility};
+use crate::model::{About, Access, Calendar, Event, Kind, Reminders, Show, Timing, Visibility};
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
 
@@ -575,6 +575,8 @@ impl Editor {
             },
             // Its link is Google's to make.
             meet: None,
+            // A new event gets its calendar's defaults from Google (`MOD-07-F03`).
+            reminders: Reminders::Default,
         };
         // Nor a Google Meet call.
         let meet = self.meet && !self.kind.timed_only();
@@ -659,6 +661,7 @@ mod tests {
             color: Rgb(0x9f, 0xe1, 0xe7),
             access: Access::Owner,
             zone: Warsaw,
+            default_reminders: Vec::new(),
         }
     }
 
@@ -731,6 +734,7 @@ mod tests {
                     attachments: Vec::new(),
                     guests: Vec::new(),
                     meet: None,
+                    reminders: Reminders::Default,
                 },
                 recurrence: Vec::new(),
                 meet: false,
