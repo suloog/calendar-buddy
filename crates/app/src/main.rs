@@ -56,7 +56,7 @@ use eframe::egui;
 use network::Online;
 use platform::{
     SystemAppearance, SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart,
-    XdgLinkHandler,
+    XdgLauncher, XdgLinkHandler,
 };
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -1519,6 +1519,15 @@ impl eframe::App for CalendarApp {
         let last = sync_status.last_synced;
         let indicator = status::indicator(state, last, self.zone, today, regional);
         let synced = status::last_synced(last, self.zone, today, regional);
+        // The widths the indicator keeps, so the view picker stays put as it changes.
+        let a_time = regional.time(chrono::NaiveTime::from_hms_opt(22, 22, 0).unwrap_or_default());
+        let widest = [
+            texts::SYNCHRONIZING.to_string(),
+            texts::state_since(texts::UP_TO_DATE, &a_time),
+            texts::state_since(texts::OFFLINE, &a_time),
+        ];
+        let widest: Vec<&str> = widest.iter().map(String::as_str).collect();
+        let declined = !self.settings.hide_declined;
         let names: Vec<&str> = View::ALL.iter().map(|view| view.name()).collect();
         let picked = View::ALL
             .iter()
@@ -1526,6 +1535,7 @@ impl eframe::App for CalendarApp {
             .unwrap_or(0);
         let (mut menu, mut to_today, mut previous, mut next) = (false, false, false, false);
         let (mut settings, mut refresh, mut switched) = (false, false, None);
+        let mut declined_switched = false;
         egui::Panel::top("view-bar").frame(bar).show(ui, |ui| {
             // The right side first: in a narrow window the period's title is cut short rather
             // than drawn under the controls.
@@ -1560,9 +1570,17 @@ impl eframe::App for CalendarApp {
                         } else {
                             shown.weak()
                         };
-                        ui.label(shown).on_hover_text(synced);
+                        widgets::steady_label(ui, shown, &widest).on_hover_text(synced);
                         ui.add_space(8.0);
                         switched = widgets::segmented(ui, &names, picked);
+                        // One switch shows or hides declined events, shown by default
+                        // (`MOD-06-F22`).
+                        let hint = if declined {
+                            texts::HIDE_DECLINED
+                        } else {
+                            texts::SHOW_DECLINED
+                        };
+                        declined_switched = widgets::icon_switch(ui, "👁", declined, hint).clicked();
                     },
                 );
         });
@@ -1589,6 +1607,11 @@ impl eframe::App for CalendarApp {
         }
         if let Some(i) = switched {
             self.navigation.switch(View::ALL[i]);
+        }
+        if declined_switched {
+            self.settings.hide_declined = declined;
+            self.save_settings();
+            self.rebuild();
         }
         // Everything cached can still be browsed (`MOD-02-U02`, `MOD-02-F15`).
         if let Some(indicator) = offline::indicator(online) {
@@ -1740,15 +1763,6 @@ impl eframe::App for CalendarApp {
                     &sync_status,
                     online,
                 );
-                // One switch shows or hides declined events, shown by default (`MOD-06-F22`),
-                // over the calendars, whose list scrolls.
-                let mut declined = !self.settings.hide_declined;
-                if ui.checkbox(&mut declined, texts::SHOW_DECLINED).changed() {
-                    self.settings.hide_declined = !declined;
-                    self.save_settings();
-                    self.rebuild();
-                }
-                ui.separator();
                 match calendar_list::show(ui, &groups, &self.settings.colors) {
                     Some(calendar_list::Action::Picked(picked)) => {
                         pick(&mut self.settings.colors, picked)
@@ -1886,7 +1900,12 @@ fn window_options(placement: &Placement) -> eframe::NativeOptions {
             .with_title(texts::APP_NAME)
             .with_inner_size(placement.size)
             .with_maximized(placement.maximized)
-            .with_min_inner_size([480.0, 360.0]),
+            .with_min_inner_size([480.0, 360.0])
+            // The desktop finds the launcher's entry, and so the icon, by the application ID.
+            .with_app_id(calendar_core::background::APP_ID)
+            .with_icon(std::sync::Arc::new(
+                eframe::icon_data::from_png_bytes(platform::ICON).expect("the app's icon"),
+            )),
         // Also makes each new window's renderer get the whole font atlas of the context the
         // windows share; without it a reopened window panics on its first new glyph.
         system_font_fallback: true,
@@ -1928,6 +1947,8 @@ fn main() -> eframe::Result {
     });
     // Off the UI thread, as the window opens.
     std::thread::spawn(|| XdgLinkHandler::new().register());
+    // Losing it only leaves the app without its icon in the desktop's menus and task bar.
+    std::thread::spawn(|| XdgLauncher::new().install());
     let tray = SystemTray::new();
     let tray_shown = tray.show(Box::new(signaled), background::at_login(&args));
     let mut shown = background::starts_shown(&args, tray_shown);

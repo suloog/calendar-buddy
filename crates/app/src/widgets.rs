@@ -42,6 +42,32 @@ pub fn refresh_button(ui: &mut egui::Ui, icon: &str, hint: &str, turning: bool) 
     response
 }
 
+/// An `icon_button` that stays filled while `on`: a switch in the bars.
+pub fn icon_switch(ui: &mut egui::Ui, icon: &str, on: bool, hint: &str) -> Response {
+    ui.add(Button::selectable(on, RichText::new(icon).size(16.0)))
+        .on_hover_text(hint)
+}
+
+/// Text in the small weak style, right-aligned in a width that fits each of `widest` too, so
+/// what stands left of it keeps its place as the text changes.
+pub fn steady_label(ui: &mut egui::Ui, text: RichText, widest: &[&str]) -> Response {
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    let measure = |text: &str| {
+        ui.painter()
+            .layout_no_wrap(text.to_owned(), font.clone(), egui::Color32::PLACEHOLDER)
+            .size()
+            .x
+    };
+    let width = widest
+        .iter()
+        .map(|text| measure(text))
+        .fold(measure(text.text()), f32::max);
+    let size = egui::vec2(width, ui.spacing().interact_size.y);
+    let layout = egui::Layout::right_to_left(egui::Align::Center);
+    ui.allocate_ui_with_layout(size, layout, |ui| ui.label(text))
+        .inner
+}
+
 /// A button outlined in the lines' gray, with no fill until hovered.
 pub fn outlined_button(ui: &mut egui::Ui, text: &str) -> Response {
     let line = ui.visuals().widgets.noninteractive.bg_stroke;

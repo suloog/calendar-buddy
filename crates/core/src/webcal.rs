@@ -18,8 +18,9 @@ pub fn link(args: &[String]) -> Option<&str> {
 /// kept out of the desktop's menus.
 pub fn handler_entry(exe: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=x-office-calendar\n\
+        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon={}\n\
          Exec={} %u\nMimeType=x-scheme-handler/webcal;\nNoDisplay=true\n",
+        crate::background::APP_ID,
         exec_argument(&exe.to_string_lossy())
     )
 }
@@ -56,7 +57,7 @@ mod tests {
         let entry = handler_entry(Path::new("/usr/bin/calendar-buddy"));
         assert_eq!(
             entry,
-            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=x-office-calendar\n\
+            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=calendar-buddy\n\
              Exec=\"/usr/bin/calendar-buddy\" %u\nMimeType=x-scheme-handler/webcal;\n\
              NoDisplay=true\n"
         );

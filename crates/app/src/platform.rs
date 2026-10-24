@@ -289,7 +289,7 @@ impl Notifier for SystemNotifier {
             &(
                 texts::APP_NAME,
                 0u32,
-                "x-office-calendar",
+                background::APP_ID,
                 notification.title.as_str(),
                 escaped(&notification.body()),
                 actions,
@@ -425,7 +425,7 @@ impl ksni::Tray for TrayIcon {
     }
 
     fn icon_name(&self) -> String {
-        "x-office-calendar".into()
+        background::APP_ID.into()
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
@@ -437,7 +437,7 @@ impl ksni::Tray for TrayIcon {
         vec![
             StandardItem {
                 label: texts::OPEN_APP.into(),
-                icon_name: "x-office-calendar".into(),
+                icon_name: background::APP_ID.into(),
                 activate: Box::new(|tray: &mut Self| (tray.chosen)(Signal::Open)),
                 ..Default::default()
             }
@@ -556,6 +556,60 @@ impl LinkHandler for XdgLinkHandler {
             std::fs::create_dir_all(dir)?;
         }
         std::fs::write(entry, wanted)
+    }
+}
+
+/// The app's icon, as the window and the desktop's icon theme take it.
+pub const ICON: &[u8] = include_bytes!("../assets/icon/calendar-buddy.png");
+
+/// The app in the desktop's menus with its icon: the launcher's entry in
+/// `$XDG_DATA_HOME/applications` and the icon in the user's icon theme, the desktop taking the
+/// window's icon from the entry of its application ID.
+pub struct XdgLauncher {
+    /// The entry and the icon's file; `None` when there is no home directory.
+    files: Option<(PathBuf, PathBuf)>,
+}
+
+impl XdgLauncher {
+    pub fn new() -> Self {
+        let data = std::env::var_os("XDG_DATA_HOME")
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
+            });
+        XdgLauncher::at(data)
+    }
+
+    fn at(data: Option<PathBuf>) -> Self {
+        let id = background::APP_ID;
+        XdgLauncher {
+            files: data.map(|dir| {
+                (
+                    dir.join(format!("applications/{id}.desktop")),
+                    dir.join(format!("icons/hicolor/256x256/apps/{id}.png")),
+                )
+            }),
+        }
+    }
+
+    /// Writes the entry and the icon, each only when it changed: the desktop rereads them after
+    /// every write.
+    pub fn install(&self) -> std::io::Result<()> {
+        let Some((entry, icon)) = &self.files else {
+            return Err(std::io::ErrorKind::NotFound.into());
+        };
+        let wanted = background::launcher_entry(&running_exe()?);
+        for (path, contents) in [(icon, ICON), (entry, wanted.as_bytes())] {
+            if std::fs::read(path).is_ok_and(|kept| kept == contents) {
+                continue;
+            }
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            std::fs::write(path, contents)?;
+        }
+        Ok(())
     }
 }
 
@@ -698,6 +752,32 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
             webcal::handler_entry(&exe)
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_launchers_entry_and_the_icon_are_installed_and_kept_up_to_date() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-launcher-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let launcher = XdgLauncher::at(Some(dir.clone()));
+        let entry = dir.join("applications/calendar-buddy.desktop");
+        let icon = dir.join("icons/hicolor/256x256/apps/calendar-buddy.png");
+
+        launcher.install().unwrap();
+        let exe = std::env::current_exe().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&entry).unwrap(),
+            background::launcher_entry(&exe)
+        );
+        assert_eq!(std::fs::read(&icon).unwrap(), ICON);
+
+        std::fs::write(&entry, "[Desktop Entry]\nExec=/old/calendar-buddy\n").unwrap();
+        launcher.install().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&entry).unwrap(),
+            background::launcher_entry(&exe)
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

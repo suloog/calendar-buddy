@@ -312,8 +312,8 @@ mod tests {
             .textures_delta
             .clear();
         let font = egui::FontId::proportional(14.0);
-        // The top bar's side panel button, the calendars' locks and the toggles' ticks.
-        for mark in ["☰", "🔒", "✔", "…"] {
+        // The top bar's icons, the calendars' locks and the toggles' ticks.
+        for mark in ["☰", "🔒", "✔", "…", "👁", "🔄", "⚙"] {
             assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, mark)), "{mark}");
         }
     }

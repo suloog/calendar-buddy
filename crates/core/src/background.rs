@@ -61,10 +61,23 @@ pub fn starts_shown(args: &[String], tray: bool) -> bool {
     !(tray && at_login(args))
 }
 
+/// The app's icon in the desktop's icon theme, and its window's application ID, which the desktop
+/// matches to the launcher's entry of the same name.
+pub const APP_ID: &str = "calendar-buddy";
+
+/// The launcher's entry, which puts the app at `exe` in the desktop's menus with its icon.
+pub fn launcher_entry(exe: &Path) -> String {
+    format!(
+        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon={APP_ID}\n\
+         Exec={}\nCategories=Office;Calendar;\nStartupWMClass={APP_ID}\n",
+        exec_argument(&exe.to_string_lossy())
+    )
+}
+
 /// The XDG autostart entry that starts the app at `exe` in the tray at login.
 pub fn autostart_entry(exe: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=x-office-calendar\n\
+        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon={APP_ID}\n\
          Exec={} {IN_TRAY}\n",
         exec_argument(&exe.to_string_lossy())
     )
@@ -134,8 +147,19 @@ mod tests {
         let entry = autostart_entry(Path::new("/usr/bin/calendar-buddy"));
         assert_eq!(
             entry,
-            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=x-office-calendar\n\
+            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=calendar-buddy\n\
              Exec=\"/usr/bin/calendar-buddy\" --in-tray\n"
+        );
+    }
+
+    #[test]
+    fn the_launchers_entry_gives_the_apps_icon_and_matches_its_window() {
+        let entry = launcher_entry(Path::new("/usr/bin/calendar-buddy"));
+        assert_eq!(
+            entry,
+            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=calendar-buddy\n\
+             Exec=\"/usr/bin/calendar-buddy\"\nCategories=Office;Calendar;\n\
+             StartupWMClass=calendar-buddy\n"
         );
     }
 

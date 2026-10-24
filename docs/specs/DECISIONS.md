@@ -1872,3 +1872,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-155] The app's own icon, its launcher entry, and the declined switch back in the top bar
+
+- **Date:** 2026-10-24
+- **Decided by:** product owner
+- **Source:** product owner's request of 2026-10-24 ("add the icon to the top bar, add an app icon, and give Up to date a fixed width so the view buttons do not jump while it updates")
+- **Affects:** `MOD-06-F22`, `MOD-07-F14`, `MOD-07-F16`, `DEC-154`
+- **Decision:** The switch showing declined events is an eye icon in the top bar, left of the view picker, filled while they are shown, its action as hover text; it leaves the side panel, so there is still one switch (`MOD-06-F22`; supersedes that part of `DEC-154`). The synchronization indicator keeps the width of its widest usual text (`Synchronizing…`, `Up to date (22:22)`, `Offline (22:22)`), right-aligned, so the view picker stays put; only a longer error or a date makes it wider. The app has its own icon (a blue tile with a calendar page of three events, drawn by `scripts/icon.py`): on the window, in the tray, on notifications and in the autostart and `webcal:` entries. At start the app writes, when they differ, its launcher's entry (`calendar-buddy.desktop` in `$XDG_DATA_HOME/applications`) and the icon into the user's icon theme; the window's application ID matches the entry, as the desktop needs on Wayland to show the icon, and the app appears in the desktop's menus.
+- **Why:** The product owner asked for the switch to be always at hand, for the view picker not to move as the indicator changes, and for an icon of the app's own instead of the theme's generic calendar.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted

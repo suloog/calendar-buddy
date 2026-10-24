@@ -213,6 +213,7 @@ pub const TODAY: &str = "Today";
 pub const UPCOMING: &str = "Upcoming";
 pub const SETTINGS: &str = "Settings";
 pub const REFRESH: &str = "Refresh";
+pub const HIDE_DECLINED: &str = "Hide declined events";
 pub const SHOW_DECLINED: &str = "Show declined events";
 pub const TRY_AGAIN: &str = "Try again";
 pub const CANCEL: &str = "Cancel";
