@@ -1810,6 +1810,23 @@ mod tests {
     }
 
     #[test]
+    fn a_calendar_subscribed_from_a_webcal_link_in_google_appears_at_the_next_round() {
+        let google = Google::start("subscribed");
+        google.calendar("work", "owner");
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+
+        // Added in Google Calendar from its address (`MOD-07-F18`): a calendar the account reads.
+        google.calendar("holidays", "reader");
+        google.event("holidays", "new-year", "New Year");
+        assert_eq!(
+            told(engine.handle(None, start + secs(60))).unwrap(),
+            ["New Year"]
+        );
+        assert_eq!(listed(&engine), ["work", "holidays"]);
+    }
+
+    #[test]
     fn a_calendar_list_google_does_not_send_leaves_the_calendars_as_they_were() {
         let google = Google::start("list-failing");
         google.calendar("work", "owner");

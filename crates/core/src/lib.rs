@@ -33,4 +33,5 @@ pub mod status;
 pub mod sync;
 pub mod undo;
 pub mod view_model;
+pub mod webcal;
 pub mod week;

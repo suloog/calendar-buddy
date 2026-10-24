@@ -79,3 +79,10 @@ pub trait Instance {
     /// this copy is to end.
     fn claim(&self, launched: Box<dyn Fn() + Send + Sync>) -> bool;
 }
+
+/// The desktop's handlers of links: `webcal:` links opened anywhere go to the app
+/// (`MOD-07-F18`).
+pub trait LinkHandler {
+    /// Registers the app as the handler of `webcal:` links.
+    fn register(&self) -> std::io::Result<()>;
+}

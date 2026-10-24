@@ -27,7 +27,7 @@ use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
-use calendar_core::platform::{Autostart, Browser, Instance, Tray};
+use calendar_core::platform::{Autostart, Browser, Instance, LinkHandler, Tray};
 use calendar_core::regional::Regional;
 use calendar_core::reminders::{Action, ReminderId, SNOOZES, Silenced};
 use calendar_core::series::{Question, Scope};
@@ -38,13 +38,16 @@ use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
 use calendar_core::undo::{LastChange, Undo};
 use calendar_core::view_model::{GridViewModel, grid_view};
+use calendar_core::webcal;
 use checks::Checks;
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use connect::Connect;
 use eframe::egui;
 use network::Online;
-use platform::{SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart};
+use platform::{
+    SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart, XdgLinkHandler,
+};
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
@@ -1832,6 +1835,13 @@ fn window_options(placement: &Placement) -> eframe::NativeOptions {
 }
 
 fn main() -> eframe::Result {
+    let args: Vec<String> = std::env::args().collect();
+    // A `webcal:` link opened in the system goes to Google Calendar's page for adding it; the
+    // calendar comes back through synchronization (`MOD-07-F18`).
+    if let Some(link) = webcal::link(&args) {
+        let _ = SystemBrowser.open(&calendar_google::subscribe_page(link));
+        return Ok(());
+    }
     // One context for every time the window opens, so what the app's threads ask of it reaches
     // the window shown.
     let ctx = egui::Context::default();
@@ -1856,7 +1866,8 @@ fn main() -> eframe::Result {
             let _ = sender.send(None);
         }
     });
-    let args: Vec<String> = std::env::args().collect();
+    // Off the UI thread, as the window opens.
+    std::thread::spawn(|| XdgLinkHandler::new().register());
     let tray = SystemTray::new();
     let tray_shown = tray.show(Box::new(signaled), background::at_login(&args));
     let mut shown = background::starts_shown(&args, tray_shown);

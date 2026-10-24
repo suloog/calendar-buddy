@@ -1764,3 +1764,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-146] How `webcal:` links reach the app and Google Calendar
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-06
+- **Affects:** `US-07-06`, `MOD-07-F18`, `DEC-46`
+- **Decision:** Each time the running copy of the app starts, it writes the desktop entry `calendar-buddy-webcal.desktop` into `$XDG_DATA_HOME/applications` (`~/.local/share/applications`), unless the entry is already up to date. The entry declares `MimeType=x-scheme-handler/webcal;`, starts the running program's path with the link (`%u`), and is hidden from the menus (`NoDisplay=true`). The app does not change the user's default applications (`mimeapps.list`): when another program claims `webcal:` links and is the user's default for them, links keep going there. A launch with a `webcal:` link only opens `https://calendar.google.com/calendar/r?cid=<the link>` in the browser and ends: it opens no window, does not start the app, and does not bring a running window forward. The page is opened without `authuser`, so Google uses the browser's signed-in account and the user can switch there.
+- **Why:** There is no .deb package yet to ship the entry, and an entry of its own name does not hide a launcher a package installs later. Taking over the user's choice of default program would go beyond what the spec asks. The subscription is made in Google and arrives through synchronization (`DEC-46`), so the app has nothing to show; the link does not say which account to subscribe with.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
