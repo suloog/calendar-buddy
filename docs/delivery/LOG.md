@@ -264,3 +264,10 @@
   - One squash commit: one logical change.
 - Manual checks: TC-06-13, TC-06-01, TC-06-02, US-06-01#4, US-06-01#5
 - Commits on main: cb8807f feat(guests): invite guests with suggestions [US-06-01]
+
+## US-06-02 — review — 2026-10-24 03:50
+- What: event details list everyone invited with name, address and an answer icon (✔ ✖ ❓ ⏳), collapsed beyond 10 with "Show N more"; open details follow the latest synchronization. Guest data and its sync were already on main from US-06-01.
+- Decisions: DEC-123
+- Reviews: code 1 round(s), spec 1 round(s); open notes: the open dialog's refresh is not unit-tested (UI, covered by a manual check); COVERAGE row `US-06-02#3` has no TC (`DEC-65`), unit-tested only
+- Manual checks: TC-06-03 (US-06-02#1, #2), US-06-02#3
+- Commits on main: 67ee24c feat(guests): show guests and their answers in details [US-06-02] (squash, one logical change)
