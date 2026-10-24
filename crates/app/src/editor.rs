@@ -6,14 +6,16 @@
 //! picked from Google's event colours (`US-05-09`). Guests are added by address or from the people
 //! suggested while typing, marked optional and removed (`US-06-01`); the "Add Google Meet" switch
 //! turns on with the first guest (`US-06-07`). Under the time, the guests' availability that day
-//! (`US-06-08`).
+//! (`US-06-08`). The event's reminders, starting from its calendar's defaults (`US-07-04`).
 
 use calendar_core::accounts::Entry;
 use calendar_core::availability::{CONFLICT, NO_DATA, Preview};
 use calendar_core::colors::EventColor;
-use calendar_core::editor::{Editor, Ending, Save};
+use calendar_core::editor::{
+    Editor, Ending, LONGEST_REMINDER, MOST_REMINDERS, ReminderField, Save, Unit,
+};
 use calendar_core::guests::Person;
-use calendar_core::model::{Calendar, Kind, Show, Visibility};
+use calendar_core::model::{Calendar, Kind, Method, Show, Visibility};
 use calendar_core::regional::Regional;
 use calendar_core::repeat::Pattern;
 use eframe::egui::{self, CornerRadius, Rect, Sense, Stroke, StrokeKind, Vec2};
@@ -43,6 +45,21 @@ fn visibility_label(visibility: Visibility) -> &'static str {
         Visibility::Default => "Default visibility",
         Visibility::Public => "Public",
         Visibility::Private => "Private",
+    }
+}
+
+fn method_label(method: Method) -> &'static str {
+    match method {
+        Method::Notification => "Notification",
+        Method::Email => "Email",
+    }
+}
+
+fn unit_label(unit: Unit) -> &'static str {
+    match unit {
+        Unit::Minutes => "minutes",
+        Unit::Hours => "hours",
+        Unit::Days => "days",
     }
 }
 
@@ -212,6 +229,59 @@ fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[S
         if let Some(email) = removed {
             editor.remove_guest(&email);
         }
+    });
+}
+
+/// The event's reminders, each a notification or an e-mail so many minutes, hours or days before,
+/// and removable; "Add notification" up to Google's limit, and "Use calendar defaults" for an
+/// event with reminders of its own (`MOD-07-F04`, `F05`). Changing the calendar's defaults shown
+/// makes them the event's own, as in Google Calendar.
+fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
+    let shown = editor.reminder_fields();
+    let mut fields = shown.clone();
+    ui.vertical(|ui| {
+        let mut removed = None;
+        for (i, field) in fields.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                egui::ComboBox::from_id_salt(("editor-reminder-method", i))
+                    .selected_text(method_label(field.method))
+                    .show_ui(ui, |ui| {
+                        for method in [Method::Notification, Method::Email] {
+                            ui.selectable_value(&mut field.method, method, method_label(method));
+                        }
+                    });
+                // A number too large for the unit picked stays, and Save says why.
+                let most = LONGEST_REMINDER / field.unit.minutes();
+                ui.add(
+                    egui::DragValue::new(&mut field.amount)
+                        .range(0..=most)
+                        .clamp_existing_to_range(false),
+                );
+                egui::ComboBox::from_id_salt(("editor-reminder-unit", i))
+                    .selected_text(unit_label(field.unit))
+                    .show_ui(ui, |ui| {
+                        for unit in Unit::ALL {
+                            ui.selectable_value(&mut field.unit, unit, unit_label(unit));
+                        }
+                    });
+                if ui.button("Remove").clicked() {
+                    removed = Some(i);
+                }
+            });
+        }
+        if let Some(i) = removed {
+            fields.remove(i);
+        }
+        ui.horizontal(|ui| {
+            if fields.len() < MOST_REMINDERS && ui.button("Add notification").clicked() {
+                fields.push(ReminderField::NEW);
+            }
+            if editor.reminders.is_some() && ui.button("Use calendar defaults").clicked() {
+                editor.reminders = None;
+            } else if fields != shown {
+                editor.reminders = Some(fields);
+            }
+        });
     });
 }
 
@@ -405,6 +475,10 @@ pub fn show(
 
                 ui.label("");
                 ui.checkbox(&mut editor.meet, "Add Google Meet");
+                ui.end_row();
+
+                ui.label("Notifications");
+                reminders(ui, editor);
                 ui.end_row();
             }
 

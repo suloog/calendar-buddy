@@ -456,3 +456,24 @@ Not proven: the real settings dialog and side-panel menu, and real KDE notificat
 - [ ] `US-07-03#1` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy` and open the settings. Under "Notifications", "Desktop notifications" is ticked. Untick it, then create an event in Google Calendar starting in 12 minutes with a 10-minute notification reminder: no KDE notification comes. Restart the app: the box is still unticked. Tick it again, then create another such event: its notification comes.
 - [ ] `TC-07-04` / `US-07-03#2` (real Google, KDE session, a person's eyes): in the side panel, open a calendar's "…" menu. "Mute notifications" is under the colours. Choose it: the calendar and its events stay shown, and the menu now says "Unmute notifications". An event in that calendar, starting in 12 minutes with a 10-minute reminder, gives no notification. Unmute it: the next reminder of that calendar gives a notification again.
 - [ ] `US-07-03#3` (real Google, a person's eyes): after the two checks above, open the events in Google Calendar: their reminders are as they were set.
+
+## US-07-04
+
+Needs a connected real Google account and a person's eyes. The tests below use a fake Google that refuses, as Google does, default reminders sent together with overrides, and more than five overrides. They prove:
+- a new event shows its calendar's default reminders and is sent without reminders of its own, so Google gives it the defaults;
+- added, changed and removed reminders (notification or e-mail; minutes, hours or days) are sent as the event's own, at most five and at most 4 weeks before;
+- "Use calendar defaults" sends `useDefault` with no overrides, and the event reads back on its calendar's defaults;
+- undo, and "this and following" in a series, keep the reminders right.
+
+The tests:
+- app: `tc_07_05_a_new_event_gets_its_calendars_default_reminders_an_added_one_reaches_google_and_use_calendar_defaults_resets`;
+- google: `a_new_event_is_sent_with_its_own_reminders_or_left_to_its_calendars_defaults`, `an_events_reminders_are_changed_and_set_back_to_its_calendars_defaults`, `a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fields`;
+- core: `editor::tests::a_new_event_shows_and_keeps_its_calendars_default_reminders_until_they_are_changed`, `a_reminders_time_is_shown_in_the_largest_unit_it_is_a_whole_number_of`, `a_reminder_more_than_four_weeks_before_cannot_be_saved_and_the_editor_says_why`, `an_event_takes_five_reminders_and_no_more`, `an_events_own_reminders_are_changed_and_set_back_to_its_calendars_defaults`, `new_out_of_office_is_made_with_its_calendars_default_reminders`, `series::tests::this_and_following_keeps_the_series_reminders_or_takes_those_set`, `undo::tests::undoing_an_edit_restores_every_field_changed_and_moves_the_event_back`.
+
+Not proven: the real editor's "Notifications" section, and that real Google takes these requests. Choice to ratify:
+- `DEC-141`: the editor's controls, the 30-minute new notification, the limits, and no reminders for new out of office and focus time.
+
+- [ ] `US-07-04#1` (real Google, a person's eyes): run `cargo run -p calendar-buddy`. Create a new event in a calendar whose default notifications are set in Google: the editor's "Notifications" lists those defaults. Save it. In Google Calendar in the browser, the event's notifications are the calendar's defaults.
+- [ ] `US-07-04#2`, `#3` (real Google, a person's eyes): open that event in the app's editor. Add an "Email" reminder of 1 "days", change the first to 2 "hours", and save. In Google Calendar in the browser, the event shows a notification 2 hours before and an email 1 day before. Back in the app, "Remove" one and save: it is gone in the browser too. "Add notification" disappears once the event has five reminders.
+- [ ] `US-07-04#4` (real Google, a person's eyes): in the app's editor of that event, choose "Use calendar defaults" and save. Google takes it without an error. In the browser the event is back on the calendar's default notifications.
+- [ ] `US-07-04` edge case (real Google): add the same reminder twice and save. Note whether Google keeps both, merges them, or refuses the change.

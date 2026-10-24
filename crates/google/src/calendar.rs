@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::availability::{Availability, Span};
-use calendar_core::cache::{Cache, parse_access, parse_color, parse_method};
+use calendar_core::cache::{Cache, method_key, parse_access, parse_color, parse_method};
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
@@ -359,6 +359,10 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
     if !event.about.guests.is_empty() {
         fields["attendees"] = attendees(&event.about.guests, &[]);
     }
+    // Sent without its own, Google gives it its calendar's defaults (`MOD-07-F03`).
+    if let Reminders::Own(_) = event.about.reminders {
+        fields["reminders"] = google_reminders(&event.about.reminders);
+    }
     // Out of office and focus time with what Google Calendar sets them up with: new invitations
     // that clash are declined, and chat is set to do not disturb during focus time; both busy.
     match event.about.kind {
@@ -386,6 +390,22 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
         unreachable!("an object");
     };
     fields
+}
+
+/// Google's `reminders` of an event (`MOD-07-F04`, `F05`).
+fn google_reminders(reminders: &Reminders) -> Value {
+    match reminders {
+        Reminders::Default => json!({"useDefault": true}),
+        Reminders::Own(own) => json!({
+            "useDefault": false,
+            "overrides": (own.iter())
+                .map(|reminder| json!({
+                    "method": method_key(reminder.method),
+                    "minutes": reminder.minutes,
+                }))
+                .collect::<Vec<_>>(),
+        }),
+    }
 }
 
 /// Google's `attendees` of an event for the guests. A guest Google keeps an entry for in `kept`
@@ -680,6 +700,8 @@ impl Provider for Session {
         event.remove("colorId");
         let kept = event.remove("attendees").unwrap_or_default();
         event.extend(fields(new));
+        // The reminders `new` gives it, its calendar's defaults included.
+        event.insert("reminders".into(), google_reminders(&new.about.reminders));
         if !new.about.guests.is_empty() {
             event.insert(
                 "attendees".into(),
@@ -740,6 +762,14 @@ impl Provider for Session {
         set(
             "colorId",
             patch.color.map(|color| json!(color.map(color_id))),
+        );
+        // Back to the defaults, the overrides the event had go: Google refuses both together.
+        set(
+            "reminders",
+            (patch.reminders.as_ref()).map(|reminders| match reminders {
+                Reminders::Default => json!({"useDefault": true, "overrides": []}),
+                own => google_reminders(own),
+            }),
         );
         let mut url = self.url(&["calendars", &calendar.id, "events", id]);
         // What Google keeps of each guest is read first, as the list is replaced whole. The

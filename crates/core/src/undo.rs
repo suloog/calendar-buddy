@@ -60,6 +60,7 @@ impl Undo {
                 guests: (patch.guests.as_ref()).map(|_| before.about.guests.clone()),
                 response: None,
                 meet: patch.meet.map(|_| before.about.meet.is_some()),
+                reminders: (patch.reminders.as_ref()).map(|_| before.about.reminders.clone()),
             },
             to: edit.to.as_ref().map(|_| edit.calendar.clone()),
             // As the user answered for the change it undoes (`MOD-06-F12`).
@@ -160,7 +161,7 @@ mod tests {
     use crate::create::NO_TITLE;
     use crate::fixtures::{d, timed};
     use crate::guests::{Guest, Person};
-    use crate::model::{Access, Rgb, Show, Timing};
+    use crate::model::{Access, Reminders, Rgb, Show, Timing};
     use chrono_tz::Europe::Warsaw;
 
     fn calendar(id: &str) -> Calendar {
@@ -246,6 +247,7 @@ mod tests {
                 })]),
                 response: None,
                 meet: Some(true),
+                reminders: Some(Reminders::Own(Vec::new())),
             },
             to: Some(calendar("team")),
             notify: true,
@@ -272,6 +274,7 @@ mod tests {
                 guests: Some(Vec::new()),
                 response: None,
                 meet: Some(false),
+                reminders: Some(Reminders::Default),
             }
         );
         assert_eq!(undo.calendar, calendar("team"));

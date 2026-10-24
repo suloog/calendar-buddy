@@ -1780,9 +1780,13 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
             end: at(10) + chrono::Duration::minutes(15),
             zone: Warsaw,
         },
-        // The series' colour and guests, as synchronized.
+        // The series' colour, guests and reminders, as synchronized.
         about: About {
             color: Some(EventColor::Banana),
+            reminders: Reminders::Own(vec![Reminder {
+                method: Method::Notification,
+                minutes: 5,
+            }]),
             // As known from the occurrence, unanswered; Google's own answer of the series stays.
             guests: vec![Guest::invited(&person("", "guest@example.com"))],
             ..About::default()
@@ -1790,6 +1794,7 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
         recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6".into()],
         meet: false,
     };
+    // Without the series' colour, guests or reminders.
     let uncoloured = NewEvent {
         about: About::default(),
         ..following.clone()
@@ -1809,6 +1814,8 @@ fn a_series_is_copied_whole_with_its_guests_reminders_and_colour_but_the_new_fie
     let without = google.event(ACCOUNT_ID, "work", &without).unwrap();
     assert_eq!(without.get("colorId"), None);
     assert_eq!(without.get("attendees"), None);
+    // Nor reminders of its own: it takes its calendar's defaults (`MOD-07-F05`).
+    assert_eq!(without["reminders"], json!({"useDefault": true}));
     assert_eq!(copy["start"]["dateTime"], "2026-12-14T11:00:00+01:00");
     assert_eq!(
         copy["recurrence"],
@@ -2637,4 +2644,103 @@ fn busy_times_google_does_not_answer_are_an_error() {
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert!(busy.is_err());
+}
+
+#[test]
+fn a_new_event_is_sent_with_its_own_reminders_or_left_to_its_calendars_defaults() {
+    let (google, store, dir, client_file, cache) = synchronized_once("create-reminders");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let at = |h| Utc.with_ymd_and_hms(2026, 11, 12, h, 0, 0).unwrap();
+    let plain = NewEvent {
+        title: "Plan".into(),
+        timing: Timing::Timed {
+            start: at(9),
+            end: at(10),
+            zone: Warsaw,
+        },
+        about: About::default(),
+        recurrence: Vec::new(),
+        meet: false,
+    };
+    let reminded = NewEvent {
+        about: About {
+            reminders: Reminders::Own(vec![
+                Reminder {
+                    method: Method::Notification,
+                    minutes: 15,
+                },
+                Reminder {
+                    method: Method::Email,
+                    minutes: 1440,
+                },
+            ]),
+            ..About::default()
+        },
+        ..plain.clone()
+    };
+
+    let plain = session.create(&work, &plain).unwrap();
+    let reminded = session.create(&work, &reminded).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // Google gives an event sent without reminders its calendar's defaults (`MOD-07-F03`).
+    let plain = google.event(ACCOUNT_ID, "work", &plain).unwrap();
+    assert_eq!(plain.get("reminders"), None);
+    let reminded = google.event(ACCOUNT_ID, "work", &reminded).unwrap();
+    assert_eq!(
+        reminded["reminders"],
+        json!({"useDefault": false, "overrides": [
+            {"method": "popup", "minutes": 15},
+            {"method": "email", "minutes": 1440},
+        ]})
+    );
+}
+
+#[test]
+fn an_events_reminders_are_changed_and_set_back_to_its_calendars_defaults() {
+    let (google, store, dir, client_file, mut cache) = synchronized_once("update-reminders");
+    let mut review = timed(
+        "review",
+        "Review",
+        "2026-11-12T10:00:00+01:00",
+        "2026-11-12T11:00:00+01:00",
+    );
+    review["reminders"] =
+        json!({"useDefault": false, "overrides": [{"method": "popup", "minutes": 10}]});
+    google.add_event(ACCOUNT_ID, "work", review);
+    let synced = sync(&google, &store, &client_file, ACCOUNT_ID, &mut cache);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let work = cache.calendar_list().unwrap().remove(0);
+    let etag = cached(&cache, "work", "review").unwrap().etag;
+    let own = Patch {
+        reminders: Some(Reminders::Own(vec![Reminder {
+            method: Method::Email,
+            minutes: 60,
+        }])),
+        ..Patch::default()
+    };
+    let defaults = Patch {
+        reminders: Some(Reminders::Default),
+        ..Patch::default()
+    };
+
+    let etag = session.update(&work, "review", &etag, &own, false).unwrap();
+    let changed = google.event(ACCOUNT_ID, "work", "review").unwrap();
+    let reset = session.update(&work, "review", &etag, &defaults, false);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(synced, Ok(()));
+    assert_eq!(
+        changed["reminders"],
+        json!({"useDefault": false, "overrides": [{"method": "email", "minutes": 60}]})
+    );
+    // The overrides go with the defaults, as Google takes both together from no one.
+    assert!(reset.is_ok(), "{reset:?}");
+    let reset = google.event(ACCOUNT_ID, "work", "review").unwrap();
+    assert_eq!(reset["reminders"]["useDefault"], true);
+    assert!(
+        (reset["reminders"]["overrides"].as_array()).is_none_or(Vec::is_empty),
+        "{reset}"
+    );
 }
