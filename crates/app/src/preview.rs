@@ -411,6 +411,13 @@ fn preview() {
     picture("settings-light", week, Theme::Light, |app| {
         app.dialog = Some(Dialog::Settings)
     });
+    picture_sized(
+        "settings-short-light",
+        egui::vec2(1100.0, 560.0),
+        week,
+        Theme::Light,
+        |app| app.dialog = Some(Dialog::Settings),
+    );
     picture("details-light", week, Theme::Light, |app| {
         app.open(titled(app, "Architecture sync"), None)
     });

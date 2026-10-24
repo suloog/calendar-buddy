@@ -131,6 +131,9 @@ fn undo_pressed(input: &mut egui::InputState) -> bool {
     !input.modifiers.shift && input.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)
 }
 
+/// Room kept above and below a dialog, besides its title bar.
+const DIALOG_MARGIN: f32 = 48.0;
+
 /// Days the agenda shows when opened, and how many more each step of scrolling loads.
 const AGENDA_DAYS: i64 = 30;
 
@@ -764,10 +767,14 @@ impl CalendarApp {
             Dialog::Notify(..) => texts::NOTIFY_GUESTS,
             Dialog::Invitations => texts::INVITATIONS,
         };
+        // A dialog taller than the window scrolls, so all of it can be reached.
+        let room = ctx.content_rect().height() - 2.0 * DIALOG_MARGIN;
         egui::Window::new(title)
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
+            .vscroll(true)
+            .max_height(room)
             .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
             .show(ctx, |ui| match dialog {
                 Dialog::Shortcuts => {
