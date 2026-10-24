@@ -1788,3 +1788,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-148] Readable text on events and in the interface
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-02
+- **Affects:** `US-04-02`, `MOD-04-U04`, `MOD-04-NFR-01`, `MOD-06-F14`, `MOD-06-U04`, `DEC-147`
+- **Decision:** An event's text is black or white, whichever has the higher WCAG 2.1 contrast with what is under it: its calendar's or its own colour; for an invitation awaiting an answer, the light fill of that colour over the view's background; for a declined event, its colour under the veil that fades it. The veil of a declined event is drawn under its text, not over it, so the struck-through text stays readable; in the month and agenda views it fades the event's dot. The stripes of an out-of-office event are cleared from under its text with the event's colour, so the text reads on the colour alone. Until `US-04-03` gives the themes their palette, they stay egui's own looks, with these text colours changed to reach 4.5:1: weak text gray 110 in the light theme and gray 135 in the dark one, and, in the light theme, links and accents `#0064BE` and warnings `#B43C00`. Today's date in the day header is in strong text, as in the agenda and month views. In the mini calendar, the days of the period shown and the day under the pointer keep the text colour of their fill, so today and days of other months are not drawn in the accent or in weak text on the selection or the hover fill. Disabled controls stay greyed out, which WCAG 2.1 exempts from the contrast rule.
+- **Why:** The requirement asks for the luminance of the background (`MOD-04` *Technical notes*), and black or white always reaches 4.5:1 on any colour. Google Calendar picks dark or light event text by the event's colour in the same way. egui's default weak text, light-theme link and warning colours, and the selected days of the mini calendar fall below 4.5:1 (`MOD-04-NFR-01`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-149] How the compact grid is measured
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-02
+- **Affects:** `US-04-02`, `TC-04-03`, `MOD-04-U01`
+- **Decision:** The hour stays 44 points high, as `US-03-01` drew it. `TC-04-03` is automated on the week view drawn in a 1920×1080 window at 100% scale, with 100 points set aside for the window's title bar and the app's view bar. In that window the hours can be scrolled by only about three and a half hours, so 8:00 cannot reach the top; the test checks that both 8:00 and 18:00 are inside the hours shown. The 150% and 200% scales are checked by drawing the same view at those scales: the hours and the events' text keep their sizes in points, so they grow in pixels with the scale.
+- **Why:** At 44 points an hour, 8:00–18:00 takes 440 points, well under what a 1080-pixel window has room for (`MOD-04-U01`). The app's view bar is built with its accounts, so the test sets aside more room for it than it takes. egui lays out in points, which is how the grid keeps its proportions at any scale (`MOD-03-U02`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

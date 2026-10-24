@@ -8,7 +8,7 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
-use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable, text_on};
+use crate::grid_view::{awaiting, color, event_label, event_text, fade, filled, openable, text_on};
 
 const HEADER_HEIGHT: f32 = 24.0;
 const DATE_HEIGHT: f32 = 22.0;
@@ -44,15 +44,16 @@ fn paint_item(
     let clipped = painter.with_clip_rect(rect);
     let text = label(item, view, regional);
     // An invitation awaiting an answer, a chip or not (`MOD-06-U04`).
-    if item.awaiting {
-        awaiting(painter, rect, item.color);
-    }
+    let ink = if item.awaiting {
+        text_on(awaiting(painter, rect, item.color))
+    } else {
+        ink
+    };
     if item.start.is_none() {
         let on = if item.awaiting {
             ink
         } else {
-            painter.rect_filled(rect, CornerRadius::same(3), color(item.color));
-            text_on(item.color)
+            text_on(filled(painter, rect, item.color, item.declined))
         };
         event_text(
             &clipped,
@@ -69,6 +70,10 @@ fn paint_item(
             3.5,
             color(item.color),
         );
+        // A declined event, struck through and faded (`MOD-06-F14`).
+        if item.declined {
+            fade(painter, rect);
+        }
         event_text(
             &clipped,
             rect.left_center() + Vec2::new(14.0, 0.0),
@@ -78,10 +83,6 @@ fn paint_item(
             ink,
             item.declined,
         );
-    }
-    // A declined event, struck through and faded (`MOD-06-F14`).
-    if item.declined {
-        fade(painter, rect);
     }
 }
 
@@ -225,5 +226,52 @@ pub fn show(
     // Like Google Calendar, opening one of its events or Escape closes the list.
     if !open || opened.is_some() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.open_day = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::screen::{self, VERY_DARK, VERY_LIGHT, answered, contrast_of};
+    use calendar_core::contrast::AA;
+    use calendar_core::fixtures::{all_day, d, timed};
+    use calendar_core::guests::Response;
+    use calendar_core::month::month_view;
+    use calendar_core::theme::Scheme;
+    use chrono::{TimeZone, Utc, Weekday};
+    use chrono_tz::Europe::Warsaw;
+
+    #[test]
+    fn text_of_invitations_and_declined_events_reads_at_4_5_in_both_themes() {
+        let at = |title: &str, day| timed(title, d(2026, 11, day), (9, 0), (10, 0));
+        let events = [
+            answered(at("Invited light", 9), VERY_LIGHT, Response::Awaiting),
+            answered(at("Invited dark", 10), VERY_DARK, Response::Awaiting),
+            answered(at("Declined light", 11), VERY_LIGHT, Response::Declined),
+            answered(at("Declined dark", 12), VERY_DARK, Response::Declined),
+            answered(
+                all_day("All day light", d(2026, 11, 17), 1),
+                VERY_LIGHT,
+                Response::Declined,
+            ),
+            answered(
+                all_day("All day dark", d(2026, 11, 18), 1),
+                VERY_DARK,
+                Response::Declined,
+            ),
+        ];
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 12, 0, 0).unwrap();
+        let view = month_view(&events, d(2026, 11, 11), Warsaw, now, Weekday::Mon);
+        let regional = Regional::from_env(|_| None);
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = screen::drawn(Vec2::new(1600.0, 900.0), 1.0, scheme, None, |ui| {
+                show(ui, &view, &regional, &mut State::default(), &mut None);
+            });
+            for event in &events {
+                let ratio = contrast_of(&shapes, &event.title);
+                assert!(ratio >= AA, "{scheme:?}, {}: {ratio}", event.title);
+            }
+        }
     }
 }

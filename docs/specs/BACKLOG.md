@@ -90,7 +90,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-04-01` | As a User, I can use the app in a light or dark theme that follows my system, so that it fits my desktop day and night | F01, F02, F03 | must | review | — | — |
-| `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | ready | `US-04-01`, `US-03-01` | — |
+| `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | review | `US-04-01`, `US-03-01` | — |
 | `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05 | must | ready | `US-04-01`, `US-03-01` | — |
 
 ## [MOD-05] Creating and editing events

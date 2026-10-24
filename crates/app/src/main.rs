@@ -10,6 +10,8 @@ mod month_view;
 mod network;
 mod platform;
 mod remove;
+#[cfg(test)]
+mod screen;
 mod sync;
 
 use appearance::Desktop;
@@ -286,6 +288,7 @@ struct CalendarApp {
 
 impl CalendarApp {
     fn new(ctx: egui::Context, signals: Receiver<Option<Signal>>, tray: bool) -> Self {
+        appearance::install(&ctx);
         let regional = Regional::from_env(|key| std::env::var(key).ok());
         let zone = system_zone();
         let zone_changes = watch_zone(zone, ctx.clone());

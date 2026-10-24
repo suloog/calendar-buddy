@@ -6,7 +6,7 @@ use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use calendar_core::regional::Regional;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
-use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable};
+use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable, text_on};
 
 const DATE_WIDTH: f32 = 96.0;
 const TIME_WIDTH: f32 = 140.0;
@@ -110,16 +110,22 @@ pub fn show(
                     Vec2::new(rect.right() - x, ITEM_HEIGHT - 2.0),
                 );
                 // An invitation awaiting an answer (`MOD-06-U04`).
-                if item.awaiting {
-                    awaiting(&painter, row, item.color);
-                }
+                let ink = if item.awaiting {
+                    text_on(awaiting(&painter, row, item.color))
+                } else {
+                    visuals.text_color()
+                };
                 painter.circle_filled(Pos2::new(x + 6.0, y), 5.0, color(item.color));
+                // A declined event, struck through and faded (`MOD-06-F14`).
+                if item.declined {
+                    fade(&painter, row);
+                }
                 painter.text(
                     Pos2::new(x + 20.0, y),
                     Align2::LEFT_CENTER,
                     time_label(item, view, regional),
                     FontId::proportional(13.0),
-                    visuals.text_color(),
+                    ink,
                 );
                 event_text(
                     &painter,
@@ -127,7 +133,7 @@ pub fn show(
                     Align2::LEFT_CENTER,
                     event_label(item.title.as_deref(), item.read_only, item.saving),
                     FontId::proportional(13.0),
-                    visuals.text_color(),
+                    ink,
                     item.declined,
                 );
                 // Join opens its Google Meet call in the browser (`MOD-06-F18`).
@@ -140,10 +146,6 @@ pub fn show(
                     if ui.place(button, egui::Button::new("Join")).clicked() {
                         *join = Some(link.clone());
                     }
-                }
-                // A declined event, struck through and faded (`MOD-06-F14`).
-                if item.declined {
-                    fade(&painter, row);
                 }
             }
         }
@@ -160,6 +162,38 @@ fn near_end(seen_to: f32, content_height: f32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::screen::{self, VERY_DARK, VERY_LIGHT, answered, contrast_of};
+    use calendar_core::agenda::agenda_view;
+    use calendar_core::contrast::AA;
+    use calendar_core::fixtures::{d, timed};
+    use calendar_core::guests::Response;
+    use calendar_core::theme::Scheme;
+    use chrono::{TimeZone, Utc};
+    use chrono_tz::Europe::Warsaw;
+
+    #[test]
+    fn text_of_invitations_and_declined_events_reads_at_4_5_in_both_themes() {
+        let at = |title: &str, day| timed(title, d(2026, 11, day), (13, 0), (14, 0));
+        let events = [
+            answered(at("Invited light", 11), VERY_LIGHT, Response::Awaiting),
+            answered(at("Invited dark", 12), VERY_DARK, Response::Awaiting),
+            answered(at("Declined light", 13), VERY_LIGHT, Response::Declined),
+            answered(at("Declined dark", 14), VERY_DARK, Response::Declined),
+        ];
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
+        let view = agenda_view(&events, Warsaw, now, 14);
+        let regional = Regional::from_env(|_| None);
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = screen::drawn(Vec2::new(1600.0, 900.0), 1.0, scheme, None, |ui| {
+                show(ui, &view, &regional, &mut None, &mut None);
+            });
+            for event in &events {
+                let ratio = contrast_of(&shapes, &event.title);
+                assert!(ratio >= AA, "{scheme:?}, {}: {ratio}", event.title);
+            }
+        }
+    }
 
     #[test]
     fn more_days_load_only_when_scrolled_near_the_end() {

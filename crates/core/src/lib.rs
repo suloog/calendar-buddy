@@ -6,6 +6,7 @@ pub mod availability;
 pub mod background;
 pub mod cache;
 pub mod colors;
+pub mod contrast;
 pub mod create;
 pub mod details;
 pub mod drag;
