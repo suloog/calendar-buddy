@@ -6,8 +6,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use calendar_core::accounts::{self, Account, ConnectError};
+use calendar_core::accounts::{Account, ConnectError};
 use calendar_core::platform::{Browser, SecretStore};
+use calendar_core::texts;
 use calendar_google::{Client, Endpoints, SIGN_IN_WAIT};
 use eframe::egui;
 
@@ -148,7 +149,7 @@ impl Connect {
         if let Some(email) = &self.again
             && !matches!(self.stage, Stage::Start(None))
         {
-            ui.label(format!("Signing in again to {email}."));
+            ui.label(texts::signing_in_again(email));
         }
         match &self.stage {
             Stage::Start(error) => {
@@ -156,7 +157,7 @@ impl Connect {
                     Some(error) => {
                         ui.colored_label(ui.visuals().warn_fg_color, error.message());
                         ui.add_space(8.0);
-                        "Try again"
+                        texts::TRY_AGAIN
                     }
                     None => start,
                 };
@@ -168,22 +169,22 @@ impl Connect {
                 ui.spinner();
             }
             Stage::HeadsUp(client) => {
-                ui.label(accounts::UNVERIFIED_HEADS_UP);
+                ui.label(texts::UNVERIFIED_HEADS_UP);
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Continue in the browser").clicked() {
+                    if ui.button(texts::CONTINUE_IN_BROWSER).clicked() {
                         chosen = Some(Action::SignIn(client.clone()));
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(texts::CANCEL).clicked() {
                         chosen = Some(Action::Back);
                     }
                 });
             }
             Stage::Waiting(cancel) => {
                 ui.spinner();
-                ui.label(accounts::WAITING);
+                ui.label(texts::WAITING);
                 ui.add_space(8.0);
-                if ui.button("Cancel").clicked() {
+                if ui.button(texts::CANCEL).clicked() {
                     // The sign-in then ends as cancelled and says so.
                     cancel.store(true, Ordering::Relaxed);
                 }
@@ -208,10 +209,10 @@ pub fn welcome(ui: &mut egui::Ui, connect: &mut Connect) {
         ui.vertical_centered(|ui| {
             ui.set_max_width(480.0);
             ui.add_space(ui.available_height() / 4.0);
-            ui.heading("Welcome to Calendar Buddy");
-            ui.label("Connect a Google account to see your calendars.");
+            ui.heading(texts::WELCOME);
+            ui.label(texts::WELCOME_HINT);
             ui.add_space(16.0);
-            connect.show(ui, accounts::CONNECT);
+            connect.show(ui, texts::CONNECT);
         });
     });
 }

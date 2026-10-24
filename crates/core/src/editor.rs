@@ -18,36 +18,23 @@ use chrono_tz::Tz;
 
 use crate::accounts::Entry;
 use crate::colors::EventColor;
-use crate::create::{NO_CALENDAR, NO_TITLE, NewEvent, QuickEntry, wall};
-use crate::guests::{self, Guest, NOT_AN_ADDRESS, Person, Response};
+use crate::create::{NewEvent, QuickEntry, wall};
+use crate::guests::{self, Guest, Person, Response};
 use crate::model::{
     About, Access, Calendar, Event, Kind, Method, Reminder, Reminders, Show, Timing, Visibility,
 };
 use crate::regional::Regional;
 use crate::repeat::{Ends, Pattern, rule};
-
-/// What the editor says when the end is set before the start.
-pub const ENDS_BEFORE_STARTS: &str = "The event ends before it starts.";
-
-/// What the app says when an event saved with Google Meet came back without a call
-/// (MOD-06 *Constraints and edge cases*).
-pub const WITHOUT_MEET: &str =
-    "The event was saved without Google Meet: Google could not add a Meet call for this account.";
-
-/// What the editor says when a series is set to end before its first occurrence.
-pub const SERIES_ENDS_BEFORE_IT_STARTS: &str = "The series ends before it starts.";
+use crate::texts::{
+    self, ENDS_BEFORE_STARTS, NO_CALENDAR, NO_TITLE, NOT_AN_ADDRESS, REMINDER_TOO_EARLY,
+    SERIES_ENDS_BEFORE_IT_STARTS, TOO_MANY_REMINDERS,
+};
 
 /// How many reminders an event can have: Google's limit (`MOD-07-F04`).
 pub const MOST_REMINDERS: usize = 5;
 
 /// How long before an event a reminder can be at most: Google's limit of four weeks.
 pub const LONGEST_REMINDER: u32 = 4 * 7 * 24 * 60;
-
-/// What the editor says when a reminder is set further before the event than Google allows.
-pub const REMINDER_TOO_EARLY: &str = "A reminder can be at most 4 weeks before the event.";
-
-/// What the editor says when an event is given more reminders than Google takes.
-pub const TOO_MANY_REMINDERS: &str = "An event can have at most 5 reminders.";
 
 /// How many occurrences a series ending after a number of them has until another is typed:
 /// Google Calendar's default.
@@ -599,8 +586,8 @@ impl Editor {
         let ends = match self.ends {
             Ending::Never => Ends::Never,
             Ending::OnDate => {
-                let last = (regional.parse_date(&self.last_date))
-                    .ok_or("The end date of the series can't be read.")?;
+                let last =
+                    (regional.parse_date(&self.last_date)).ok_or(texts::SERIES_END_UNREADABLE)?;
                 let first = match *timing {
                     Timing::Timed { start, zone, .. } => start.with_timezone(&zone).date_naive(),
                     Timing::AllDay { start, .. } => start,
@@ -612,7 +599,7 @@ impl Editor {
             }
             Ending::AfterCount => match self.count.trim().parse() {
                 Ok(count) if count > 0 => Ends::After(count),
-                _ => return Err("The number of occurrences can't be read.".to_string()),
+                _ => return Err(texts::COUNT_UNREADABLE.to_string()),
             },
         };
         Ok(vec![rule(pattern, ends, timing)])
@@ -620,11 +607,12 @@ impl Editor {
 
     /// When the event happens, as the fields say; why it cannot be saved otherwise.
     pub fn timing(&self, regional: &Regional) -> Result<Timing, String> {
-        let unread = |field: &str| format!("The {field} can't be read.");
-        let date = |text: &str, field| regional.parse_date(text).ok_or_else(|| unread(field));
-        let time = |text: &str, field| regional.parse_time(text).ok_or_else(|| unread(field));
-        let first = date(&self.start_date, "start date")?;
-        let last = date(&self.end_date, "end date")?;
+        let date =
+            |text: &str, unread: &str| regional.parse_date(text).ok_or_else(|| unread.to_string());
+        let time =
+            |text: &str, unread: &str| regional.parse_time(text).ok_or_else(|| unread.to_string());
+        let first = date(&self.start_date, texts::START_DATE_UNREADABLE)?;
+        let last = date(&self.end_date, texts::END_DATE_UNREADABLE)?;
         if self.all_day {
             if last < first {
                 return Err(ENDS_BEFORE_STARTS.to_string());
@@ -644,10 +632,13 @@ impl Editor {
             });
         }
         let start = instant(
-            first.and_time(time(&self.start_time, "start time")?),
+            first.and_time(time(&self.start_time, texts::START_TIME_UNREADABLE)?),
             self.zone,
         );
-        let end = instant(last.and_time(time(&self.end_time, "end time")?), self.zone);
+        let end = instant(
+            last.and_time(time(&self.end_time, texts::END_TIME_UNREADABLE)?),
+            self.zone,
+        );
         if end < start {
             return Err(ENDS_BEFORE_STARTS.to_string());
         }

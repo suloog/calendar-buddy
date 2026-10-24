@@ -3,6 +3,7 @@
 
 use calendar_core::month::{MonthItem, MonthViewModel};
 use calendar_core::regional::Regional;
+use calendar_core::texts;
 use chrono::NaiveDate;
 use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
@@ -180,7 +181,7 @@ pub fn show(
                 painter.with_clip_rect(rect).text(
                     rect.left_center() + Vec2::new(4.0, 0.0),
                     Align2::LEFT_CENTER,
-                    format!("+{more} more"),
+                    texts::more(more),
                     FontId::proportional(12.0),
                     visuals.text_color(),
                 );

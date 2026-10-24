@@ -1,10 +1,11 @@
-//! Google accounts and connecting one (`MOD-01`): the account, what connecting can end in, and the
-//! words the welcome screen uses.
+//! Google accounts and connecting one (`MOD-01`): the account, what connecting can end in, and
+//! which of the texts (`crate::texts`) the app says about them.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::platform::SecretStoreError;
+use crate::texts;
 
 /// A connected Google account and what it allows the app to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,10 +26,10 @@ impl Account {
     pub fn unavailable(&self) -> Vec<&'static str> {
         let mut features = Vec::new();
         if !self.contacts {
-            features.push("contact suggestions (contacts access was not granted)");
+            features.push(texts::NO_CONTACT_SUGGESTIONS);
         }
         if self.workspace && !self.directory {
-            features.push("colleague suggestions (directory access was not granted)");
+            features.push(texts::NO_COLLEAGUE_SUGGESTIONS);
         }
         features
     }
@@ -45,8 +46,8 @@ pub enum AccountState {
 impl AccountState {
     pub fn label(self) -> &'static str {
         match self {
-            AccountState::Connected => "Connected",
-            AccountState::NeedsSignIn => "Needs sign-in",
+            AccountState::Connected => texts::ACCOUNT_CONNECTED,
+            AccountState::NeedsSignIn => texts::ACCOUNT_NEEDS_SIGN_IN,
         }
     }
 
@@ -241,20 +242,10 @@ pub enum CheckError {
 impl CheckError {
     /// What the app says above the calendar, which still shows what it has.
     pub fn message(&self) -> String {
-        let until = "Your calendars are shown as they were, but nothing synchronizes or changes";
         match self {
-            CheckError::ClientFile(path) => format!(
-                "The Google OAuth client file {} is missing or unreadable. {until} until it is \
-                 back.",
-                path.display()
-            ),
-            CheckError::NoSecretStore => format!(
-                "No secret store is running, and your sign-ins are kept only there. {until} \
-                 until it runs."
-            ),
-            CheckError::SecretStore(reason) => {
-                format!("The secret store is locked ({reason}). {until} until it is unlocked.")
-            }
+            CheckError::ClientFile(path) => texts::client_file_gone(path),
+            CheckError::NoSecretStore => texts::secret_store_not_running(),
+            CheckError::SecretStore(reason) => texts::secret_store_locked(reason),
         }
     }
 }
@@ -277,42 +268,12 @@ pub fn next_check(result: &Result<Vec<(String, Check)>, CheckError>) -> Option<D
     }
 }
 
-/// What the app says about an account Google turned away (`MOD-01-F05`).
-pub fn needs_sign_in(email: &str) -> String {
-    format!(
-        "{email} needs sign-in: Google ended Calendar Buddy's access to it. Your other accounts \
-         keep working."
-    )
-}
-
-/// The action that signs in to an account again (`MOD-01-F06`).
-pub const SIGN_IN_AGAIN: &str = "Sign in again";
-
-/// The action that removes an account (`MOD-01-F07`).
-pub const REMOVE: &str = "Remove";
-
-/// What removing an account deletes and what it leaves alone, asked before it happens
-/// (`MOD-01-U02`).
-pub fn confirm_removal(email: &str) -> String {
-    format!(
-        "Remove {email}? Its calendars, events, credentials and local settings will be deleted \
-         from this computer, and Calendar Buddy's access to it will be withdrawn at Google. The \
-         Google account itself stays untouched: its calendars and events stay in Google."
-    )
-}
-
 /// Why an account was not removed: the secret store did not delete its credentials, so it stays
 /// listed for another try.
 pub fn not_removed(email: &str, error: &SecretStoreError) -> String {
     match error {
-        SecretStoreError::NotRunning => format!(
-            "{email} was not removed: no secret store is running, and its credentials are kept \
-             there. Start the secret store and try again."
-        ),
-        SecretStoreError::Failed(reason) => format!(
-            "{email} was not removed: the secret store did not delete its credentials \
-             ({reason}). Unlock the secret store and try again."
-        ),
+        SecretStoreError::NotRunning => texts::not_removed_no_secret_store(email),
+        SecretStoreError::Failed(reason) => texts::not_removed(email, reason),
     }
 }
 
@@ -343,58 +304,18 @@ impl ConnectError {
     /// What the welcome screen says.
     pub fn message(&self) -> String {
         match self {
-            ConnectError::ClientFile(path) => format!(
-                "The Google OAuth client file is missing or unreadable. Download the OAuth \
-                 client (type Desktop app) from Google Cloud Console and save it as {}, then try \
-                 again.",
-                path.display()
-            ),
-            ConnectError::NoSecretStore => "No secret store is running, and Calendar Buddy keeps \
-                 your sign-in only there. Start or install one — KWallet on KDE Plasma, GNOME \
-                 Keyring, or KeePassXC with its Secret Service integration turned on — then try \
-                 again."
-                .to_string(),
-            ConnectError::SecretStore(reason) => format!(
-                "The secret store did not keep the sign-in ({reason}), so the account was not \
-                 connected. Unlock the secret store and try again."
-            ),
-            ConnectError::Offline => "Signing in is not possible offline. Connect to the \
-                 network and try again."
-                .to_string(),
-            ConnectError::Cancelled => {
-                "The sign-in was cancelled, so no account was connected.".to_string()
-            }
-            ConnectError::TimedOut => {
-                "The sign-in was not finished in time, so no account was connected.".to_string()
-            }
-            ConnectError::CalendarNotGranted => "Calendar access was not granted, so the account \
-                 was not connected. Calendar Buddy needs it to show your calendars: start again \
-                 and leave calendar access ticked."
-                .to_string(),
-            ConnectError::Refused(reason) => {
-                format!(
-                    "Google did not allow the sign-in: {reason}. The account was not connected."
-                )
-            }
-            ConnectError::Failed(reason) => {
-                format!("Signing in failed: {reason}. The account was not connected.")
-            }
+            ConnectError::ClientFile(path) => texts::client_file_missing(path),
+            ConnectError::NoSecretStore => texts::NO_SECRET_STORE.to_string(),
+            ConnectError::SecretStore(reason) => texts::sign_in_not_kept(reason),
+            ConnectError::Offline => texts::SIGN_IN_OFFLINE.to_string(),
+            ConnectError::Cancelled => texts::SIGN_IN_CANCELLED.to_string(),
+            ConnectError::TimedOut => texts::SIGN_IN_TIMED_OUT.to_string(),
+            ConnectError::CalendarNotGranted => texts::CALENDAR_NOT_GRANTED.to_string(),
+            ConnectError::Refused(reason) => texts::sign_in_refused(reason),
+            ConnectError::Failed(reason) => texts::sign_in_failed(reason),
         }
     }
 }
-
-/// The welcome screen's one action (`MOD-01-F12`).
-pub const CONNECT: &str = "Connect Google account";
-
-/// Shown before the browser opens (`MOD-01-U03`).
-pub const UNVERIFIED_HEADS_UP: &str = "Google will now show a warning that it hasn't verified \
-     this app — Calendar Buddy is your own app, not one published to everyone. To continue, \
-     choose \"Advanced\" and then \"Go to … (unsafe)\". On the next screen leave calendar access \
-     ticked; contacts and your organization's directory are optional.";
-
-/// Shown while the browser has the sign-in.
-pub const WAITING: &str = "Finish signing in in your browser. On a Workspace account Google asks \
-     a second time, for your organization's directory.";
 
 #[cfg(test)]
 mod tests {
@@ -465,7 +386,7 @@ mod tests {
 
     #[test]
     fn removing_says_what_is_deleted_and_that_the_google_account_stays() {
-        let asked = confirm_removal("me@gmail.com");
+        let asked = texts::confirm_removal("me@gmail.com");
         for deleted in ["calendars", "events", "credentials", "local settings"] {
             assert!(asked.contains(deleted), "{deleted}");
         }
@@ -622,7 +543,7 @@ mod tests {
 
     #[test]
     fn account_problems_explain_themselves() {
-        assert!(needs_sign_in("me@gmail.com").starts_with("me@gmail.com needs sign-in"));
+        assert!(texts::needs_sign_in("me@gmail.com").starts_with("me@gmail.com needs sign-in"));
         let locked = CheckError::SecretStore("unlocking it was declined".into()).message();
         assert!(locked.contains("locked") && locked.contains("nothing synchronizes"));
         let path = PathBuf::from("/home/u/.config/calendar-buddy/google-oauth-client.json");

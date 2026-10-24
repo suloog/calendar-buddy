@@ -8,9 +8,9 @@ use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, 
 use chrono_tz::Tz;
 use rrule::{RRuleSet, Tz as RuleZone};
 
-use crate::create::NO_TITLE;
 use crate::model::{Access, Calendar, Event, Timing};
 use crate::sync::{Start, SyncedEvent, Window};
+use crate::texts::NO_TITLE;
 
 /// Every event and occurrence of the calendar that falls inside the window, in the calendar's
 /// colour.

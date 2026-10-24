@@ -532,3 +532,14 @@ Ratify `DEC-148` and `DEC-149`:
   - an out-of-office event's stripes stop around its title.
 
   Say if declined events now look too strong.
+
+## US-04-03
+
+Ratify `DEC-150`, `DEC-151` and `DEC-152`:
+- `DEC-150`: the accent is Google's blue (`#0B57D0` light, `#A8C7FA` dark). Links, selection outlines, warnings and the current-time line are drawn in it. The current-time line is no longer red as in Google Calendar, because only one accent is allowed;
+- `DEC-151`: nothing in the interface animates, including windows and menus, which no longer fade in;
+- `DEC-152`: every interface text is in one table, `crates/core/src/texts.rs`.
+
+- [ ] `TC-04-05` step 1 / `US-04-03#1` (a person's eyes, real calendars): the palette is proven by `apart_from_grays_the_themes_have_only_the_accent_in_both_themes`, and the week view by `apart_from_calendar_colours_the_week_draws_in_grays_and_the_accent_in_both_themes`. The other views and widgets on screen are not. Run `cargo run -p calendar-buddy` and look at the main window in Light, then in Dark (Settings → Appearance → Theme). Check the view bar, the side panel and mini calendar, the Day / Week / Month / Agenda views, the settings, the event editor and an offline or error notice if one shows. Apart from calendar and event colours, only grays and the one blue appear: today's mark, links, the current-time line and warnings. Take a screenshot in each theme.
+- [ ] `TC-04-05` step 2 / `US-04-03#2` (a person's eyes): `nothing_in_the_interface_animates` proves that egui's animations take no time. Switch between Day, Week and Month, and step between weeks with ‹ › and `j` / `k`. Each change appears at once, with no slide or fade. Opening a dialog (Settings, an event) also shows it at once. Scrolling the hours with the mouse wheel stays smooth.
+- [ ] `US-04-03#3` (a person's eyes; no test case): `every_text_is_in_english` and `the_views_keep_no_interface_texts_of_their_own` prove it in the code. While doing the checks above, look for any text that is not English, or that reads oddly after moving into the table.

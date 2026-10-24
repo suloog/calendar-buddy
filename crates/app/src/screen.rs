@@ -159,3 +159,17 @@ pub fn contrast_where(shapes: &[ClippedShape], matches: impl Fn(&str) -> bool) -
     let covered = laid(&shown[index + 1..], at, background);
     contrast(glyphs, covered)
 }
+
+/// The hue of the accent, in degrees: the same in its tones for both themes.
+const ACCENT_HUE: f32 = 217.0;
+
+/// Whether `c` is a gray, or a tone of the accent, at any opacity.
+pub fn neutral_or_accent(c: Color32) -> bool {
+    let [r, g, b, a] = c.to_srgba_unmultiplied().map(f32::from);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    if a == 0.0 || max - min <= 2.0 {
+        return true;
+    }
+    // Blue is the strongest of the accent's channels, which gives its hue.
+    max == b && (240.0 + 60.0 * (r - g) / (max - min) - ACCENT_HUE).abs() <= 3.0
+}

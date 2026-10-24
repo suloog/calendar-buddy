@@ -18,14 +18,15 @@ use crate::guests::{Response, same};
 use crate::model::{Calendar, Event, Timing};
 use crate::series::Question;
 use crate::settings::Settings;
+use crate::texts;
 use crate::week::day_start;
 
 /// The answers to an invitation, in the order offered, with what their buttons say
 /// (`MOD-06-U03`).
 pub const ANSWERS: [(Response, &str); 3] = [
-    (Response::Accepted, "Accept"),
-    (Response::Maybe, "Maybe"),
-    (Response::Declined, "Decline"),
+    (Response::Accepted, texts::ACCEPT),
+    (Response::Maybe, texts::MAYBE),
+    (Response::Declined, texts::DECLINE),
 ];
 
 /// The user's own answer to the event, when they can answer it: they are among its guests
@@ -58,17 +59,6 @@ pub fn answer(event: &Event, calendar: Calendar, response: Response) -> Result<E
     match event.series {
         Some(_) => Err(Question::Respond(Box::new(edit))),
         None => Ok(edit),
-    }
-}
-
-/// What the list of invitations says when none awaits an answer.
-pub const NONE: &str = "No invitations await an answer.";
-
-/// What the side panel's counter says, with the number of invitations awaiting an answer.
-pub fn counter(count: usize) -> String {
-    match count {
-        1 => "1 invitation awaiting an answer".to_string(),
-        n => format!("{n} invitations awaiting an answer"),
     }
 }
 
@@ -257,7 +247,10 @@ mod tests {
 
         let awaiting = awaiting(&events, &accounts(), &Settings::default(), Warsaw, clock());
 
-        assert_eq!(counter(awaiting.len()), "2 invitations awaiting an answer");
+        assert_eq!(
+            texts::invitations_awaiting(awaiting.len()),
+            "2 invitations awaiting an answer"
+        );
         assert_eq!(titles(&events, &awaiting), ["Board", "Lunch"]);
     }
 
@@ -369,7 +362,10 @@ mod tests {
 
         assert_eq!(titles(&events, &awaiting), ["Board"]);
         assert!(!titles(&events, &shown).contains(&"Lunch".to_string()));
-        assert_eq!(counter(awaiting.len()), "1 invitation awaiting an answer");
+        assert_eq!(
+            texts::invitations_awaiting(awaiting.len()),
+            "1 invitation awaiting an answer"
+        );
     }
 
     #[test]
@@ -496,7 +492,10 @@ mod tests {
         let listed = awaiting(&shown, &accounts(), &Settings::default(), Warsaw, clock());
 
         assert_eq!(titles(&shown, &listed), ["Lunch"]);
-        assert_eq!(counter(listed.len()), "1 invitation awaiting an answer");
+        assert_eq!(
+            texts::invitations_awaiting(listed.len()),
+            "1 invitation awaiting an answer"
+        );
         let board = shown.iter().find(|e| e.title == "Board").unwrap();
         assert_eq!(own_answer(board), Some(Response::Accepted));
     }

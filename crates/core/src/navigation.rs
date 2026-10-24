@@ -4,6 +4,7 @@
 use chrono::{Datelike, Duration, Months, NaiveDate, Weekday};
 
 use crate::month::weeks_covering;
+use crate::texts;
 use crate::week::GridView;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,11 +26,11 @@ impl View {
 
     pub fn name(self) -> &'static str {
         match self {
-            View::Grid(GridView::Day) => "Day",
-            View::Grid(GridView::ThreeDays) => "3 days",
-            View::Grid(GridView::Week) => "Week",
-            View::Month => "Month",
-            View::Agenda => "Agenda",
+            View::Grid(GridView::Day) => texts::DAY,
+            View::Grid(GridView::ThreeDays) => texts::THREE_DAYS,
+            View::Grid(GridView::Week) => texts::WEEK,
+            View::Month => texts::MONTH,
+            View::Agenda => texts::AGENDA,
         }
     }
 

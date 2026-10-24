@@ -7,17 +7,7 @@ use crate::editor::Edit;
 use crate::guests::Guest;
 use crate::model::{Calendar, Event};
 use crate::series::{Question, Scope};
-
-/// What the question says for a change.
-pub const UPDATE: &str = "Send update e-mails to the guests?";
-
-/// What the question says for a deletion.
-pub const CANCELLATION: &str = "Send cancellation e-mails to the guests?";
-
-/// The answers, as Google words them, and Back, which saves nothing.
-pub const SEND: &str = "Send";
-pub const DONT_SEND: &str = "Don't send";
-pub const BACK: &str = "Back";
+use crate::texts::{SEND_CANCELLATION, SEND_UPDATE};
 
 /// A change or deletion of an event, or of the events of its series the user chose, to save.
 #[derive(Clone, Debug, PartialEq)]
@@ -45,8 +35,10 @@ impl Pending {
         match self {
             Pending::Change(edit, _) => (invites(&edit.event.about.guests)
                 || edit.patch.guests.as_deref().is_some_and(invites))
-            .then_some(UPDATE),
-            Pending::Delete(deleted, _) => invites(&deleted.1.about.guests).then_some(CANCELLATION),
+            .then_some(SEND_UPDATE),
+            Pending::Delete(deleted, _) => {
+                invites(&deleted.1.about.guests).then_some(SEND_CANCELLATION)
+            }
             Pending::Respond(..) => None,
         }
     }
@@ -111,8 +103,8 @@ mod tests {
         let event = sync(vec![own(), guest("adam@example.com")]);
         let deleted = Pending::Delete(Box::new((calendar(), event.clone())), Scope::This);
 
-        assert_eq!(moved(&event).asks(), Some(UPDATE));
-        assert_eq!(deleted.asks(), Some(CANCELLATION));
+        assert_eq!(moved(&event).asks(), Some(SEND_UPDATE));
+        assert_eq!(deleted.asks(), Some(SEND_CANCELLATION));
     }
 
     #[test]
@@ -146,7 +138,7 @@ mod tests {
 
         for edit in [invited, removed] {
             let pending = Pending::Change(Box::new(edit), Scope::This);
-            assert_eq!(pending.asks(), Some(UPDATE));
+            assert_eq!(pending.asks(), Some(SEND_UPDATE));
         }
     }
 

@@ -14,6 +14,7 @@ use crate::editor::{Edit, Patch};
 use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::{before, count_before, excluded, start_of};
 use crate::sync::{Start, SyncedEvent};
+use crate::texts::{self, OTHER_CALENDAR, OTHER_DAY};
 
 /// What a change or deletion of an occurrence applies to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,19 +31,12 @@ impl Scope {
     /// What the question calls the scope, as Google Calendar does.
     pub fn label(self) -> &'static str {
         match self {
-            Scope::This => "This event",
-            Scope::Following => "This and following events",
-            Scope::All => "All events",
+            Scope::This => texts::THIS_EVENT,
+            Scope::Following => texts::THIS_AND_FOLLOWING,
+            Scope::All => texts::ALL_EVENTS,
         }
     }
 }
-
-/// Why the following or all events cannot move to another day, or between all-day and timed.
-pub const OTHER_DAY: &str = "Moving the following or all events to another day changes how the \
-                             series repeats; that is done in Google Calendar.";
-
-/// Why an occurrence, or those following it, cannot move to another calendar.
-pub const OTHER_CALENDAR: &str = "Only all events of a series can move to another calendar.";
 
 /// The scopes a change of an occurrence can be saved with, in the order asked, each with why it
 /// cannot be when it cannot (`MOD-05-F20`).

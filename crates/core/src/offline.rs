@@ -6,27 +6,17 @@
 use chrono::NaiveDate;
 
 use crate::sync::Window;
-
-/// The offline indicator in the main window.
-pub const OFFLINE: &str = "Offline — your calendars are shown as last synchronized.";
-
-/// Why a change cannot be made offline.
-pub const NO_CHANGES: &str = "Creating, editing and deleting events and answering invitations \
-                              are not available offline.";
-
-/// The note over days the cache does not hold, while offline.
-pub const NOT_CACHED: &str =
-    "Days more than a year back or two years ahead are not available offline.";
+use crate::texts::{NO_CHANGES_OFFLINE, NOT_CACHED, OFFLINE_INDICATOR};
 
 /// The offline indicator, while offline (`MOD-02-U02`).
 pub fn indicator(online: bool) -> Option<&'static str> {
-    (!online).then_some(OFFLINE)
+    (!online).then_some(OFFLINE_INDICATOR)
 }
 
 /// Why creating, editing or deleting an event or answering an invitation is refused now; `None`
 /// while online.
 pub fn refused(online: bool) -> Option<&'static str> {
-    (!online).then_some(NO_CHANGES)
+    (!online).then_some(NO_CHANGES_OFFLINE)
 }
 
 /// What becomes of the days on screen, from `first` to `last`, that the cache window does not
@@ -59,10 +49,10 @@ mod tests {
 
     #[test]
     fn offline_every_change_is_refused_with_the_reason_and_online_none_is() {
-        assert_eq!(indicator(false), Some(OFFLINE));
+        assert_eq!(indicator(false), Some(OFFLINE_INDICATOR));
         assert_eq!(indicator(true), None);
-        assert_eq!(refused(false), Some(NO_CHANGES));
-        assert!(NO_CHANGES.contains("not available offline"));
+        assert_eq!(refused(false), Some(NO_CHANGES_OFFLINE));
+        assert!(NO_CHANGES_OFFLINE.contains("not available offline"));
         assert_eq!(refused(true), None);
     }
 

@@ -4,6 +4,7 @@ use chrono_tz::Tz;
 use crate::colors::EventColor;
 use crate::guests::{Guest, Response};
 use crate::sync::Start;
+use crate::texts;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb(pub u8, pub u8, pub u8);
@@ -69,16 +70,9 @@ impl Protected {
     /// What the app says when the user tries to change the event.
     pub fn why(self) -> &'static str {
         match self {
-            Protected::ReadOnlyCalendar => {
-                "🔒 This event can't be changed: its calendar is read-only."
-            }
-            Protected::OrganizerOnly => {
-                "This event can't be changed: only its organizer can change it."
-            }
-            Protected::DisplayOnly => {
-                "This event can't be changed here: working locations and birthdays are changed in \
-                 Google."
-            }
+            Protected::ReadOnlyCalendar => texts::READ_ONLY_EVENT,
+            Protected::OrganizerOnly => texts::ORGANIZER_ONLY,
+            Protected::DisplayOnly => texts::DISPLAY_ONLY,
         }
     }
 }
@@ -136,11 +130,11 @@ impl Kind {
     /// What the type is called where the user picks it.
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Ordinary => "Event",
-            Kind::OutOfOffice => "Out of office",
-            Kind::FocusTime => "Focus time",
-            Kind::WorkingLocation => "Working location",
-            Kind::Birthday => "Birthday",
+            Kind::Ordinary => texts::KIND_EVENT,
+            Kind::OutOfOffice => texts::OUT_OF_OFFICE,
+            Kind::FocusTime => texts::FOCUS_TIME,
+            Kind::WorkingLocation => texts::WORKING_LOCATION,
+            Kind::Birthday => texts::BIRTHDAY,
         }
     }
 

@@ -11,6 +11,7 @@ use crate::details::When;
 use crate::model::{About, Calendar, Event, Timing};
 use crate::settings::Settings;
 use crate::side_panel::pickable;
+use crate::texts::NO_TITLE;
 
 /// The length, in minutes, of a new event started without a range until the account's own is
 /// known: Google Calendar's default.
@@ -18,15 +19,6 @@ pub const DEFAULT_LENGTH: u32 = 60;
 
 /// The step, in minutes, a click or a selection in the hours snaps to (`DEC-103`).
 pub const STEP: u32 = 15;
-
-/// What the views add to the label of an event Google has not confirmed yet (`MOD-05-U03`).
-pub const SAVING: &str = "Saving…";
-
-/// What the quick-entry box says when the user has no calendar to add events to.
-pub const NO_CALENDAR: &str = "No calendar you can add events to.";
-
-/// What Google Calendar names an event without a title.
-pub const NO_TITLE: &str = "(No title)";
 
 /// A new event as the user made it, to be created at the provider.
 #[derive(Clone, Debug, PartialEq)]

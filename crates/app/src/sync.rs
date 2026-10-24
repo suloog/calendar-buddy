@@ -45,6 +45,7 @@ use calendar_core::sync::{
     Provider, SyncError, SyncedEvent, Window, fetch_events, shown_events, sync_calendar_list,
     sync_calendars,
 };
+use calendar_core::texts::{self, NO_SERIES, NOT_SIGNED_IN};
 use calendar_google::{Endpoints, Session};
 use chrono::{DateTime, Utc};
 use eframe::egui;
@@ -913,14 +914,7 @@ impl Engine {
                 Ok(etag) => Update::Changed(local, etag),
                 // What was patched stays; only the move is told of.
                 Err(error) if edit.patch.is_empty() => Update::NotChanged(local, error.0),
-                Err(error) => Update::NotChanged(
-                    local,
-                    format!(
-                        "it could not be moved to the other calendar ({}); its other changes \
-                         were saved",
-                        error.0
-                    ),
-                ),
+                Err(error) => Update::NotChanged(local, texts::not_moved(&error.0)),
             },
         }];
         let calendars: Vec<Calendar> = std::iter::once(calendar.clone())
@@ -1087,24 +1081,14 @@ impl Engine {
         if let Some(new) = &split.new {
             session
                 .copy(&split.calendar, &split.id, new, notify)
-                .map_err(|error| {
-                    format!(
-                        "the series now ends before this event, but the following events could \
-                         not be made a series of their own ({})",
-                        error.0
-                    )
-                })?;
+                .map_err(|error| texts::following_not_split(&error.0))?;
         }
         // The series' end won against its version; Google may have changed these with it.
         let failed = (split.changed.iter())
             .filter_map(|(id, _)| session.delete(&split.calendar, id, "", notify).err())
             .last();
         if let Some(error) = failed {
-            return Err(format!(
-                "the series now ends before this event, but an event of it changed on its own \
-                 could not be deleted ({})",
-                error.0
-            ));
+            return Err(texts::changed_one_not_deleted(&error.0));
         }
         Ok(etag)
     }
@@ -1306,22 +1290,11 @@ impl Engine {
     }
 }
 
-/// Why a change to a series was not sent: its series is not in the cache, as for an invitation to
-/// one occurrence of someone else's series, or not synchronized yet.
-const NO_SERIES: &str =
-    "its series is not in the calendar (yet); only this event can be changed or deleted";
-
-/// Why a change was not sent: the event's account has not signed in in this run yet.
-const NOT_SIGNED_IN: &str = "its account is not signed in yet; try again in a moment";
-
 /// Why Google did not take a change; one made to an event changed elsewhere meanwhile is shown as
 /// it is now, for the user to make again.
 fn refusal(error: SyncError) -> String {
     if error.is_changed_elsewhere() {
-        format!(
-            "{}; it is shown as it is now, make your change again",
-            error.0
-        )
+        texts::make_it_again(&error.0)
     } else {
         error.0
     }
@@ -1416,7 +1389,7 @@ mod tests {
         Visibility,
     };
     use calendar_core::navigation::Navigation;
-    use calendar_core::notify::{self, Pending};
+    use calendar_core::notify::Pending;
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
@@ -1545,7 +1518,10 @@ mod tests {
         );
 
         assert_eq!(next_events(&mut sync), ["1"]);
-        assert_eq!(offline::indicator(online.get()), Some(offline::OFFLINE));
+        assert_eq!(
+            offline::indicator(online.get()),
+            Some(texts::OFFLINE_INDICATOR)
+        );
 
         // 2. Creating, editing and deleting an event and answering an invitation are refused,
         //    the reason saying the app is offline.
@@ -3720,7 +3696,10 @@ mod tests {
             google.fake.event(ACCOUNT_ID, EMAIL, "gym").unwrap()["status"],
             "cancelled"
         );
-        assert_eq!(last.notice(deleted_at), Some((undo::DELETED, undo::NOTICE)));
+        assert_eq!(
+            last.notice(deleted_at),
+            Some((texts::DELETED, undo::NOTICE))
+        );
         assert_eq!(last.notice(deleted_at + undo::NOTICE), None);
 
         // 2. Undo within the 5 seconds: "Gym" is back at 18:00–19:00, also in Google.
@@ -4857,7 +4836,7 @@ mod tests {
 
         // 1. "Sync" dragged to 11:00: the app asks once whether to send the guests an update.
         let pending = sync_dropped_at_11(&engine);
-        assert_eq!(pending.asks(), Some(notify::UPDATE));
+        assert_eq!(pending.asks(), Some(texts::SEND_UPDATE));
 
         // 2. "No": Google receives the new time with guest notifications turned off.
         let Pending::Change(mut edit, Scope::This) = pending else {
@@ -4914,7 +4893,7 @@ mod tests {
             panic!("no scope question");
         };
         let asked = Pending::Change(Box::new(edit.clone()), Scope::This).asks();
-        assert_eq!(asked, Some(notify::UPDATE));
+        assert_eq!(asked, Some(texts::SEND_UPDATE));
         edit.notify = true;
         engine.handle(Some(Job::Change(1, Box::new(edit))), start);
         assert_eq!(
@@ -4930,7 +4909,7 @@ mod tests {
             panic!("no scope question");
         };
         let asked = Pending::Delete(Box::new(deleted.clone()), Scope::This).asks();
-        assert_eq!(asked, Some(notify::CANCELLATION));
+        assert_eq!(asked, Some(texts::SEND_CANCELLATION));
         let (calendar, sync) = deleted;
         let updates = engine.handle(
             Some(Job::Delete(2, calendar.clone(), sync.clone(), false)),
@@ -4977,7 +4956,7 @@ mod tests {
             panic!("the scope is asked first");
         };
         let pending = Pending::of(question, Scope::Following);
-        assert_eq!(pending.asks(), Some(notify::UPDATE));
+        assert_eq!(pending.asks(), Some(texts::SEND_UPDATE));
         let Pending::Change(mut edit, scope) = pending else {
             panic!("a change");
         };

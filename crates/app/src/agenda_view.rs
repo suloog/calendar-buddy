@@ -4,6 +4,7 @@
 
 use calendar_core::agenda::{AgendaItem, AgendaViewModel};
 use calendar_core::regional::Regional;
+use calendar_core::texts;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
 use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable, text_on};
@@ -20,7 +21,7 @@ fn time_label(item: &AgendaItem, view: &AgendaViewModel, regional: &Regional) ->
     let time = |t: chrono::DateTime<chrono::Utc>| regional.time(t.with_timezone(&view.zone).time());
     match item.time {
         Some((start, end)) => format!("{} – {}", time(start), time(end)),
-        None => "All day".to_string(),
+        None => texts::ALL_DAY.to_string(),
     }
 }
 
@@ -34,7 +35,7 @@ pub fn show(
     join: &mut Option<String>,
 ) -> bool {
     if view.is_empty() {
-        ui.centered_and_justified(|ui| ui.label("No upcoming events"));
+        ui.centered_and_justified(|ui| ui.label(texts::NO_UPCOMING_EVENTS));
         return false;
     }
     let output = ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
@@ -143,7 +144,7 @@ pub fn show(
                         row.max,
                     );
                     // Placed over the row, not laid out: the day's room is taken already.
-                    if ui.place(button, egui::Button::new("Join")).clicked() {
+                    if ui.place(button, egui::Button::new(texts::JOIN)).clicked() {
                         *join = Some(link.clone());
                     }
                 }

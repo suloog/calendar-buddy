@@ -23,6 +23,7 @@ use calendar_core::model::{
 };
 use calendar_core::platform::{SecretStore, SecretStoreError};
 use calendar_core::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
+use calendar_core::texts::{self, REFUSED, REFUSED_AS_INVALID};
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 use chrono_tz::Tz;
 use serde::Deserialize;
@@ -35,13 +36,6 @@ use crate::{Client, Endpoints, HTTP_TIMEOUT, agent, google_reason, random, refre
 /// Google's largest pages: fewer requests for the first full synchronization.
 const CALENDARS_PER_PAGE: &str = "250";
 const EVENTS_PER_PAGE: &str = "2500";
-
-/// How an error starts when Google answered, but refused what was asked.
-const REFUSED: &str = "Google refused";
-
-/// How an error starts when Google refused what was asked as invalid (400), as it refuses a
-/// Google Meet call the account may not have.
-const INVALID: &str = "Google refused it as invalid";
 
 /// How many people each search of the People API asks for.
 const PEOPLE_PER_SEARCH: &str = "10";
@@ -110,21 +104,17 @@ impl Session {
         store: &dyn SecretStore,
         account_id: &str,
     ) -> Result<Session, SyncError> {
-        let client = Client::read(client_file).map_err(|_| {
-            SyncError(format!(
-                "the Google OAuth client file {} is missing or unreadable",
-                client_file.display()
-            ))
-        })?;
+        let client = Client::read(client_file)
+            .map_err(|_| SyncError(texts::client_file_unreadable(client_file)))?;
         let refresh_token = store
             .load(account_id)
             .map_err(|error| match error {
-                SecretStoreError::NotRunning => SyncError("no secret store is running".into()),
+                SecretStoreError::NotRunning => SyncError(texts::NO_SECRET_STORE_RUNNING.into()),
                 SecretStoreError::Failed(reason) => {
-                    SyncError(format!("the secret store is locked ({reason})"))
+                    SyncError(texts::secret_store_is_locked(&reason))
                 }
             })?
-            .ok_or_else(|| SyncError("the account needs sign-in".into()))?;
+            .ok_or_else(|| SyncError(texts::ACCOUNT_NEEDS_SIGN_IN_REASON.into()))?;
         let session = Session {
             client,
             endpoints: endpoints.clone(),
@@ -144,7 +134,7 @@ impl Session {
             Some((token, issued)) if issued.elapsed() < ACCESS_FOR => Ok(token.clone()),
             _ => {
                 let token = refresh(&self.client, &self.endpoints, &self.refresh_token)
-                    .map_err(|_| SyncError("Google did not accept the account's sign-in".into()))?;
+                    .map_err(|_| SyncError(texts::SIGN_IN_NOT_ACCEPTED.into()))?;
                 *access = Some((token.clone(), Instant::now()));
                 Ok(token)
             }
@@ -210,7 +200,7 @@ impl Session {
     /// Google's answer to a change sent to it, as `get` handles answers.
     fn post<T: DeserializeOwned>(&self, url: Url, change: Option<&Value>) -> Result<T, SyncError> {
         self.send(url, Request::Post(change))?
-            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+            .ok_or_else(|| SyncError(texts::GONE.into()))
     }
 
     /// Google's answer to a patch of what it keeps in the version `etag`, or in any version
@@ -223,7 +213,7 @@ impl Session {
         etag: Option<&str>,
     ) -> Result<T, SyncError> {
         self.send(url, Request::Patch(change, etag))?
-            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+            .ok_or_else(|| SyncError(texts::GONE.into()))
     }
 
     /// Asks Google, as `get` says.
@@ -248,14 +238,18 @@ impl Session {
         }
         if !status.is_success() {
             let reason = google_reason(&body).unwrap_or_else(|| status.to_string());
-            let refused = if status == 400 { INVALID } else { REFUSED };
+            let refused = if status == 400 {
+                REFUSED_AS_INVALID
+            } else {
+                REFUSED
+            };
             return Err(SyncError(format!("{refused} ({reason})")));
         }
         // A deletion is answered without a body.
         let body = if body.is_empty() { "null" } else { &body };
         serde_json::from_str(body)
             .map(Some)
-            .map_err(|_| SyncError("Google's answer could not be read".into()))
+            .map_err(|_| SyncError(texts::ANSWER_NOT_READ.into()))
     }
 
     fn call(
@@ -299,12 +293,12 @@ impl Session {
                 .call()
             }
         };
-        let mut response = response
-            .map_err(|error| SyncError(format!("Google could not be reached ({error})")))?;
+        let mut response =
+            response.map_err(|error| SyncError(texts::unreachable(&error.to_string())))?;
         let body = response
             .body_mut()
             .read_to_string()
-            .map_err(|error| SyncError(format!("Google's answer could not be read ({error})")))?;
+            .map_err(|error| SyncError(texts::answer_unreadable(&error.to_string())))?;
         Ok((response.status(), body))
     }
 
@@ -378,7 +372,7 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
             fields["eventType"] = json!("outOfOffice");
             fields["outOfOfficeProperties"] = json!({
                 "autoDeclineMode": "declineOnlyNewConflictingInvitations",
-                "declineMessage": "Declined because I am out of office",
+                "declineMessage": texts::DECLINED_OUT_OF_OFFICE,
             });
             fields["transparency"] = json!("opaque");
         }
@@ -386,7 +380,7 @@ fn fields(event: &NewEvent) -> serde_json::Map<String, Value> {
             fields["eventType"] = json!("focusTime");
             fields["focusTimeProperties"] = json!({
                 "autoDeclineMode": "declineOnlyNewConflictingInvitations",
-                "declineMessage": "Declined because I am in focus time",
+                "declineMessage": texts::DECLINED_FOCUS_TIME,
                 "chatStatus": "doNotDisturb",
             });
             fields["transparency"] = json!("opaque");
@@ -471,7 +465,7 @@ fn meet_request() -> Value {
 /// (`send(false)`), so the event is saved without a call (MOD-06 *Constraints and edge cases*).
 fn with_meet<T>(send: impl Fn(bool) -> Result<T, SyncError>) -> Result<T, SyncError> {
     match send(true) {
-        Err(error) if error.0.starts_with(INVALID) => send(false),
+        Err(error) if error.0.starts_with(REFUSED_AS_INVALID) => send(false),
         sent => sent,
     }
 }
@@ -623,7 +617,7 @@ impl Provider for Session {
             .append_pair("maxResults", CALENDARS_PER_PAGE);
         let (entries, _) = self
             .all::<CalendarEntry>(url)?
-            .ok_or_else(|| SyncError("Google refused (gone)".into()))?;
+            .ok_or_else(|| SyncError(texts::GONE.into()))?;
         Ok(entries
             .into_iter()
             .filter_map(|entry| entry.into_calendar(&self.account_id))
@@ -640,7 +634,7 @@ impl Provider for Session {
             .append_pair("timeMax", &instant(window.end()))
             .append_pair("maxResults", EVENTS_PER_PAGE);
         self.fetch(url, calendar)?
-            .ok_or_else(|| SyncError("Google refused (gone)".into()))
+            .ok_or_else(|| SyncError(texts::GONE.into()))
     }
 
     fn changes(&self, calendar: &Calendar, sync_token: &str) -> Result<Option<Fetched>, SyncError> {
@@ -687,7 +681,7 @@ impl Provider for Session {
     ) -> Result<String, SyncError> {
         let url = self.url(&["calendars", &calendar.id, "events", id]);
         let Some(Value::Object(mut event)) = self.get::<Value>(url)? else {
-            return Err(SyncError("Google refused (gone)".into()));
+            return Err(SyncError(texts::GONE.into()));
         };
         for own in [
             "id",
@@ -925,7 +919,7 @@ impl Provider for Session {
         let at = |text: &str| {
             DateTime::parse_from_rfc3339(text)
                 .map(|at| at.with_timezone(&Utc))
-                .map_err(|_| SyncError("Google's answer could not be read".into()))
+                .map_err(|_| SyncError(texts::ANSWER_NOT_READ.into()))
         };
         let items: Vec<Value> = emails.iter().map(|email| json!({"id": email})).collect();
         let query = json!({
@@ -964,11 +958,11 @@ impl Provider for Session {
         let url = self.url(&["users", "me", "settings", "defaultEventLength"]);
         let setting: Setting = self
             .get(url)?
-            .ok_or_else(|| SyncError("Google refused (gone)".into()))?;
+            .ok_or_else(|| SyncError(texts::GONE.into()))?;
         setting
             .value
             .parse()
-            .map_err(|_| SyncError("Google's answer could not be read".into()))
+            .map_err(|_| SyncError(texts::ANSWER_NOT_READ.into()))
     }
 }
 

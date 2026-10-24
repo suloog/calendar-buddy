@@ -1,6 +1,8 @@
 //! The light and dark themes (`MOD-04-F01`): the one the settings choose, or the desktop's
 //! (`MOD-04-F02`, `MOD-04-F03`, `DEC-57`).
 
+use crate::texts;
+
 /// The theme chosen in the settings; by default the desktop's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Theme {
@@ -23,9 +25,9 @@ impl Theme {
 
     pub fn label(self) -> &'static str {
         match self {
-            Theme::System => "System",
-            Theme::Light => "Light",
-            Theme::Dark => "Dark",
+            Theme::System => texts::SYSTEM,
+            Theme::Light => texts::LIGHT,
+            Theme::Dark => texts::DARK,
         }
     }
 

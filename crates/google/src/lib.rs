@@ -12,6 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use calendar_core::accounts::{Account, Check, CheckError, ConnectError};
 use calendar_core::platform::{Browser, SecretStore, SecretStoreError};
+use calendar_core::texts;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
@@ -162,7 +163,7 @@ pub fn connect(
         }
     }
     let refresh_token =
-        refresh_token.ok_or_else(|| ConnectError::Failed("Google sent no refresh token".into()))?;
+        refresh_token.ok_or_else(|| ConnectError::Failed(texts::NO_REFRESH_TOKEN.into()))?;
     let account = Account {
         id: user.sub,
         email: user.email,
@@ -240,7 +241,7 @@ fn refresh(client: &Client, endpoints: &Endpoints, refresh_token: &str) -> Resul
         }
         return serde_json::from_str::<Access>(&body)
             .map(|access| access.access_token)
-            .map_err(|_| Check::Failed("Google's answer could not be read".into()));
+            .map_err(|_| Check::Failed(texts::ANSWER_NOT_READ.into()));
     }
     Err(match google_reason(&body) {
         Some(reason) if reason.split_whitespace().next() == Some("invalid_grant") => {
@@ -326,7 +327,7 @@ fn authorize(
     );
     browser
         .open(url.as_str())
-        .map_err(|_| ConnectError::Failed("the browser could not be opened".into()))?;
+        .map_err(|_| ConnectError::Failed(texts::BROWSER_NOT_OPENED.into()))?;
     let code = wait_for_code(&listener, &state, cancel, wait)?;
     json(agent(HTTP_TIMEOUT).post(&endpoints.token).send_form([
         ("code", code.as_str()),
@@ -416,9 +417,6 @@ fn wait_for_code(
     }
 }
 
-const DONE_PAGE: &str = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
-     Connection: close\r\n\r\n<!doctype html><title>Calendar Buddy</title>\
-     <p>You can close this tab and go back to Calendar Buddy.</p>";
 const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n";
 
 /// Reads one request to the loopback port; `None` when it is not this sign-in's redirect (a
@@ -451,9 +449,14 @@ fn answer(mut stream: TcpStream, state: &str) -> Option<Result<String, ConnectEr
         param("error").map(|error| Err(redirect_error(error, param("error_description"))))
     };
     let page = if result.is_some() {
-        DONE_PAGE
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
+             <!doctype html><title>{}</title><p>{}</p>",
+            texts::APP_NAME,
+            texts::SIGNED_IN_PAGE
+        )
     } else {
-        NOT_FOUND
+        NOT_FOUND.to_string()
     };
     let _ = stream.write_all(page.as_bytes());
     result
@@ -491,8 +494,7 @@ fn json<T: DeserializeOwned>(
             google_reason(&body).unwrap_or_else(|| status.to_string()),
         ));
     }
-    serde_json::from_str(&body)
-        .map_err(|_| ConnectError::Failed("Google's answer could not be read".into()))
+    serde_json::from_str(&body).map_err(|_| ConnectError::Failed(texts::ANSWER_NOT_READ.into()))
 }
 
 /// `{"error": "…", "error_description": "…"}` from the token service, or
