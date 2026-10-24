@@ -1680,3 +1680,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-139] A reminder's buttons, snoozing, and Snooze without buttons
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-07-02
+- **Affects:** `US-07-02`, `MOD-07-F09`, `MOD-07-F10`, MOD-07 Constraints and edge cases
+- **Decision:** A notification's buttons are, in this order: "Join" (only for an event with Google Meet), "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss". Dismiss only closes the notification. A snoozed notification comes back after the chosen minutes counted from the moment Snooze was chosen, showing the event as it is then; it can be snoozed again. It also comes back when the event has started in the meantime. It does not come back when the event, or that reminder of it, is deleted, moved to another time or declined: the moved event's reminder is a new one (`DEC-138`). Whether the desktop's notifications show buttons is asked with `GetCapabilities` ("actions"). When they do not, the event's details opened by clicking the notification show "Snooze 5 minutes" and "Snooze 10 minutes" next to the existing "Join with Google Meet"; choosing one snoozes and closes the details. If the browser cannot be started from a notification's Join, nothing is shown, as the notification is gone.
+- **Why:** `MOD-07-F10` and `DEC-45`/`DEC-64` name the buttons and the fallback but not their order, what happens to a snooze when its event changes, or how the fallback is decided. Join first, as the main action before a call; a snooze following its event is how reminders already behave (`MOD-07` Constraints). Snoozing from the details without buttons is what `DEC-64` asks; with buttons the details stay as they are.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

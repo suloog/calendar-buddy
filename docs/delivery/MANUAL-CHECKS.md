@@ -415,3 +415,24 @@ Not proven: the real KDE notification, the real click, and real sleep. Choices t
 - [ ] `TC-07-07` / `US-07-01#3` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy` and minimize the window. In Google Calendar, create "Join check" starting in 12 minutes with a 10-minute notification reminder and a location. When the notification comes, it shows "Join check", the start time and the location. Click its body: the window comes forward, un-minimized, on the event's day, with "Join check"'s details open. Watch on Wayland in particular: the code review warns that the window may stay minimized or not take focus there. If so, record it.
 - [ ] `US-07-01#1`, `#2` (real Google, KDE session): with the app running, an event with a 10-minute reminder gives exactly one KDE notification 10 minutes before it starts. None comes again while the app keeps synchronizing until the event starts.
 - [ ] `US-07-01#7` (KDE session, real sleep): with an event starting in 15 minutes and a 10-minute reminder, suspend the computer before the reminder and wake it after the reminder's time but before the event starts: the notification appears on waking.
+
+## US-07-02
+
+Needs the KDE session, a connected real Google account and a person's eyes. The tests below use a fake Google, fake desktop notifications and a clock the test moves. They prove:
+- a notification offers "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss", with "Join" first for an event with Google Meet;
+- Snooze shows it again after 5 or 10 minutes, counted from the choice, without a single request to Google; Dismiss tells Google nothing either;
+- a snooze follows its event: it is dropped when the event is deleted or moved, and it can be repeated;
+- Join hands the event's Meet link on to be opened;
+- without notification buttons, a click opens the event with its reminder to snooze there;
+- each action comes back from its D-Bus key.
+
+The tests:
+- app: `tc_07_03_snoozing_for_5_minutes_shows_the_notification_again_without_changing_google`, `snoozing_for_10_minutes_shows_the_notification_again_after_10_minutes`, `dismissing_a_notification_closes_it_for_good_and_tells_google_nothing`, `a_notification_of_an_event_with_google_meet_joins_the_meeting_from_its_join_button`, `without_buttons_clicking_a_notification_opens_its_event_with_snooze`, `platform::tests::each_action_of_a_notification_comes_back_from_its_key_on_the_bus`;
+- core: `reminders::tests::tc_07_03_a_notification_offers_dismiss_and_snooze_for_5_or_10_minutes`, `tc_07_03_a_snoozed_notification_is_shown_again_after_the_chosen_minutes`, `a_notification_of_an_event_with_google_meet_offers_join_first`, `a_snooze_outlives_synchronization_follows_the_event_and_can_be_repeated`, `a_snooze_of_a_deleted_or_moved_events_reminder_goes_with_it`.
+
+Not proven: the real KDE buttons, the real browser, and a desktop without buttons. Choice to ratify:
+- `DEC-139`: the buttons and their order, what happens to a snooze, and Snooze in the event's details when the desktop has no notification buttons.
+
+- [ ] `TC-07-07` / `US-07-02#3` (real Google, KDE session, a person's eyes): run `cargo run -p calendar-buddy`. In Google Calendar, create an event with Google Meet starting in 12 minutes with a 10-minute notification reminder. The notification shows the buttons "Join", "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss". Choose "Join": the Meet meeting opens in the default browser.
+- [ ] `US-07-02#1`, `#2` (KDE session, a person's eyes): on a reminder of an event without Meet, the KDE notification shows "Snooze 5 minutes", "Snooze 10 minutes" and "Dismiss", and no "Join". Choose "Snooze 5 minutes": the same notification comes back about 5 minutes later. Open the event in Google Calendar: nothing changed in it or its reminders. "Dismiss" closes it, and it does not come back.
+- [ ] `US-07-02` edge case (a desktop whose notifications have no buttons, e.g. a notification daemon without the "actions" capability; a person's eyes): click the notification. The app opens the event with "Join with Google Meet" (for a Meet event), "Snooze 5 minutes" and "Snooze 10 minutes". "Snooze 5 minutes" closes the details, and the notification comes back 5 minutes later.

@@ -2,7 +2,7 @@
 //! app, tests use fakes.
 
 use crate::accounts::Account;
-use crate::reminders::Notification;
+use crate::reminders::{Action, Notification};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SecretStoreError {
@@ -47,6 +47,10 @@ pub trait Network {
 /// The desktop's notification service (`MOD-07-F01`); the desktop decides what is shown, e.g.
 /// in "do not disturb" mode.
 pub trait Notifier: Send {
-    /// Shows the notification; `clicked` is called when the user clicks it (`MOD-07-F08`).
-    fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>);
+    /// Shows the notification with its buttons; `chosen` is called with what the user chooses
+    /// on it: clicking it (`MOD-07-F08`) or one of its buttons (`MOD-07-F09`, `F10`).
+    fn show(&self, notification: &Notification, chosen: Box<dyn Fn(Action) + Send + Sync>);
+    /// Whether the desktop's notifications show buttons; without them, Join and Snooze are
+    /// reached by clicking the notification (`DEC-64`).
+    fn buttons(&self) -> bool;
 }

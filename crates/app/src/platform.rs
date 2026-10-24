@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use calendar_core::accounts::Account;
 use calendar_core::platform::{Browser, Network, Notifier, SecretStore, SecretStoreError, Wakeups};
-use calendar_core::reminders::Notification;
+use calendar_core::reminders::{Action, Notification, SNOOZES};
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
@@ -106,8 +106,8 @@ impl Browser for SystemBrowser {
     }
 }
 
-/// What clicking each notification shown and not closed yet does, by its ID.
-type Clicks = Arc<Mutex<HashMap<u32, Box<dyn Fn() + Send + Sync>>>>;
+/// What choosing on each notification shown and not closed yet does, by its ID.
+type Clicks = Arc<Mutex<HashMap<u32, Box<dyn Fn(Action) + Send + Sync>>>>;
 
 /// The desktop's notifications, through `org.freedesktop.Notifications` on the session bus
 /// (MOD-07 *Technical notes*). Without a session bus nothing is shown.
@@ -115,6 +115,8 @@ pub struct SystemNotifier {
     /// The session bus, once connected; `None` when it could not be.
     bus: OnceLock<Option<zbus::blocking::Connection>>,
     clicks: Clicks,
+    /// Whether the desktop's notifications show buttons, once asked.
+    buttons: OnceLock<bool>,
 }
 
 const NOTIFICATIONS: &str = "org.freedesktop.Notifications";
@@ -125,7 +127,16 @@ impl SystemNotifier {
         SystemNotifier {
             bus: OnceLock::new(),
             clicks: Arc::default(),
+            buttons: OnceLock::new(),
         }
+    }
+
+    /// The session bus, connected the first time it is needed.
+    fn bus(&self) -> Option<&zbus::blocking::Connection> {
+        let bus = self
+            .bus
+            .get_or_init(|| SystemNotifier::connect(self.clicks.clone()).ok());
+        bus.as_ref()
     }
 
     /// Connects to the session bus and listens for clicks on the notifications and for their
@@ -141,25 +152,52 @@ impl SystemNotifier {
             for message in messages.flatten() {
                 let header = message.header();
                 let body = message.body();
-                // Clicking a notification's body invokes its "default" action.
+                // Clicking a notification's body invokes its "default" action, a button its own.
                 let (id, invoked) = match header.member().map(|member| member.as_str()) {
                     Some("ActionInvoked") => match body.deserialize::<(u32, String)>() {
-                        Ok((id, action)) if action == "default" => (id, true),
-                        _ => continue,
+                        Ok((id, key)) => match action(&key) {
+                            Some(action) => (id, Some(action)),
+                            None => continue,
+                        },
+                        Err(_) => continue,
                     },
                     Some("NotificationClosed") => match body.deserialize::<(u32, u32)>() {
-                        Ok((id, _)) => (id, false),
+                        Ok((id, _)) => (id, None),
                         Err(_) => continue,
                     },
                     _ => continue,
                 };
-                let clicked = clicks.lock().expect("clicks").remove(&id);
-                if invoked && let Some(clicked) = clicked {
-                    clicked();
+                let chosen = clicks.lock().expect("clicks").remove(&id);
+                if let (Some(action), Some(chosen)) = (invoked, chosen) {
+                    chosen(action);
                 }
             }
         });
         Ok(bus)
+    }
+}
+
+/// The key of the action on the bus; "default" is clicking the notification's body.
+fn key(action: Action) -> String {
+    match action {
+        Action::Open => "default".to_string(),
+        Action::Join => "join".to_string(),
+        Action::Snooze(minutes) => format!("snooze-{minutes}"),
+        Action::Dismiss => "dismiss".to_string(),
+    }
+}
+
+/// The action of the key on the bus; `None` for a key the app did not give.
+fn action(key: &str) -> Option<Action> {
+    match key {
+        "default" => Some(Action::Open),
+        "join" => Some(Action::Join),
+        "dismiss" => Some(Action::Dismiss),
+        _ => key
+            .strip_prefix("snooze-")
+            .and_then(|minutes| minutes.parse().ok())
+            .filter(|minutes| SNOOZES.contains(minutes))
+            .map(Action::Snooze),
     }
 }
 
@@ -171,13 +209,15 @@ fn escaped(text: &str) -> String {
 }
 
 impl Notifier for SystemNotifier {
-    fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>) {
-        let bus = self
-            .bus
-            .get_or_init(|| SystemNotifier::connect(self.clicks.clone()).ok());
-        let Some(bus) = bus else {
+    fn show(&self, notification: &Notification, chosen: Box<dyn Fn(Action) + Send + Sync>) {
+        let Some(bus) = self.bus() else {
             return;
         };
+        // Pairs of an action's key and what its button says.
+        let mut actions = vec![key(Action::Open), Action::Open.label()];
+        for action in notification.actions() {
+            actions.extend([key(action), action.label()]);
+        }
         let hints: HashMap<&str, zbus::zvariant::Value> = HashMap::new();
         let shown = bus.call_method(
             Some(NOTIFICATIONS),
@@ -190,14 +230,32 @@ impl Notifier for SystemNotifier {
                 "x-office-calendar",
                 notification.title.as_str(),
                 escaped(&notification.body()),
-                vec!["default", "Open"],
+                actions,
                 hints,
                 -1i32,
             ),
         );
         if let Ok(id) = shown.and_then(|reply| reply.body().deserialize::<u32>()) {
-            self.clicks.lock().expect("clicks").insert(id, clicked);
+            self.clicks.lock().expect("clicks").insert(id, chosen);
         }
+    }
+
+    fn buttons(&self) -> bool {
+        *self.buttons.get_or_init(|| {
+            let Some(bus) = self.bus() else {
+                return false;
+            };
+            let capabilities = bus.call_method(
+                Some(NOTIFICATIONS),
+                NOTIFICATIONS_PATH,
+                Some(NOTIFICATIONS),
+                "GetCapabilities",
+                &(),
+            );
+            capabilities
+                .and_then(|reply| reply.body().deserialize::<Vec<String>>())
+                .is_ok_and(|capabilities| capabilities.iter().any(|c| c == "actions"))
+        })
     }
 }
 
@@ -284,6 +342,24 @@ impl Network for SystemNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_action_of_a_notification_comes_back_from_its_key_on_the_bus() {
+        let actions = [
+            Action::Open,
+            Action::Join,
+            Action::Snooze(5),
+            Action::Snooze(10),
+            Action::Dismiss,
+        ];
+        for chosen in actions {
+            assert_eq!(action(&key(chosen)), Some(chosen));
+        }
+        assert_eq!(key(Action::Open), "default");
+        assert_eq!(action("snooze-later"), None);
+        assert_eq!(action("snooze-7"), None);
+        assert_eq!(action("other"), None);
+    }
 
     #[test]
     fn only_full_connectivity_or_an_unknown_state_counts_as_online() {

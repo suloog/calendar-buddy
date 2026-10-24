@@ -17,7 +17,9 @@
 //! guest (`US-06-01`). An event saved with Google Meet that comes back without a call is told of
 //! (`US-06-07`). The guests' busy times on the day chosen in the editor are asked of Google
 //! (`US-06-08`). The reminders of the events the cache holds are shown as desktop notifications
-//! when due, and a click on one opens its event (`US-07-01`).
+//! when due, and a click on one opens its event (`US-07-01`). Join on a notification opens the
+//! event's Google Meet call in the browser, and Snooze shows it again 5 or 10 minutes later,
+//! without telling Google (`US-07-02`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -33,9 +35,9 @@ use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
 use calendar_core::guests::{Person, Reach};
 use calendar_core::model::{Calendar, Event};
-use calendar_core::platform::{Notifier, SecretStore, Wakeups};
+use calendar_core::platform::{Browser, Notifier, SecretStore, Wakeups};
 use calendar_core::regional::Regional;
-use calendar_core::reminders::{Alarms, EventId};
+use calendar_core::reminders::{Action, Alarms, EventId, ReminderId};
 use calendar_core::schedule::Schedule;
 use calendar_core::series::{self, Plan, Scope, Split};
 use calendar_core::status::{Problem, Status};
@@ -47,7 +49,7 @@ use calendar_google::{Endpoints, Session};
 use chrono::{DateTime, Utc};
 use eframe::egui;
 
-use crate::platform::{SystemNotifier, SystemSecretStore, SystemWakeups};
+use crate::platform::{SystemBrowser, SystemNotifier, SystemSecretStore, SystemWakeups};
 
 enum Job {
     Sync(String, Window),
@@ -90,11 +92,33 @@ enum Job {
     Busy(Asked),
     /// Reminders are to be shown from now on (`MOD-07-F01`), their times written as the system
     /// writes them.
-    Remind(Box<dyn Notifier>, Regional, Opens),
+    Remind(Box<dyn Notifier>, Regional, Acts),
+    /// A reminder shown is to be shown again in so many minutes from when Snooze was chosen
+    /// (`MOD-07-F10`).
+    Snooze(ReminderId, u32, DateTime<Utc>),
 }
 
-/// Tells the views to open an event, of a notification clicked (`MOD-07-F08`).
-type Opens = Arc<dyn Fn(EventId) + Send + Sync>;
+/// What the user chose on a notification, for the app to do.
+#[derive(Debug, PartialEq, Eq)]
+enum Chosen {
+    /// The views are to open its event (`MOD-07-F08`).
+    Open(Opened),
+    /// The Google Meet call at the link is to be joined in the browser (`MOD-07-F09`).
+    Join(String),
+    /// The reminder is to be shown again in so many minutes (`MOD-07-F10`).
+    Snooze(ReminderId, u32),
+}
+
+/// Does what the user chose on a notification.
+type Acts = Arc<dyn Fn(Chosen) + Send + Sync>;
+
+/// The event of a notification clicked, to open (`MOD-07-F08`), with its reminder to snooze from
+/// the event's details when the desktop's notifications have no buttons (`DEC-64`).
+#[derive(Debug, PartialEq, Eq)]
+pub struct Opened {
+    pub event: EventId,
+    pub snooze: Option<ReminderId>,
+}
 
 enum Update {
     /// The calendars listed in the cache, and the events to show.
@@ -163,8 +187,8 @@ pub struct Synchronization {
     /// The guests' busy times Google last gave, and what they were asked for.
     busy: Option<(Asked, Option<Vec<Availability>>)>,
     /// The events of notifications clicked, not yet taken.
-    opens: Sender<EventId>,
-    opened: Receiver<EventId>,
+    opens: Sender<Opened>,
+    opened: Receiver<Opened>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -301,17 +325,31 @@ impl Synchronization {
     /// Shows the reminders of the cached events through the desktop's notifications from now
     /// on; those whose time passed before are not shown (`MOD-07-F20`).
     fn remind_with(&self, ctx: &egui::Context, notifier: Box<dyn Notifier>, regional: Regional) {
-        let (opens, ctx) = (self.opens.clone(), ctx.clone());
-        let open: Opens = Arc::new(move |event| {
-            let _ = opens.send(event);
-            ctx.request_repaint();
+        let (opens, jobs, ctx) = (self.opens.clone(), self.jobs.clone(), ctx.clone());
+        let act: Acts = Arc::new(move |chosen| match chosen {
+            Chosen::Open(opened) => {
+                let _ = opens.send(opened);
+                ctx.request_repaint();
+            }
+            // There is no one to tell if the browser does not start: the notification is gone.
+            Chosen::Join(link) => {
+                let _ = SystemBrowser.open(&link);
+            }
+            Chosen::Snooze(reminder, minutes) => {
+                let _ = jobs.send(Job::Snooze(reminder, minutes, Utc::now()));
+            }
         });
-        let _ = self.jobs.send(Job::Remind(notifier, regional, open));
+        let _ = self.jobs.send(Job::Remind(notifier, regional, act));
     }
 
     /// The event of the notification the user last clicked since asked, to open (`MOD-07-F08`).
-    pub fn take_opened(&self) -> Option<EventId> {
+    pub fn take_opened(&self) -> Option<Opened> {
         self.opened.try_iter().last()
+    }
+
+    /// Shows the reminder again in so many minutes; Google is not told (`MOD-07-F10`).
+    pub fn snooze(&self, reminder: ReminderId, minutes: u32) {
+        let _ = self.jobs.send(Job::Snooze(reminder, minutes, Utc::now()));
     }
 
     /// Synchronizes everything at once after waking from sleep and when the network returns.
@@ -580,7 +618,7 @@ struct Engine {
 struct Reminding {
     alarms: Alarms,
     notifier: Box<dyn Notifier>,
-    open: Opens,
+    act: Acts,
 }
 
 /// The longest wait for a reminder, so a changed system clock is followed.
@@ -711,14 +749,20 @@ impl Engine {
                     .and_then(|session| session.busy(&asked.emails, asked.day).ok());
                 return vec![Update::Busy(asked, busy)];
             }
-            Some(Job::Remind(notifier, regional, open)) => {
+            Some(Job::Remind(notifier, regional, act)) => {
                 let alarms = Alarms::new((self.clock)(), regional, self.window.zone);
                 self.reminding = Some(Reminding {
                     alarms,
                     notifier,
-                    open,
+                    act,
                 });
                 return vec![self.shown()];
+            }
+            Some(Job::Snooze(reminder, minutes, chosen)) => {
+                if let Some(reminding) = &mut self.reminding {
+                    (reminding.alarms).snooze(&reminder, minutes, chosen);
+                }
+                return Vec::new();
             }
         };
         self.round(&calendars, now)
@@ -1208,15 +1252,29 @@ impl Engine {
         Update::Events(calendars, events)
     }
 
-    /// Shows the reminders due now as desktop notifications, each once (`MOD-07-F07`).
+    /// Shows the reminders due now as desktop notifications, each once (`MOD-07-F07`), and the
+    /// snoozed ones due again; what the user chooses on one is done (`MOD-07-F08`–`F10`).
     fn remind(&mut self) {
         let Some(reminding) = &mut self.reminding else {
             return;
         };
         for notification in reminding.alarms.due((self.clock)()) {
-            let (open, event) = (reminding.open.clone(), notification.event.clone());
-            let clicked = Box::new(move || open(event.clone()));
-            reminding.notifier.show(&notification, clicked);
+            let buttons = reminding.notifier.buttons();
+            let (act, shown) = (reminding.act.clone(), notification.clone());
+            let chosen = Box::new(move |action| match action {
+                Action::Open => act(Chosen::Open(Opened {
+                    event: shown.reminder.event.clone(),
+                    snooze: (!buttons).then(|| shown.reminder.clone()),
+                })),
+                Action::Join => {
+                    if let Some(link) = &shown.meet {
+                        act(Chosen::Join(link.clone()));
+                    }
+                }
+                Action::Snooze(minutes) => act(Chosen::Snooze(shown.reminder.clone(), minutes)),
+                Action::Dismiss => {}
+            });
+            reminding.notifier.show(&notification, chosen);
         }
     }
 
@@ -1289,6 +1347,7 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Suggest(..)
                 | Job::Busy(_)
                 | Job::Remind(..)
+                | Job::Snooze(..)
         )
     )
 }
@@ -5516,18 +5575,24 @@ mod tests {
         }
     }
 
-    /// The desktop's notifications, faked: what was shown, and what clicking each does.
+    /// The desktop's notifications, faked: what was shown, and what choosing on each does; with
+    /// buttons unless said otherwise.
     #[derive(Clone, Default)]
     struct FakeNotifier {
         shown: Arc<Mutex<Vec<Shown>>>,
+        without_buttons: bool,
     }
 
-    type Shown = (Notification, Box<dyn Fn() + Send + Sync>);
+    type Shown = (Notification, Box<dyn Fn(Action) + Send + Sync>);
 
     impl Notifier for FakeNotifier {
-        fn show(&self, notification: &Notification, clicked: Box<dyn Fn() + Send + Sync>) {
-            let shown = (notification.clone(), clicked);
+        fn show(&self, notification: &Notification, chosen: Box<dyn Fn(Action) + Send + Sync>) {
+            let shown = (notification.clone(), chosen);
             self.shown.lock().unwrap().push(shown);
+        }
+
+        fn buttons(&self) -> bool {
+            !self.without_buttons
         }
     }
 
@@ -5539,8 +5604,13 @@ mod tests {
                 .collect()
         }
 
-        fn click(&self, index: usize) {
-            (self.shown.lock().unwrap()[index].1)();
+        /// The buttons of the notification shown at `index`.
+        fn actions(&self, index: usize) -> Vec<Action> {
+            self.shown.lock().unwrap()[index].0.actions()
+        }
+
+        fn choose(&self, index: usize, action: Action) {
+            (self.shown.lock().unwrap()[index].1)(action);
         }
     }
 
@@ -5580,27 +5650,27 @@ mod tests {
 
     /// The app started at 9:00 on Thursday 12 November with the clock that the test moves,
     /// reminders shown through the fake notifications, and the account's first synchronization
-    /// done; with what clicking a notification opens.
+    /// done; with what the user chose on the notifications.
     fn reminding(
         google: &Google,
         clock: &Arc<Mutex<DateTime<Utc>>>,
         notifier: &FakeNotifier,
         disabled: Disabled,
         start: Instant,
-    ) -> (Engine, Receiver<EventId>) {
+    ) -> (Engine, Receiver<Chosen>) {
         *clock.lock().unwrap() = thursday(9, 0);
         let mut engine = Engine::new(Cache::in_memory(), google.sign_in(), window(), disabled);
         let time = clock.clone();
         engine.clock = Box::new(move || *time.lock().unwrap());
         engine.clear_disabled();
-        let (opens, opened) = mpsc::channel();
-        let open: Opens = Arc::new(move |event| opens.send(event).unwrap());
+        let (acts, chosen) = mpsc::channel();
+        let act: Acts = Arc::new(move |choice| acts.send(choice).unwrap());
         let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
-        let job = Job::Remind(Box::new(notifier.clone()), regional, open);
+        let job = Job::Remind(Box::new(notifier.clone()), regional, act);
         engine.handle(Some(job), start);
         let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
         assert!(told(updates).is_some());
-        (engine, opened)
+        (engine, chosen)
     }
 
     #[test]
@@ -5717,21 +5787,177 @@ mod tests {
         google.fake.add_event(ACCOUNT_ID, "work", review);
         let clock = Arc::new(Mutex::new(thursday(9, 0)));
         let notifier = FakeNotifier::default();
-        let (mut engine, opened) =
+        let (mut engine, chosen) =
             reminding(&google, &clock, &notifier, Disabled::new(), Instant::now());
         *clock.lock().unwrap() = thursday(9, 50);
         engine.remind();
 
-        notifier.click(0);
+        notifier.choose(0, Action::Open);
 
         assert_eq!(
-            opened.try_recv(),
-            Ok(EventId {
-                account_id: ACCOUNT_ID.to_string(),
-                calendar_id: "work".to_string(),
-                id: "review".to_string(),
-            })
+            chosen.try_recv(),
+            Ok(Chosen::Open(Opened {
+                event: EventId {
+                    account_id: ACCOUNT_ID.to_string(),
+                    calendar_id: "work".to_string(),
+                    id: "review".to_string(),
+                },
+                snooze: None,
+            }))
         );
+    }
+
+    /// The "Review" event at 10:00 with a 10-minute reminder, shown at 9:50 through the fake
+    /// notifications; with the engine, what the user chose, and when it started.
+    fn review_shown(
+        google: &Google,
+        clock: &Arc<Mutex<DateTime<Utc>>>,
+        notifier: &FakeNotifier,
+        meet: bool,
+    ) -> (Engine, Receiver<Chosen>, Instant) {
+        work_calendar(google, "work", "Work");
+        let mut review = at_ten(
+            "review",
+            "Review",
+            json!([{"method": "popup", "minutes": 10}]),
+        );
+        if meet {
+            review["conferenceData"] = json!({
+                "conferenceSolution": {"key": {"type": "hangoutsMeet"}},
+                "entryPoints": [
+                    {"entryPointType": "video", "uri": "https://meet.google.com/abc-defg-hij"}
+                ],
+            });
+        }
+        google.fake.add_event(ACCOUNT_ID, "work", review);
+        let start = Instant::now();
+        let (mut engine, chosen) = reminding(google, clock, notifier, Disabled::new(), start);
+        *clock.lock().unwrap() = thursday(9, 50);
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 1);
+        (engine, chosen, start)
+    }
+
+    #[test]
+    fn tc_07_03_snoozing_for_5_minutes_shows_the_notification_again_without_changing_google() {
+        let google = Google::start("tc-07-03");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, chosen, start) = review_shown(&google, &clock, &notifier, false);
+        let before = google.fake.requests().len();
+
+        // 1. Dismiss, Snooze 5 minutes and Snooze 10 minutes are offered.
+        assert_eq!(
+            notifier.actions(0),
+            [Action::Snooze(5), Action::Snooze(10), Action::Dismiss]
+        );
+
+        // 2. Snooze 5 minutes, and the clock at 9:55: "Review" is shown again.
+        notifier.choose(0, Action::Snooze(5));
+        let Ok(Chosen::Snooze(reminder, 5)) = chosen.try_recv() else {
+            panic!("Snooze 5 minutes was not chosen");
+        };
+        assert!(
+            engine
+                .handle(Some(Job::Snooze(reminder, 5, thursday(9, 50))), start)
+                .is_empty()
+        );
+        assert_eq!(engine.next_reminder(start), Some(start + secs(60)));
+        *clock.lock().unwrap() = thursday(9, 54) + chrono::Duration::seconds(30);
+        assert_eq!(engine.next_reminder(start), Some(start + secs(30)));
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 1);
+        *clock.lock().unwrap() = thursday(9, 55);
+        engine.remind();
+        let review = ("Review".to_string(), "10:00".to_string(), String::new());
+        assert_eq!(notifier.shown(), [review.clone(), review]);
+
+        // 3. Google was told nothing.
+        assert_eq!(google.fake.requests().len(), before);
+        assert!(google.fake.patched().is_empty());
+    }
+
+    #[test]
+    fn dismissing_a_notification_closes_it_for_good_and_tells_google_nothing() {
+        let google = Google::start("reminders-dismiss");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, chosen, _) = review_shown(&google, &clock, &notifier, false);
+        let before = google.fake.requests().len();
+
+        notifier.choose(0, Action::Dismiss);
+
+        assert!(chosen.try_recv().is_err());
+        *clock.lock().unwrap() = thursday(10, 5);
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 1);
+        assert_eq!(google.fake.requests().len(), before);
+    }
+
+    #[test]
+    fn snoozing_for_10_minutes_shows_the_notification_again_after_10_minutes() {
+        let google = Google::start("reminders-snooze-10");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, chosen, start) = review_shown(&google, &clock, &notifier, false);
+        let before = google.fake.requests().len();
+
+        notifier.choose(0, Action::Snooze(10));
+        let Ok(Chosen::Snooze(reminder, 10)) = chosen.try_recv() else {
+            panic!("Snooze 10 minutes was not chosen");
+        };
+        // Counted from the choice at 9:59, though the worker got to it later.
+        *clock.lock().unwrap() = thursday(10, 1);
+        engine.handle(Some(Job::Snooze(reminder, 10, thursday(9, 59))), start);
+        *clock.lock().unwrap() = thursday(10, 8);
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 1);
+        *clock.lock().unwrap() = thursday(10, 9);
+        engine.remind();
+        assert_eq!(notifier.shown().len(), 2);
+        assert_eq!(google.fake.requests().len(), before);
+    }
+
+    #[test]
+    fn a_notification_of_an_event_with_google_meet_joins_the_meeting_from_its_join_button() {
+        let google = Google::start("reminders-join");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (_engine, chosen, _) = review_shown(&google, &clock, &notifier, true);
+
+        assert_eq!(
+            notifier.actions(0),
+            [
+                Action::Join,
+                Action::Snooze(5),
+                Action::Snooze(10),
+                Action::Dismiss
+            ]
+        );
+        notifier.choose(0, Action::Join);
+
+        let link = "https://meet.google.com/abc-defg-hij".to_string();
+        assert_eq!(chosen.try_recv(), Ok(Chosen::Join(link)));
+    }
+
+    #[test]
+    fn without_buttons_clicking_a_notification_opens_its_event_with_snooze() {
+        let google = Google::start("reminders-no-buttons");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier {
+            without_buttons: true,
+            ..FakeNotifier::default()
+        };
+        let (_engine, chosen, _) = review_shown(&google, &clock, &notifier, true);
+
+        notifier.choose(0, Action::Open);
+
+        let Ok(Chosen::Open(opened)) = chosen.try_recv() else {
+            panic!("the event was not opened");
+        };
+        assert_eq!(opened.event.id, "review");
+        let shown = notifier.shown.lock().unwrap()[0].0.reminder.clone();
+        assert_eq!(opened.snooze, Some(shown));
     }
 
     #[test]

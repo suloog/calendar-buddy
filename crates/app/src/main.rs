@@ -28,7 +28,7 @@ use calendar_core::notify::{self, Pending};
 use calendar_core::offline;
 use calendar_core::platform::Browser;
 use calendar_core::regional::Regional;
-use calendar_core::reminders::EventId;
+use calendar_core::reminders::{Action, ReminderId, SNOOZES};
 use calendar_core::series::{Question, Scope};
 use calendar_core::settings::{self, Settings};
 use calendar_core::shortcuts::{self, Command, SHORTCUTS};
@@ -47,7 +47,7 @@ use platform::{SystemBrowser, SystemNetwork};
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Instant;
-use sync::{Saved, Synchronization};
+use sync::{Opened, Saved, Synchronization};
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -94,9 +94,10 @@ enum Dialog {
     QuickEntry(QuickEntry, bool),
     /// The full editor of a new or an existing event (`MOD-05-F04`).
     Editor(Box<Editor>),
-    /// The event whose details are open, what had the keyboard when it opened, and whether its
-    /// guest list is expanded (`DEC-63`).
-    Event(Event, Option<egui::Id>, bool),
+    /// The event whose details are open, what had the keyboard when it opened, whether its
+    /// guest list is expanded (`DEC-63`), and the reminder of the notification it was opened
+    /// from, to snooze there when the desktop's notifications have no buttons (`DEC-64`).
+    Event(Box<Event>, Option<egui::Id>, bool, Option<ReminderId>),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
     /// Which events of a series a change or deletion of one of its occurrences applies to
@@ -372,13 +373,15 @@ impl CalendarApp {
     fn open(&mut self, event: usize, focused: Option<egui::Id>) {
         // The event is brought up to date first, as the editor opens from its details.
         self.sync.opening(&self.events[event].calendar_id);
-        self.dialog = Some(Dialog::Event(self.events[event].clone(), focused, false));
+        let opened = Box::new(self.events[event].clone());
+        self.dialog = Some(Dialog::Event(opened, focused, false, None));
     }
 
     /// Opens the event of a notification clicked on its day, bringing the window forward
-    /// (`MOD-07-F08`). Over an event being edited or saved, the window only comes forward, so
-    /// nothing typed is lost.
-    fn open_notified(&mut self, ctx: &egui::Context, notified: &EventId) {
+    /// (`MOD-07-F08`), with Snooze when the notification had no buttons (`DEC-64`). Over an event
+    /// being edited or saved, the window only comes forward, so nothing typed is lost.
+    fn open_notified(&mut self, ctx: &egui::Context, opened: &Opened) {
+        let notified = &opened.event;
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         let busy = matches!(
@@ -401,6 +404,9 @@ impl CalendarApp {
             Timing::AllDay { start, .. } => start,
         };
         self.open(event, None);
+        if let Some(Dialog::Event(.., snooze)) = &mut self.dialog {
+            *snooze = opened.snooze.clone();
+        }
     }
 
     /// The cached events but those changed meanwhile, followed by the new and changed events not
@@ -647,7 +653,7 @@ impl CalendarApp {
     /// the event, and the scope and notify questions go back to the editor.
     fn close_dialog(&mut self, ctx: &egui::Context) {
         match self.dialog.take() {
-            Some(Dialog::Event(_, Some(id), _)) => ctx.memory_mut(|m| m.request_focus(id)),
+            Some(Dialog::Event(_, Some(id), ..)) => ctx.memory_mut(|m| m.request_focus(id)),
             // The scope and notify questions go back to the editor the change was made in.
             Some(Dialog::Scope(_, Some(editor)) | Dialog::Notify(_, Some(editor))) => {
                 self.dialog = Some(Dialog::Editor(editor))
@@ -682,6 +688,7 @@ impl CalendarApp {
         let mut open_series = None;
         let mut attachment = None;
         let mut join = None;
+        let mut snoozed = None;
         let mut search = None;
         let mut busy = None;
         let mut invitation = None;
@@ -832,7 +839,7 @@ impl CalendarApp {
                     // Asked again as the day, the guests or the calendar change (`MOD-06-F19`).
                     busy = availability::asked(editor, regional, online).map(|(asked, _)| asked);
                 }
-                Dialog::Event(event, _, expanded) => {
+                Dialog::Event(event, _, expanded, snooze) => {
                     // The event as last synchronized, which may have come since it was opened.
                     let event = self
                         .events
@@ -866,6 +873,16 @@ impl CalendarApp {
                         && ui.button("Join with Google Meet").clicked()
                     {
                         join = Some(link.clone());
+                    }
+                    // The Snooze of a notification without buttons (`DEC-64`).
+                    if let Some(reminder) = snooze {
+                        ui.horizontal(|ui| {
+                            for minutes in SNOOZES {
+                                if ui.button(Action::Snooze(minutes).label()).clicked() {
+                                    snoozed = Some((reminder.clone(), minutes));
+                                }
+                            }
+                        });
                     }
                     // Each attachment opens in the browser (`MOD-05-F26`).
                     for listed in &details.attachments {
@@ -1126,6 +1143,10 @@ impl CalendarApp {
         }
         if let Some(link) = join {
             self.join(&link);
+        }
+        if let Some((reminder, minutes)) = snoozed {
+            self.sync.snooze(reminder, minutes);
+            open = false;
         }
         if let Some(editor) = edit {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
