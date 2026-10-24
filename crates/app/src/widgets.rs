@@ -64,8 +64,12 @@ pub fn steady_label(ui: &mut egui::Ui, text: RichText, widest: &[&str]) -> Respo
         .fold(measure(text.text()), f32::max);
     let size = egui::vec2(width, ui.spacing().interact_size.y);
     let layout = egui::Layout::right_to_left(egui::Align::Center);
-    ui.allocate_ui_with_layout(size, layout, |ui| ui.label(text))
-        .inner
+    // The area keeps the whole width, not only the text's.
+    ui.allocate_ui_with_layout(size, layout, |ui| {
+        ui.set_min_size(size);
+        ui.label(text)
+    })
+    .inner
 }
 
 /// A button outlined in the lines' gray, with no fill until hovered.
@@ -131,4 +135,34 @@ pub fn segmented(ui: &mut egui::Ui, names: &[&str], picked: usize) -> Option<usi
             }
         });
     clicked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Where a button left of the indicator showing `text` is drawn, in a right-to-left bar.
+    fn left_of(text: &str) -> egui::Rect {
+        let ctx = egui::Context::default();
+        crate::appearance::install(&ctx);
+        let mut drawn = egui::Rect::NOTHING;
+        for _ in 0..2 {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let widest = ["Synchronizing…", "Up to date (22:22)"];
+                    steady_label(ui, RichText::new(text).small(), &widest);
+                    drawn = ui.button("Week").rect;
+                });
+            });
+            output.textures_delta.clear();
+        }
+        drawn
+    }
+
+    #[test]
+    fn what_stands_left_of_the_indicator_keeps_its_place_as_its_text_changes() {
+        let synchronizing = left_of("Synchronizing…");
+        assert_eq!(left_of("Up to date (14:05)"), synchronizing);
+        assert_eq!(left_of("Offline"), synchronizing);
+    }
 }
