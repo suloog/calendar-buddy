@@ -54,8 +54,9 @@ pub fn event_label(title: Option<&str>, read_only: bool, saving: bool) -> String
     }
 }
 
-/// Draws an event's `text` at `pos`, like `Painter::text`; a declined event's struck through
-/// (`MOD-06-F14`).
+/// Draws an event's `text` at `pos`, like `Painter::text`, on one line `width` wide at most,
+/// ending in "…" when it does not fit; a declined event's struck through (`MOD-06-F14`).
+#[expect(clippy::too_many_arguments)]
 pub fn event_text(
     painter: &egui::Painter,
     pos: Pos2,
@@ -64,14 +65,22 @@ pub fn event_text(
     font: FontId,
     ink: Color32,
     declined: bool,
+    width: f32,
 ) {
     let mut job = LayoutJob::simple(text, font, ink, f32::INFINITY);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(width.max(0.0));
     if declined {
         job.sections[0].format.strikethrough = Stroke::new(1.0, ink);
     }
     let galley = painter.layout_job(job);
     let at = align.anchor_size(pos, galley.size()).min;
     painter.galley(at, galley, ink);
+}
+
+/// The lines of a view's grid: faint, so the events stand out from them.
+pub fn grid_line(visuals: &egui::Visuals) -> Stroke {
+    let line = visuals.widgets.noninteractive.bg_stroke;
+    Stroke::new(line.width, line.color.gamma_multiply(0.6))
 }
 
 /// How much of the view's background veils a declined event.
@@ -325,7 +334,7 @@ pub fn show(
     let columns = view.days.len();
     let day_width = ((width - GUTTER) / columns as f32).max(40.0);
     let visuals = ui.visuals().clone();
-    let grid_line = visuals.widgets.noninteractive.bg_stroke;
+    let grid_line = grid_line(&visuals);
     let weak_text = visuals.weak_text_color();
     // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way; one whose event
     // left the view is dropped.
@@ -352,15 +361,21 @@ pub fn show(
             Vec2::new(day_width, HEADER_HEIGHT),
         );
         // The weekday small above the day's number; today's number on a disc of the accent.
+        // Alone in the day view, at the start of its column, by the hours, as in Google Calendar.
+        let top = if view.days.len() == 1 {
+            rect.left_top() + Vec2::new(24.0, 0.0)
+        } else {
+            rect.center_top()
+        };
         let accent = visuals.selection.stroke.color;
         painter.text(
-            rect.center_top() + Vec2::new(0.0, 6.0),
+            top + Vec2::new(0.0, 6.0),
             Align2::CENTER_TOP,
             regional.weekday(day.date).to_uppercase(),
             FontId::proportional(11.0),
             if day.is_today { accent } else { weak_text },
         );
-        let number = rect.center_top() + Vec2::new(0.0, 34.0);
+        let number = top + Vec2::new(0.0, 34.0);
         let ink = if day.is_today {
             painter.circle_filled(number, 14.0, accent);
             text_on(Rgb(accent.r(), accent.g(), accent.b()))
@@ -378,10 +393,18 @@ pub fn show(
 
     // All-day and multi-day strip.
     let strip_height = view.lanes as f32 * LANE_HEIGHT + 4.0;
+    // The hours right under the strip.
+    ui.spacing_mut().item_spacing.y = 0.0;
     let (strip, _) = ui.allocate_exact_size(Vec2::new(width, strip_height), Sense::hover());
     // Above the hours, a dragged event is over the strip.
     let over_strip = pointer.is_some_and(|p| p.y < strip.bottom());
     let painter = ui.painter_at(strip);
+    // The days' lines go on through the strip, under its bars, so each day reads as a column
+    // from its date down.
+    for i in 0..=columns {
+        let x = strip.left() + GUTTER + i as f32 * day_width;
+        painter.vline(x, strip.y_range(), grid_line);
+    }
     let mut bar_into_hours = None;
     for (index, bar) in view.bars.iter().enumerate() {
         let x0 = strip.left() + GUTTER + bar.bar.first_day as f32 * day_width + 2.0;
@@ -478,6 +501,7 @@ pub fn show(
             font,
             ink,
             bar.declined,
+            rect.right() - at.x - 4.0,
         );
         openable(ui, &response, rect, bar.bar.event, opened);
     }
@@ -508,6 +532,8 @@ pub fn show(
     }
     ui.painter()
         .hline(strip.x_range(), strip.bottom(), grid_line);
+    // The hours' lines go on from the strip, not faded at its edge.
+    ui.spacing_mut().scroll.fade.strength = 0.0;
 
     // Hours.
     // The grid follows the clock, also on daylight-saving days (`DEC-67`).
@@ -591,7 +617,7 @@ pub fn show(
             let x = grid.left() + GUTTER + p.day as f32 * day_width + 2.0 + offset;
             let mut rect = Rect::from_min_max(
                 Pos2::new(x, minute_y(p.start_min as f32) + 1.0),
-                Pos2::new(x + column_width - 2.0, minute_y(p.end_min as f32) - 1.0),
+                Pos2::new(x + column_width - 3.0, minute_y(p.end_min as f32) - 1.0),
             );
             // A short event stays tall enough for a line of its title.
             rect.max.y = rect.max.y.max(rect.min.y + MIN_BLOCK_HEIGHT);
@@ -757,6 +783,7 @@ pub fn show(
                     font,
                     ink,
                     block.declined,
+                    rect.right() - left - 3.0,
                 );
             }
             openable(ui, &response, rect, p.event, opened);

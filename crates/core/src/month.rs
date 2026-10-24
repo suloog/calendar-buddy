@@ -4,7 +4,7 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc, Weekday};
 use chrono_tz::Tz;
 
-use crate::layout::{is_strip_event, strip_dates};
+use crate::layout::{all_day_bars, is_strip_event, strip_dates};
 use crate::model::{Event, Rgb, Timing};
 use crate::view_model::shown_title;
 use crate::week::Week;
@@ -27,6 +27,31 @@ pub struct MonthItem {
     pub declined: bool,
     /// Start of a timed event; `None` for all-day and multi-day events.
     pub start: Option<DateTime<Utc>>,
+    /// The row of an all-day or multi-day event in its week, where its bar runs on through the
+    /// days it covers, as in Google Calendar; `None` for timed events.
+    pub lane: Option<u32>,
+}
+
+/// An all-day or multi-day event as one bar across the days it covers in a week.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MonthBar {
+    pub item: MonthItem,
+    /// The first and last day of the week it covers, from 0.
+    pub first_day: usize,
+    pub last_day: usize,
+    /// It starts on its first day, and ends on its last, rather than going on from the week
+    /// before or into the next.
+    pub starts: bool,
+    pub ends: bool,
+}
+
+/// What of a day fits in its rows: the rows of the week's bars it shows, its timed events after
+/// them, and how many are left for "+N more".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fit {
+    pub lanes: usize,
+    pub timed: usize,
+    pub more: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -37,18 +62,32 @@ pub struct MonthDay {
     pub is_today: bool,
     /// Every event of the day: all-day and multi-day first, then timed ones by start.
     pub items: Vec<MonthItem>,
+    /// The rows the week's bars take on the day: up to its lowest bar.
+    pub lanes: usize,
 }
 
 impl MonthDay {
-    /// How many items to draw in `slots` rows, and how many are left for "+N more". When not all
-    /// fit, the last row is taken by "+N more".
-    pub fn fit(&self, slots: usize) -> (usize, usize) {
-        let all = self.items.len();
-        if all <= slots {
-            (all, 0)
-        } else {
-            let shown = slots.saturating_sub(1);
-            (shown, all - shown)
+    /// What fits in `slots` rows: the bars' rows, then the timed events. When not all fit, the
+    /// last row is taken by "+N more", which counts the bars and the timed events left out.
+    pub fn fit(&self, slots: usize) -> Fit {
+        let timed = self.items.iter().filter(|item| item.lane.is_none()).count();
+        if self.lanes + timed <= slots {
+            return Fit {
+                lanes: self.lanes,
+                timed,
+                more: 0,
+            };
+        }
+        let rows = slots.saturating_sub(1);
+        let lanes = self.lanes.min(rows);
+        let shown = rows - lanes;
+        let bars_left = (self.items.iter())
+            .filter(|item| item.lane.is_some_and(|lane| lane as usize >= lanes))
+            .count();
+        Fit {
+            lanes,
+            timed: shown,
+            more: bars_left + timed - shown,
         }
     }
 }
@@ -60,6 +99,8 @@ pub struct MonthViewModel {
     pub month: NaiveDate,
     /// Whole weeks covering the month, from the first day of the week.
     pub weeks: Vec<[MonthDay; 7]>,
+    /// The bars of each week, in its rows.
+    pub bars: Vec<Vec<MonthBar>>,
 }
 
 impl MonthViewModel {
@@ -124,6 +165,34 @@ pub fn month_view(
             std::cmp::Reverse(to),
         )
     };
+    // The bars of each week, one lane each, as in the strip of the week view.
+    let lanes: Vec<Vec<_>> = (0..week_count)
+        .map(|week| {
+            let dates: Vec<NaiveDate> = (0..7)
+                .map(|day| first_shown + Duration::days((week * 7 + day) as i64))
+                .collect();
+            all_day_bars(events, &dates, zone)
+        })
+        .collect();
+    let lane_of = |n: usize, event: usize| {
+        (lanes[n / 7].iter())
+            .find(|bar| bar.event == event)
+            .map(|bar| bar.lane)
+    };
+    let item = |i: usize, lane: Option<u32>| {
+        let event = &events[i];
+        MonthItem {
+            event: i,
+            title: shown_title(event),
+            color: event.shown_color(),
+            read_only: event.read_only,
+            saving: event.saving,
+            awaiting: event.about.awaiting(),
+            declined: event.about.declined(),
+            start: timed_start(event),
+            lane,
+        }
+    };
     let today = now.with_timezone(&zone).date_naive();
     let mut days = per_day.into_iter().enumerate().map(|(n, mut indices)| {
         indices.sort_by_cached_key(order);
@@ -132,21 +201,14 @@ pub fn month_view(
             date,
             in_month: date.month() == month.month(),
             is_today: date == today,
+            lanes: (lanes[n / 7].iter())
+                .filter(|bar| bar.first_day <= n % 7 && n % 7 <= bar.last_day)
+                .map(|bar| bar.lane as usize + 1)
+                .max()
+                .unwrap_or(0),
             items: indices
                 .into_iter()
-                .map(|i| {
-                    let event = &events[i];
-                    MonthItem {
-                        event: i,
-                        title: shown_title(event),
-                        color: event.shown_color(),
-                        read_only: event.read_only,
-                        saving: event.saving,
-                        awaiting: event.about.awaiting(),
-                        declined: event.about.declined(),
-                        start: timed_start(event),
-                    }
-                })
+                .map(|i| item(i, lane_of(n, i)))
                 .collect(),
         }
     });
@@ -154,7 +216,31 @@ pub fn month_view(
         .map(|_| std::array::from_fn(|_| days.next().expect("seven days a week")))
         .collect();
 
-    MonthViewModel { zone, month, weeks }
+    let bars = (lanes.iter().enumerate())
+        .map(|(week, bars)| {
+            let first = first_shown + Duration::days(week as i64 * 7);
+            (bars.iter())
+                .map(|bar| {
+                    let (from, to) = strip_dates(&events[bar.event], zone);
+                    let date = |day: usize| first + Duration::days(day as i64);
+                    MonthBar {
+                        item: item(bar.event, Some(bar.lane)),
+                        first_day: bar.first_day,
+                        last_day: bar.last_day,
+                        starts: from >= date(bar.first_day),
+                        ends: to.max(from) <= date(bar.last_day),
+                    }
+                })
+                .collect()
+        })
+        .collect();
+
+    MonthViewModel {
+        zone,
+        month,
+        weeks,
+        bars,
+    }
 }
 
 #[cfg(test)]
@@ -228,12 +314,13 @@ mod tests {
             Weekday::Mon,
         );
         let monday = vm.day(d(2026, 11, 16)).unwrap();
+        let fit = |lanes, timed, more| Fit { lanes, timed, more };
         // Four rows fit: three events and "+5 more".
-        assert_eq!(monday.fit(4), (3, 5));
+        assert_eq!(monday.fit(4), fit(0, 3, 5));
         assert_eq!(&titles(monday)[..3], ["Monday 8", "Monday 9", "Monday 10"]);
         // A day whose events fit has no "+N more".
-        assert_eq!(vm.day(d(2026, 11, 3)).unwrap().fit(4), (1, 0));
-        assert_eq!(monday.fit(8), (8, 0));
+        assert_eq!(vm.day(d(2026, 11, 3)).unwrap().fit(4), fit(0, 1, 0));
+        assert_eq!(monday.fit(8), fit(0, 8, 0));
     }
 
     #[test]
@@ -287,6 +374,51 @@ mod tests {
             vec!["Trip", "Late"]
         );
         assert!(vm.day(d(2026, 11, 12)).unwrap().items[0].start.is_none());
+    }
+
+    #[test]
+    fn a_multi_day_event_is_one_bar_a_week_with_the_timed_events_under_the_bars() {
+        let events = [
+            // Thursday 12 to Tuesday 17 November: on into the next week.
+            all_day("Trip", d(2026, 11, 12), 6),
+            all_day("Holiday", d(2026, 11, 13), 1),
+            timed("Early", d(2026, 11, 13), (7, 0), (8, 0)),
+        ];
+        let vm = month_view(&events, d(2026, 11, 1), Warsaw, clock(), Weekday::Mon);
+        // The week of 9 November, then the week of 16 November.
+        let bars = |week: usize| -> Vec<(&str, usize, usize, u32, bool, bool)> {
+            (vm.bars[week].iter())
+                .map(|bar| {
+                    let title = bar.item.title.as_deref().unwrap_or("");
+                    let lane = bar.item.lane.unwrap();
+                    (
+                        title,
+                        bar.first_day,
+                        bar.last_day,
+                        lane,
+                        bar.starts,
+                        bar.ends,
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(
+            bars(2),
+            [
+                ("Trip", 3, 6, 0, true, false),
+                ("Holiday", 4, 4, 1, true, true)
+            ]
+        );
+        assert_eq!(bars(3), [("Trip", 0, 1, 0, false, true)]);
+        // Friday 13: both bars' rows, then its timed event.
+        let friday = vm.day(d(2026, 11, 13)).unwrap();
+        assert_eq!(friday.lanes, 2);
+        let fit = |lanes, timed, more| Fit { lanes, timed, more };
+        assert_eq!(friday.fit(4), fit(2, 1, 0));
+        // Two rows: the first bar, then "+2 more" for the second and the timed event.
+        assert_eq!(friday.fit(2), fit(1, 0, 2));
+        // Saturday 14 keeps the Trip's row only.
+        assert_eq!(vm.day(d(2026, 11, 14)).unwrap().lanes, 1);
     }
 
     #[test]

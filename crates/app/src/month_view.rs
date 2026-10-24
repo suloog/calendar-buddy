@@ -9,8 +9,10 @@ use eframe::egui::{
     self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, ScrollArea, Sense, Vec2,
 };
 
+use calendar_core::model::Rgb;
+
 use crate::grid_view::{
-    STRIP, awaiting, color, event_label, event_text, fade, filled, openable, text_on,
+    STRIP, awaiting, color, event_label, event_text, fade, filled, grid_line, openable, text_on,
 };
 
 const HEADER_HEIGHT: f32 = 24.0;
@@ -66,6 +68,7 @@ fn paint_item(
             crate::appearance::strong(12.0),
             on,
             item.declined,
+            rect.width() - STRIP - 8.0,
         );
     } else {
         painter.circle_filled(
@@ -85,6 +88,7 @@ fn paint_item(
             FontId::proportional(12.0),
             ink,
             item.declined,
+            rect.width() - 16.0,
         );
     }
 }
@@ -97,7 +101,7 @@ pub fn show(
     opened: &mut Option<usize>,
 ) {
     let visuals = ui.visuals().clone();
-    let grid_line = visuals.widgets.noninteractive.bg_stroke;
+    let grid_line = grid_line(&visuals);
     let (area, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
     let painter = ui.painter_at(area);
     let day_width = area.width() / 7.0;
@@ -112,32 +116,56 @@ pub fn show(
                 area.top() + HEADER_HEIGHT / 2.0,
             ),
             Align2::CENTER_CENTER,
-            regional.weekday(day.date),
-            FontId::proportional(12.0),
+            // As above the days of the week view.
+            regional.weekday(day.date).to_uppercase(),
+            FontId::proportional(11.0),
             visuals.weak_text_color(),
         );
     }
 
+    // One line between two days, not a frame of each.
+    let weeks = area.top() + HEADER_HEIGHT..=area.bottom();
+    for i in 0..=7 {
+        let x = (area.left() + i as f32 * day_width).clamp(area.left() + 0.5, area.right() - 0.5);
+        painter.vline(x, weeks.clone(), grid_line);
+    }
+    for w in 0..=view.weeks.len() {
+        let y = area.top() + HEADER_HEIGHT + w as f32 * week_height;
+        painter.hline(area.x_range(), y.min(area.bottom() - 0.5), grid_line);
+    }
+
     for (w, week) in view.weeks.iter().enumerate() {
-        for (i, day) in week.iter().enumerate() {
-            let cell = Rect::from_min_size(
+        let cell = |i: usize| {
+            Rect::from_min_size(
                 Pos2::new(
                     area.left() + i as f32 * day_width,
                     area.top() + HEADER_HEIGHT + w as f32 * week_height,
                 ),
                 Vec2::new(day_width, week_height),
-            );
-            painter.rect_stroke(
-                cell,
-                CornerRadius::ZERO,
-                grid_line,
-                egui::StrokeKind::Inside,
-            );
-
+            )
+        };
+        // The row `n` under a day's date, from its day `first` to its day `last`.
+        let row = |first: usize, last: usize, n: usize| {
+            Rect::from_min_max(
+                Pos2::new(
+                    cell(first).left() + 2.0,
+                    cell(first).top() + DATE_HEIGHT + n as f32 * ITEM_HEIGHT,
+                ),
+                Pos2::new(
+                    cell(last).right() - 2.0,
+                    cell(first).top() + DATE_HEIGHT + (n + 1) as f32 * ITEM_HEIGHT - 2.0,
+                ),
+            )
+        };
+        let fits: Vec<_> = week.iter().map(|day| day.fit(slots)).collect();
+        for (i, day) in week.iter().enumerate() {
+            let cell = cell(i);
             let date_center = Pos2::new(cell.center().x, cell.top() + DATE_HEIGHT / 2.0);
+            // Today on a disc of the accent, as in the week view and the mini calendar.
             let date_color = if day.is_today {
-                painter.circle_filled(date_center, 10.0, visuals.selection.bg_fill);
-                visuals.strong_text_color()
+                let accent = visuals.selection.stroke.color;
+                painter.circle_filled(date_center, 10.0, accent);
+                text_on(Rgb(accent.r(), accent.g(), accent.b()))
             } else if day.in_month {
                 visuals.text_color()
             } else {
@@ -151,26 +179,27 @@ pub fn show(
                 date_color,
             );
 
-            let row = |n: usize| {
-                Rect::from_min_size(
-                    Pos2::new(
-                        cell.left() + 2.0,
-                        cell.top() + DATE_HEIGHT + n as f32 * ITEM_HEIGHT,
-                    ),
-                    Vec2::new(day_width - 4.0, ITEM_HEIGHT - 2.0),
-                )
-            };
-            let (shown, more) = day.fit(slots);
-            for (n, item) in day.items[..shown].iter().enumerate() {
-                let rect = row(n);
+            // The timed events under the rows of the week's bars.
+            let fit = fits[i];
+            let timed = day.items.iter().filter(|item| item.lane.is_none());
+            for (n, item) in timed.take(fit.timed).enumerate() {
+                let rect = row(i, i, fit.lanes + n);
                 let id = ui.scope_id().with(("item", day.date, n));
                 let response = ui.interact(rect, id, Sense::click());
+                // Under the pointer, a timed event's row is lit, as a bar is by its fill.
+                if response.hovered() {
+                    painter.rect_filled(
+                        rect,
+                        CornerRadius::same(crate::grid_view::EVENT_RADIUS),
+                        visuals.widgets.hovered.weak_bg_fill,
+                    );
+                }
                 paint_item(&painter, rect, item, view, regional, visuals.text_color());
                 openable(ui, &response, rect, item.event, opened);
             }
             // With no row free in a very short window, there is nowhere to put "+N more".
-            if more > 0 && slots > 0 {
-                let rect = row(shown);
+            if fit.more > 0 && slots > 0 {
+                let rect = row(i, i, fit.lanes + fit.timed);
                 let response =
                     ui.interact(rect, ui.scope_id().with(("more", day.date)), Sense::click());
                 if response.hovered() || response.has_focus() {
@@ -183,13 +212,43 @@ pub fn show(
                 painter.with_clip_rect(rect).text(
                     rect.left_center() + Vec2::new(4.0, 0.0),
                     Align2::LEFT_CENTER,
-                    texts::more(more),
+                    texts::more(fit.more),
                     FontId::proportional(12.0),
                     visuals.text_color(),
                 );
                 if response.clicked() {
                     state.open_day = Some(day.date);
                 }
+            }
+        }
+
+        // All-day and multi-day events as one bar across their days in the week, as in Google
+        // Calendar (`MOD-03-F26`); broken off on a day whose rows its bar no longer fits in.
+        for bar in &view.bars[w] {
+            let lane = bar.item.lane.unwrap_or_default() as usize;
+            let mut day = bar.first_day;
+            while day <= bar.last_day {
+                if lane >= fits[day].lanes {
+                    day += 1;
+                    continue;
+                }
+                let first = day;
+                while day < bar.last_day && lane < fits[day + 1].lanes {
+                    day += 1;
+                }
+                let rect = row(first, day, lane);
+                let id = ui.scope_id().with(("bar", bar.item.event, w, first));
+                let response = ui.interact(rect, id, Sense::click());
+                paint_item(
+                    &painter,
+                    rect,
+                    &bar.item,
+                    view,
+                    regional,
+                    visuals.text_color(),
+                );
+                openable(ui, &response, rect, bar.item.event, opened);
+                day += 1;
             }
         }
     }

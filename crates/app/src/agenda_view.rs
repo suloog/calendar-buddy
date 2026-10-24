@@ -7,13 +7,21 @@ use calendar_core::regional::Regional;
 use calendar_core::texts;
 use eframe::egui::{self, Align2, FontId, Pos2, ScrollArea, Sense, Vec2};
 
-use crate::grid_view::{awaiting, color, event_label, event_text, fade, openable, text_on};
+use calendar_core::model::Rgb;
 
-const DATE_WIDTH: f32 = 96.0;
+use crate::grid_view::{
+    awaiting, color, event_label, event_text, fade, grid_line, openable, text_on,
+};
+
+const DATE_WIDTH: f32 = 112.0;
 const TIME_WIDTH: f32 = 140.0;
-const ITEM_HEIGHT: f32 = 24.0;
-const DAY_GAP: f32 = 8.0;
-const JOIN_WIDTH: f32 = 48.0;
+const ITEM_HEIGHT: f32 = 28.0;
+/// The room around a day's events, half above them and half under, before its line.
+const DAY_GAP: f32 = 16.0;
+/// How tall Join is.
+const JOIN_HEIGHT: f32 = 22.0;
+/// The room on each side of Join's word.
+const JOIN_PADDING: f32 = 10.0;
 /// How close to the end of the list scrolling has to get before more days load.
 const LOAD_MARGIN: f32 = 200.0;
 
@@ -38,7 +46,15 @@ pub fn show(
         ui.centered_and_justified(|ui| ui.label(texts::NO_UPCOMING_EVENTS));
         return false;
     }
-    let output = ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
+    // Off the window's edge and the side panel, as the other views' days are.
+    let margin = egui::Margin {
+        left: 8,
+        right: 16,
+        top: 4,
+        bottom: 16,
+    };
+    let scroll = ScrollArea::vertical().auto_shrink(false);
+    let output = scroll.content_margin(margin).show(ui, |ui| {
         let visuals = ui.visuals().clone();
         for day in &view.days {
             let height = day.items.len() as f32 * ITEM_HEIGHT;
@@ -52,11 +68,12 @@ pub fn show(
             if !ui.is_rect_visible(rect.expand2(screen)) {
                 continue;
             }
+            let mut lit = None;
             for (n, item) in day.items.iter().enumerate() {
                 let row = egui::Rect::from_min_size(
                     Pos2::new(
                         rect.left() + DATE_WIDTH,
-                        rect.top() + n as f32 * ITEM_HEIGHT,
+                        rect.top() + DAY_GAP / 2.0 + n as f32 * ITEM_HEIGHT,
                     ),
                     Vec2::new(rect.width() - DATE_WIDTH, ITEM_HEIGHT),
                 );
@@ -65,46 +82,57 @@ pub fn show(
                     ui.scope_id().with(("item", day.date, n)),
                     Sense::click(),
                 );
+                if response.hovered() {
+                    lit = Some(row.shrink2(Vec2::new(0.0, 1.0)));
+                }
                 openable(ui, &response, row, item.event, opened);
             }
             if !ui.is_rect_visible(rect) {
                 continue;
             }
             let painter = ui.painter_at(rect);
-            ui.painter().hline(
-                rect.x_range(),
-                rect.bottom(),
-                visuals.widgets.noninteractive.bg_stroke,
-            );
+            ui.painter()
+                .hline(rect.x_range(), rect.bottom(), grid_line(&visuals));
+            // Under the pointer, an event's row is lit, as in the month view.
+            if let Some(row) = lit {
+                let fill = visuals.widgets.hovered.weak_bg_fill;
+                painter.rect_filled(row, crate::grid_view::EVENT_RADIUS, fill);
+            }
 
-            let date_center = Pos2::new(rect.left() + 16.0, rect.top() + ITEM_HEIGHT / 2.0);
+            // The day's number as in the other views' headers, its month and weekday beside it.
+            let date_center = Pos2::new(
+                rect.left() + 18.0,
+                rect.top() + DAY_GAP / 2.0 + ITEM_HEIGHT / 2.0,
+            );
+            // Today on a disc of the accent, its weekday in the accent, as in the other views.
+            let accent = visuals.selection.stroke.color;
             let date_color = if day.is_today {
-                painter.circle_filled(date_center, 11.0, visuals.selection.bg_fill);
-                visuals.strong_text_color()
+                painter.circle_filled(date_center, 14.0, accent);
+                text_on(Rgb(accent.r(), accent.g(), accent.b()))
             } else {
-                visuals.text_color()
+                visuals.strong_text_color()
             };
             painter.text(
                 date_center,
                 Align2::CENTER_CENTER,
                 day.date.format("%-d").to_string(),
-                FontId::proportional(14.0),
+                crate::appearance::strong(18.0),
                 date_color,
             );
             painter.text(
-                date_center + Vec2::new(18.0, 0.0),
+                date_center + Vec2::new(22.0, 0.0),
                 Align2::LEFT_CENTER,
                 regional.month_weekday(day.date),
                 FontId::proportional(11.0),
                 if day.is_today {
-                    visuals.strong_text_color()
+                    accent
                 } else {
                     visuals.weak_text_color()
                 },
             );
 
             for (n, item) in day.items.iter().enumerate() {
-                let y = rect.top() + (n as f32 + 0.5) * ITEM_HEIGHT;
+                let y = rect.top() + DAY_GAP / 2.0 + (n as f32 + 0.5) * ITEM_HEIGHT;
                 let x = rect.left() + DATE_WIDTH;
                 let row = egui::Rect::from_center_size(
                     Pos2::new((x + rect.right()) / 2.0, y),
@@ -128,23 +156,46 @@ pub fn show(
                     FontId::proportional(13.0),
                     ink,
                 );
+                // As wide as its word, at the row's end and in its middle, in the accent as in
+                // the event's details; the title ends in "…" before it.
+                let join_size = item.meet.as_ref().map(|_| {
+                    let font = egui::TextStyle::Body.resolve(ui.style());
+                    let word = ui.fonts_mut(|fonts| {
+                        fonts.layout_no_wrap(texts::JOIN.into(), font, egui::Color32::PLACEHOLDER)
+                    });
+                    Vec2::new(word.size().x + 2.0 * JOIN_PADDING, JOIN_HEIGHT)
+                });
+                let title = x + 20.0 + TIME_WIDTH;
+                let room = row.right() - title - join_size.map_or(4.0, |size| size.x + 12.0);
                 event_text(
                     &painter,
-                    Pos2::new(x + 20.0 + TIME_WIDTH, y),
+                    Pos2::new(title, y),
                     Align2::LEFT_CENTER,
                     event_label(item.title.as_deref(), item.read_only, item.saving),
-                    FontId::proportional(13.0),
+                    crate::appearance::strong(13.0),
                     ink,
                     item.declined,
+                    room,
                 );
                 // Join opens its Google Meet call in the browser (`MOD-06-F18`).
-                if let Some(link) = &item.meet {
-                    let button = egui::Rect::from_min_max(
-                        Pos2::new(row.right() - JOIN_WIDTH, row.top()),
-                        row.max,
+                if let (Some(link), Some(size)) = (&item.meet, join_size) {
+                    let button = egui::Rect::from_center_size(
+                        Pos2::new(row.right() - 2.0 - size.x / 2.0, y),
+                        size,
                     );
-                    // Placed over the row, not laid out: the day's room is taken already.
-                    if ui.place(button, egui::Button::new(texts::JOIN)).clicked() {
+                    let primary = crate::widgets::primary(ui, texts::JOIN)
+                        .wrap_mode(egui::TextWrapMode::Extend)
+                        .corner_radius(size.y / 2.0);
+                    // Placed over the row, not laid out: the day's room is taken already. No
+                    // taller than the room it is given.
+                    let clicked = ui
+                        .scope(|ui| {
+                            ui.spacing_mut().interact_size.y = size.y;
+                            ui.spacing_mut().button_padding.y = 2.0;
+                            ui.place(button, primary).clicked()
+                        })
+                        .inner;
+                    if clicked {
                         *join = Some(link.clone());
                     }
                 }

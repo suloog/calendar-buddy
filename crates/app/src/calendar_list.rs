@@ -72,11 +72,20 @@ pub enum Action {
 pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<Action> {
     let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for group in groups {
+        // Rows close together, as in Google Calendar's list.
+        ui.spacing_mut().item_spacing.y = 2.0;
+        ui.spacing_mut().button_padding.y = 2.0;
+        ui.spacing_mut().interact_size.y = 26.0;
+        for (i, group) in groups.iter().enumerate() {
+            // Each account apart from the one above it.
+            if i > 0 {
+                ui.add_space(10.0);
+            }
             let email = egui::RichText::new(&group.email)
                 .font(crate::appearance::strong(12.5))
                 .color(ui.visuals().weak_text_color());
             ui.add(egui::Label::new(email).truncate());
+            ui.add_space(2.0);
             for row in &group.calendars {
                 let calendar = &row.calendar;
                 ui.push_id((&calendar.account_id, &calendar.id), |ui| {
@@ -85,35 +94,37 @@ pub fn show(ui: &mut egui::Ui, groups: &[Group], local: &LocalColors) -> Option<
                     }
                 });
             }
-            ui.add_space(6.0);
         }
     });
     action
 }
 
 /// The settings' list of calendars under their accounts, each with a checkbox ticked while it is
-/// enabled (`MOD-03-F13`). Gives the calendar whose checkbox was used.
+/// enabled (`MOD-03-F13`); each account's calendars fold away under it, folded when the
+/// settings open. Gives the calendar whose checkbox was used.
 pub fn in_settings(
     ui: &mut egui::Ui,
     accounts: &[(String, Vec<(Calendar, bool)>)],
 ) -> Option<Calendar> {
     let mut used = None;
-    // Not a scroll of its own: the settings scroll as a whole.
     for (email, calendars) in accounts {
-        ui.label(egui::RichText::new(email).strong());
-        for (calendar, enabled) in calendars {
-            let mut ticked = *enabled;
-            ui.push_id((&calendar.account_id, &calendar.id), |ui| {
-                if ui
-                    .checkbox(&mut ticked, &calendar.name)
-                    .on_hover_text(ENABLED_HINT)
-                    .clicked()
-                {
-                    used = Some(calendar.clone());
+        egui::CollapsingHeader::new(egui::RichText::new(email).strong())
+            .id_salt(("calendars-in-settings", email))
+            .default_open(false)
+            .show(ui, |ui| {
+                for (calendar, enabled) in calendars {
+                    let mut ticked = *enabled;
+                    ui.push_id((&calendar.account_id, &calendar.id), |ui| {
+                        if ui
+                            .checkbox(&mut ticked, &calendar.name)
+                            .on_hover_text(ENABLED_HINT)
+                            .clicked()
+                        {
+                            used = Some(calendar.clone());
+                        }
+                    });
                 }
             });
-        }
-        ui.add_space(6.0);
     }
     used
 }
@@ -130,12 +141,25 @@ pub fn row_label(name: &str, read_only: bool) -> String {
 fn show_row(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Action> {
     let calendar = &row.calendar;
     let mut action = None;
+    // Its menu's "…" shows while the row is under the pointer.
+    let size = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+    let rect = egui::Rect::from_min_size(ui.cursor().min, size);
+    let hovered = ui.rect_contains_pointer(rect);
+    // The row under the pointer is lit, as the views' events are.
+    if hovered {
+        let fill = ui.visuals().widgets.hovered.weak_bg_fill;
+        ui.painter().rect_filled(
+            rect.expand2(egui::vec2(4.0, 0.0)),
+            CornerRadius::same(4),
+            fill,
+        );
+    }
     ui.horizontal(|ui| {
         if toggle(ui, row).clicked() {
             action = Some(Action::Toggled(calendar.clone()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            match menu(ui, row, local) {
+            match menu(ui, row, local, hovered) {
                 Some(Chosen::Color(color)) => {
                     action = Some(Action::Picked(Picked {
                         account_id: calendar.account_id.clone(),
@@ -222,14 +246,14 @@ enum Chosen {
 
 /// The calendar's menu: Google Calendar's calendar colours and "Reset", then muting its
 /// notifications or unmuting them. Gives what was chosen.
-fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors) -> Option<Chosen> {
+fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors, shown: bool) -> Option<Chosen> {
     let calendar = &row.calendar;
     let current = local
         .get(&(calendar.account_id.clone(), calendar.id.clone()))
         .copied();
     let mut picked = None;
     // The default fonts have no "⋮".
-    crate::widgets::menu_dots(ui, |ui| {
+    crate::widgets::menu_dots(ui, shown, |ui| {
         egui::Grid::new("palette")
             .spacing([4.0, 4.0])
             .show(ui, |ui| {
@@ -305,8 +329,9 @@ mod tests {
             .textures_delta
             .clear();
         let font = egui::FontId::proportional(14.0);
-        // The top bar's icons, the calendars' locks and the toggles' ticks.
-        for mark in ["☰", "🔒", "✔", "…", "👁", "🔄", "⚙"] {
+        // The calendars' locks, the toggles' ticks and the menus' dots; the bars' icons are drawn
+        // (`icons`).
+        for mark in ["🔒", "✔", "…"] {
             assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, mark)), "{mark}");
         }
     }

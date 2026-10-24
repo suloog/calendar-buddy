@@ -423,6 +423,9 @@ pub const ADD_GOOGLE_MEET: &str = "Add Google Meet";
 pub const NOTIFICATIONS: &str = "Notifications";
 pub const DESCRIPTION: &str = "Description";
 pub const ADD_DESCRIPTION: &str = "Add description";
+pub const EDIT_FORMATTED_DESCRIPTION: &str = "Click to edit";
+pub const FORMATTING_WILL_BE_LOST: &str = "This description has formatting from Google Calendar, which the app can't edit. Editing it here removes the formatting.";
+pub const EDIT_AS_PLAIN_TEXT: &str = "Edit as plain text";
 pub const CALENDAR: &str = "Calendar";
 pub const COLOUR: &str = "Colour";
 pub const SHOW_AS: &str = "Show as";
@@ -491,6 +494,9 @@ pub const OTHER_CALENDAR: &str = "Only all events of a series can move to anothe
 pub const GOING: &str = "Going?";
 pub const JOIN_WITH_MEET: &str = "Join with Google Meet";
 pub const OPTIONAL: &str = "Optional";
+/// The hint of a guest's switch, as Google Calendar's.
+pub const MARK_OPTIONAL: &str = "Mark optional";
+pub const MARK_REQUIRED: &str = "Mark required";
 pub const SHOW_FEWER: &str = "Show fewer";
 pub fn show_more(count: usize) -> String {
     format!("Show {count} more")

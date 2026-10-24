@@ -203,16 +203,44 @@ impl Connect {
     }
 }
 
-/// The welcome screen of a first run: its one action connects a Google account (`MOD-01-F12`).
+/// How large the app's icon is on the welcome screen.
+const WELCOME_ICON: f32 = 72.0;
+/// How tall the welcome screen's content is, to centre it in the window.
+const WELCOME_HEIGHT: f32 = 240.0;
+
+/// The welcome screen of a first run: the app's icon, a word of welcome and its one action, which
+/// connects a Google account (`MOD-01-F12`); in the middle of the window.
 pub fn welcome(ui: &mut egui::Ui, connect: &mut Connect) {
     egui::CentralPanel::default().show(ui, |ui| {
         ui.vertical_centered(|ui| {
             ui.set_max_width(480.0);
-            ui.add_space(ui.available_height() / 4.0);
-            ui.heading(texts::WELCOME);
-            ui.label(texts::WELCOME_HINT);
-            ui.add_space(16.0);
+            ui.add_space(((ui.available_height() - WELCOME_HEIGHT) / 2.0).max(16.0));
+            if let Some(icon) = icon(ui.ctx()) {
+                ui.add(egui::Image::new(&icon).fit_to_exact_size(egui::Vec2::splat(WELCOME_ICON)));
+                ui.add_space(16.0);
+            }
+            let title = egui::RichText::new(texts::WELCOME)
+                .font(crate::appearance::strong(24.0))
+                .color(ui.visuals().strong_text_color());
+            ui.label(title);
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(texts::WELCOME_HINT).size(15.0).weak());
+            ui.add_space(20.0);
             connect.show(ui, texts::CONNECT);
         });
     });
+}
+
+/// The app's icon as a texture, loaded once.
+fn icon(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique("welcome-icon");
+    if let Some(icon) = ctx.data(|data| data.get_temp::<egui::TextureHandle>(id)) {
+        return Some(icon);
+    }
+    let data = eframe::icon_data::from_png_bytes(crate::platform::ICON).ok()?;
+    let size = [data.width as usize, data.height as usize];
+    let image = egui::ColorImage::from_rgba_unmultiplied(size, &data.rgba);
+    let icon = ctx.load_texture("welcome-icon", image, egui::TextureOptions::LINEAR);
+    ctx.data_mut(|data| data.insert_temp(id, icon.clone()));
+    Some(icon)
 }

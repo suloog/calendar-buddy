@@ -110,6 +110,21 @@ pub fn strong(size: f32) -> egui::FontId {
 
 const SEMIBOLD: &str = "semibold";
 
+/// The outline of text fields, and its darker step under the pointer.
+pub fn field_lines(visuals: &egui::Visuals) -> (Color32, Color32) {
+    let grays = if visuals.dark_mode { &DARK } else { &LIGHT };
+    (
+        Color32::from_gray(grays.pressed),
+        Color32::from_gray(grays.weak),
+    )
+}
+
+/// The track of a segmented control, the gray of a button, also where buttons are outlined.
+pub fn track(visuals: &egui::Visuals) -> Color32 {
+    let grays = if visuals.dark_mode { &DARK } else { &LIGHT };
+    Color32::from_gray(grays.button)
+}
+
 /// The side panel's fill, a step off the calendar's background.
 pub fn side_fill(visuals: &egui::Visuals) -> Color32 {
     let grays = if visuals.dark_mode { &DARK } else { &LIGHT };
@@ -159,7 +174,8 @@ pub fn visuals(scheme: Scheme) -> egui::Visuals {
         menu_corner_radius: CornerRadius::same(RADIUS),
         faint_bg_color: gray(g.side),
         extreme_bg_color: gray(g.field),
-        text_edit_bg_color: Some(gray(g.field)),
+        // Fields are outlined on the window's fill (`widgets::text_field`), unlike buttons.
+        text_edit_bg_color: Some(gray(g.window)),
         code_bg_color: gray(g.field),
         selection: Selection {
             bg_fill: fill,

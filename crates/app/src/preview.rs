@@ -9,9 +9,10 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use calendar_core::accounts::{Account, Accounts};
+use calendar_core::availability::Availability;
 use calendar_core::cache::Cache;
 use calendar_core::guests::{Guest, Response};
-use calendar_core::model::{About, Access, Calendar, Kind, Rgb, Timing};
+use calendar_core::model::{About, Access, Attachment, Calendar, Kind, Rgb, Timing};
 use calendar_core::navigation::{Navigation, View};
 use calendar_core::platform::{Appearance, Network};
 use calendar_core::regional::Regional;
@@ -129,6 +130,41 @@ fn with_guests(mut event: SyncedEvent, own: Response) -> SyncedEvent {
     event
 }
 
+/// With everything an event's details can show: a Meet call, an attachment, guests who answered
+/// each way, and a time zone of its own.
+fn rich(mut event: SyncedEvent) -> SyncedEvent {
+    let guest = |email: &str, name: &str, response| Guest {
+        email: email.into(),
+        name: name.into(),
+        optional: false,
+        response,
+        own: false,
+    };
+    event = with_guests(event, Response::Accepted);
+    event.about.guests.extend([
+        // Optional, for the editor's switch.
+        Guest {
+            optional: true,
+            ..guest("john@client.com", "John Miller", Response::Maybe)
+        },
+        guest("kate@client.com", "Kate Brown", Response::Declined),
+        guest("piotr@example.com", "", Response::Awaiting),
+    ]);
+    event.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
+    event.about.location = "Acme office, 20 Main Street, Warsaw".into();
+    event.about.description = "<b>Agenda</b><br>1. Demo of the week view<br>2. Scope of the \
+        next release<br>3. Questions from the client's team about synchronization and offline work"
+        .into();
+    event.about.attachments = vec![Attachment {
+        title: "Calendar Buddy — scope.pdf".into(),
+        url: "https://drive.google.com/file/d/scope".into(),
+    }];
+    if let Some(Timing::Timed { zone, .. }) = &mut event.timing {
+        *zone = chrono_tz::America::New_York;
+    }
+    event
+}
+
 /// Two accounts with their calendars, and the week around `today` filled the way a working week
 /// is: meetings, overlaps, focus time, an all-day event and a trip over several days.
 fn cache(today: NaiveDate) -> Cache {
@@ -188,13 +224,13 @@ fn cache(today: NaiveDate) -> Cache {
             Kind::FocusTime,
         ),
         timed("1on1", "1:1 with Anna", day(1), (11, 0), (11, 30)),
-        timed(
+        rich(timed(
             "client",
             "Client call — Calendar Buddy",
             day(1),
             (14, 0),
             (15, 0),
-        ),
+        )),
         timed("review", "Design review", day(1), (14, 30), (15, 30)),
         with_guests(
             timed("arch", "Architecture sync", day(2), (10, 0), (11, 0)),
@@ -245,7 +281,12 @@ fn cache(today: NaiveDate) -> Cache {
         .set_events(
             &home[1],
             &[
-                timed("dinner", "Family dinner", day(6), (14, 0), (16, 0)),
+                // With a Meet call, for the agenda's Join.
+                {
+                    let mut dinner = timed("dinner", "Family dinner", day(6), (14, 0), (16, 0));
+                    dinner.about.meet = Some("https://meet.google.com/xyz-abcd-efg".into());
+                    dinner
+                },
                 all_day("trip", "Trip to Kraków", day(5), 2),
             ],
         )
@@ -310,6 +351,7 @@ impl CalendarApp {
             saving: Default::default(),
             last: LastChange::default(),
             not_saved: Vec::new(),
+            shown: Default::default(),
             online: Online::watch(ctx, &Online_),
             desktop: Desktop::watch(ctx, &NoPreference),
             focused: false,
@@ -350,7 +392,12 @@ fn out_dir() -> PathBuf {
 
 /// Draws the app until the cached events are shown, does `then` to it, then saves the picture
 /// as `name`.
-fn picture(name: &str, view: View, theme: Theme, then: impl FnOnce(&mut CalendarApp)) {
+fn picture(
+    name: &str,
+    view: View,
+    theme: Theme,
+    then: impl FnOnce(&mut CalendarApp, &egui::Context),
+) {
     picture_sized(name, egui::vec2(1440.0, 900.0), view, theme, then);
 }
 
@@ -360,7 +407,7 @@ fn picture_sized(
     size: egui::Vec2,
     view: View,
     theme: Theme,
-    then: impl FnOnce(&mut CalendarApp),
+    then: impl FnOnce(&mut CalendarApp, &egui::Context),
 ) {
     let egui_theme = match theme {
         Theme::Dark => egui::Theme::Dark,
@@ -378,7 +425,8 @@ fn picture_sized(
         std::thread::sleep(Duration::from_millis(20));
         harness.step();
     }
-    then(harness.state_mut());
+    let ctx = harness.ctx.clone();
+    then(harness.state_mut(), &ctx);
     harness.run_steps(4);
     let image = harness.render().expect("a picture");
     image.save(out_dir().join(format!("{name}.png"))).unwrap();
@@ -394,9 +442,19 @@ fn titled(app: &CalendarApp, title: &str) -> usize {
 #[ignore = "draws pictures for looking at the design; run on demand"]
 fn preview() {
     let week = View::Grid(GridView::Week);
-    let nothing = |_: &mut CalendarApp| {};
+    let nothing = |_: &mut CalendarApp, _: &egui::Context| {};
     picture("week-light", week, Theme::Light, nothing);
     picture("week-dark", week, Theme::Dark, nothing);
+    // The eye in the top bar struck through.
+    picture(
+        "week-declined-hidden-light",
+        week,
+        Theme::Light,
+        |app, _| {
+            app.settings.hide_declined = true;
+            app.rebuild();
+        },
+    );
     let narrow = egui::vec2(960.0, 700.0);
     picture_sized("week-narrow-light", narrow, week, Theme::Light, nothing);
     picture(
@@ -405,10 +463,22 @@ fn preview() {
         Theme::Light,
         nothing,
     );
+    let three = View::Grid(GridView::ThreeDays);
+    picture("three-days-light", three, Theme::Light, nothing);
+    picture("three-days-dark", three, Theme::Dark, nothing);
     picture("month-light", View::Month, Theme::Light, nothing);
     picture("month-dark", View::Month, Theme::Dark, nothing);
     picture("agenda-light", View::Agenda, Theme::Light, nothing);
-    picture("settings-light", week, Theme::Light, |app| {
+    // What a drag of an event the user may not change says, along the top.
+    picture("notice-light", week, Theme::Light, |app, _| {
+        let event = &app.events[titled(app, "All Saints' Day")];
+        let why = event
+            .protected()
+            .expect("a holiday cannot be changed")
+            .why();
+        app.not_saved.push(why.to_string());
+    });
+    picture("settings-light", week, Theme::Light, |app, _| {
         app.dialog = Some(Dialog::Settings)
     });
     picture_sized(
@@ -416,15 +486,81 @@ fn preview() {
         egui::vec2(1100.0, 560.0),
         week,
         Theme::Light,
-        |app| app.dialog = Some(Dialog::Settings),
+        |app, _| app.dialog = Some(Dialog::Settings),
     );
-    picture("details-light", week, Theme::Light, |app| {
+    picture("details-light", week, Theme::Light, |app, _| {
         app.open(titled(app, "Architecture sync"), None)
     });
-    picture("details-dark", week, Theme::Dark, |app| {
+    picture("details-dark", week, Theme::Dark, |app, _| {
         app.open(titled(app, "Client call — Calendar Buddy"), None)
     });
-    picture("new-event-light", week, Theme::Light, |app| {
+    picture("details-rich-light", week, Theme::Light, |app, _| {
+        app.open(titled(app, "Client call — Calendar Buddy"), None)
+    });
+    picture("details-read-only-light", week, Theme::Light, |app, _| {
+        app.open(titled(app, "All Saints' Day"), None)
+    });
+    let editing = |app: &mut CalendarApp, _: &egui::Context| {
+        let event = app.events[titled(app, "Client call — Calendar Buddy")].clone();
+        let calendar = (app.sync.calendars().iter())
+            .find(|c| c.account_id == event.account_id && c.id == event.calendar_id)
+            .cloned()
+            .expect("its calendar is in the made-up data");
+        let editor = calendar_core::editor::Editor::of(&event, calendar, &app.regional);
+        app.dialog = Some(Dialog::Editor(Box::new(editor)));
+    };
+    picture("editor-light", week, Theme::Light, editing);
+    picture("editor-dark", week, Theme::Dark, editing);
+    picture("editor-formatting-light", week, Theme::Light, |app, ctx| {
+        editing(app, ctx);
+        let asking = egui::Id::unique(crate::editor::ASKING);
+        ctx.data_mut(|data| data.insert_temp(asking, true));
+    });
+    // A guest known only by a long address, and Google's answer about everyone's day.
+    picture(
+        "editor-availability-light",
+        week,
+        Theme::Light,
+        |app, ctx| {
+            editing(app, ctx);
+            let Some(Dialog::Editor(editor)) = &mut app.dialog else {
+                unreachable!("the editor was just opened")
+            };
+            editor.guests.push(Guest {
+                email: "procurement.department.long-address@client-company.example.com".into(),
+                name: String::new(),
+                optional: false,
+                response: Response::Awaiting,
+                own: false,
+            });
+            let (asked, (start, _)) =
+                calendar_core::availability::asked(editor, &app.regional, true).expect("asked");
+            let (from, _) = asked.day;
+            let busy = (asked.emails.iter().enumerate())
+                .map(|(i, email)| Availability {
+                    email: email.clone(),
+                    busy: (i != 2).then(|| {
+                        let at = from + Span::hours(8 + i as i64);
+                        vec![
+                            (at, at + Span::minutes(90)),
+                            (start, start + Span::minutes(30)),
+                        ]
+                    }),
+                })
+                .collect();
+            app.sync.answered_busy(asked, busy);
+        },
+    );
+    picture("go-to-date-light", week, Theme::Light, |app, _| {
+        app.go_to_date()
+    });
+    picture("shortcuts-light", week, Theme::Light, |app, _| {
+        app.dialog = Some(Dialog::Shortcuts)
+    });
+    picture("shortcuts-dark", week, Theme::Dark, |app, _| {
+        app.dialog = Some(Dialog::Shortcuts)
+    });
+    picture("new-event-light", week, Theme::Light, |app, _| {
         let start = app.events[titled(app, "Sprint demo")].timing;
         let Timing::Timed { start, .. } = start else {
             unreachable!("a timed event")
@@ -432,7 +568,7 @@ fn preview() {
         let start = start + Span::hours(3);
         app.start_event(|length| (start, start + Span::minutes(length.into())));
     });
-    picture("welcome-light", week, Theme::Light, |app| {
+    picture("welcome-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default()
     });
 }

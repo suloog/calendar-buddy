@@ -533,6 +533,13 @@ impl Synchronization {
         }
     }
 
+    /// Takes `busy` as Google's answer to `asked`, for pictures of the availability preview.
+    #[cfg(test)]
+    pub fn answered_busy(&mut self, asked: Asked, busy: Vec<Availability>) {
+        self.asked = Some(asked.clone());
+        self.busy = Some((asked, Some(busy)));
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
