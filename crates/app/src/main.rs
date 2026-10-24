@@ -1,4 +1,5 @@
 mod agenda_view;
+mod appearance;
 mod calendar_list;
 mod checks;
 mod connect;
@@ -11,6 +12,7 @@ mod platform;
 mod remove;
 mod sync;
 
+use appearance::Desktop;
 use calendar_core::accounts::{self, Account, AccountState, Accounts, Check, CheckError};
 use calendar_core::agenda::{AgendaViewModel, agenda_view};
 use calendar_core::availability;
@@ -36,6 +38,7 @@ use calendar_core::shortcuts::{self, Command, SHORTCUTS};
 use calendar_core::side_panel::{self, Panel};
 use calendar_core::status::{self, State};
 use calendar_core::sync::Window;
+use calendar_core::theme::Theme;
 use calendar_core::undo::{LastChange, Undo};
 use calendar_core::view_model::{GridViewModel, grid_view};
 use calendar_core::webcal;
@@ -46,7 +49,8 @@ use connect::Connect;
 use eframe::egui;
 use network::Online;
 use platform::{
-    SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart, XdgLinkHandler,
+    SystemAppearance, SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart,
+    XdgLinkHandler,
 };
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -228,6 +232,8 @@ struct CalendarApp {
     not_saved: Vec<String>,
     /// Whether the computer is online, as the system says (`MOD-02-F14`).
     online: Online,
+    /// The desktop's light or dark preference (`MOD-04-F02`).
+    desktop: Desktop,
     /// Whether the window had the keyboard at the last frame.
     focused: bool,
     /// The system's regional settings, read at start (`DEC-29`).
@@ -365,6 +371,7 @@ impl CalendarApp {
             last: LastChange::default(),
             not_saved: Vec::new(),
             online: Online::watch(&ctx, &SystemNetwork),
+            desktop: Desktop::watch(&ctx, &SystemAppearance),
             focused: false,
             regional,
             zone,
@@ -729,6 +736,7 @@ impl CalendarApp {
         let mut default_calendar = None;
         let mut notifications = None;
         let mut start_at_login = None;
+        let mut theme = None;
         let mut scope = None;
         let mut notify = None;
         let mut cancelled = false;
@@ -1146,6 +1154,19 @@ impl CalendarApp {
                     {
                         start_at_login = Some(on);
                     }
+                    ui.add_space(8.0);
+                    // System, Light or Dark (`MOD-04-F03`), where Google Calendar has its theme.
+                    ui.heading("Appearance");
+                    ui.horizontal(|ui| {
+                        ui.label("Theme");
+                        let mut chosen = self.settings.theme;
+                        for choice in Theme::ALL {
+                            ui.radio_value(&mut chosen, choice, choice.label());
+                        }
+                        if chosen != self.settings.theme {
+                            theme = Some(chosen);
+                        }
+                    });
                 }
             });
         if let Some(email) = again {
@@ -1166,6 +1187,11 @@ impl CalendarApp {
         if let Some(on) = start_at_login {
             self.start_at_login = on;
             let _ = self.autostart_writer.send(on);
+        }
+        if let Some(theme) = theme {
+            self.settings.theme = theme;
+            self.save_settings();
+            ctx.request_repaint();
         }
         match save {
             Some(Save::Create(calendar, event)) => {
@@ -1427,6 +1453,7 @@ impl CalendarApp {
 
 impl eframe::App for CalendarApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        appearance::apply(ui.ctx(), self.settings.theme, &self.desktop);
         self.signaled(ui.ctx());
         self.background(ui.ctx());
         // Looking at the app brings it up to date; a minimized window is polled less often.

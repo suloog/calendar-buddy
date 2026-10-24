@@ -1776,3 +1776,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-147] The theme setting and reading the desktop's light or dark preference
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-04-01
+- **Affects:** `US-04-01`, `MOD-04-F01`, `MOD-04-F02`, `MOD-04-F03`, `DEC-57`, `DEC-58`
+- **Decision:** The settings have an "Appearance" section with "Theme" and three choices, System, Light and Dark, as radio buttons; System is the default. The choice is kept in the settings file as `theme = light` or `theme = dark`, and System is not written. The desktop's preference is the XDG desktop portal's `org.freedesktop.appearance` `color-scheme`, read with `ReadOne` and followed through `SettingChanged`: 1 is dark, 2 is light, anything else is no preference. Until the portal answers, or when there is no portal or session bus, the desktop counts as stating no preference, so System shows the light theme. Until `US-04-03` gives the themes their palette, the light and dark themes are egui's own light and dark looks.
+- **Why:** Google Calendar keeps its theme under "Appearance" in its settings; the labels are the spec's (`DEC-57`). No preference means light (`DEC-58`). The portal is read off the UI thread, so a slow portal never holds up the window (`NFR-01`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
