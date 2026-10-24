@@ -5,6 +5,7 @@
 use chrono::{DateTime, Days, Months, NaiveDate, Utc};
 use chrono_tz::Tz;
 
+use crate::availability::{Availability, Span};
 use crate::cache::{Cache, CachedCalendar};
 use crate::create::NewEvent;
 use crate::editor::Patch;
@@ -212,6 +213,17 @@ pub trait Provider {
     /// none from places that cannot be reached now.
     fn people(&self, _query: &str, _reach: Reach) -> Vec<Person> {
         Vec::new()
+    }
+    /// Each address's busy times within `span`, as its owner's calendar shares them
+    /// (`MOD-06-F19`); `None` for one that does not, and for everyone from a provider that has
+    /// nowhere to look (`MOD-06-F20`).
+    fn busy(&self, emails: &[String], _span: Span) -> Result<Vec<Availability>, SyncError> {
+        Ok((emails.iter())
+            .map(|email| Availability {
+                email: email.clone(),
+                busy: None,
+            })
+            .collect())
     }
 }
 

@@ -15,7 +15,8 @@
 //! deleted one and one restored (`US-05-04`); each account's default event length is read with
 //! its first synchronization. People to invite are searched for at Google while the user types a
 //! guest (`US-06-01`). An event saved with Google Meet that comes back without a call is told of
-//! (`US-06-07`).
+//! (`US-06-07`). The guests' busy times on the day chosen in the editor are asked of Google
+//! (`US-06-08`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -25,6 +26,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
 
 use calendar_core::accounts::Check;
+use calendar_core::availability::{Asked, Availability};
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
@@ -81,6 +83,8 @@ enum Job {
     /// What is typed in the guest field, to search the account's people for where it may look
     /// (`MOD-06-F02`, `F04`).
     Suggest(String, String, Reach),
+    /// The guests' busy times the editor's preview asks for (`MOD-06-F19`).
+    Busy(Asked),
 }
 
 enum Update {
@@ -112,6 +116,8 @@ enum Update {
     DefaultLength(String, u32),
     /// The people of the account found for what was last typed in the guest field.
     People(String, Vec<Person>),
+    /// The guests' busy times Google gave for what was asked; `None` when it gave none.
+    Busy(Asked, Option<Vec<Availability>>),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -143,6 +149,10 @@ pub struct Synchronization {
     saved: Vec<Saved>,
     /// The people Google last found to invite, and the account they were found for.
     people: Option<(String, Vec<Person>)>,
+    /// The guests' busy times last asked for, if the editor still asks for them.
+    asked: Option<Asked>,
+    /// The guests' busy times Google last gave, and what they were asked for.
+    busy: Option<(Asked, Option<Vec<Availability>>)>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -250,6 +260,8 @@ impl Synchronization {
             lengths: HashMap::new(),
             saved: Vec::new(),
             people: None,
+            asked: None,
+            busy: None,
         }
     }
 
@@ -397,6 +409,28 @@ impl Synchronization {
         }
     }
 
+    /// The guests' busy times the editor's preview needs, `None` while it shows none: asked of
+    /// Google when they differ from those last asked for (`MOD-06-F19`); `busy` gives them once
+    /// answered. Called every frame.
+    pub fn ask_busy(&mut self, asked: Option<Asked>) {
+        if asked != self.asked {
+            self.asked = asked.clone();
+            if let Some(asked) = asked {
+                let _ = self.jobs.send(Job::Busy(asked));
+            }
+        }
+    }
+
+    /// The guests' busy times Google gave for what is asked; `None` until it answers, and when it
+    /// did not (`MOD-06-F20`). The same asked again, its last answer is given until the new one
+    /// comes.
+    pub fn busy(&self, asked: &Asked) -> Option<&[Availability]> {
+        match &self.busy {
+            Some((answered, Some(busy))) if answered == asked => Some(busy),
+            _ => None,
+        }
+    }
+
     /// The length, in minutes, of a new event of the account started without a range: as set in
     /// its Google Calendar settings, or Google's default until known (`MOD-05-F09`).
     pub fn default_length(&self, account_id: &str) -> u32 {
@@ -438,6 +472,7 @@ impl Synchronization {
                     self.lengths.insert(account, minutes);
                 }
                 Update::People(account, people) => self.people = Some((account, people)),
+                Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
             }
         }
         events
@@ -595,6 +630,11 @@ impl Engine {
                     .map(|session| session.people(&query, reach))
                     .unwrap_or_default();
                 return vec![Update::People(account, people)];
+            }
+            Some(Job::Busy(asked)) => {
+                let busy = (self.sessions.get(&asked.account_id))
+                    .and_then(|session| session.busy(&asked.emails, asked.day).ok());
+                return vec![Update::Busy(asked, busy)];
             }
         };
         self.round(&calendars, now)
@@ -1106,18 +1146,22 @@ fn refusal(error: SyncError) -> String {
     }
 }
 
-/// The jobs waiting, with only the last of the browsing and of the searches for guests among
-/// them: days left behind and what was typed before while the worker was busy are not fetched.
+/// The jobs waiting, with only the last of the browsing, of the searches for guests and of the
+/// guests' busy times among them: days left behind, what was typed before and times chosen
+/// before while the worker was busy are not fetched.
 fn latest_only(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
     let browsing = |job: &Option<Job>| matches!(job, Some(Job::Browse(_)));
     let searching = |job: &Option<Job>| matches!(job, Some(Job::Suggest(..)));
+    let busy = |job: &Option<Job>| matches!(job, Some(Job::Busy(_)));
     let last_browsing = jobs.iter().rposition(browsing);
     let last_searching = jobs.iter().rposition(searching);
+    let last_busy = jobs.iter().rposition(busy);
     jobs.into_iter()
         .enumerate()
         .filter(|(i, job)| {
             (!browsing(job) || Some(*i) == last_browsing)
                 && (!searching(job) || Some(*i) == last_searching)
+                && (!busy(job) || Some(*i) == last_busy)
         })
         .map(|(_, job)| job)
         .collect()
@@ -1135,7 +1179,12 @@ fn synchronizes(job: &Option<Job>) -> bool {
     !matches!(
         job,
         Some(
-            Job::Stop(_) | Job::Unconfirmed(_) | Job::Shown(_) | Job::Window(_) | Job::Suggest(..)
+            Job::Stop(_)
+                | Job::Unconfirmed(_)
+                | Job::Shown(_)
+                | Job::Window(_)
+                | Job::Suggest(..)
+                | Job::Busy(_)
         )
     )
 }
@@ -1170,6 +1219,7 @@ mod tests {
 
     use crate::calendar_list::Picked;
     use crate::{Built, build, grid_view, pick, tell_unmovable};
+    use calendar_core::availability::{self, Preview};
     use calendar_core::colors;
     use calendar_core::create::{self, QuickEntry, Saving};
     use calendar_core::details::event_details;
@@ -2008,6 +2058,29 @@ mod tests {
         assert!(matches!(done[1], Some(Job::Refresh)));
         assert!(matches!(&done[2], Some(Job::Browse(span)) if *span == week(18)));
         assert!(matches!(&done[3], Some(Job::Suggest(_, query, _)) if query == "ada"));
+    }
+
+    #[test]
+    fn of_the_guests_busy_times_waiting_only_the_last_is_asked() {
+        let day = calendar_core::week::day_span(d(2026, 11, 13), Warsaw);
+        let asked = |email: &str| {
+            Some(Job::Busy(Asked {
+                account_id: "1".into(),
+                day,
+                emails: vec![email.into()],
+            }))
+        };
+        let jobs = vec![
+            asked("anna@example.com"),
+            Some(Job::Refresh),
+            asked("adam@example.com"),
+        ];
+
+        let done = latest_only(jobs);
+
+        assert_eq!(done.len(), 2);
+        assert!(matches!(done[0], Some(Job::Refresh)));
+        assert!(matches!(&done[1], Some(Job::Busy(asked)) if asked.emails == ["adam@example.com"]));
     }
 
     #[test]
@@ -5170,5 +5243,170 @@ mod tests {
             saved_changes(&changed)[..],
             [Saved::Changed(2, _)]
         ));
+    }
+
+    /// A new event on Friday 13 November 2026, 14:30–15:00 in Warsaw, open in the editor with
+    /// the people invited.
+    fn availability_editor(engine: &Engine, people: &[(&str, &str)]) -> Editor {
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+        let entry = QuickEntry::new(
+            create::selected(d(2026, 11, 13), 870, 900, Warsaw),
+            Warsaw,
+            Some(calendar),
+        );
+        let mut editor = Editor::from_quick(&entry, &polish());
+        for (name, email) in people {
+            let person = Person {
+                name: name.to_string(),
+                email: email.to_string(),
+            };
+            editor.add_guest(&person, &[]);
+        }
+        editor
+    }
+
+    /// The preview the editor shows, once the engine has asked Google for the guests' day.
+    fn previewed(engine: &mut Engine, editor: &Editor) -> Option<Preview> {
+        let (asked, chosen) = availability::asked(editor, &polish(), true).unwrap();
+        let updates = engine.handle(Some(Job::Busy(asked.clone())), Instant::now());
+        let [Update::Busy(answered, answer)] = updates.as_slice() else {
+            panic!("the guests' busy times");
+        };
+        assert_eq!(*answered, asked);
+        let answer = answer.as_ref()?;
+        Some(availability::preview(
+            &asked,
+            chosen,
+            &editor.guests,
+            None,
+            answer,
+        ))
+    }
+
+    #[test]
+    fn tc_06_12_the_editor_shows_each_guests_busy_blocks_for_the_day_and_marks_a_conflict() {
+        let google = Google::start("tc-06-12");
+        personal(&google);
+        // Anna is busy on 13 November 14:00–15:00; Adam has no busy time that day.
+        google.fake.share_busy(
+            "anna.nowak@example.com",
+            &[("2026-11-13T14:00:00+01:00", "2026-11-13T15:00:00+01:00")],
+        );
+        google.fake.share_busy("adam@example.com", &[]);
+        let mut engine = first_sync(&google, Instant::now());
+
+        // 1. A new event on 13 November 14:30–15:00 with Anna and Adam: a strip per guest with
+        //    the day's busy blocks, 14:00–15:00 for Anna and none for Adam; the chosen time
+        //    highlighted.
+        let editor = availability_editor(
+            &engine,
+            &[
+                ("Anna Nowak", "anna.nowak@example.com"),
+                ("Adam", "adam@example.com"),
+            ],
+        );
+        let preview = previewed(&mut engine, &editor).unwrap();
+
+        let [anna, adam] = preview.strips.as_slice() else {
+            panic!("a strip per guest");
+        };
+        assert_eq!(anna.label, "Anna Nowak");
+        assert_eq!(anna.busy, Some(vec![(14.0 / 24.0, 15.0 / 24.0)]));
+        assert_eq!(adam.label, "Adam");
+        assert_eq!(adam.busy, Some(vec![]));
+        assert_eq!(preview.chosen, (14.5 / 24.0, 15.0 / 24.0));
+        let [query] = google.fake.busy_queries().try_into().unwrap();
+        assert_eq!(query["timeMin"], "2026-11-12T23:00:00Z");
+        assert_eq!(query["timeMax"], "2026-11-13T23:00:00Z");
+
+        // 2. Anna is marked as a conflict; Adam is not.
+        assert!(anna.conflict);
+        assert!(!adam.conflict);
+    }
+
+    #[test]
+    fn a_guest_who_does_not_share_their_availability_shows_no_data() {
+        let google = Google::start("no-data");
+        personal(&google);
+        let mut engine = first_sync(&google, Instant::now());
+        let editor = availability_editor(&engine, &[("", "private@example.com")]);
+
+        let preview = previewed(&mut engine, &editor).unwrap();
+
+        let [strip] = preview.strips.as_slice() else {
+            panic!("a strip");
+        };
+        assert_eq!(strip.busy, None);
+        assert!(!strip.conflict);
+    }
+
+    #[test]
+    fn without_network_the_preview_is_not_shown() {
+        let google = Google::start("busy-offline");
+        personal(&google);
+        let mut engine = first_sync(&google, Instant::now());
+        let editor = availability_editor(&engine, &[("", "adam@example.com")]);
+
+        // Offline, nothing is asked; with Google out of reach, nothing comes to show.
+        assert_eq!(availability::asked(&editor, &polish(), false), None);
+        google.fake.disconnect();
+        assert_eq!(previewed(&mut engine, &editor), None);
+    }
+
+    #[test]
+    fn the_guests_day_is_asked_once_and_again_when_the_editor_asks_anew() {
+        let google = Google::start("busy-asked");
+        personal(&google);
+        google.fake.share_busy("adam@example.com", &[]);
+        let ctx = egui::Context::default();
+        let ids = vec![ACCOUNT_ID.to_string()];
+        let mut sync = Synchronization::with(
+            &ctx,
+            Cache::in_memory,
+            google.sign_in(),
+            ids,
+            window(),
+            Disabled::new(),
+        );
+        next_events(&mut sync);
+        sync.checked(&[(ACCOUNT_ID.to_string(), Check::Works)], window());
+        next_events(&mut sync);
+        let calendar = sync.calendars()[0].clone();
+        let entry = QuickEntry::new(
+            create::selected(d(2026, 11, 13), 870, 900, Warsaw),
+            Warsaw,
+            Some(calendar),
+        );
+        let mut editor = Editor::from_quick(&entry, &polish());
+        let adam = Person {
+            name: String::new(),
+            email: "adam@example.com".to_string(),
+        };
+        editor.add_guest(&adam, &[]);
+        let (asked, _) = availability::asked(&editor, &polish(), true).unwrap();
+        let answered = |sync: &mut Synchronization| {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while sync.busy(&asked).is_none() {
+                assert!(Instant::now() < deadline, "no answer came");
+                std::thread::sleep(Duration::from_millis(5));
+                sync.poll();
+            }
+        };
+
+        // Asked every frame: once.
+        sync.ask_busy(Some(asked.clone()));
+        sync.ask_busy(Some(asked.clone()));
+        answered(&mut sync);
+        assert_eq!(google.fake.busy_queries().len(), 1);
+
+        // The editor closed and opened again: asked again, the last answer shown meanwhile.
+        sync.ask_busy(None);
+        sync.ask_busy(Some(asked.clone()));
+        assert!(sync.busy(&asked).is_some());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while google.fake.busy_queries().len() < 2 {
+            assert!(Instant::now() < deadline, "not asked again");
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 }

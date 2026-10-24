@@ -86,6 +86,11 @@ struct State {
     /// The contact searches warmed up for each account with an empty search, as Google asks;
     /// until then they find nobody.
     warmed: Vec<(&'static str, String)>,
+    /// The addresses whose calendars share their free/busy, and when they are busy then (RFC 3339);
+    /// Google knows nothing of the others.
+    busy: Vec<(String, Vec<(String, String)>)>,
+    /// Every `freeBusy` query the app sent.
+    busy_queries: Vec<Value>,
 }
 
 impl State {
@@ -356,6 +361,19 @@ impl FakeGoogle {
         (self.state.lock().unwrap().people).push((account, search, person));
     }
 
+    /// The address's calendar shares its free/busy, busy at these times (RFC 3339, from and to).
+    pub fn share_busy(&self, email: &str, busy: &[(&str, &str)]) {
+        let busy = (busy.iter())
+            .map(|(from, to)| (from.to_string(), to.to_string()))
+            .collect();
+        (self.state.lock().unwrap().busy).push((email.to_string(), busy));
+    }
+
+    /// Every `freeBusy` query the app sent.
+    pub fn busy_queries(&self) -> Vec<Value> {
+        self.state.lock().unwrap().busy_queries.clone()
+    }
+
     /// The access tokens given out expire.
     pub fn expire_access_tokens(&self) {
         self.state.lock().unwrap().access.clear();
@@ -547,6 +565,9 @@ fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         let answer = match bearer {
             Some(account) if patch => patch_event(&mut state, account, request[1], if_match, &body),
             Some(account) if delete => delete_event(&mut state, account, request[1], if_match),
+            Some(_) if insert && request[1] == "/calendar/v3/freeBusy" => {
+                free_busy(&mut state, &body)
+            }
             Some(account) if insert && request[1].contains("/move?") => {
                 move_event(&mut state, account, request[1])
             }
@@ -828,6 +849,48 @@ fn people_api(state: &mut State, account: &'static str, target: &str) -> (&'stat
             .collect();
         json!({"results": results})
     };
+    ("200 OK", answer.to_string())
+}
+
+/// The Calendar API's `freeBusy.query`: the busy times within the query's span of each address
+/// whose calendar shares them, cut to the span; `notFound` for the others.
+fn free_busy(state: &mut State, body: &str) -> (&'static str, String) {
+    let query: Value = serde_json::from_str(body).unwrap();
+    state.busy_queries.push(query.clone());
+    let at = |text: &str| {
+        DateTime::parse_from_rfc3339(text)
+            .unwrap()
+            .with_timezone(&Utc)
+    };
+    let (from, until) = (
+        at(query["timeMin"].as_str().unwrap()),
+        at(query["timeMax"].as_str().unwrap()),
+    );
+    let mut calendars = serde_json::Map::new();
+    for item in query["items"].as_array().unwrap() {
+        let email = item["id"].as_str().unwrap();
+        let shared = match state.busy.iter().find(|(owner, _)| owner == email) {
+            Some((_, busy)) => {
+                let busy: Vec<Value> = (busy.iter())
+                    .map(|(start, end)| (at(start).max(from), at(end).min(until)))
+                    .filter(|(start, end)| start < end)
+                    .map(|(start, end)| {
+                        let text = |t: DateTime<Utc>| t.to_rfc3339_opts(SecondsFormat::Secs, true);
+                        json!({"start": text(start), "end": text(end)})
+                    })
+                    .collect();
+                json!({"busy": busy})
+            }
+            None => json!({"errors": [{"domain": "global", "reason": "notFound"}], "busy": []}),
+        };
+        calendars.insert(email.to_string(), shared);
+    }
+    let answer = json!({
+        "kind": "calendar#freeBusy",
+        "timeMin": query["timeMin"],
+        "timeMax": query["timeMax"],
+        "calendars": calendars,
+    });
     ("200 OK", answer.to_string())
 }
 

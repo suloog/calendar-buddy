@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod agenda;
+pub mod availability;
 pub mod cache;
 pub mod colors;
 pub mod create;

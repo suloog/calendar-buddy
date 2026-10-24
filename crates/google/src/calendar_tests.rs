@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use super::*;
+use calendar_core::availability::Availability;
 use calendar_core::cache::CachedCalendar;
 use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
@@ -2491,4 +2492,71 @@ fn a_new_event_with_google_meet_google_fails_to_save_is_not_sent_again_without_i
         .filter(|r| r.starts_with("POST /calendar/v3/"))
         .count();
     assert_eq!(posted, 1);
+}
+
+#[test]
+fn guests_busy_times_are_asked_with_free_busy_for_the_day_and_one_not_shared_has_none() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("free-busy");
+    google.share_busy(
+        "anna@example.com",
+        &[("2026-11-13T14:00:00+01:00", "2026-11-13T15:00:00+01:00")],
+    );
+    google.share_busy("adam@example.com", &[]);
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let day = calendar_core::week::day_span(d(2026, 11, 13), Warsaw);
+    let emails = [
+        "anna@example.com",
+        "adam@example.com",
+        "private@example.com",
+    ]
+    .map(String::from);
+
+    let busy = session.busy(&emails, day);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let at = |hour| Utc.with_ymd_and_hms(2026, 11, 13, hour, 0, 0).unwrap();
+    assert_eq!(
+        busy,
+        Ok(vec![
+            Availability {
+                email: "anna@example.com".into(),
+                busy: Some(vec![(at(13), at(14))]),
+            },
+            Availability {
+                email: "adam@example.com".into(),
+                busy: Some(vec![]),
+            },
+            Availability {
+                email: "private@example.com".into(),
+                busy: None,
+            },
+        ])
+    );
+    assert_eq!(
+        google.busy_queries(),
+        [json!({
+            "timeMin": "2026-11-12T23:00:00Z",
+            "timeMax": "2026-11-13T23:00:00Z",
+            "items": [
+                {"id": "anna@example.com"},
+                {"id": "adam@example.com"},
+                {"id": "private@example.com"}
+            ]
+        })]
+    );
+}
+
+#[test]
+fn busy_times_google_does_not_answer_are_an_error() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("free-busy-offline");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    google.disconnect();
+
+    let busy = session.busy(
+        &["anna@example.com".to_string()],
+        calendar_core::week::day_span(d(2026, 11, 13), Warsaw),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(busy.is_err());
 }
