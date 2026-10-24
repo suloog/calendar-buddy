@@ -271,3 +271,16 @@
 - Reviews: code 1 round(s), spec 1 round(s); open notes: the open dialog's refresh is not unit-tested (UI, covered by a manual check); COVERAGE row `US-06-02#3` has no TC (`DEC-65`), unit-tested only
 - Manual checks: TC-06-03 (US-06-02#1, #2), US-06-02#3
 - Commits on main: 67ee24c feat(guests): show guests and their answers in details [US-06-02] (squash, one logical change)
+
+## US-06-03 — review — 2026-10-24 04:05
+- What: changing (drag or editor) or deleting an event with guests asks once "Send update/cancellation e-mails to the guests?" (Back / Don't send / Send), after the scope question for occurrences; the answer goes to Google as `sendUpdates=all|none` on every write the change makes, undo reusing it.
+- Decisions: DEC-124
+- Reviews: code 1 round(s), spec 1 round(s); open notes:
+  - the calendar-provider interface changed: `Provider::update/copy/move_to/delete/restore` take `notify`;
+  - fixed after review: a drag that asks nothing no longer closes an open dialog;
+  - not done: turning the answer into `Edit.notify` / the delete flag lives in the UI's `saved` and is not unit-tested;
+  - not done: deleting an invitation the user may modify as a guest also asks (not checked against Google);
+  - Back after a deletion closes the details.
+  - One squash commit: one logical change.
+- Manual checks: TC-06-04 (US-06-03#1), US-06-03#2
+- Commits on main: d659348 feat(guests): ask whether to notify guests of a change [US-06-03]
