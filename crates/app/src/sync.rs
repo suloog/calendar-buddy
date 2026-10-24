@@ -1129,6 +1129,7 @@ mod tests {
     use crate::{Built, build, grid_view, pick, tell_unmovable};
     use calendar_core::colors;
     use calendar_core::create::{self, QuickEntry, Saving};
+    use calendar_core::details::event_details;
     use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, Save};
     use calendar_core::fixtures::d;
@@ -4296,6 +4297,52 @@ mod tests {
             .unwrap();
         let guests: Vec<String> = kickoff.about.guests.into_iter().map(|g| g.email).collect();
         assert_eq!(guests, ["adam@example.com", "ewa@example.com"]);
+    }
+
+    #[test]
+    fn tc_06_03_a_guests_answer_is_shown_as_an_icon_and_changes_after_the_next_synchronization() {
+        let google = Google::start("tc-06-03");
+        personal(&google);
+        let mut kickoff = event("kickoff", "Kickoff");
+        kickoff["organizer"] = json!({"email": EMAIL, "self": true});
+        kickoff["attendees"] = json!([
+            {"email": EMAIL, "self": true, "organizer": true, "responseStatus": "accepted"},
+            {"email": "adam@example.com", "displayName": "Adam Kowalski", "responseStatus": "accepted"},
+            {"email": "ewa@example.com", "responseStatus": "needsAction"}
+        ]);
+        google.fake.add_event(ACCOUNT_ID, EMAIL, kickoff.clone());
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        // Each guest as Kickoff's details list them: name, address and the answer's icon.
+        let listed = |events: Vec<Event>| -> Vec<(String, String, &'static str)> {
+            let kickoff = events.into_iter().find(|e| e.id == "kickoff").unwrap();
+            let details = event_details(&kickoff, Warsaw);
+            (details.listed_guests(false).iter())
+                .filter(|g| !g.own)
+                .map(|g| (g.name.clone(), g.email.clone(), g.response.icon()))
+                .collect()
+        };
+
+        // 1. Adam accepted, Ewa awaiting.
+        assert_eq!(
+            listed(now_shown(&engine)),
+            [
+                ("Adam Kowalski".into(), "adam@example.com".into(), "✔"),
+                (String::new(), "ewa@example.com".into(), "⏳"),
+            ]
+        );
+
+        // 2. Ewa declines in Google; the next round shows it.
+        kickoff["attendees"][2]["responseStatus"] = json!("declined");
+        google.fake.add_event(ACCOUNT_ID, EMAIL, kickoff);
+        let updates = engine.handle(None, start + secs(60));
+        assert_eq!(
+            listed(shown(&updates).unwrap()),
+            [
+                ("Adam Kowalski".into(), "adam@example.com".into(), "✔"),
+                (String::new(), "ewa@example.com".into(), "✖"),
+            ]
+        );
     }
 
     #[test]

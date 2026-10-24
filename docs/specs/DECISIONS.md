@@ -1488,3 +1488,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-123] How an event's details list its guests and their answers
+
+- **Date:** 2026-10-24
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-02
+- **Affects:** `US-06-02`, `MOD-06-F05`, `MOD-06-U01`, `DEC-63`
+- **Decision:** Below the attachments, the details say how many guests there are ("N guests") and list everyone Google lists as an attendee, the user included, in Google's order. Each row is the answer's icon (✔ accepted, ✖ declined, ❓ maybe, ⏳ awaiting; hovering names it), then the guest's name when Google gives one, then their address. With more than 10 guests the first 10 are listed and a "Show N more" link expands the list ("Show fewer" collapses it again); each opening of an event starts collapsed. The open details follow the event as last synchronized, so an answer changes there after the next synchronization.
+- **Why:** As in Google Calendar, which lists the organizer and every guest with a small answer mark and a count of guests; the icons are in the app's built-in fonts. Google's order is kept rather than re-sorted, the simplest choice consistent with `DEC-62`.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

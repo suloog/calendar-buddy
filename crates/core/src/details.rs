@@ -1,13 +1,17 @@
 //! What opening an event shows, independent of how it is drawn: its title and when it happens in
 //! the system's time zone (`DEC-73`), and also in its own zone when that is another one
-//! (`DEC-29`), and its attachments as links (`MOD-05-F26`). Guests, responses and the rest come
-//! with `MOD-06`.
+//! (`DEC-29`), its attachments as links (`MOD-05-F26`), and its guests with their answers
+//! (`MOD-06-F05`).
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate};
 use chrono_tz::Tz;
 
+use crate::guests::Guest;
 use crate::model::{Attachment, Event, Timing};
 use crate::regional::Regional;
+
+/// How many guests the details list before the rest is expanded (`DEC-63`).
+pub const GUESTS_LISTED: usize = 10;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum When {
@@ -31,6 +35,9 @@ pub struct EventDetails {
     pub own_zone: Option<When>,
     /// Listed by name, each opened in the browser (`MOD-05-F26`).
     pub attachments: Vec<Attachment>,
+    /// Everyone invited, the user included, with their answers, in Google's order
+    /// (`MOD-06-F05`).
+    pub guests: Vec<Guest>,
 }
 
 pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
@@ -38,6 +45,7 @@ pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
         title: (!event.busy_only).then(|| event.title.clone()),
         read_only: event.read_only,
         attachments: event.about.attachments.clone(),
+        guests: event.about.guests.clone(),
         own_zone: match event.timing {
             Timing::Timed {
                 start,
@@ -66,6 +74,20 @@ pub fn event_details(event: &Event, zone: Tz) -> EventDetails {
 }
 
 impl EventDetails {
+    /// The guests listed: the first `GUESTS_LISTED` until the list is expanded (`DEC-63`).
+    pub fn listed_guests(&self, expanded: bool) -> &[Guest] {
+        if expanded {
+            &self.guests
+        } else {
+            &self.guests[..self.guests.len().min(GUESTS_LISTED)]
+        }
+    }
+
+    /// How many guests the collapsed list leaves out.
+    pub fn more_guests(&self) -> usize {
+        self.guests.len().saturating_sub(GUESTS_LISTED)
+    }
+
     /// The time in the event's own zone, named after it, when that is not the system's.
     pub fn in_own_zone(&self, regional: &Regional) -> Option<String> {
         match &self.own_zone {
@@ -123,6 +145,7 @@ impl When {
 mod tests {
     use super::*;
     use crate::fixtures::{all_day, d, timed};
+    use crate::guests::{Guest, Response};
     use chrono::NaiveTime;
     use chrono_tz::{America::New_York, Europe::Warsaw, UTC};
 
@@ -160,6 +183,73 @@ mod tests {
         };
         event.about.attachments = vec![numbers.clone()];
         assert_eq!(event_details(&event, Warsaw).attachments, [numbers]);
+    }
+
+    fn guest(name: &str, email: &str, response: Response) -> Guest {
+        Guest {
+            email: email.to_string(),
+            name: name.to_string(),
+            optional: false,
+            response,
+            own: false,
+        }
+    }
+
+    #[test]
+    fn an_event_opens_with_each_guests_name_address_and_answer() {
+        let mut event = timed("Kickoff", d(2026, 11, 13), (10, 0), (11, 0));
+        assert!(event_details(&event, Warsaw).guests.is_empty());
+        event.about.guests = vec![
+            Guest {
+                own: true,
+                ..guest("", "owner@example.com", Response::Accepted)
+            },
+            guest("Adam Kowalski", "adam@example.com", Response::Accepted),
+            guest("", "ewa@example.com", Response::Awaiting),
+            guest("Ola Nowak", "ola@example.com", Response::Declined),
+            guest("Jan", "jan@example.com", Response::Maybe),
+        ];
+
+        let details = event_details(&event, Warsaw);
+
+        // All of them, the user included, in Google's order.
+        assert_eq!(details.guests, event.about.guests);
+        assert_eq!(details.listed_guests(false), &event.about.guests[..]);
+        assert_eq!(details.more_guests(), 0);
+    }
+
+    #[test]
+    fn each_answer_has_its_own_icon_and_name() {
+        let answers = [
+            Response::Accepted,
+            Response::Declined,
+            Response::Maybe,
+            Response::Awaiting,
+        ];
+        let icons: Vec<&str> = answers.iter().map(|r| r.icon()).collect();
+        assert_eq!(icons, ["✔", "✖", "❓", "⏳"]);
+        let names: Vec<&str> = answers.iter().map(|r| r.label()).collect();
+        assert_eq!(names, ["Accepted", "Declined", "Maybe", "Awaiting"]);
+    }
+
+    #[test]
+    fn a_guest_list_of_more_than_10_shows_the_first_10_until_expanded() {
+        let mut event = timed("All hands", d(2026, 11, 13), (10, 0), (11, 0));
+        event.about.guests = (1..=12)
+            .map(|i| guest("", &format!("p{i}@example.com"), Response::Awaiting))
+            .collect();
+
+        let details = event_details(&event, Warsaw);
+
+        assert_eq!(details.listed_guests(false), &event.about.guests[..10]);
+        assert_eq!(details.more_guests(), 2);
+        assert_eq!(details.listed_guests(true), &event.about.guests[..]);
+
+        // Exactly 10 are all listed.
+        event.about.guests.truncate(10);
+        let details = event_details(&event, Warsaw);
+        assert_eq!(details.listed_guests(false).len(), 10);
+        assert_eq!(details.more_guests(), 0);
     }
 
     #[test]

@@ -54,6 +54,28 @@ pub enum Response {
     Maybe,
 }
 
+impl Response {
+    /// How the guest list shows it (`MOD-06-U01`).
+    pub fn icon(self) -> &'static str {
+        match self {
+            Response::Accepted => "✔",
+            Response::Declined => "✖",
+            Response::Maybe => "❓",
+            Response::Awaiting => "⏳",
+        }
+    }
+
+    /// What the icon means, in words.
+    pub fn label(self) -> &'static str {
+        match self {
+            Response::Accepted => "Accepted",
+            Response::Declined => "Declined",
+            Response::Maybe => "Maybe",
+            Response::Awaiting => "Awaiting",
+        }
+    }
+}
+
 /// Someone who can be invited: from the contacts, the directory or an earlier event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Person {

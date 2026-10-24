@@ -90,8 +90,9 @@ enum Dialog {
     QuickEntry(QuickEntry, bool),
     /// The full editor of a new or an existing event (`MOD-05-F04`).
     Editor(Box<Editor>),
-    /// The event whose details are open, and what had the keyboard when it opened.
-    Event(Event, Option<egui::Id>),
+    /// The event whose details are open, what had the keyboard when it opened, and whether its
+    /// guest list is expanded (`DEC-63`).
+    Event(Event, Option<egui::Id>, bool),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
     /// Which events of a series a change or deletion of one of its occurrences applies to
@@ -521,7 +522,7 @@ impl CalendarApp {
     /// the event, and the scope question goes back to the editor.
     fn close_dialog(&mut self, ctx: &egui::Context) {
         match self.dialog.take() {
-            Some(Dialog::Event(_, Some(id))) => ctx.memory_mut(|m| m.request_focus(id)),
+            Some(Dialog::Event(_, Some(id), _)) => ctx.memory_mut(|m| m.request_focus(id)),
             // The scope question goes back to the editor the change was made in.
             Some(Dialog::Scope(_, Some(editor))) => self.dialog = Some(Dialog::Editor(editor)),
             _ => {}
@@ -676,7 +677,17 @@ impl CalendarApp {
                         search = Some((id, now_typed.to_string()));
                     }
                 }
-                Dialog::Event(event, _) => {
+                Dialog::Event(event, _, expanded) => {
+                    // The event as last synchronized, which may have come since it was opened.
+                    let event = self
+                        .events
+                        .iter()
+                        .find(|e| {
+                            e.id == event.id
+                                && e.calendar_id == event.calendar_id
+                                && e.account_id == event.account_id
+                        })
+                        .unwrap_or(event);
                     let details = event_details(event, self.zone);
                     ui.heading(details.title.as_deref().unwrap_or("Busy"));
                     ui.label(details.when.describe(&self.regional));
@@ -689,16 +700,37 @@ impl CalendarApp {
                             attachment = Some(listed.url.clone());
                         }
                     }
-                    // The event as last synchronized, which may have come since it was opened.
-                    let event = self
-                        .events
-                        .iter()
-                        .find(|e| {
-                            e.id == event.id
-                                && e.calendar_id == event.calendar_id
-                                && e.account_id == event.account_id
-                        })
-                        .unwrap_or(event);
+                    // Each guest with their answer as an icon (`MOD-06-F05`, `MOD-06-U01`).
+                    match details.guests.len() {
+                        0 => {}
+                        1 => {
+                            ui.label("1 guest");
+                        }
+                        n => {
+                            ui.label(format!("{n} guests"));
+                        }
+                    }
+                    for guest in details.listed_guests(*expanded) {
+                        ui.horizontal(|ui| {
+                            let answer = guest.response;
+                            ui.label(answer.icon()).on_hover_text(answer.label());
+                            if !guest.name.is_empty() {
+                                ui.label(&guest.name);
+                            }
+                            ui.weak(&guest.email);
+                        });
+                    }
+                    let more = details.more_guests();
+                    if more > 0 {
+                        let toggle = if *expanded {
+                            "Show fewer".to_string()
+                        } else {
+                            format!("Show {more} more")
+                        };
+                        if ui.link(toggle).clicked() {
+                            *expanded = !*expanded;
+                        }
+                    }
                     // Editing is not offered for an event the user may not change (`MOD-05-F17`).
                     let protected = event.protected();
                     if let Some(protected) = protected {
@@ -1358,7 +1390,7 @@ impl eframe::App for CalendarApp {
             // The event is brought up to date first, as the editor opens from its details.
             self.sync.opening(&self.events[event].calendar_id);
             let focused = ui.ctx().memory(|m| m.focused());
-            self.dialog = Some(Dialog::Event(self.events[event].clone(), focused));
+            self.dialog = Some(Dialog::Event(self.events[event].clone(), focused, false));
         }
     }
 }
@@ -1377,4 +1409,28 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| Ok(Box::new(CalendarApp::new(cc.egui_ctx.clone())))),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use calendar_core::guests::Response;
+
+    #[test]
+    fn the_guest_answers_icons_are_in_the_apps_fonts() {
+        let ctx = egui::Context::default();
+        ctx.run_ui(egui::RawInput::default(), |_| {})
+            .textures_delta
+            .clear();
+        let font = egui::FontId::proportional(14.0);
+        for answer in [
+            Response::Accepted,
+            Response::Declined,
+            Response::Maybe,
+            Response::Awaiting,
+        ] {
+            let icon = answer.icon();
+            assert!(ctx.fonts_mut(|f| f.has_glyphs(&font, icon)), "{icon}");
+        }
+    }
 }
