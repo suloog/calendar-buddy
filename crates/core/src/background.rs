@@ -61,15 +61,26 @@ pub fn starts_shown(args: &[String], tray: bool) -> bool {
     !(tray && at_login(args))
 }
 
+/// A debug build, as `cargo run` makes, is a separate app: "Calendar Buddy (dev)", with its own
+/// files, sign-in, menu entry and running copy, so it runs beside an installed app without
+/// touching it.
+pub const DEV: bool = cfg!(debug_assertions);
+
 /// The app's icon in the desktop's icon theme, and its window's application ID, which the desktop
-/// matches to the launcher's entry of the same name.
-pub const APP_ID: &str = "calendar-buddy";
+/// matches to the launcher's entry of the same name; also the name of its directories, entries
+/// and secrets.
+pub const APP_ID: &str = if DEV {
+    "calendar-buddy-dev"
+} else {
+    "calendar-buddy"
+};
 
 /// The launcher's entry, which puts the app at `exe` in the desktop's menus with its icon.
 pub fn launcher_entry(exe: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon={APP_ID}\n\
+        "[Desktop Entry]\nType=Application\nName={}\nIcon={APP_ID}\n\
          Exec={}\nCategories=Office;Calendar;\nStartupWMClass={APP_ID}\n",
+        crate::texts::APP_NAME,
         exec_argument(&exe.to_string_lossy())
     )
 }
@@ -77,8 +88,9 @@ pub fn launcher_entry(exe: &Path) -> String {
 /// The XDG autostart entry that starts the app at `exe` in the tray at login.
 pub fn autostart_entry(exe: &Path) -> String {
     format!(
-        "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon={APP_ID}\n\
+        "[Desktop Entry]\nType=Application\nName={}\nIcon={APP_ID}\n\
          Exec={} {IN_TRAY}\n",
+        crate::texts::APP_NAME,
         exec_argument(&exe.to_string_lossy())
     )
 }
@@ -147,8 +159,11 @@ mod tests {
         let entry = autostart_entry(Path::new("/usr/bin/calendar-buddy"));
         assert_eq!(
             entry,
-            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=calendar-buddy\n\
-             Exec=\"/usr/bin/calendar-buddy\" --in-tray\n"
+            format!(
+                "[Desktop Entry]\nType=Application\nName={}\nIcon={APP_ID}\n\
+                 Exec=\"/usr/bin/calendar-buddy\" --in-tray\n",
+                crate::texts::APP_NAME
+            )
         );
     }
 
@@ -157,10 +172,20 @@ mod tests {
         let entry = launcher_entry(Path::new("/usr/bin/calendar-buddy"));
         assert_eq!(
             entry,
-            "[Desktop Entry]\nType=Application\nName=Calendar Buddy\nIcon=calendar-buddy\n\
-             Exec=\"/usr/bin/calendar-buddy\"\nCategories=Office;Calendar;\n\
-             StartupWMClass=calendar-buddy\n"
+            format!(
+                "[Desktop Entry]\nType=Application\nName={}\nIcon={APP_ID}\n\
+                 Exec=\"/usr/bin/calendar-buddy\"\nCategories=Office;Calendar;\n\
+                 StartupWMClass={APP_ID}\n",
+                crate::texts::APP_NAME
+            )
         );
+    }
+
+    #[test]
+    fn a_debug_build_is_an_app_of_its_own() {
+        // The tests run as a debug build.
+        assert_eq!(APP_ID, "calendar-buddy-dev");
+        assert_eq!(crate::texts::APP_NAME, "Calendar Buddy (dev)");
     }
 
     #[test]

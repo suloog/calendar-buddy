@@ -1981,3 +1981,15 @@
 - **Scope effect:** reduction
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-164] A debug build is a separate app, "Calendar Buddy (dev)"
+
+- **Date:** 2026-10-24
+- **Decided by:** tech lead (Maciej)
+- **Source:** tech lead's request of 2026-10-24 (test the app in development without overwriting the installed one)
+- **Affects:** `DEC-77`, `DEC-87`, `DEC-143`, `DEC-146`, `DEC-155`, `MOD-07-F17`
+- **Decision:** A debug build (`cargo run`) is its own app: named "Calendar Buddy (dev)" (window, tray, notifications, desktop entries), with the ID `calendar-buddy-dev` for its config and cache directories, its secrets' `application` attribute, its icon, launcher, autostart and `webcal:` entries and its window, and `pl.ordergroup.CalendarBuddyDev` on the session bus. A release build (`cargo install`, `cargo run --release`, the future .deb) keeps `calendar-buddy` and `pl.ordergroup.CalendarBuddy`. Both read the Google OAuth client from `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json`. The app is installed for daily use with `cargo install --path crates/app --locked`.
+- **Why:** The app writes its menu entry, autostart entry and `webcal:` handler for the program that runs, lets only one copy run and keeps sign-ins in the shared secret store; a development run would otherwise take over the installed app's entries, stop when it runs and share its sign-ins. Disconnecting an account in either build still withdraws the shared client's access at Google, so the other build has to sign in to it again.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

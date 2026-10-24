@@ -5,8 +5,13 @@
 
 use std::path::Path;
 
-/// The app's name, as the window, its notifications and the tray show it.
-pub const APP_NAME: &str = "Calendar Buddy";
+/// The app's name, as the window, its notifications and the tray show it; a debug build is
+/// another app (`background::DEV`).
+pub const APP_NAME: &str = if crate::background::DEV {
+    "Calendar Buddy (dev)"
+} else {
+    "Calendar Buddy"
+};
 
 // The welcome screen and signing in (`MOD-01`).
 

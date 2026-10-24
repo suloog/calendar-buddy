@@ -101,10 +101,12 @@ impl Client {
     }
 }
 
-/// `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json` (default `~/.config/…`).
+/// `$XDG_CONFIG_HOME/calendar-buddy/google-oauth-client.json` (default `~/.config/…`), also for
+/// a debug build: both builds sign in through the same client.
 pub fn client_file_path() -> PathBuf {
-    calendar_core::settings::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config/calendar-buddy"))
+    calendar_core::settings::config_home()
+        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .join("calendar-buddy")
         .join(CLIENT_FILE)
 }
 

@@ -2289,7 +2289,7 @@ fn main() -> eframe::Result {
     loop {
         if shown {
             eframe::run_native_ext(
-                "calendar-buddy",
+                background::APP_ID,
                 window_options(&app.placement),
                 Some(ctx.clone()),
                 Box::new(|_| Ok(Box::new(AppWindow(&mut app)))),

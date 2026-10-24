@@ -49,7 +49,10 @@ impl SecretStore for SystemSecretStore {
         collection
             .create_item(
                 &format!("{}: {}", texts::APP_NAME, account.email),
-                HashMap::from([("application", "calendar-buddy"), ("account", &account.id)]),
+                HashMap::from([
+                    ("application", background::APP_ID),
+                    ("account", &account.id),
+                ]),
                 refresh_token.as_bytes(),
                 true,
                 "text/plain",
@@ -67,7 +70,7 @@ impl SecretStore for SystemSecretStore {
         }
         let items = collection
             .search_items(HashMap::from([
-                ("application", "calendar-buddy"),
+                ("application", background::APP_ID),
                 ("account", account_id),
             ]))
             .map_err(failed)?;
@@ -89,7 +92,7 @@ impl SecretStore for SystemSecretStore {
         }
         let items = collection
             .search_items(HashMap::from([
-                ("application", "calendar-buddy"),
+                ("application", background::APP_ID),
                 ("account", account_id),
             ]))
             .map_err(failed)?;
@@ -417,7 +420,7 @@ impl SystemTray {
 
 impl ksni::Tray for TrayIcon {
     fn id(&self) -> String {
-        "calendar-buddy".into()
+        background::APP_ID.into()
     }
 
     fn title(&self) -> String {
@@ -480,7 +483,7 @@ impl XdgAutostart {
 
     fn at(autostart: Option<PathBuf>) -> Self {
         XdgAutostart {
-            entry: autostart.map(|dir| dir.join("calendar-buddy.desktop")),
+            entry: autostart.map(|dir| dir.join(format!("{}.desktop", background::APP_ID))),
         }
     }
 }
@@ -537,7 +540,8 @@ impl XdgLinkHandler {
 
     fn at(applications: Option<PathBuf>) -> Self {
         XdgLinkHandler {
-            entry: applications.map(|dir| dir.join("calendar-buddy-webcal.desktop")),
+            entry: applications
+                .map(|dir| dir.join(format!("{}-webcal.desktop", background::APP_ID))),
         }
     }
 }
@@ -614,9 +618,17 @@ impl XdgLauncher {
 }
 
 /// The app's well-known name on the session bus, held by the copy that runs (MOD-07
-/// *Technical notes*).
-const INSTANCE: &str = "pl.ordergroup.CalendarBuddy";
-const INSTANCE_PATH: &str = "/pl/ordergroup/CalendarBuddy";
+/// *Technical notes*); a debug build is another app, with a name of its own.
+const INSTANCE: &str = if background::DEV {
+    "pl.ordergroup.CalendarBuddyDev"
+} else {
+    "pl.ordergroup.CalendarBuddy"
+};
+const INSTANCE_PATH: &str = if background::DEV {
+    "/pl/ordergroup/CalendarBuddyDev"
+} else {
+    "/pl/ordergroup/CalendarBuddy"
+};
 
 /// The one copy of the app, through its name on the session bus, where a launch tells the running
 /// copy through the desktop's standard `org.freedesktop.Application` interface. Without a session
@@ -722,7 +734,9 @@ mod tests {
 
         autostart.set(true).unwrap();
         assert!(autostart.is_on());
-        let entry = std::fs::read_to_string(dir.join("autostart/calendar-buddy.desktop")).unwrap();
+        let entry =
+            std::fs::read_to_string(dir.join(format!("autostart/{}.desktop", background::APP_ID)))
+                .unwrap();
         let exe = std::env::current_exe().unwrap();
         assert_eq!(entry, background::autostart_entry(&exe));
 
@@ -738,7 +752,10 @@ mod tests {
             std::env::temp_dir().join(format!("calendar-buddy-webcal-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let handler = XdgLinkHandler::at(Some(dir.join("applications")));
-        let path = dir.join("applications/calendar-buddy-webcal.desktop");
+        let path = dir.join(format!(
+            "applications/{}-webcal.desktop",
+            background::APP_ID
+        ));
 
         handler.register().unwrap();
         let exe = std::env::current_exe().unwrap();
@@ -762,8 +779,11 @@ mod tests {
             std::env::temp_dir().join(format!("calendar-buddy-launcher-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let launcher = XdgLauncher::at(Some(dir.clone()));
-        let entry = dir.join("applications/calendar-buddy.desktop");
-        let icon = dir.join("icons/hicolor/256x256/apps/calendar-buddy.png");
+        let entry = dir.join(format!("applications/{}.desktop", background::APP_ID));
+        let icon = dir.join(format!(
+            "icons/hicolor/256x256/apps/{}.png",
+            background::APP_ID
+        ));
 
         launcher.install().unwrap();
         let exe = std::env::current_exe().unwrap();

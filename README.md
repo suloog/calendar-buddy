@@ -49,11 +49,17 @@ in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the S
 2. Set up your own Google OAuth client and save its file to
    `~/.config/calendar-buddy/google-oauth-client.json`, as described in
    [Setting up the Google OAuth client](#setting-up-the-google-oauth-client) below.
-3. Run the app:
+3. Build and install the app, then start it once from where it was installed:
 
    ```sh
-   cargo run -p calendar-buddy --release
+   cargo install --path crates/app --locked     # into ~/.cargo/bin/calendar-buddy
+   ~/.cargo/bin/calendar-buddy
    ```
+
+   On its first start the app puts itself, with its icon, in your desktop's menu (an entry in
+   `~/.local/share/applications`); from then on start it from there, or pin it to the task bar.
+   The entry starts the program the app was last started from, so keep starting it from the
+   installed one. To update, pull and run the same `cargo install` again.
 
 4. Click **Connect Google account**. Sign-in happens in your browser; the app never sees your
    password. Google warns that the app is not verified: choose **Advanced**, then
@@ -61,7 +67,8 @@ in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the S
    suggest guests; on a Workspace account it may also ask to read your organization's directory.
 
 Your calendars are cached in `~/.cache/calendar-buddy/`, your settings in
-`~/.config/calendar-buddy/`.
+`~/.config/calendar-buddy/`. "Start at login" in the settings also starts the program it was
+turned on from: turn it on in the installed app.
 
 ### Setting up the Google OAuth client
 
@@ -101,6 +108,33 @@ client from your own Google Cloud project. You set it up once, in the
    you which file to put where.
 
 ## Development
+
+### Running a development build
+
+A debug build, the one `cargo run` makes, is a separate app, **Calendar Buddy (dev)**, so it runs
+next to your installed app and never touches it:
+
+```sh
+cargo run -p calendar-buddy
+```
+
+| | Installed app (release build) | Development build (debug build) |
+| --- | --- | --- |
+| Name in the window, tray and menu | Calendar Buddy | Calendar Buddy (dev) |
+| Settings and connected accounts | `~/.config/calendar-buddy/` | `~/.config/calendar-buddy-dev/` |
+| Synchronized calendars | `~/.cache/calendar-buddy/` | `~/.cache/calendar-buddy-dev/` |
+| Sign-ins in the secret store | `application=calendar-buddy` | `application=calendar-buddy-dev` |
+| Menu entry, icon, start at login | `calendar-buddy.desktop` | `calendar-buddy-dev.desktop` |
+| The one copy that runs (session bus) | `pl.ordergroup.CalendarBuddy` | `pl.ordergroup.CalendarBuddyDev` |
+
+Both run at the same time, each with its own window and tray icon. The development build starts
+with no accounts: connect the ones you want to test with. Both sign in through the same Google
+OAuth client, read from `~/.config/calendar-buddy/google-oauth-client.json`, so disconnecting an
+account in either one withdraws the client's access at Google and the other has to sign in to it
+again. Only `cargo run --release` (or
+`cargo install`) makes the installed app, so use those only to install.
+
+### Crates and checks
 
 The workspace has three crates:
 

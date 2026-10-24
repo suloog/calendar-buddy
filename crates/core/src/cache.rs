@@ -553,13 +553,14 @@ fn timing(start: &str, end: &str, zone: Option<&str>) -> Option<Timing> {
     })
 }
 
-/// `$XDG_CACHE_HOME/calendar-buddy/cache.sqlite3`, or under `~/.cache` when that is not set.
+/// `$XDG_CACHE_HOME/calendar-buddy/cache.sqlite3`, or under `~/.cache` when that is not set
+/// (`calendar-buddy-dev` in a debug build).
 pub fn default_path() -> Option<PathBuf> {
     let cache = std::env::var_os("XDG_CACHE_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))?;
-    Some(cache.join("calendar-buddy").join("cache.sqlite3"))
+    Some(cache.join(crate::background::APP_ID).join("cache.sqlite3"))
 }
 
 fn window_key(window: Window) -> String {

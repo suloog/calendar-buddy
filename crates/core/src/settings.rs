@@ -164,13 +164,18 @@ pub fn default_path() -> Option<PathBuf> {
     Some(config_dir()?.join("settings"))
 }
 
-/// `$XDG_CONFIG_HOME/calendar-buddy`, or `~/.config/calendar-buddy` when that is not set.
+/// `$XDG_CONFIG_HOME/calendar-buddy`, or `~/.config/calendar-buddy` when that is not set
+/// (`calendar-buddy-dev` in a debug build).
 pub fn config_dir() -> Option<PathBuf> {
-    let config = std::env::var_os("XDG_CONFIG_HOME")
+    Some(config_home()?.join(crate::background::APP_ID))
+}
+
+/// `$XDG_CONFIG_HOME`, or `~/.config` when that is not set.
+pub fn config_home() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
         .filter(|dir| !dir.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
-    Some(config.join("calendar-buddy"))
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
 }
 
 #[cfg(test)]

@@ -11,7 +11,8 @@ A calendar application. The repo is at the specification stage — no applicatio
 
 ## Commands
 
-- Run the app: `cargo run -p calendar-buddy` (the welcome screen first — connecting needs `~/.config/calendar-buddy/google-oauth-client.json`, `DEC-77`; then the calendars of the connected accounts, synchronized into `~/.cache/calendar-buddy/cache.sqlite3`, `DEC-87`)
+- Run the app: `cargo run -p calendar-buddy` — a debug build is a separate app, "Calendar Buddy (dev)", with its own directories (`calendar-buddy-dev`), secrets, menu entry and bus name, so it never touches an installed release build (`DEC-164`). The welcome screen first — connecting needs `~/.config/calendar-buddy/google-oauth-client.json` (shared by both builds, `DEC-77`); then the calendars of the connected accounts, synchronized into `~/.cache/calendar-buddy-dev/cache.sqlite3` (`DEC-87`)
+- Install the app: `cargo install --path crates/app --locked`, then start `~/.cargo/bin/calendar-buddy` once — it adds itself to the desktop's menu
 - Tests: `cargo test --workspace`
 - Pictures of the interface on made-up data (no real accounts, Google or desktop): `cargo test -p calendar-buddy preview -- --ignored`, into `target/preview/`
 - Gates (also run by the commit/push hook, `.claude/og-gates.json`): `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`
