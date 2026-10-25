@@ -91,6 +91,9 @@ struct State {
     busy: Vec<(String, Vec<(String, String)>)>,
     /// Every `freeBusy` query the app sent.
     busy_queries: Vec<Value>,
+    /// The addresses whose calendars share their details with every account, and their events,
+    /// as Google sends them; Google refuses the others' events.
+    shared: Vec<(String, Vec<Value>)>,
 }
 
 impl State {
@@ -367,6 +370,13 @@ impl FakeGoogle {
             .map(|(from, to)| (from.to_string(), to.to_string()))
             .collect();
         (self.state.lock().unwrap().busy).push((email.to_string(), busy));
+    }
+
+    /// The address's calendar shares its details with every account, with these events now.
+    pub fn share_calendar(&self, email: &str, events: &[Value]) {
+        let shared = &mut self.state.lock().unwrap().shared;
+        shared.retain(|(owner, _)| owner != email);
+        shared.push((email.to_string(), events.to_vec()));
     }
 
     /// Every `freeBusy` query the app sent.
@@ -720,6 +730,21 @@ fn calendar_api(state: &State, account: &str, target: &str) -> (&'static str, St
                 .calendars
                 .iter()
                 .any(|(owner, entry)| *owner == account && entry["id"] == id.as_str());
+            // Someone else's calendar shared with details: its single events within the range.
+            if let Some((_, events)) = (state.shared.iter()).find(|(email, _)| email == id)
+                && !listed
+            {
+                let instant = |name: &str| {
+                    DateTime::parse_from_rfc3339(&param(&url, name).unwrap())
+                        .unwrap()
+                        .with_timezone(&Utc)
+                };
+                let (from, until) = (instant("timeMin"), instant("timeMax"));
+                let items: Vec<&Value> = (events.iter())
+                    .filter(|event| in_window(event, from, until))
+                    .collect();
+                return ("200 OK", json!({ "items": items }).to_string());
+            }
             if !listed {
                 return (
                     "404 Not Found",

@@ -15,6 +15,7 @@ pub mod fixtures;
 pub mod guests;
 pub mod invitations;
 pub mod layout;
+pub mod meet_with;
 pub mod model;
 pub mod month;
 pub mod navigation;

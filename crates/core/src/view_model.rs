@@ -11,6 +11,25 @@ use crate::week::wall_minute;
 pub struct DayColumn {
     pub date: NaiveDate,
     pub is_today: bool,
+    /// Whose column it is in the day view with people chosen in "Meet with…" (`MOD-06-U05`);
+    /// `None` otherwise.
+    pub whose: Option<Whose>,
+}
+
+/// Whose column of the day view it is, with people chosen in "Meet with…": the user's, headed
+/// by their name, or a chosen person's, headed by theirs, in their colour (`MOD-06-U05`, `U06`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Whose {
+    User(String),
+    Person(String, Rgb),
+}
+
+impl Whose {
+    pub fn name(&self) -> &str {
+        match self {
+            Whose::User(name) | Whose::Person(name, _) => name,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,6 +123,7 @@ pub fn grid_view(
         .map(|&date| DayColumn {
             date,
             is_today: date == today,
+            whose: None,
         })
         .collect();
 

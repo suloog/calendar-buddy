@@ -12,6 +12,7 @@ use calendar_core::accounts::{Account, Accounts};
 use calendar_core::availability::Availability;
 use calendar_core::cache::Cache;
 use calendar_core::guests::{Guest, Response};
+use calendar_core::meet_with::{MeetWith, Overlay, Shared};
 use calendar_core::model::{About, Access, Attachment, Calendar, Kind, Rgb, Timing};
 use calendar_core::navigation::{Navigation, View};
 use calendar_core::platform::{Appearance, Network};
@@ -334,7 +335,16 @@ impl CalendarApp {
         };
         let navigation = Navigation::start(settings.last_view, today, regional.week_start);
         let built_at = Utc::now();
-        let (built, places) = build(&[], &settings, navigation, AGENDA_DAYS, zone, built_at);
+        let overlay = Overlay::default();
+        let (built, places) = build(
+            &[],
+            &settings,
+            navigation,
+            AGENDA_DAYS,
+            zone,
+            built_at,
+            &overlay,
+        );
         let (autostart_writer, _) = mpsc::channel();
         let (_, signals) = mpsc::channel();
         CalendarApp {
@@ -367,6 +377,8 @@ impl CalendarApp {
             agenda_days: AGENDA_DAYS,
             built,
             places,
+            meet_with: MeetWith::default(),
+            overlay,
             invitations: Vec::new(),
             built_at,
             view_state: Default::default(),
@@ -582,7 +594,84 @@ fn preview() {
         let start = start + Span::hours(3);
         app.start_event(|length| (start, start + Span::minutes(length.into())));
     });
+    // "Meet with…" with three people: one sharing details, one free/busy, one nothing.
+    picture("meet-with-week-light", week, Theme::Light, meeting);
+    picture("meet-with-week-dark", week, Theme::Dark, meeting);
+    picture(
+        "meet-with-day-light",
+        View::Grid(GridView::Day),
+        Theme::Light,
+        meeting,
+    );
     picture("welcome-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default()
     });
+}
+
+/// Three people chosen in "Meet with…", and Google's answer about their calendars over the days
+/// shown: Jordan's with details, Sam's free/busy only, and nothing of Robin's.
+fn meeting(app: &mut CalendarApp, _: &egui::Context) {
+    let account = app.meeting_account().map(|e| e.account.id.clone());
+    let account = account.expect("an account in the made-up data");
+    for (name, email) in [
+        ("Jordan Lee", "jordan.lee@example.com"),
+        ("Sam Patel", "sam.patel@example.com"),
+        ("", "robin@partner.example.org"),
+    ] {
+        let person = calendar_core::guests::Person {
+            name: name.into(),
+            email: email.into(),
+        };
+        app.meet_with.choose(&person, &account, &[]);
+    }
+    let asked = app.meeting_asked(true).expect("a grid view");
+    let (from, _) = asked.span;
+    let today = app.navigation.selected;
+    let at = |day: i64, hour: i64| {
+        let date = today + Span::days(day);
+        Warsaw
+            .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
+            .unwrap()
+            .to_utc()
+            + Span::hours(hour)
+    };
+    let synced = |id: &str, title: &str, timing: Timing| SyncedEvent {
+        id: id.into(),
+        title: title.into(),
+        timing: Some(timing),
+        recurrence: Vec::new(),
+        instance_of: None,
+        about: About::default(),
+        etag: String::new(),
+        organizer_only: false,
+    };
+    let timed = |day, start, end| Timing::Timed {
+        start: at(day, start),
+        end: at(day, end),
+        zone: Warsaw,
+    };
+    let jordan = Shared::Events(vec![
+        synced("j1", "Budget review", timed(0, 10, 11)),
+        synced("j2", "Hiring panel", timed(1, 14, 16)),
+        synced("j3", "", timed(0, 15, 16)),
+        synced(
+            "j4",
+            "Offsite",
+            Timing::AllDay {
+                start: today,
+                end_exclusive: today + Span::days(1),
+            },
+        ),
+    ]);
+    let sam = Shared::Busy(vec![
+        (at(0, 9), at(0, 10) + Span::minutes(30)),
+        (at(1, 13), at(1, 14)),
+        (from + Span::hours(12), from + Span::hours(13)),
+    ]);
+    let answer = vec![
+        ("jordan.lee@example.com".to_string(), jordan),
+        ("sam.patel@example.com".to_string(), sam),
+        ("robin@partner.example.org".to_string(), Shared::Nothing),
+    ];
+    app.sync.answered_their(asked, answer);
 }

@@ -10,6 +10,7 @@ use calendar_core::details::event_details;
 use calendar_core::editor::Patch;
 use calendar_core::fixtures::d;
 use calendar_core::guests::{Guest, Person, Reach, Response};
+use calendar_core::meet_with::Shared;
 use calendar_core::model::{
     About, Access, Attachment, Event, Kind, Method, Reminder, Reminders, Rgb, Show, Visibility,
 };
@@ -2758,4 +2759,105 @@ fn an_events_reminders_are_changed_and_set_back_to_its_calendars_defaults() {
         (reset["reminders"]["overrides"].as_array()).is_none_or(Vec::is_empty),
         "{reset}"
     );
+}
+
+#[test]
+fn a_persons_calendar_shared_with_details_is_listed_with_single_events_for_the_span() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("shared-details");
+    let mut private = timed(
+        "private",
+        "",
+        "2026-11-13T09:00:00+01:00",
+        "2026-11-13T10:00:00+01:00",
+    );
+    private.as_object_mut().unwrap().remove("summary");
+    google.share_calendar(
+        "anna.nowak@example.com",
+        &[
+            timed(
+                "budget",
+                "Budget review",
+                "2026-11-13T14:30:00+01:00",
+                "2026-11-13T15:30:00+01:00",
+            ),
+            private,
+            timed(
+                "later",
+                "Planning",
+                "2026-11-17T10:00:00+01:00",
+                "2026-11-17T11:00:00+01:00",
+            ),
+        ],
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let week = (
+        calendar_core::week::day_start(d(2026, 11, 9), Warsaw),
+        calendar_core::week::day_start(d(2026, 11, 16), Warsaw),
+    );
+
+    let shared = session.shared("anna.nowak@example.com", week);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let Ok(Shared::Events(events)) = shared else {
+        panic!("Anna's events: {shared:?}");
+    };
+    let listed: Vec<(&str, &str)> = (events.iter())
+        .map(|event| (event.id.as_str(), event.title.as_str()))
+        .collect();
+    // Without a title, the event is the views' busy block.
+    assert_eq!(listed, [("budget", "Budget review"), ("private", "")]);
+    let asked: Vec<String> = (google.requests().into_iter())
+        .filter(|request| request.contains("/calendars/anna.nowak"))
+        .collect();
+    let [asked] = asked.as_slice() else {
+        panic!("one list of Anna's events: {asked:?}");
+    };
+    assert!(asked.contains("singleEvents=true"), "{asked}");
+    assert!(
+        asked.contains("timeMin=2026-11-08T23%3A00%3A00Z"),
+        "{asked}"
+    );
+    assert!(
+        asked.contains("timeMax=2026-11-15T23%3A00%3A00Z"),
+        "{asked}"
+    );
+    assert!(google.busy_queries().is_empty());
+}
+
+#[test]
+fn a_persons_calendar_google_refuses_falls_back_to_free_busy_or_cannot_be_seen() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("shared-busy");
+    google.share_busy(
+        "adam@example.com",
+        &[("2026-11-12T11:00:00+01:00", "2026-11-12T12:00:00+01:00")],
+    );
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    let week = (
+        calendar_core::week::day_start(d(2026, 11, 9), Warsaw),
+        calendar_core::week::day_start(d(2026, 11, 16), Warsaw),
+    );
+
+    let adam = session.shared("adam@example.com", week);
+    let ewa = session.shared("ewa@example.com", week);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let at = |hour| Utc.with_ymd_and_hms(2026, 11, 12, hour, 0, 0).unwrap();
+    assert_eq!(adam, Ok(Shared::Busy(vec![(at(10), at(11))])));
+    assert_eq!(ewa, Ok(Shared::Nothing));
+    assert_eq!(google.busy_queries().len(), 2);
+}
+
+#[test]
+fn a_persons_calendar_google_does_not_answer_is_an_error() {
+    let (google, store, dir, client_file, _cache) = synchronized_once("shared-offline");
+    let session = Session::sign_in(&client_file, &google.endpoints, &store, ACCOUNT_ID).unwrap();
+    google.disconnect();
+
+    let shared = session.shared(
+        "anna.nowak@example.com",
+        calendar_core::week::day_span(d(2026, 11, 13), Warsaw),
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert!(shared.is_err());
 }

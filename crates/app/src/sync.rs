@@ -16,7 +16,8 @@
 //! its first synchronization. People to invite are searched for at Google while the user types a
 //! guest (`US-06-01`). An event saved with Google Meet that comes back without a call is told of
 //! (`US-06-07`). The guests' busy times on the day chosen in the editor are asked of Google
-//! (`US-06-08`). The reminders of the events the cache holds are shown as desktop notifications
+//! (`US-06-08`), and the calendars of the people chosen in "Meet with…" over the days shown, again
+//! with every synchronization round (`US-06-09`). The reminders of the events the cache holds are shown as desktop notifications
 //! when due, and a click on one opens its event (`US-07-01`). Join on a notification opens the
 //! event's Google Meet call in the browser, and Snooze shows it again 5 or 10 minutes later,
 //! without telling Google (`US-07-02`).
@@ -29,11 +30,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use calendar_core::accounts::Check;
-use calendar_core::availability::{Asked, Availability};
+use calendar_core::availability::{Asked, Availability, Span};
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
 use calendar_core::guests::{Person, Reach};
+use calendar_core::meet_with::{self, Shared};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{Browser, Notifier, SecretStore, Wakeups};
 use calendar_core::regional::Regional;
@@ -91,6 +93,9 @@ enum Job {
     Suggest(String, String, Reach),
     /// The guests' busy times the editor's preview asks for (`MOD-06-F19`).
     Busy(Asked),
+    /// The calendars of the people chosen in "Meet with…" the views ask for, `None` while they
+    /// ask for none (`MOD-06-F24`).
+    Their(Option<meet_with::Asked>),
     /// Reminders are to be shown from now on (`MOD-07-F01`), their times written as the system
     /// writes them.
     Remind(Box<dyn Notifier>, Regional, Acts),
@@ -152,6 +157,8 @@ enum Update {
     People(String, Vec<Person>),
     /// The guests' busy times Google gave for what was asked; `None` when it gave none.
     Busy(Asked, Option<Vec<Availability>>),
+    /// The people's calendars as Google gave them for what was asked.
+    Their(meet_with::Asked, Vec<(String, Shared)>),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -187,6 +194,10 @@ pub struct Synchronization {
     asked: Option<Asked>,
     /// The guests' busy times Google last gave, and what they were asked for.
     busy: Option<(Asked, Option<Vec<Availability>>)>,
+    /// The people's calendars "Meet with…" last asked for, if any.
+    meeting: Option<meet_with::Asked>,
+    /// The people's calendars Google last gave, and what they were asked for.
+    their: Option<(meet_with::Asked, Vec<(String, Shared)>)>,
     /// The events of notifications clicked, not yet taken.
     opens: Sender<Opened>,
     opened: Receiver<Opened>,
@@ -325,6 +336,8 @@ impl Synchronization {
             people: None,
             asked: None,
             busy: None,
+            meeting: None,
+            their: None,
             opens,
             opened,
             silenced,
@@ -533,6 +546,34 @@ impl Synchronization {
         }
     }
 
+    /// The calendars of the people chosen in "Meet with…" the views need, `None` while they show
+    /// none: asked of Google when they differ from those last asked for, and again with every
+    /// synchronization round (`MOD-06-F24`); `their` gives them once answered. Called every
+    /// frame.
+    pub fn ask_their(&mut self, asked: Option<meet_with::Asked>) {
+        if asked != self.meeting {
+            self.meeting = asked.clone();
+            let _ = self.jobs.send(Job::Their(asked));
+        }
+    }
+
+    /// The people's calendars Google last gave over the span; `None` until it answers for it
+    /// (MOD-06 *Constraints and edge cases*). Asked for other people over the same span, the
+    /// last answer is given until the new one comes.
+    pub fn their(&self, span: Span) -> Option<&meet_with::Answer> {
+        match &self.their {
+            Some((asked, answer)) if asked.span == span => Some(answer),
+            _ => None,
+        }
+    }
+
+    /// Takes `answer` as Google's answer to `asked`, for pictures of "Meet with…".
+    #[cfg(test)]
+    pub fn answered_their(&mut self, asked: meet_with::Asked, answer: Vec<(String, Shared)>) {
+        self.meeting = Some(asked.clone());
+        self.their = Some((asked, answer));
+    }
+
     /// Takes `busy` as Google's answer to `asked`, for pictures of the availability preview.
     #[cfg(test)]
     pub fn answered_busy(&mut self, asked: Asked, busy: Vec<Availability>) {
@@ -582,6 +623,7 @@ impl Synchronization {
                 }
                 Update::People(account, people) => self.people = Some((account, people)),
                 Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
+                Update::Their(asked, answer) => self.their = Some((asked, answer)),
             }
         }
         events
@@ -636,6 +678,8 @@ struct Engine {
     reminding: Option<Reminding>,
     /// The notifications not shown when their reminders come, as the app last set them.
     silenced: Arc<Mutex<Silenced>>,
+    /// The people's calendars "Meet with…" asks for, fetched again with every round.
+    meeting: Option<meet_with::Asked>,
 }
 
 /// Reminders, and how they are shown.
@@ -665,6 +709,7 @@ impl Engine {
             clock: Box::new(Utc::now),
             reminding: None,
             silenced: Arc::default(),
+            meeting: None,
             cache,
         }
     }
@@ -685,6 +730,7 @@ impl Engine {
     }
 
     fn handle_job(&mut self, job: Option<Job>, now: Instant) -> Vec<Update> {
+        let polled = job.is_none();
         let calendars = match job {
             None => self.schedule.due(now),
             Some(Job::Sync(id, window)) => {
@@ -722,6 +768,7 @@ impl Engine {
                     self.fetch_outside();
                     updates.push(self.shown());
                 }
+                updates.extend(self.their());
                 return updates;
             }
             Some(Job::Activated) => self.schedule.stale(now),
@@ -774,6 +821,10 @@ impl Engine {
                     .and_then(|session| session.busy(&asked.emails, asked.day).ok());
                 return vec![Update::Busy(asked, busy)];
             }
+            Some(Job::Their(asked)) => {
+                self.meeting = asked;
+                return self.their().into_iter().collect();
+            }
             Some(Job::Remind(notifier, regional, act)) => {
                 let alarms = Alarms::new((self.clock)(), regional, self.window.zone);
                 self.reminding = Some(Reminding {
@@ -790,7 +841,25 @@ impl Engine {
                 return Vec::new();
             }
         };
-        self.round(&calendars, now)
+        let mut updates = self.round(&calendars, now);
+        // With the polling round, not each time the window is activated or an event opened.
+        if polled && !calendars.is_empty() {
+            updates.extend(self.their());
+        }
+        updates
+    }
+
+    /// The calendars of the people "Meet with…" asks for, as Google shares them with the account
+    /// each is read through; one Google does not answer for is left out, and shows nothing.
+    fn their(&self) -> Option<Update> {
+        let asked = self.meeting.as_ref()?;
+        let answer = (asked.people.iter())
+            .filter_map(|(account, email)| {
+                let shared = self.sessions.get(account)?.shared(email, asked.span).ok()?;
+                Some((email.clone(), shared))
+            })
+            .collect();
+        Some(Update::Their(asked.clone(), answer))
     }
 
     /// The account's first synchronization of this run: it signs in, fetches the calendar list
@@ -1307,22 +1376,25 @@ fn refusal(error: SyncError) -> String {
     }
 }
 
-/// The jobs waiting, with only the last of the browsing, of the searches for guests and of the
-/// guests' busy times among them: days left behind, what was typed before and times chosen
-/// before while the worker was busy are not fetched.
+/// The jobs waiting, with only the last of the browsing, of the searches for guests, of the
+/// guests' busy times and of the people's calendars among them: days left behind, what was
+/// typed before and times or people chosen before while the worker was busy are not fetched.
 fn latest_only(jobs: Vec<Option<Job>>) -> Vec<Option<Job>> {
     let browsing = |job: &Option<Job>| matches!(job, Some(Job::Browse(_)));
     let searching = |job: &Option<Job>| matches!(job, Some(Job::Suggest(..)));
     let busy = |job: &Option<Job>| matches!(job, Some(Job::Busy(_)));
+    let their = |job: &Option<Job>| matches!(job, Some(Job::Their(_)));
     let last_browsing = jobs.iter().rposition(browsing);
     let last_searching = jobs.iter().rposition(searching);
     let last_busy = jobs.iter().rposition(busy);
+    let last_their = jobs.iter().rposition(their);
     jobs.into_iter()
         .enumerate()
         .filter(|(i, job)| {
             (!browsing(job) || Some(*i) == last_browsing)
                 && (!searching(job) || Some(*i) == last_searching)
                 && (!busy(job) || Some(*i) == last_busy)
+                && (!their(job) || Some(*i) == last_their)
         })
         .map(|(_, job)| job)
         .collect()
@@ -1346,6 +1418,7 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Window(_)
                 | Job::Suggest(..)
                 | Job::Busy(_)
+                | Job::Their(_)
                 | Job::Remind(..)
                 | Job::Snooze(..)
         )
@@ -1391,11 +1464,13 @@ mod tests {
     use calendar_core::fixtures::d;
     use calendar_core::guests::{self, Person};
     use calendar_core::invitations;
+    use calendar_core::meet_with::{MeetWith, Overlay};
     use calendar_core::model::{
         Access, Calendar, Kind, Method, Protected, Reminder, Reminders, Rgb, Show, Timing,
         Visibility,
     };
     use calendar_core::navigation::Navigation;
+    use calendar_core::navigation::View;
     use calendar_core::notify::Pending;
     use calendar_core::offline;
     use calendar_core::platform::Network;
@@ -1407,6 +1482,8 @@ mod tests {
     use calendar_core::status::{self, State, label};
     use calendar_core::sync::SyncedEvent;
     use calendar_core::undo::{self, LastChange, Undo};
+    use calendar_core::view_model::{GridViewModel, Whose};
+    use calendar_core::week::GridView;
     use calendar_core::zoom::HourZoom;
     use calendar_google::CLIENT_FILE;
     use calendar_google::fake::{
@@ -2686,7 +2763,8 @@ mod tests {
         let navigation = Navigation::start(None, d(2026, 11, 10), chrono::Weekday::Mon);
         let now = Utc.with_ymd_and_hms(2026, 11, 10, 8, 0, 0).unwrap();
 
-        let (Built::Grid(week), places) = build(&events, &settings, navigation, 30, Warsaw, now)
+        let (Built::Grid(week), places) =
+            build(&events, &settings, navigation, 30, Warsaw, now, &none())
         else {
             panic!("the week view is built");
         };
@@ -2723,7 +2801,8 @@ mod tests {
         let shown = |settings: &Settings| {
             let navigation = Navigation::start(None, d(2026, 11, 10), chrono::Weekday::Mon);
             let now = Utc.with_ymd_and_hms(2026, 11, 10, 8, 0, 0).unwrap();
-            let (Built::Grid(week), _) = build(&events, settings, navigation, 30, Warsaw, now)
+            let (Built::Grid(week), _) =
+                build(&events, settings, navigation, 30, Warsaw, now, &none())
             else {
                 panic!("the week view is built");
             };
@@ -2974,6 +3053,11 @@ mod tests {
         }
         let (start, end) = create::clicked(d(2026, 11, 12), 600, 30, Warsaw);
         assert_eq!(end - start, chrono::Duration::minutes(30));
+    }
+
+    /// No one chosen in "Meet with…".
+    fn none() -> Overlay {
+        Overlay::default()
     }
 
     fn polish() -> Regional {
@@ -3365,9 +3449,15 @@ mod tests {
     fn week_colors(events: &[Event]) -> Vec<Rgb> {
         let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
         let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
-        let (Built::Grid(week), _) =
-            build(events, &Settings::default(), navigation, 30, Warsaw, now)
-        else {
+        let (Built::Grid(week), _) = build(
+            events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            now,
+            &none(),
+        ) else {
             panic!("the week view is built");
         };
         week.blocks.iter().map(|block| block.color).collect()
@@ -3547,9 +3637,15 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
         let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
         let events = now_shown(&engine);
-        let (Built::Grid(week), places) =
-            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
-        else {
+        let (Built::Grid(week), places) = build(
+            &events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            now,
+            &none(),
+        ) else {
             panic!("the week view is built");
         };
         let block = &week.blocks[0];
@@ -4025,9 +4121,15 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
         let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
         let events = now_shown(&engine);
-        let (Built::Grid(week), places) =
-            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
-        else {
+        let (Built::Grid(week), places) = build(
+            &events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            now,
+            &none(),
+        ) else {
             panic!("the week view is built");
         };
 
@@ -4089,9 +4191,15 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2026, 11, 11, 9, 0, 0).unwrap();
         let navigation = Navigation::start(None, d(2026, 11, 11), chrono::Weekday::Mon);
         let events = now_shown(&engine);
-        let (Built::Grid(week), places) =
-            build(&events, &Settings::default(), navigation, 30, Warsaw, now)
-        else {
+        let (Built::Grid(week), places) = build(
+            &events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            now,
+            &none(),
+        ) else {
             panic!("the week view is built");
         };
 
@@ -5520,6 +5628,7 @@ mod tests {
             30,
             Warsaw,
             thursday_9(),
+            &none(),
         ) else {
             panic!("the week view is built");
         };
@@ -5582,9 +5691,15 @@ mod tests {
         let events = now_shown(&engine);
         let week = |settings: &Settings| {
             let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
-            let (Built::Grid(week), _) =
-                build(&events, settings, navigation, 30, Warsaw, thursday_9())
-            else {
+            let (Built::Grid(week), _) = build(
+                &events,
+                settings,
+                navigation,
+                30,
+                Warsaw,
+                thursday_9(),
+                &none(),
+            ) else {
                 panic!("the week view is built");
             };
             (week.blocks.iter())
@@ -6230,9 +6345,15 @@ mod tests {
         let settings = Settings::parse(&settings.to_text());
         *engine.silenced.lock().unwrap() = Silenced::of(&settings);
         let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
-        let (Built::Grid(week), _) =
-            build(&events, &settings, navigation, 30, Warsaw, thursday(9, 0))
-        else {
+        let (Built::Grid(week), _) = build(
+            &events,
+            &settings,
+            navigation,
+            30,
+            Warsaw,
+            thursday(9, 0),
+            &none(),
+        ) else {
             panic!("the week view is built");
         };
         let mut titles: Vec<String> = (week.blocks.iter())
@@ -6522,5 +6643,516 @@ mod tests {
         assert_eq!(engine.next_reminder(now), Some(now + secs(60)));
         *clock.lock().unwrap() = thursday(9, 49) + chrono::Duration::seconds(30);
         assert_eq!(engine.next_reminder(now), Some(now + secs(30)));
+    }
+
+    /// The account of `TC-06-14`…`TC-06-16`, on Workspace, with "Weekly sync" on Friday
+    /// 13 November 14:00–15:00; Anna Nowak in its organization's directory sharing her calendar
+    /// with details.
+    fn meet_with_google(name: &str, anna: &[Value]) -> Google {
+        let google = Google::start(name);
+        personal(&google);
+        let mut sync = event("weekly", "Weekly sync");
+        sync["start"]["dateTime"] = json!("2026-11-13T14:00:00+01:00");
+        sync["end"]["dateTime"] = json!("2026-11-13T15:00:00+01:00");
+        google.fake.add_event(ACCOUNT_ID, EMAIL, sync);
+        google
+            .fake
+            .add_colleague(ACCOUNT_ID, "Anna Nowak", "anna.nowak@example.com");
+        google
+            .fake
+            .add_colleague(ACCOUNT_ID, "Adam Kowalski", "adam@example.com");
+        google.fake.share_calendar("anna.nowak@example.com", anna);
+        google
+    }
+
+    /// A timed event of someone else's calendar, as Google sends it.
+    fn theirs(id: &str, title: &str, start: &str, end: &str) -> Value {
+        json!({
+            "id": id,
+            "status": "confirmed",
+            "summary": title,
+            "start": {"dateTime": start, "timeZone": "Europe/Warsaw"},
+            "end": {"dateTime": end, "timeZone": "Europe/Warsaw"},
+        })
+    }
+
+    /// Who the account finds for what is typed in "Meet with…", recent guests after them.
+    fn meet_suggested(engine: &mut Engine, meet: &MeetWith) -> Vec<Person> {
+        let reach = Reach {
+            contacts: true,
+            directory: true,
+        };
+        let job = Job::Suggest(ACCOUNT_ID.into(), meet.field.clone(), reach);
+        let updates = engine.handle(Some(job), Instant::now());
+        let [Update::People(_, found)] = updates.as_slice() else {
+            panic!("the people found");
+        };
+        let found: Vec<Person> = (found.iter().cloned())
+            .chain(guests::recent(&now_shown(engine), ACCOUNT_ID))
+            .collect();
+        meet.suggestions(&found, &[EMAIL.to_string()])
+    }
+
+    /// The people's calendars over the days `navigation` shows, as the engine fetches them.
+    fn their_answer(
+        engine: &mut Engine,
+        meet: &MeetWith,
+        navigation: Navigation,
+    ) -> Vec<(String, Shared)> {
+        let View::Grid(grid) = navigation.view else {
+            panic!("a grid view");
+        };
+        let dates = grid.days(navigation.selected, navigation.week_start);
+        let asked = meet.asked(Some(&dates), Warsaw, true).unwrap();
+        let updates = engine.handle(Some(Job::Their(Some(asked.clone()))), Instant::now());
+        let [Update::Their(answered, answer)] = updates.as_slice() else {
+            panic!("the people's calendars");
+        };
+        assert_eq!(*answered, asked);
+        answer.clone()
+    }
+
+    /// The grid `navigation` shows of the engine's events with the people's calendars.
+    fn grid_with(
+        engine: &Engine,
+        meet: &MeetWith,
+        answer: &[(String, Shared)],
+        navigation: Navigation,
+    ) -> (GridViewModel, Vec<Event>, Overlay) {
+        let events = now_shown(engine);
+        let overlay = Overlay::of(EMAIL, &meet.chosen, answer, Warsaw);
+        let (Built::Grid(grid), _) = build(
+            &events,
+            &Settings::default(),
+            navigation,
+            30,
+            Warsaw,
+            thursday(9, 0),
+            &overlay,
+        ) else {
+            panic!("a grid view is built");
+        };
+        (grid, events, overlay)
+    }
+
+    fn block<'a>(grid: &'a GridViewModel, title: &str) -> &'a calendar_core::view_model::Block {
+        (grid.blocks.iter())
+            .find(|block| block.title.as_deref() == Some(title))
+            .unwrap_or_else(|| panic!("{title} is shown"))
+    }
+
+    #[test]
+    fn tc_06_14_meet_with_lays_colleagues_calendars_over_the_week_and_follows_it() {
+        let google = meet_with_google(
+            "tc-06-14",
+            &[
+                theirs(
+                    "budget",
+                    "Budget review",
+                    "2026-11-13T14:30:00+01:00",
+                    "2026-11-13T15:30:00+01:00",
+                ),
+                json!({
+                    "id": "conference",
+                    "status": "confirmed",
+                    "summary": "Conference",
+                    "start": {"date": "2026-11-13"},
+                    "end": {"date": "2026-11-14"},
+                }),
+                theirs(
+                    "planning",
+                    "Planning",
+                    "2026-11-17T10:00:00+01:00",
+                    "2026-11-17T11:00:00+01:00",
+                ),
+            ],
+        );
+        google.fake.share_busy(
+            "adam@example.com",
+            &[("2026-11-12T11:00:00+01:00", "2026-11-12T12:00:00+01:00")],
+        );
+        let mut engine = first_sync(&google, Instant::now());
+        let week = Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 12),
+            chrono::Weekday::Mon,
+        );
+        let mut meet = MeetWith::default();
+        let own = [EMAIL.to_string()];
+
+        // 1. "Ann" typed: Anna Nowak is suggested.
+        meet.field = "Ann".to_string();
+        let suggested = meet_suggested(&mut engine, &meet);
+        assert_eq!(named(&suggested), ["Anna Nowak <anna.nowak@example.com>"]);
+
+        // 2. Anna, then Adam, then Ewa's typed address chosen: listed, each in a colour of
+        //    their own.
+        meet.choose(&suggested[0], ACCOUNT_ID, &own);
+        meet.field = "Adam".to_string();
+        let suggested = meet_suggested(&mut engine, &meet);
+        meet.choose(&suggested[0], ACCOUNT_ID, &own);
+        meet.field = "ewa.zielinska@example.com".to_string();
+        meet.enter(&[], ACCOUNT_ID, &own);
+        let listed: Vec<&str> = meet.chosen.iter().map(|chosen| chosen.name()).collect();
+        assert_eq!(
+            listed,
+            ["Anna Nowak", "Adam Kowalski", "ewa.zielinska@example.com"]
+        );
+        let [a, b, c] = [0, 1, 2].map(|i| meet.chosen[i].color);
+        assert!(a != b && b != c && a != c);
+        let [anna, adam, ewa] = [0, 1, 2].map(|i| meet.chosen[i].clone());
+
+        // 3. On Friday "Budget review" in Anna's colour beside "Weekly sync"; "Conference" in
+        //    the all-day strip in Anna's colour.
+        let answer = their_answer(&mut engine, &meet, week);
+        let (grid, events, overlay) = grid_with(&engine, &meet, &answer, week);
+        let (sync, budget) = (block(&grid, "Weekly sync"), block(&grid, "Budget review"));
+        assert_eq!(budget.color, anna.color);
+        assert_eq!((sync.placement.day, budget.placement.day), (4, 4));
+        assert_eq!(
+            (budget.placement.start_min, budget.placement.end_min),
+            (870, 930)
+        );
+        assert_eq!((sync.placement.columns, budget.placement.columns), (2, 2));
+        assert_ne!(sync.placement.column, budget.placement.column);
+        let conference = (grid.bars.iter())
+            .find(|bar| bar.title.as_deref() == Some("Conference"))
+            .unwrap();
+        assert_eq!(conference.color, anna.color);
+        assert_eq!((conference.bar.first_day, conference.bar.last_day), (4, 4));
+
+        // 4. On Thursday a "Busy" block 11:00–12:00 in Adam's colour, without a title.
+        let thursday: Vec<_> = (grid.blocks.iter())
+            .filter(|block| block.placement.day == 3)
+            .collect();
+        let [busy] = thursday.as_slice() else {
+            panic!("Adam's busy block on Thursday: {thursday:?}");
+        };
+        assert_eq!(busy.title, None);
+        assert_eq!(busy.color, adam.color);
+        assert_eq!(
+            (busy.placement.start_min, busy.placement.end_min),
+            (660, 720)
+        );
+
+        // 5. Ewa is marked as one whose calendar cannot be seen; nothing of hers is shown.
+        assert!(meet_with::cannot_be_seen(&ewa.person.email, &answer));
+        assert!(!meet_with::cannot_be_seen(&anna.person.email, &answer));
+        assert!(!meet_with::cannot_be_seen(&adam.person.email, &answer));
+        assert!((overlay.events()).all(|event| event.calendar_id != ewa.person.email));
+
+        // 6. "Budget review" opens read-only: no Edit, no Delete, as its calendar is not one of
+        //    the account's and it is protected.
+        let theirs: Vec<&Event> = overlay.events().collect();
+        let opened = theirs[budget.placement.event - events.len()];
+        assert_eq!(opened.title, "Budget review");
+        assert!(opened.protected().is_some());
+        let calendars = engine.cache.calendar_list().unwrap();
+        assert!(!calendars.iter().any(|calendar| {
+            calendar.account_id == opened.account_id && calendar.id == opened.calendar_id
+        }));
+
+        // 7. The next week: "Planning" on Tuesday 17 November 10:00–11:00 in Anna's colour, and
+        //    Google was asked for that week.
+        let mut next = week;
+        next.next();
+        let answer = their_answer(&mut engine, &meet, next);
+        let (grid, ..) = grid_with(&engine, &meet, &answer, next);
+        let planning = block(&grid, "Planning");
+        assert_eq!(planning.color, anna.color);
+        assert_eq!(planning.placement.day, 1);
+        assert_eq!(
+            (planning.placement.start_min, planning.placement.end_min),
+            (600, 660)
+        );
+        let asked: Vec<String> = (google.fake.requests().into_iter())
+            .filter(|request| request.contains("/calendars/anna.nowak@example.com/events"))
+            .collect();
+        assert_eq!(asked.len(), 2);
+        assert!(
+            asked[1].contains("timeMin=2026-11-15T23%3A00%3A00Z"),
+            "{asked:?}"
+        );
+        assert!(
+            asked[1].contains("timeMax=2026-11-22T23%3A00%3A00Z"),
+            "{asked:?}"
+        );
+    }
+
+    #[test]
+    fn tc_06_15_with_people_chosen_the_day_view_has_their_columns_and_create_event_invites_them() {
+        let google = meet_with_google(
+            "tc-06-15",
+            &[theirs(
+                "budget",
+                "Budget review",
+                "2026-11-13T14:30:00+01:00",
+                "2026-11-13T15:30:00+01:00",
+            )],
+        );
+        google.fake.share_busy(
+            "adam@example.com",
+            &[("2026-11-13T10:00:00+01:00", "2026-11-13T11:00:00+01:00")],
+        );
+        google.fake.set_default_length(ACCOUNT_ID, 30);
+        let mut engine = first_sync(&google, Instant::now());
+        let own = [EMAIL.to_string()];
+        let mut meet = MeetWith::default();
+        let anna = Person {
+            name: "Anna Nowak".to_string(),
+            email: "anna.nowak@example.com".to_string(),
+        };
+        let adam = Person {
+            name: "Adam Kowalski".to_string(),
+            email: "adam@example.com".to_string(),
+        };
+        meet.choose(&anna, ACCOUNT_ID, &own);
+        meet.choose(&adam, ACCOUNT_ID, &own);
+
+        // 1. The day view of Friday 13 November: three columns, headed by the user, Anna and
+        //    Adam, with "Weekly sync", "Budget review" and Adam's busy block 10:00–11:00.
+        let day = Navigation::start(
+            Some(View::Grid(GridView::Day)),
+            d(2026, 11, 13),
+            chrono::Weekday::Mon,
+        );
+        let answer = their_answer(&mut engine, &meet, day);
+        let (grid, ..) = grid_with(&engine, &meet, &answer, day);
+        let heads: Vec<Option<&str>> = (grid.days.iter())
+            .map(|column| column.whose.as_ref().map(Whose::name))
+            .collect();
+        assert_eq!(
+            heads,
+            [Some(EMAIL), Some("Anna Nowak"), Some("Adam Kowalski")]
+        );
+        let placed: Vec<(usize, Option<&str>, u32, u32)> = (grid.blocks.iter())
+            .map(|block| {
+                let p = block.placement;
+                (p.day, block.title.as_deref(), p.start_min, p.end_min)
+            })
+            .collect();
+        assert_eq!(
+            placed,
+            [
+                (0, Some("Weekly sync"), 840, 900),
+                (1, Some("Budget review"), 870, 930),
+                (2, None, 600, 660),
+            ]
+        );
+
+        // 2. Create event: the full editor with Anna and Adam as guests, on 13 November at the
+        //    next full hour for the default length, 10:00–10:30, in the default calendar.
+        let calendars = engine.cache.calendar_list().unwrap();
+        let default = create::default_calendar(&accounts(), &calendars, &Settings::default());
+        let length = engine.sessions[ACCOUNT_ID].default_length().unwrap();
+        let times = create::keyed(d(2026, 11, 13), thursday(9, 0), length, Warsaw);
+        let editor = meet.meeting(&QuickEntry::new(times, Warsaw, default.clone()), &polish());
+        let guests: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
+        assert_eq!(guests, ["anna.nowak@example.com", "adam@example.com"]);
+        assert_eq!(editor.calendar, default);
+        assert!(default.is_some_and(|calendar| calendar.id == EMAIL));
+        let Ok(Timing::Timed { start, end, .. }) = editor.timing(&polish()) else {
+            panic!("a timed event");
+        };
+        let at = |h, m| Warsaw.with_ymd_and_hms(2026, 11, 13, h, m, 0).unwrap();
+        assert_eq!((start, end), (at(10, 0).to_utc(), at(10, 30).to_utc()));
+    }
+
+    #[test]
+    fn tc_06_16_people_go_when_removed_offline_and_after_a_restart() {
+        let google = meet_with_google(
+            "tc-06-16",
+            &[theirs(
+                "anna",
+                "Anna's review",
+                "2026-11-13T09:00:00+01:00",
+                "2026-11-13T10:00:00+01:00",
+            )],
+        );
+        google.fake.share_calendar(
+            "adam@example.com",
+            &[theirs(
+                "adam",
+                "Adam's call",
+                "2026-11-13T11:00:00+01:00",
+                "2026-11-13T12:00:00+01:00",
+            )],
+        );
+        let ctx = egui::Context::default();
+        let cache_file = google.dir.join("cache.sqlite3");
+        let path = cache_file.clone();
+        let mut sync = Synchronization::with(
+            &ctx,
+            move || Cache::open(&path).unwrap(),
+            google.sign_in(),
+            vec![ACCOUNT_ID.to_string()],
+            window(),
+            Disabled::new(),
+        );
+        next_events(&mut sync);
+        sync.checked(&[(ACCOUNT_ID.to_string(), Check::Works)], window());
+        let events = loop {
+            let shown = next_events(&mut sync);
+            if !shown.is_empty() {
+                break shown;
+            }
+        };
+        assert!(events.contains(&"Weekly sync".to_string()));
+        let own = [EMAIL.to_string()];
+        let mut meet = MeetWith::default();
+        for (name, email) in [
+            ("Anna Nowak", "anna.nowak@example.com"),
+            ("Adam Kowalski", "adam@example.com"),
+        ] {
+            let person = Person {
+                name: name.to_string(),
+                email: email.to_string(),
+            };
+            meet.choose(&person, ACCOUNT_ID, &own);
+        }
+        let week = GridView::Week.days(d(2026, 11, 12), chrono::Weekday::Mon);
+        // What the views show of the people, online or not, as the app does every frame.
+        let shown = |sync: &mut Synchronization, meet: &MeetWith, online: bool| {
+            let asked = meet.asked(Some(&week), Warsaw, online);
+            sync.ask_their(asked.clone());
+            let Some(asked) = asked else {
+                return Vec::new();
+            };
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                sync.poll();
+                if let Some(answer) = sync.their(asked.span)
+                    && meet.chosen.iter().all(|chosen| {
+                        answer
+                            .iter()
+                            .any(|(email, _)| *email == chosen.person.email)
+                    })
+                {
+                    let overlay = Overlay::of(EMAIL, &meet.chosen, answer, Warsaw);
+                    let mut titles: Vec<String> =
+                        overlay.events().map(|event| event.title.clone()).collect();
+                    titles.sort();
+                    return titles;
+                }
+                assert!(Instant::now() < deadline, "no answer came");
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        };
+        assert_eq!(
+            shown(&mut sync, &meet, true),
+            ["Adam's call", "Anna's review"]
+        );
+
+        // 1. Adam removed: his events leave, Anna's stay.
+        meet.remove("adam@example.com");
+        assert_eq!(shown(&mut sync, &meet, true), ["Anna's review"]);
+
+        // 2. The network gone: Anna's events leave, her entry stays; nothing is asked.
+        let lists = |google: &Google| {
+            (google.fake.requests().iter())
+                .filter(|request| request.contains("/calendars/anna.nowak@example.com/events"))
+                .count()
+        };
+        let before = lists(&google);
+        assert!(shown(&mut sync, &meet, false).is_empty());
+        assert_eq!(meet.chosen.len(), 1);
+
+        // 3. The network back: Anna's events are asked for again and shown.
+        assert_eq!(shown(&mut sync, &meet, true), ["Anna's review"]);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while lists(&google) == before {
+            assert!(Instant::now() < deadline, "not asked again");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        // 4. A restart on the same cache: no one is chosen, and only the user's events are shown.
+        drop(sync);
+        let path = cache_file.clone();
+        let mut restarted = Synchronization::with(
+            &ctx,
+            move || Cache::open(&path).unwrap(),
+            google.sign_in(),
+            vec![ACCOUNT_ID.to_string()],
+            window(),
+            Disabled::new(),
+        );
+        let events = next_events(&mut restarted);
+        assert!(events.contains(&"Weekly sync".to_string()));
+        let fresh = MeetWith::default();
+        assert!(fresh.chosen.is_empty());
+        assert!(shown(&mut restarted, &fresh, true).is_empty());
+        assert!(!events.iter().any(|title| title == "Anna's review"));
+    }
+
+    #[test]
+    fn the_peoples_calendars_are_fetched_again_with_every_synchronization_round() {
+        let google = meet_with_google("their-rounds", &[]);
+        let start = Instant::now();
+        let mut engine = first_sync(&google, start);
+        let mut meet = MeetWith::default();
+        let anna = Person {
+            name: "Anna Nowak".to_string(),
+            email: "anna.nowak@example.com".to_string(),
+        };
+        meet.choose(&anna, ACCOUNT_ID, &[]);
+        let week = Navigation::start(
+            Some(View::Grid(GridView::Week)),
+            d(2026, 11, 12),
+            chrono::Weekday::Mon,
+        );
+        their_answer(&mut engine, &meet, week);
+
+        // Anna adds an event; the next polling round brings it.
+        google.fake.share_calendar(
+            "anna.nowak@example.com",
+            &[theirs(
+                "new",
+                "New",
+                "2026-11-13T09:00:00+01:00",
+                "2026-11-13T10:00:00+01:00",
+            )],
+        );
+        let updates = engine.handle(None, start + secs(3600));
+        let answer = updates.iter().find_map(|update| match update {
+            Update::Their(_, answer) => Some(answer.clone()),
+            _ => None,
+        });
+        let Some([(_, Shared::Events(events))]) = answer.as_deref() else {
+            panic!("Anna's calendar fetched again: {answer:?}");
+        };
+        assert!(!events.is_empty());
+
+        // No one asked for, nothing is fetched.
+        engine.handle(Some(Job::Their(None)), start);
+        let updates = engine.handle(None, start + secs(7200));
+        assert!(
+            !updates
+                .iter()
+                .any(|update| matches!(update, Update::Their(..)))
+        );
+    }
+
+    #[test]
+    fn of_the_peoples_calendars_waiting_only_the_last_is_asked() {
+        let asked = |email: &str| {
+            Some(Job::Their(Some(meet_with::Asked {
+                people: vec![(ACCOUNT_ID.into(), email.into())],
+                span: calendar_core::week::day_span(d(2026, 11, 13), Warsaw),
+            })))
+        };
+        let jobs = vec![
+            asked("anna@example.com"),
+            Some(Job::Refresh),
+            asked("adam@example.com"),
+        ];
+
+        let done = latest_only(jobs);
+
+        assert_eq!(done.len(), 2);
+        assert!(matches!(done[0], Some(Job::Refresh)));
+        assert!(matches!(
+            &done[1],
+            Some(Job::Their(Some(asked))) if asked.people[0].1 == "adam@example.com"
+        ));
     }
 }

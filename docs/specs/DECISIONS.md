@@ -2113,3 +2113,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-175] "Meet with…" works through the default calendar's account
+
+- **Date:** 2026-10-25
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-09
+- **Affects:** `MOD-06-F23`, `MOD-06-U05`, `US-06-09`
+- **Decision:** With several accounts connected, "Meet with…" searches for people (contacts, directory, recent guests) in the account of the default calendar, the one **Create event** puts the meeting in, or the first connected account when there is none; every person chosen, suggested or typed, has their calendar read through that account. In the day view, the user's column is headed by that account's address, as the app knows no name for the user.
+- **Why:** The technical note reads a typed address through the default calendar's account; using the same account for suggestions keeps one place to look, as the editor looks in its calendar's account (`US-06-01`). Google knows the user by that address.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-176] "Meet with…": each person's colour
+
+- **Date:** 2026-10-25
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-09
+- **Affects:** `MOD-06-U06`, `US-06-09`
+- **Decision:** A person chosen gets the first of Google Calendar's calendar colours, in the order its menu offers them (Radicchio, Tangerine, Citron, Basil, …), that no one chosen has; a colour is free again once its person is removed. Their events and busy blocks are drawn in it, without the lock of the user's own read-only calendars, and in the day view their column's heading is underlined in it.
+- **Why:** The spec asks for a colour of their own without naming one; Google's own palette keeps the views in its look, and the first free colour keeps the people apart.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-177] "Meet with…": what is shown while Google answers, and people's busy blocks
+
+- **Date:** 2026-10-25
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-06-09
+- **Affects:** `MOD-06-F24`, `MOD-06-F25`, `MOD-06-U05`, `US-06-09`
+- **Decision:** In the day view the people's columns are there as soon as they are chosen and the app is online, empty until Google answers. When people are added or removed over the same days, those still chosen stay shown from the last answer while the new one comes. A person Google cannot be asked about just now (no answer for them) shows nothing and is not marked as one whose calendar cannot be seen. A person's busy block opens read-only like their events, as "Busy" with its time. A click or a selection in a person's column of the day view starts a new event on that day, as it does in the user's column; the user's own events are dragged only within their own column.
+- **Why:** Columns that do not come and go with every answer keep the layout still; keeping those still chosen avoids their events flickering out on every change of the list. Marking a calendar as unseen needs Google's word that it shares nothing.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

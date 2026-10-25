@@ -18,6 +18,7 @@ use calendar_core::colors::EventColor;
 use calendar_core::create::NewEvent;
 use calendar_core::editor::Patch;
 use calendar_core::guests::{Guest, Person, Reach, Response, same};
+use calendar_core::meet_with::Shared;
 use calendar_core::model::{
     About, Attachment, Calendar, Kind, Reminder, Reminders, Show, Timing, Visibility,
 };
@@ -948,6 +949,37 @@ impl Provider for Session {
                 })
             })
             .collect()
+    }
+
+    /// `events.list` on the person's address, single events expanded; when Google refuses the
+    /// calendar, its busy times from `freeBusy.query`, which answers `notFound` for a calendar
+    /// sharing nothing (MOD-06 *Technical notes*).
+    fn shared(&self, email: &str, (from, until): Span) -> Result<Shared, SyncError> {
+        let instant = |at: DateTime<Utc>| at.to_rfc3339_opts(SecondsFormat::Secs, true);
+        let mut url = self.url(&["calendars", email, "events"]);
+        url.query_pairs_mut()
+            .append_pair("timeMin", &instant(from))
+            .append_pair("timeMax", &instant(until))
+            .append_pair("singleEvents", "true")
+            .append_pair("maxResults", EVENTS_PER_PAGE);
+        match self.all::<GoogleEvent>(url) {
+            // Times without a zone of their own are shown in the views' zone anyway.
+            Ok(Some((events, _))) => Ok(Shared::Events(
+                (events.into_iter())
+                    .filter_map(|event| event.into_synced(Tz::UTC).ok())
+                    .filter(|event| event.timing.is_some())
+                    .collect(),
+            )),
+            Ok(None) => Err(SyncError(texts::GONE.into())),
+            Err(error) if error.is_rate_limited() => Err(error),
+            // A refusal is not told apart from Google failing once: either way the busy times
+            // are asked, and the next round lists the events again.
+            Err(_) => {
+                let answer = self.busy(&[email.to_string()], (from, until))?;
+                let busy = answer.into_iter().next().and_then(|answer| answer.busy);
+                Ok(busy.map_or(Shared::Nothing, Shared::Busy))
+            }
+        }
     }
 
     fn default_length(&self) -> Result<u32, SyncError> {

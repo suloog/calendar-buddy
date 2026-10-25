@@ -7,7 +7,7 @@ use calendar_core::drag::{self, Target};
 use calendar_core::model::Rgb;
 use calendar_core::regional::Regional;
 use calendar_core::texts::{self, SAVING};
-use calendar_core::view_model::GridViewModel;
+use calendar_core::view_model::{GridViewModel, Whose};
 use calendar_core::zoom::{self, HourZoom};
 use chrono::{DateTime, Datelike, Duration, Utc};
 use eframe::egui::{
@@ -329,7 +329,7 @@ pub fn minutes(dy: f32, hour: f32) -> i64 {
 pub fn moved(delta: Vec2, day_width: f32, day: usize, days: usize, hour: f32) -> Target {
     let shift = (delta.x / day_width).round() as i64;
     Target::Moved {
-        days: shift.clamp(-(day as i64), (days - 1 - day) as i64),
+        days: shift.clamp(-(day as i64), days as i64 - 1 - day as i64),
         minutes: minutes(delta.y, hour),
     }
 }
@@ -352,6 +352,11 @@ pub fn show(
     let hour = HOUR_HEIGHT * zoom.factor();
     let width = ui.available_width();
     let columns = view.days.len();
+    // The user's own columns, which their events are dragged within: not those of the people
+    // chosen in "Meet with…" (`MOD-06-U05`).
+    let own_columns = (view.days.iter())
+        .filter(|day| !matches!(day.whose, Some(Whose::Person(..))))
+        .count();
     let day_width = ((width - GUTTER) / columns as f32).max(40.0);
     let visuals = ui.visuals().clone();
     let grid_line = grid_line(&visuals);
@@ -380,9 +385,37 @@ pub fn show(
             Pos2::new(x, header.top()),
             Vec2::new(day_width, HEADER_HEIGHT),
         );
+        // With people chosen in "Meet with…", each column of the day view is headed by whose it
+        // is, a person's underlined in their colour (`MOD-06-U05`, `U06`); the date once, over
+        // the hours.
+        if let Some(whose) = &day.whose {
+            event_text(
+                &painter,
+                rect.center(),
+                Align2::CENTER_CENTER,
+                whose.name().to_string(),
+                crate::appearance::strong(13.0),
+                visuals.strong_text_color(),
+                false,
+                day_width - 8.0,
+            );
+            if let Whose::Person(_, c) = whose {
+                let line = Rect::from_min_max(
+                    Pos2::new(rect.left() + 4.0, rect.bottom() - 4.0),
+                    Pos2::new(rect.right() - 4.0, rect.bottom() - 1.0),
+                );
+                painter.rect_filled(line, CornerRadius::same(1), color(*c));
+            }
+            if i > 0 {
+                continue;
+            }
+        }
         // The weekday small above the day's number; today's number on a disc of the accent.
-        // Alone in the day view, at the start of its column, by the hours, as in Google Calendar.
-        let top = if view.days.len() == 1 {
+        // Alone in the day view, at the start of its column, by the hours, as in Google Calendar;
+        // with people's columns, over the hours.
+        let top = if day.whose.is_some() {
+            Pos2::new(header.left() + GUTTER / 2.0, header.top())
+        } else if view.days.len() == 1 {
             rect.left_top() + Vec2::new(24.0, 0.0)
         } else {
             rect.center_top()
@@ -469,7 +502,7 @@ pub fn show(
                 // Kept in sight by a day at least, also when it starts before the first day.
                 let shift = (drag.delta.x / day_width).round() as i64;
                 let last = bar.bar.last_day as i64;
-                let days = shift.clamp(-last, (columns - 1 - bar.bar.first_day) as i64);
+                let days = shift.clamp(-last, own_columns as i64 - 1 - bar.bar.first_day as i64);
                 rect = rect.translate(Vec2::new(days as f32 * day_width, 0.0));
                 let drop = Target::Moved { days, minutes: 0 };
                 if response.drag_stopped() {
@@ -724,7 +757,7 @@ pub fn show(
                             });
                         }
                     } else if let drop @ Target::Moved { days, minutes } =
-                        moved(drag.delta, day_width, p.day, columns, hour)
+                        moved(drag.delta, day_width, p.day, own_columns, hour)
                     {
                         let shift =
                             Vec2::new(days as f32 * day_width, minutes as f32 / 60.0 * hour);
@@ -849,13 +882,19 @@ pub fn show(
             }
         }
 
+        // Across every column of today, the people's too.
         if let Some(now) = view.now {
-            let x = grid.left() + GUTTER + now.day as f32 * day_width;
-            let y = minute_y(now.minute as f32);
-            // In the accent, the one colour of the interface (`MOD-04-U03`).
-            let accent = visuals.selection.stroke.color;
-            painter.hline(x..=(x + day_width), y, Stroke::new(2.0, accent));
-            painter.circle_filled(Pos2::new(x, y), 4.0, accent);
+            let today = view.days.iter().enumerate().filter(|(_, day)| day.is_today);
+            for (i, _) in today {
+                let x = grid.left() + GUTTER + i as f32 * day_width;
+                let y = minute_y(now.minute as f32);
+                // In the accent, the one colour of the interface (`MOD-04-U03`).
+                let accent = visuals.selection.stroke.color;
+                painter.hline(x..=(x + day_width), y, Stroke::new(2.0, accent));
+                if i == now.day {
+                    painter.circle_filled(Pos2::new(x, y), 4.0, accent);
+                }
+            }
         }
     });
     state.hours = Some(Hours {

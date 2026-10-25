@@ -539,6 +539,12 @@ pub fn invitations_awaiting(count: usize) -> String {
         n => format!("{n} invitations awaiting an answer"),
     }
 }
+/// The side panel's "Meet with…" (`MOD-06-F23`…`F27`): its field, why it is unavailable
+/// offline, a person whose calendar shares nothing, and the button starting a meeting.
+pub const MEET_WITH: &str = "Meet with…";
+pub const MEET_WITH_OFFLINE: &str = "Meet with… needs a connection to Google.";
+pub const CALENDAR_CANNOT_BE_SEEN: &str = "Calendar can't be seen";
+pub const CREATE_EVENT: &str = "Create event";
 /// What a strip says of a guest who does not share their availability.
 pub const NO_DATA: &str = "No data";
 /// What a strip says of a guest busy at the chosen time.

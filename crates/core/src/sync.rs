@@ -10,6 +10,7 @@ use crate::cache::{Cache, CachedCalendar};
 use crate::create::NewEvent;
 use crate::editor::Patch;
 use crate::guests::{Person, Reach};
+use crate::meet_with::Shared;
 use crate::model::{About, Calendar, Event, Timing};
 use crate::recurrence::expand;
 use crate::texts::{CHANGED_ELSEWHERE, RATE_LIMITED};
@@ -219,6 +220,12 @@ pub trait Provider {
                 busy: None,
             })
             .collect())
+    }
+    /// The calendar of the person with the address over `span`, as far as it is shared with the
+    /// account (`MOD-06-F25`): its events with their details, single events of series expanded;
+    /// or only when they are busy; or nothing, also from a provider that has nowhere to look.
+    fn shared(&self, _email: &str, _span: Span) -> Result<Shared, SyncError> {
+        Ok(Shared::Nothing)
     }
 }
 

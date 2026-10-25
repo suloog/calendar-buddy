@@ -6,6 +6,7 @@ mod connect;
 mod editor;
 mod grid_view;
 mod icons;
+mod meet_with;
 mod mini_calendar;
 mod month_view;
 mod network;
@@ -30,6 +31,7 @@ use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
+use calendar_core::meet_with::{self as meeting, MeetWith, Overlay};
 use calendar_core::model::{Calendar, Event, Timing};
 use calendar_core::month::{MonthViewModel, month_view};
 use calendar_core::navigation::{Navigation, View, mini_calendar};
@@ -48,7 +50,7 @@ use calendar_core::sync::Window;
 use calendar_core::texts::{self, NO_CALENDAR, WITHOUT_MEET};
 use calendar_core::theme::Theme;
 use calendar_core::undo::{LastChange, Undo};
-use calendar_core::view_model::{GridViewModel, grid_view};
+use calendar_core::view_model::GridViewModel;
 use calendar_core::webcal;
 use checks::Checks;
 use chrono::{DateTime, NaiveDate, Utc};
@@ -168,8 +170,9 @@ const AGENDA_DAYS: i64 = 30;
 
 /// The view's model, of the events of calendars neither hidden in the side panel
 /// (`MOD-03-F12`) nor disabled in the settings (`MOD-03-F13`), each in its calendar's local
-/// colour where it has one; with the places in `events` of the events the model's indices point
-/// to.
+/// colour where it has one, and in the day, 3-day and week views the calendars of the people
+/// chosen in "Meet with…" over them (`MOD-06-U05`); with the places in `events` of the events the
+/// model's indices point to, the people's events counted after them.
 fn build(
     events: &[Event],
     settings: &Settings,
@@ -177,6 +180,7 @@ fn build(
     agenda_days: i64,
     zone: Tz,
     now: DateTime<Utc>,
+    overlay: &Overlay,
 ) -> (Built, Vec<usize>) {
     let places = side_panel::shown(events, settings);
     let events: &Vec<Event> = &colors::apply(events, &settings.colors)
@@ -187,8 +191,10 @@ fn build(
     let selected = navigation.selected;
     let week_start = navigation.week_start;
     let built = match navigation.view {
-        View::Grid(grid) => Built::Grid(grid_view(
+        View::Grid(grid) => Built::Grid(meeting::grid(
             events,
+            overlay,
+            grid,
             &grid.days(selected, week_start),
             zone,
             now,
@@ -306,6 +312,10 @@ struct CalendarApp {
     built: Built,
     /// The places in `events` of the events the built view's indices point to.
     places: Vec<usize>,
+    /// The side panel's "Meet with…", never kept across restarts (`MOD-06-F27`).
+    meet_with: MeetWith,
+    /// The calendars of the people chosen in it, as the built view shows them.
+    overlay: Overlay,
     /// The places in `events` of the invitations awaiting the user's answer (`MOD-06-F10`).
     invitations: Vec<usize>,
     built_at: DateTime<Utc>,
@@ -395,7 +405,16 @@ impl CalendarApp {
         let navigation = Navigation::start(settings.last_view, today, regional.week_start);
         let built_at = Utc::now();
         let events = Vec::new();
-        let (built, places) = build(&events, &settings, navigation, AGENDA_DAYS, zone, built_at);
+        let overlay = Overlay::default();
+        let (built, places) = build(
+            &events,
+            &settings,
+            navigation,
+            AGENDA_DAYS,
+            zone,
+            built_at,
+            &overlay,
+        );
         let autostart = XdgAutostart::new();
         let start_at_login = autostart.is_on();
         let (autostart_writer, turned) = mpsc::channel::<bool>();
@@ -435,6 +454,8 @@ impl CalendarApp {
             agenda_days: AGENDA_DAYS,
             built,
             places,
+            meet_with: MeetWith::default(),
+            overlay,
             invitations: Vec::new(),
             built_at,
             view_state: grid_view::State::default(),
@@ -460,6 +481,7 @@ impl CalendarApp {
             self.agenda_days,
             self.zone,
             self.built_at,
+            &self.overlay,
         );
         self.invitations = invitations::awaiting(
             &self.events,
@@ -683,6 +705,13 @@ impl CalendarApp {
     /// Opens the quick-entry box at the times `times` gives for the default length of the
     /// default calendar's account (`MOD-05-F09`, `MOD-05-F10`).
     fn start_event(&mut self, times: impl FnOnce(u32) -> (DateTime<Utc>, DateTime<Utc>)) {
+        let entry = self.new_entry(times);
+        self.dialog = Some(Dialog::QuickEntry(entry, false));
+    }
+
+    /// A new event in the default calendar, at the times `times` gives for the default length of
+    /// its account.
+    fn new_entry(&self, times: impl FnOnce(u32) -> (DateTime<Utc>, DateTime<Utc>)) -> QuickEntry {
         let calendar =
             create::default_calendar(self.accounts.list(), self.sync.calendars(), &self.settings);
         let length = calendar
@@ -690,8 +719,66 @@ impl CalendarApp {
             .map_or(create::DEFAULT_LENGTH, |calendar| {
                 self.sync.default_length(&calendar.account_id)
             });
-        let entry = QuickEntry::new(times(length), self.zone, calendar);
-        self.dialog = Some(Dialog::QuickEntry(entry, false));
+        QuickEntry::new(times(length), self.zone, calendar)
+    }
+
+    /// The account "Meet with…" searches for people and reads their calendars through: the
+    /// default calendar's, or else the first connected (`DEC-175`).
+    fn meeting_account(&self) -> Option<&accounts::Entry> {
+        let calendar =
+            create::default_calendar(self.accounts.list(), self.sync.calendars(), &self.settings);
+        let list = self.accounts.list();
+        (calendar.and_then(|calendar| list.iter().find(|e| e.account.id == calendar.account_id)))
+            .or(list.first())
+    }
+
+    /// The calendars of the people chosen in "Meet with…" as the grid views are to show them:
+    /// those Google gave for the days shown, nothing offline (`MOD-06-F27`) nor in the month and
+    /// agenda views.
+    fn overlay(&self, online: bool) -> Overlay {
+        let Some(asked) = self.meeting_asked(online) else {
+            return Overlay::default();
+        };
+        let answer = self.sync.their(asked.span).unwrap_or_default();
+        let user = self.meeting_account().map(|e| e.account.email.as_str());
+        Overlay::of(
+            user.unwrap_or_default(),
+            &self.meet_with.chosen,
+            answer,
+            self.zone,
+        )
+    }
+
+    /// The calendars of the people chosen in "Meet with…" over the days the grid view shows.
+    fn meeting_asked(&self, online: bool) -> Option<meeting::Asked> {
+        let navigation = self.navigation;
+        let dates = match navigation.view {
+            View::Grid(grid) => Some(grid.days(navigation.selected, navigation.week_start)),
+            _ => None,
+        };
+        self.meet_with.asked(dates.as_deref(), self.zone, online)
+    }
+
+    /// The event at `index` in the built view: the user's, or a chosen person's after them.
+    fn in_view(&self, index: usize) -> Option<&Event> {
+        match self.places.get(index) {
+            Some(&place) => self.events.get(place),
+            None => self.overlay.events().nth(index - self.places.len()),
+        }
+    }
+
+    /// Opens the event at `index` in the built view; a chosen person's read-only, as it is not
+    /// on the user's calendars (`MOD-06-F25`).
+    fn open_in_view(&mut self, index: usize, focused: Option<egui::Id>) {
+        match self.places.get(index) {
+            Some(&place) => self.open(place, focused),
+            None => {
+                if let Some(theirs) = self.in_view(index) {
+                    let opened = Box::new(theirs.clone());
+                    self.dialog = Some(Dialog::Event(opened, focused, false, None));
+                }
+            }
+        }
     }
 
     fn today(&self) -> NaiveDate {
@@ -1678,6 +1765,57 @@ impl CalendarApp {
         }
     }
 
+    /// The side panel's "Meet with…" (`US-06-09`): people suggested as guests are, from the
+    /// account it reads calendars through (`MOD-06-F23`), chosen and removed; **Create event**
+    /// opens the editor of a meeting with them on the selected day (`MOD-06-F26`).
+    fn meet_with_panel(&mut self, ui: &mut egui::Ui, online: bool) {
+        let entry = self.meeting_account().cloned();
+        let account = entry.as_ref().map(|e| e.account.id.clone());
+        let own: Vec<String> = (self.accounts.list().iter())
+            .map(|e| e.account.email.clone())
+            .collect();
+        let typed = self.meet_with.field.trim().to_string();
+        // The people Google found, then the account's recent guests (`MOD-06-F03`).
+        let found: Vec<Person> = match &account {
+            Some(id) if !typed.is_empty() => (self.sync.people(id).iter().cloned())
+                .chain(guests::recent(&self.cached, id))
+                .collect(),
+            _ => Vec::new(),
+        };
+        let suggested = self.meet_with.suggestions(&found, &own);
+        let answer = (self.meeting_asked(online))
+            .and_then(|asked| self.sync.their(asked.span))
+            .unwrap_or_default();
+        let seen: Vec<bool> = (self.meet_with.chosen.iter())
+            .map(|chosen| !meeting::cannot_be_seen(&chosen.person.email, answer))
+            .collect();
+        let action = meet_with::show(ui, &mut self.meet_with, &suggested, &seen, online);
+        let account_id = account.clone().unwrap_or_default();
+        match action {
+            Some(meet_with::Action::Choose(person)) => {
+                self.meet_with.choose(&person, &account_id, &own)
+            }
+            Some(meet_with::Action::Enter) => self.meet_with.enter(&suggested, &account_id, &own),
+            Some(meet_with::Action::Remove(email)) => self.meet_with.remove(&email),
+            Some(meet_with::Action::Create) => {
+                let (date, zone) = (self.navigation.selected, self.zone);
+                let entry = self.new_entry(|length| create::keyed(date, Utc::now(), length, zone));
+                let editor = self.meet_with.meeting(&entry, &self.regional);
+                self.dialog = Some(Dialog::Editor(Box::new(editor)));
+            }
+            None => {}
+        }
+        // What is typed is searched for at Google as it changes (`MOD-06-F23`).
+        let now_typed = self.meet_with.field.trim();
+        if let Some(entry) = entry
+            && now_typed != typed
+            && !now_typed.is_empty()
+        {
+            let reach = Reach::of(&entry.account);
+            self.sync.suggest(&entry.account.id, now_typed, reach);
+        }
+    }
+
     fn save_settings(&self) {
         if let Some(writer) = &self.settings_writer {
             let _ = writer.send(self.settings.clone());
@@ -2096,6 +2234,8 @@ impl eframe::App for CalendarApp {
                     None => {}
                 }
                 ui.separator();
+                self.meet_with_panel(ui, online);
+                ui.separator();
                 // How many invitations await an answer; the counter opens their list
                 // (`MOD-06-F10`).
                 if !self.invitations.is_empty() {
@@ -2136,6 +2276,15 @@ impl eframe::App for CalendarApp {
             self.removal.close();
         }
         self.navigated(before);
+        // The people's calendars over the days shown, asked of Google as they change
+        // (`MOD-06-F24`), shown once it answers.
+        self.sync.ask_their(self.meeting_asked(online));
+        let overlay = self.overlay(online);
+        if overlay != self.overlay {
+            self.overlay = overlay;
+            self.view_state.events_changed();
+            self.rebuild();
+        }
         // Days on screen the cache does not hold: fetched online, a note offline (`MOD-02-F12`).
         let (first, last) = self.navigation.on_screen(self.today(), self.agenda_days);
         let browsed = offline::browsed(self.window(), first, last, online);
@@ -2168,10 +2317,10 @@ impl eframe::App for CalendarApp {
                         hours,
                     ) {
                         Some(grid_view::Action::Dropped { event, drop }) if online => {
-                            dropped = Some((self.places[event], drop));
+                            dropped = self.places.get(event).map(|&place| (place, drop));
                         }
                         Some(grid_view::Action::Unmovable { event }) => {
-                            unmovable = Some(self.places[event]);
+                            unmovable = Some(event);
                         }
                         // A click or a selection in the hours starts a new event (`MOD-05-F01`).
                         Some(grid_view::Action::Clicked { day, minute }) => {
@@ -2212,8 +2361,10 @@ impl eframe::App for CalendarApp {
         if let Some(link) = join {
             self.join(&link);
         }
-        if let Some(event) = unmovable {
-            tell_unmovable(&mut self.not_saved, &self.events[event]);
+        if let Some(event) = unmovable
+            && let Some(event) = self.in_view(event).cloned()
+        {
+            tell_unmovable(&mut self.not_saved, &event);
         }
         if let Some((date, pressed, released)) = started {
             let zone = self.zone;
@@ -2224,7 +2375,7 @@ impl eframe::App for CalendarApp {
         }
         if let Some(event) = opened {
             let focused = ui.ctx().memory(|m| m.focused());
-            self.open(self.places[event], focused);
+            self.open_in_view(event, focused);
         }
     }
 }
@@ -2461,6 +2612,7 @@ mod tests {
             ("editor.rs", include_str!("editor.rs")),
             ("grid_view.rs", include_str!("grid_view.rs")),
             ("main.rs", include_str!("main.rs")),
+            ("meet_with.rs", include_str!("meet_with.rs")),
             ("mini_calendar.rs", include_str!("mini_calendar.rs")),
             ("month_view.rs", include_str!("month_view.rs")),
             ("remove.rs", include_str!("remove.rs")),
