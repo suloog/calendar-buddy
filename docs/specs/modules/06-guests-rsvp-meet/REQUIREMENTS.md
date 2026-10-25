@@ -96,7 +96,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-06-F23] The side panel has a "Meet with…" field; typing in it suggests people as adding guests does (`MOD-06-F02`…`F04`), and a typed address can be chosen too. — *source: `DEC-173`*
 - [MOD-06-F24] The chosen people are listed under the field, each with a way to remove them, and their calendars are shown in the day, 3-day and week views over the user's own. — *source: `DEC-173`*
 - [MOD-06-F25] A person's event shows its title and time where their calendar shares details with the account, and is a "Busy" block where it shares only free/busy; a person whose calendar shares nothing is marked in the list as such. A person's events are read-only; one with details opens them read-only. — *source: `DEC-173`*
-- [MOD-06-F26] **Create event** under the list opens the full editor with the chosen people as guests. — *source: `DEC-173`*
+- [MOD-06-F26] **Create event** under the list opens the full editor with the chosen people as guests, starting as the `c` key does: on the selected day at the next full hour, with the default length and calendar. — *source: `DEC-173`, `DEC-174`*
 - [MOD-06-F27] The chosen people are not remembered across restarts; without network the field is unavailable and says why, and the people's calendars are not shown. — *source: `DEC-173`*
 
 ## UI/UX requirements
@@ -105,7 +105,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-06-U02] The availability preview is one horizontal strip per guest, with the chosen time highlighted across all strips. — *source: `DEC-63`*
 - [MOD-06-U03] An invitation's details open with Accept, Maybe and Decline at the top. — *source: `DEC-63`*
 - [MOD-06-U04] An invitation awaiting a response has a dashed outline and a light fill in the views. — *source: `DEC-61`, `DEC-63`*
-- [MOD-06-U05] With people chosen in "Meet with…", the day view shows the user and each person as columns side by side, headed by name; the 3-day and week views lay a person's events out beside the user's like overlapping events. — *source: `DEC-173`*
+- [MOD-06-U05] With people chosen in "Meet with…", the day view shows the user and each person as columns side by side, headed by name; the 3-day and week views lay a person's events out beside the user's like overlapping events. A person's all-day events are in the all-day strip (in the day view, in their column). — *source: `DEC-173`, `DEC-174`*
 - [MOD-06-U06] Each chosen person has a colour of their own, shown next to their name in the list and on their events and busy blocks. — *source: `DEC-173`*
 
 ## Non-functional requirements

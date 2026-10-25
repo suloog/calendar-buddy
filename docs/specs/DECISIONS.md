@@ -2101,3 +2101,15 @@
 - **Scope effect:** extension
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-174] "Meet with…": when Create event starts the meeting, and people's all-day events
+
+- **Date:** 2026-10-25
+- **Decided by:** client (product owner — Maciej)
+- **Source:** `/og:clarify` of `US-06-09`, answers of the product owner
+- **Affects:** `DEC-173`, `MOD-06-F26`, `MOD-06-U05`, `US-06-09`
+- **Decision:** **Create event** opens the full editor as the `c` key starts an event (`DEC-103`): on the selected day at the next full hour of the clock, 23:00 at the latest, with the default length and the default calendar, and with the chosen people as guests. A chosen person's all-day events are shown in the all-day strip in the person's colour; in the day view, in the person's column.
+- **Why:** `DEC-173` left the new meeting's time and calendar, and people's all-day events, open; both now follow what the app already does for the user's own events, as Google does.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

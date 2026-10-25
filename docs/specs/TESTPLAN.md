@@ -164,9 +164,9 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-06-11` | Join in the event details and in the agenda opens the Meet meeting in the browser | `US-06-07#3` | desktop | happy-path | manual-only | ready |
 | `TC-06-12` | The editor shows each guest's busy blocks for the day and marks a conflict with the chosen time | `US-06-08#1`, `US-06-08#2` | desktop | happy-path | auto | ready |
 | `TC-06-13` | A guest invited from the app receives Google's invitation e-mail | `US-06-01#6` | desktop | happy-path | manual-only | ready |
-| `TC-06-14` | "Meet with…" lays colleagues' calendars over the week view, with details, busy blocks and a calendar that cannot be seen | `US-06-09#1`, `US-06-09#2`, `US-06-09#3`, `US-06-09#6` | desktop | happy-path | auto | draft |
-| `TC-06-15` | With people chosen, the day view shows columns side by side and Create event invites them | `US-06-09#4`, `US-06-09#5` | desktop | happy-path | auto | draft |
-| `TC-06-16` | Chosen people go away when removed, without network and after a restart | `US-06-09#7`, `US-06-09#8` | desktop | edge | auto | draft |
+| `TC-06-14` | "Meet with…" lays colleagues' calendars over the week view, with details, busy blocks and a calendar that cannot be seen | `US-06-09#1`, `US-06-09#2`, `US-06-09#3`, `US-06-09#6` | desktop | happy-path | auto | ready |
+| `TC-06-15` | With people chosen, the day view shows columns side by side and Create event invites them | `US-06-09#4`, `US-06-09#5` | desktop | happy-path | auto | ready |
+| `TC-06-16` | Chosen people go away when removed, without network and after a restart | `US-06-09#7`, `US-06-09#8` | desktop | edge | auto | ready |
 
 ## [MOD-07] Reminders and notifications
 
