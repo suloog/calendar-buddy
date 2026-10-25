@@ -46,6 +46,11 @@
 | `MOD-06-F18` | `US-06-07` |
 | `MOD-06-F19` | `US-06-08` |
 | `MOD-06-F20` | `US-06-08` |
+| `MOD-06-F23` | `US-06-09` |
+| `MOD-06-F24` | `US-06-09` |
+| `MOD-06-F25` | `US-06-09` |
+| `MOD-06-F26` | `US-06-09` |
+| `MOD-06-F27` | `US-06-09` |
 
 ### UI/UX requirements
 
@@ -55,6 +60,8 @@
 | `MOD-06-U02` | `US-06-08` |
 | `MOD-06-U03` | `US-06-05` |
 | `MOD-06-U04` | `US-06-04` |
+| `MOD-06-U05` | `US-06-09` |
+| `MOD-06-U06` | `US-06-09` |
 
 <!-- og:part tests -->
 
@@ -94,6 +101,14 @@
 | `US-06-08#3` | A guest who does not share availability is shown as "no data". | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-06-08#4` | The preview shows up to the first 20 guests. | — | — | smoke depth — not tested yet (`DEC-65`) |
 | `US-06-08#5` | Without network, the preview is not shown. | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-06-09#1` | Typing part of a colleague's name in the side panel's "Meet with…"… | `TC-06-14` | auto | — |
+| `US-06-09#2` | In the week view, a chosen person's events appear among the user's,… | `TC-06-14` | auto | — |
+| `US-06-09#3` | A person's event shows its title where their calendar shares detail… | `TC-06-14` | auto | — |
+| `US-06-09#4` | In the day view, the user and each chosen person are columns side b… | `TC-06-15` | auto | — |
+| `US-06-09#5` | **Create event** under the list opens the full editor with the chos… | `TC-06-15` | auto | — |
+| `US-06-09#6` | Moving to another day or week shows the chosen people's events for it. | `TC-06-14` | auto | — |
+| `US-06-09#7` | Removing a person takes their events out of the views; after the ap… | `TC-06-16` | auto | — |
+| `US-06-09#8` | Without network the field is unavailable and says why, and the peop… | `TC-06-16` | auto | — |
 
 ### Module constraints and edge cases
 
@@ -106,3 +121,6 @@
 | Directory permission was not granted at sign-in → directory suggest… | — | smoke depth — not tested yet (`DEC-65`) |
 | Responding or editing guests without network → unavailable (`MOD-02… | — | smoke depth — not tested yet (`DEC-65`) |
 | The organizer changes or cancels the event → the change arrives thr… | — | smoke depth — not tested yet (`DEC-65`) |
+| The user chooses themselves, or a person already chosen, in "Meet w… | — | smoke depth — not tested yet (`DEC-65`) |
+| The user moves to another day or week with people chosen → their c… | `TC-06-14` | — |
+| The network drops with people chosen → their calendars disappear f… | `TC-06-16` | — |

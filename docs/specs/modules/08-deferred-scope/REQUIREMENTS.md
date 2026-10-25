@@ -42,7 +42,7 @@ Also deferred, recorded in the delivery modules' *Out of scope* sections rather 
 
 - Adding Google Drive attachments, ICS import and export — `DEC-37` (`MOD-05`).
 - Recurrence rules beyond Google's custom recurrence dialog, creating working-location events — `DEC-165`, `DEC-34` (`MOD-05`).
-- Advanced scheduling with guests (multi-day grid, free-slot suggestions) — `DEC-42` (`MOD-06`).
+- Suggesting free times for guests and dragging over other people's time — `DEC-42`, `DEC-173` (`MOD-06`).
 - A second time zone, choosing the display time zone by hand — `DEC-29` (`MOD-03`).
 - Interface translations — `DEC-31` (`MOD-04`).
 - `mailto:` links, update checking and automatic updates — `DEC-46` (`MOD-07`).

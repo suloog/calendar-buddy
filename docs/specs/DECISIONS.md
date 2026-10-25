@@ -2089,3 +2089,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-173] "Meet with…" in the side panel: chosen people's calendars over the user's own
+
+- **Date:** 2026-10-25
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-25 (`SRC-05-01`…`SRC-05-06`)
+- **Affects:** `DEC-42` (its "multi-day view of guests' time out" part), `MOD-06`, `MOD-03-F10`, `MOD-08`
+- **Decision:** The side panel gets Google Calendar's "Meet with…" field. Typing in it suggests people as adding guests does (contacts, the Workspace directory, recently invited addresses); a typed address can be chosen too. The chosen people are listed under the field, each with a way to remove them, and their calendars are shown in the day, 3-day and week views over the user's own, each person in a colour of their own: in the day view the user and each person are columns side by side headed by name; in the 3-day and week views a person's events are laid out beside the user's like overlapping events. A person's event shows its title and time where their calendar shares details with the account, and is a "Busy" block where it shares only free/busy; a person whose calendar shares nothing is marked in the list, Google's way, as one whose calendar cannot be seen. A person's events are read-only; one with details opens them read-only. **Create event** under the list opens the full editor with the chosen people as guests. The chosen people are not remembered across restarts. Without network the field is unavailable and says why, and the people's calendars are not shown. The editor's availability preview (`DEC-42`, `DEC-134`) stays as it is. The month and agenda views, suggesting free times and dragging over other people's time stay out.
+- **Why:** The one-day strips in the editor show availability only for a time already picked; finding a time for several people needs their calendars in the views, as Google does it (`DEC-62`). No new permission: the calendar scope already granted reads other people's calendars as far as they are shared.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted

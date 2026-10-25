@@ -36,9 +36,9 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-03` Views and navigation | 29 / 8 | 10 | 7 | sliced |
 | `MOD-04` Appearance and themes | 4 / 6 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 35 / 5 | 11 | 0 | sliced |
-| `MOD-06` Guests, invitations, RSVP and Google Meet | 22 / 4 | 8 | 0 | sliced |
+| `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 0 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| **Total** | **147 / 32** | **49** | **7** | 7 / 7 modules sliced |
+| **Total** | **152 / 34** | **50** | **7** | 7 / 7 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -126,6 +126,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-06-06` | As a User, I see declined events struck through and can hide them with one switch, so that my calendar stays readable | F14, F22 | must | review | `US-06-05` | — |
 | `US-06-07` | As a User, I can add Google Meet to a meeting and join it with one click, so that video calls start on time | F16, F17, F18 | must | review | `US-06-01` | — |
 | `US-06-08` | As a User, I can see when my guests are busy while picking a time, so that I avoid conflicts | F19, F20, U02 | must | review | `US-06-01` | — |
+| `US-06-09` | As a User, I can lay my colleagues' calendars over mine from the side panel, so that I find a time that suits everyone | F23, F24, F25, F26, F27, U05, U06 | must | draft | `US-06-01`, `US-03-01`, `US-03-02` | — |
 
 ## [MOD-07] Reminders and notifications
 

@@ -4,7 +4,7 @@ title: Guests, invitations, RSVP and Google Meet
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-05] # other module IDs
-sources: [SRC-01, SRC-03] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-01, SRC-03, SRC-05] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -14,7 +14,7 @@ sources: [SRC-01, SRC-03] # SRC-NN documents this module draws on, e.g. [SRC-01,
 
 ## Context
 
-Meetings with other people: adding guests with suggestions from contacts, the Workspace directory and recent addresses, responding to invitations, asking before guests are notified of a change, a simple free/busy preview of guests, and Google Meet with a one-click Join. Answers for the scope area "Guests, invitations, RSVP and Google Meet"; comes from `DSC-08` (`discovery/08-guests-rsvp-meet.md`), drawing on `SRC-01` and `SRC-03`.
+Meetings with other people: adding guests with suggestions from contacts, the Workspace directory and recent addresses, responding to invitations, asking before guests are notified of a change, a simple free/busy preview of guests, "Meet with…" in the side panel laying chosen people's calendars over the user's own, and Google Meet with a one-click Join. Answers for the scope area "Guests, invitations, RSVP and Google Meet"; comes from `DSC-08` (`discovery/08-guests-rsvp-meet.md`), drawing on `SRC-01` and `SRC-03`; "Meet with…" comes from `SRC-05` (`DEC-173`).
 
 ## Scope coverage
 
@@ -46,6 +46,12 @@ Meetings with other people: adding guests with suggestions from contacts, the Wo
 | `SRC-03-04` "Open a Meet link" means joining with one click: a clear Join button on the event, also… | informal | `MOD-06-F18`; Join in notifications in `MOD-07` |
 | `SRC-03-05` Invitations in a calendar disabled in the settings are not visible; disabling is the us… | informal | `MOD-06-F21` |
 | `SRC-03-06` A simple free/busy preview of guests is wanted in the MVP: busy blocks per guest for th… | informal | `MOD-06-F19`, `MOD-06-F20` |
+| `SRC-05-01` What the app has today as availability is hard to use in a sensible way. | informal | `MOD-06-F23`…`MOD-06-F27` |
+| `SRC-05-02` The side panel gets "Meet with…" as in Google Calendar: the user enters people and t… | informal | `MOD-06-F23`, `MOD-06-F24`, `MOD-06-F26` |
+| `SRC-05-03` The availability preview in the event editor stays; "Meet with…" comes in addition t… | informal | `MOD-06-F19`, `MOD-06-F20` (unchanged) |
+| `SRC-05-04` A person's calendar shows as in Google: event details where the person shares them,… | informal | `MOD-06-F25` |
+| `SRC-05-05` In the day view the user and the chosen people are columns side by side, as in Googl… | informal | `MOD-06-U05` |
+| `SRC-05-06` The chosen people are not remembered: after a restart the list is empty, as Google's… | informal | `MOD-06-F27` |
 
 ## Functional requirements
 
@@ -85,12 +91,22 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-06-F19] In the event editor, under the chosen time, the app shows each guest's busy blocks for that day and marks a conflict with the chosen time. — *source: `DEC-42`*
 - [MOD-06-F20] Guests who do not share their availability are shown as "no data", and without network the preview is not shown. — *source: `DEC-42`*
 
+### Meeting with people
+
+- [MOD-06-F23] The side panel has a "Meet with…" field; typing in it suggests people as adding guests does (`MOD-06-F02`…`F04`), and a typed address can be chosen too. — *source: `DEC-173`*
+- [MOD-06-F24] The chosen people are listed under the field, each with a way to remove them, and their calendars are shown in the day, 3-day and week views over the user's own. — *source: `DEC-173`*
+- [MOD-06-F25] A person's event shows its title and time where their calendar shares details with the account, and is a "Busy" block where it shares only free/busy; a person whose calendar shares nothing is marked in the list as such. A person's events are read-only; one with details opens them read-only. — *source: `DEC-173`*
+- [MOD-06-F26] **Create event** under the list opens the full editor with the chosen people as guests. — *source: `DEC-173`*
+- [MOD-06-F27] The chosen people are not remembered across restarts; without network the field is unavailable and says why, and the people's calendars are not shown. — *source: `DEC-173`*
+
 ## UI/UX requirements
 
 - [MOD-06-U01] The guest list shows each response as an icon: accepted, declined, maybe, awaiting. — *source: `DEC-63`*
 - [MOD-06-U02] The availability preview is one horizontal strip per guest, with the chosen time highlighted across all strips. — *source: `DEC-63`*
 - [MOD-06-U03] An invitation's details open with Accept, Maybe and Decline at the top. — *source: `DEC-63`*
 - [MOD-06-U04] An invitation awaiting a response has a dashed outline and a light fill in the views. — *source: `DEC-61`, `DEC-63`*
+- [MOD-06-U05] With people chosen in "Meet with…", the day view shows the user and each person as columns side by side, headed by name; the 3-day and week views lay a person's events out beside the user's like overlapping events. — *source: `DEC-173`*
+- [MOD-06-U06] Each chosen person has a colour of their own, shown next to their name in the list and on their events and busy blocks. — *source: `DEC-173`*
 
 ## Non-functional requirements
 
@@ -105,11 +121,15 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Directory permission was not granted at sign-in → directory suggestions are unavailable for that account (`DEC-52`).
 - Responding or editing guests without network → unavailable (`MOD-02-F15`).
 - The organizer changes or cancels the event → the change arrives through synchronization; a cancelled event disappears.
+- The user chooses themselves, or a person already chosen, in "Meet with…" → ignored. — *source: `DEC-173`*
+- The user moves to another day or week with people chosen → their calendars are fetched for the new range; until Google answers, only the user's events are shown. — *source: `DEC-173`*
+- The network drops with people chosen → their calendars disappear from the views and the list stays; they come back with the network. — *source: `DEC-173`*
 
 ## Integrations
 
 - **Google Calendar API — events** (write): guests, the user's own response, sending updates to guests, creating a Google Meet conference.
-- **Google Calendar API — free/busy** (read): busy blocks of guests for one day.
+- **Google Calendar API — free/busy** (read): busy blocks of guests for one day; busy blocks of people chosen in "Meet with…" whose calendars share only free/busy.
+- **Google Calendar API — events** (read): the events of people chosen in "Meet with…", as far as their calendars are shared with the account.
 - **Google People API** (read): contacts, "other contacts", and the organization directory on Workspace accounts.
 
 ## Technical notes
@@ -119,12 +139,14 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Meet: `conferenceDataVersion=1` with a `createRequest` of type `hangoutsMeet`; the Join button uses the conference entry point.
 - Suggestions: People API `searchContacts` and `otherContacts.search` (with the warm-up request the API requires), and `people.searchDirectoryPeople` on Workspace accounts only; recently invited addresses come from the guests of cached events.
 - Availability: `freebusy.query` for the chosen day, with the guests' addresses as items.
+- "Meet with…": `events.list` on the person's address as the calendar ID for the shown range (single events expanded), through the account the suggestion came from, or the default calendar's account for a typed address; events without a title (free/busy-only access) are "Busy". When Google refuses the calendar, `freeBusy.query` for the range; when that answers `notFound` too, the person is marked as not visible. The people's events are held in memory, not in the cache, and are fetched again when the people or the range change and with every synchronization round.
 - "Invitation awaiting response" = the user's attendee entry has `responseStatus: needsAction`.
 
 ## Out of scope / what not to worry about
 
 - Responding with a comment, proposing another time — `SRC-03-01`, `MOD-08`.
-- Advanced scheduling: a multi-day grid, dragging on it, suggesting free slots — `DEC-42`, `MOD-08`.
+- Suggesting free times and dragging over other people's time — `DEC-42`, `DEC-173`, `MOD-08`.
+- Other people's calendars in the month and agenda views — `DEC-173`.
 - Setting guest permissions (guests may modify the event / invite others / see the guest list) — Google's defaults are kept. — *source: `DEC-63`*
 - Event fields, recurrence and the editor itself — `MOD-05`.
 - The Join button in notifications — `MOD-07`.
@@ -138,3 +160,4 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] Moving an event with guests asks whether to notify them; answering "no" sends no e-mail.
 - [ ] In the editor, a colleague's meeting at the chosen time shows as a conflict in the availability preview.
 - [ ] The Join button opens the meeting in the browser from the event and from the agenda.
+- [ ] Choosing two colleagues in "Meet with…" shows their calendars beside the user's in the week view and as columns in the day view; **Create event** opens the editor with them as guests.

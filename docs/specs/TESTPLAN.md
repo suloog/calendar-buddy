@@ -48,9 +48,9 @@ that module. Numbers are never reused or renumbered.
 | `MOD-03` Views and navigation | 46 | 28 | 12 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
-| `MOD-06` Guests, invitations, RSVP and Google Meet | 28 | 19 | 11 / 2 | written |
+| `MOD-06` Guests, invitations, RSVP and Google Meet | 36 | 27 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **202** | **119** | **55 / 14** | 7 / 7 modules written |
+| **Total** | **210** | **127** | **58 / 14** | 7 / 7 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -164,6 +164,9 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-06-11` | Join in the event details and in the agenda opens the Meet meeting in the browser | `US-06-07#3` | desktop | happy-path | manual-only | ready |
 | `TC-06-12` | The editor shows each guest's busy blocks for the day and marks a conflict with the chosen time | `US-06-08#1`, `US-06-08#2` | desktop | happy-path | auto | ready |
 | `TC-06-13` | A guest invited from the app receives Google's invitation e-mail | `US-06-01#6` | desktop | happy-path | manual-only | ready |
+| `TC-06-14` | "Meet with…" lays colleagues' calendars over the week view, with details, busy blocks and a calendar that cannot be seen | `US-06-09#1`, `US-06-09#2`, `US-06-09#3`, `US-06-09#6` | desktop | happy-path | auto | draft |
+| `TC-06-15` | With people chosen, the day view shows columns side by side and Create event invites them | `US-06-09#4`, `US-06-09#5` | desktop | happy-path | auto | draft |
+| `TC-06-16` | Chosen people go away when removed, without network and after a restart | `US-06-09#7`, `US-06-09#8` | desktop | edge | auto | draft |
 
 ## [MOD-07] Reminders and notifications
 
