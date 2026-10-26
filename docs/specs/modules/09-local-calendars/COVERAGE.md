@@ -45,6 +45,7 @@
 | ~~`MOD-09-F19`~~ | withdrawn, `DEC-185` |
 | `MOD-09-F20` | `US-09-01` |
 | `MOD-09-F21` | `US-09-02` |
+| `MOD-09-F22` | `US-09-05` |
 
 ### UI/UX requirements
 
@@ -55,6 +56,7 @@
 | `MOD-09-U03` | `US-09-02` |
 | `MOD-09-U04` | `US-09-01` |
 | `MOD-09-U05` | `US-09-01` |
+| `MOD-09-U06` | `US-09-05` |
 
 ### Non-functional requirements
 
@@ -103,6 +105,11 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-09-04#3` | In the "Local calendars" section a calendar's default notifications … | `TC-09-11` | auto | — |
 | `US-09-04#4` | In the editor a local event's notifications can be added and removed… | `TC-09-12` | auto | — |
 | `US-09-04#5` | A muted or disabled local calendar gives no notifications, nor does … | `TC-09-12` | auto | — |
+| `US-09-05#1` | The settings' "Local calendars" section has a "Show local calendars" c… | `TC-09-16` | auto | — |
+| `US-09-05#2` | Unticking it takes "Local" out of the side panel and the calendar pi… | `TC-09-16` | auto | — |
+| `US-09-05#3` | Ticking it again brings everything back as it was, events included;… | `TC-09-16` | auto | — |
+| `US-09-05#4` | With a local calendar as the default calendar, while the local calen… | `TC-09-16` | auto | — |
+| `US-09-05#5` | With no Google account connected the checkbox is ticked and unavaila… | `TC-09-17` | auto | — |
 
 ### Module constraints and edge cases
 

@@ -53,6 +53,7 @@
 | `MOD-03-F27` | `US-03-10` |
 | `MOD-03-F28` | `US-03-10` |
 | `MOD-03-F29` | `US-03-10` |
+| `MOD-03-F30` | `US-03-11` |
 
 ### UI/UX requirements
 
@@ -66,6 +67,7 @@
 | `MOD-03-U06` | `US-03-05` |
 | `MOD-03-U07` | `US-03-08` |
 | `MOD-03-U08` | `US-03-10` |
+| `MOD-03-U09` | `US-03-11` |
 
 ### Non-functional requirements
 
@@ -131,6 +133,11 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-03-10#5` | Events, the current-time line, clicking to create, dragging and res… | `TC-03-13` | auto | — |
 | `US-03-10#6` | The settings' "Appearance" section shows the height as a slider wit… | `TC-03-14` | auto | — |
 | `US-03-10#7` | The height chosen in the week view is the same in the day and 3-day… | `TC-03-14` | auto | — |
+| `US-03-11#1` | The settings' Accounts section lists the accounts and "Local calendars… | `TC-03-15` | auto | — |
+| `US-03-11#2` | Moving a group changes at once the side panel, the calendar picker o… | `TC-03-15` | auto | — |
+| `US-03-11#3` | The order is kept after a restart. | `TC-03-15` | auto | — |
+| `US-03-11#4` | Until anything is moved, the accounts are in the order they were con… | `TC-03-16` | auto | — |
+| `US-03-11#5` | The order does not change where new events go when no default calend… | `TC-03-16` | auto | — |
 
 ### Module constraints and edge cases
 

@@ -4,7 +4,7 @@ title: Local calendars
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-01, MOD-03, MOD-05, MOD-07] # other module IDs
-sources: [SRC-06] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-06, SRC-07] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -37,6 +37,8 @@ Calendars and events kept only on the device, never synchronized with Google, so
 | `SRC-06-15` Local data is kept apart from the cache, in the app's data directory, so that it is… | informal | `MOD-09-F01`, `MOD-09-F20`, `MOD-09-U05`, `MOD-09-NFR-01` |
 | `SRC-06-16` Local events do not make the user busy for others in "Meet with…" and availability,… | informal | `MOD-09-F16` |
 | `SRC-06-17` The work goes through the spec workflow: a source, a decision, a new module with req… | informal | this module (process, no requirement) |
+| `SRC-07-01` An option to hide the local calendars, as calendars can be hidden today. | informal | `MOD-09-F22`, `MOD-09-U06` |
+| `SRC-07-03` Hiding means one switch that takes the whole "Local" group out of the side panel, the… | informal | `MOD-09-F22` |
 
 ## Functional requirements
 
@@ -74,14 +76,16 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - [MOD-09-F20] When a change to local calendars or events cannot be written to the device, the app says so at once and keeps saying it until a change is written again; the change is not shown as made. A change refused because the event changed or is gone does not count. — *source: `DEC-186`*
 - [MOD-09-F21] Once the app is in use there is always a local calendar: with a Google account connected and no local calendar, "My calendar" is added; the last local calendar cannot be deleted. Removing the last Google account keeps the local calendars and the calendar views. — *source: `DEC-185`*
+- [MOD-09-F22] The user can hide the local calendars as a whole: they are then not in the side panel, the calendar pickers or the views and give no notifications, and they are kept; showing them again brings everything back. While no Google account is connected they are always shown. — *source: `DEC-188`*
 
 ## UI/UX requirements
 
 - [MOD-09-U01] The settings have a "Local calendars" section listing every local calendar with its colour and name, an action to add one, and for each one renaming, its colour, its default notifications and deleting. — *source: `DEC-178`*
-- [MOD-09-U02] In the side panel and the calendar picker the "Local" group comes last, after the accounts, and has no account address or account state. — *source: `DEC-178`*
+- [MOD-09-U02] In the side panel and the calendar picker the "Local" group comes last, after the accounts, until the user chooses another order (`MOD-03-F30`), and has no account address or account state. — *source: `DEC-178`, `DEC-189`*
 - [MOD-09-U03] Deleting a local calendar that has events asks for confirmation, saying how many events will be deleted and that this cannot be undone; an empty one is deleted without a question. — *source: `DEC-178`*
 - [MOD-09-U04] The welcome screen keeps connecting a Google account as its main action and says what it brings (synchronization, invitations, Google Meet); "Use without an account" is the secondary one. — *source: `DEC-179`*
 - [MOD-09-U05] A change not saved (`MOD-09-F20`) is told in a bar across the top of the main window, filled with the warning tone and in bold, naming the reason and the file to check. — *source: `DEC-186`*
+- [MOD-09-U06] The "Local calendars" section has a "Show local calendars" checkbox, ticked by default; while no Google account is connected it is ticked, unavailable, and says why. — *source: `DEC-188`*
 
 ## Non-functional requirements
 
@@ -130,4 +134,5 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] Deleting a local calendar with events asks for confirmation with their count; afterwards neither the calendar nor its events remain.
 - [ ] After deleting the cache file and restarting, local calendars and events are all still there.
 - [ ] With a Google account and local calendars, removing the account leaves the local calendars and the calendar views; the last local calendar cannot be deleted.
+- [ ] Unticking "Show local calendars" takes "Local" and its events out of the side panel, the pickers and the views, and ticking it brings them back; with no account connected it cannot be unticked.
 - [ ] With the local file's directory made read-only, adding a local calendar shows the bar saying changes are not being saved, until a change is written again.

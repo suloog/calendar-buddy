@@ -2269,3 +2269,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-188] Hiding the local calendars as a whole
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-26 (`SRC-07-01`, `SRC-07-03`)
+- **Affects:** `DEC-178`, `DEC-185`, `MOD-09-F22`, `MOD-09-U06`, `MOD-05-F10`, `MOD-07-F13`
+- **Decision:** The settings' "Local calendars" section gets a "Show local calendars" checkbox, ticked by default. Unticked, the "Local" group is not in the side panel or the calendar pickers, local events are in no view and give no notifications, as for disabled calendars; the local calendars and events stay in the file, the section keeps listing them for managing, and ticking it again brings everything back as it was. The choice is kept in the app's settings file. A local default calendar is not used while they are hidden: new events go where they go when none is chosen (`DEC-104`), and the choice holds again once they are shown. While no Google account is connected the local calendars are always shown: the checkbox is ticked and unavailable, saying why, and removing the last account shows them again.
+- **Why:** A user of Google only has "My calendar" since `DEC-185`; one switch keeps it out of sight without deleting anything, while an app without accounts never ends up with nothing to show.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-189] The order of the side panel's groups is chosen in the settings
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-26 (`SRC-07-02`, `SRC-07-04`)
+- **Affects:** `DEC-102`, `DEC-178`, `MOD-03-F10`, `MOD-03-F30`, `MOD-03-U09`, `MOD-09-U02`
+- **Decision:** The settings' **Accounts** section lists the groups in their order — each connected account and, as its own row, "Local calendars" — and each row has **Move up** and **Move down** buttons; the first cannot move up and the last cannot move down. The order holds at once in the side panel, the calendar pickers and the settings' **Calendars** list; the calendars inside a group keep their own order. It is kept in the app's settings file. Until the user moves anything, the accounts are in the order they were connected and "Local" is last; a group the kept order does not name (an account connected later) comes after those it names, and a removed account leaves the others in their order. The order is only how the groups are shown: which calendar new events go to when none is chosen (`DEC-104`) and which account "Meet with…" searches (`DEC-175`) do not change with it.
+- **Why:** Arrows in the settings are the simplest way that also works from the keyboard (`NFR-09`); Google Calendar has no order of accounts, as each is a separate Google Calendar there, so this goes beyond it (`DEC-62`) at the product owner's word.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted

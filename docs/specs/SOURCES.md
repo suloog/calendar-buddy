@@ -21,6 +21,7 @@
 | `SRC-04` | Analyst notes — product owner's requests 2026-10-24 (5 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-24 | — | `sources/04-analyst-notes-2026-10-24.md` |
 | `SRC-05` | Analyst notes — product owner's request 2026-10-25 (6 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-25 | — | `sources/05-analyst-notes-2026-10-25.md` |
 | `SRC-06` | Analyst notes — product owner's request 2026-10-26 (17 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-26 | — | `sources/06-analyst-notes-2026-10-26.md` |
+| `SRC-07` | Analyst notes — product owner's requests after reviewing local calendars, 2026-10-26 (4 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-26 | — | `sources/07-analyst-notes-2026-10-26-review.md` |
 
 ## Originals
 
@@ -30,3 +31,4 @@
 - `SRC-04` — written directly in this repo from the conversation; no separate original
 - `SRC-05` — written directly in this repo from the conversation; no separate original
 - `SRC-06` — written directly in this repo from the conversation; no separate original
+- `SRC-07` — written directly in this repo from the conversation; no separate original

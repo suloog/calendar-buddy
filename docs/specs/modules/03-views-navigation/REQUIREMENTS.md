@@ -4,7 +4,7 @@ title: Views and navigation
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-02] # other module IDs
-sources: [SRC-01, SRC-02, SRC-04] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-01, SRC-02, SRC-04, SRC-07] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -42,6 +42,8 @@ How the user looks at the calendar and moves around it: day, 3-day, week, month 
 | `SRC-04-03` The second missing feature is zooming, only vertically: stretching the hours of the day. | informal | `MOD-03-F27` |
 | `SRC-04-04` Zooming works with Ctrl + mouse wheel or a touchpad pinch, with Ctrl + plus / minus / 0… | informal | `MOD-03-F27`, `MOD-03-F28`, `MOD-03-U08` |
 | `SRC-04-05` The chosen height of an hour is one for the day, 3-day and week views and is remembere… | informal | `MOD-03-F29` |
+| `SRC-07-02` The order of the calendars can be changed — of the accounts with their calendars, not… | informal | `MOD-03-F30` |
+| `SRC-07-04` The order is changed in the settings, with up and down arrows on each account and on… | informal | `MOD-03-U09` |
 
 ## Functional requirements
 
@@ -76,6 +78,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-F27] In the day, 3-day and week views the user can make the hours taller or shorter — only vertically — with Ctrl + mouse wheel or a touchpad pinch over the hours, and with Ctrl + plus and Ctrl + minus; Ctrl + 0 returns to the usual height. — *source: `DEC-166`*
 - [MOD-03-F28] The settings' "Appearance" section has a slider for the height of an hour, showing it in percent of the usual height. — *source: `DEC-166`*
 - [MOD-03-F29] The height of an hour is one for the day, 3-day and week views and is kept after a restart. — *source: `DEC-166`*
+- [MOD-03-F30] The user can change the order of the side panel's groups — each account with its calendars, and the local calendars — in the settings; the order holds in the side panel, the calendar pickers and the settings, and is remembered. The calendars inside a group keep their order. — *source: `DEC-189`*
 
 ## UI/UX requirements
 
@@ -87,6 +90,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-03-U06] "Go to date" also opens from a button in the top bar, beside next and previous. — *source: `DEC-161`*
 - [MOD-03-U07] The list of keyboard shortcuts also opens from a help button in the top bar, beside the settings, and shows the shortcuts in groups, keys doing the same thing on one row. — *source: `DEC-162`*
 - [MOD-03-U08] Zooming with the wheel or a pinch is smooth and keeps the time under the pointer where it is; zooming with the keys goes in steps of 25 % and keeps the time at the middle of the view in place; the height goes from 50 % to 300 %. — *source: `DEC-166`*
+- [MOD-03-U09] In the settings' Accounts section, each account and "Local calendars" is a row with Move up and Move down buttons, in the order the side panel shows them; the first cannot move up and the last cannot move down. — *source: `DEC-189`*
 
 ## Non-functional requirements
 
@@ -140,3 +144,4 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] With the system set to a locale starting the week on Sunday and a different time zone, the views follow both.
 - [ ] Scrolling the week view on the 20,000-event profile is smooth and within the measured thresholds.
 - [ ] The hours of the day, 3-day and week views zoom vertically with Ctrl + wheel, a pinch, Ctrl + plus / minus / 0 and the slider in the settings, and the height is kept after a restart.
+- [ ] Moving an account down in the settings moves its group down in the side panel and the calendar picker at once, and the order is kept after a restart.

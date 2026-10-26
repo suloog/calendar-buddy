@@ -45,13 +45,13 @@ that module. Numbers are never reused or renumbered.
 | ------ | -------------- | ------- | ------------------ | ------- |
 | `MOD-01` Google accounts and sign-in | 19 | 7 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
-| `MOD-03` Views and navigation | 46 | 28 | 12 / 2 | written |
+| `MOD-03` Views and navigation | 51 | 33 | 14 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 36 | 27 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| `MOD-09` Local calendars | 29 | 29 | 14 / 1 | written |
-| **Total** | **239** | **156** | **72 / 15** | 8 / 8 modules written |
+| `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
+| **Total** | **249** | **166** | **76 / 15** | 8 / 8 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -111,6 +111,8 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-03-12` | A Sunday-first locale and a change of system time zone are followed by the views | `US-03-09#1`, `US-03-09#2` | desktop | happy-path | auto | ready |
 | `TC-03-13` | Ctrl + wheel and Ctrl + plus / minus / 0 zoom the hours around the pointer or the middle, within 50–300 % | `US-03-10#1`, `US-03-10#2`, `US-03-10#3`, `US-03-10#5` | desktop | happy-path | auto | ready |
 | `TC-03-14` | The hour height is a slider in the settings, shared by the three views and kept after a restart | `US-03-10#6`, `US-03-10#7` | desktop | happy-path | auto | ready |
+| `TC-03-15` | Accounts and the local calendars are moved up and down in the settings, everywhere at once, and the order is kept | `US-03-11#1`, `US-03-11#2`, `US-03-11#3` | desktop | happy-path | auto | ready |
+| `TC-03-16` | An account connected after the order was chosen comes last, a removed one leaves the order, and the default calendar does not move with it | `US-03-11#4`, `US-03-11#5` | desktop | edge | auto | ready |
 
 ## [MOD-04] Appearance and themes
 
@@ -206,3 +208,5 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-09-13` | On KDE, a local event's notification snoozes, dismisses and opens its event | `US-09-04#2` | desktop | happy-path | manual-only | ready |
 | `TC-09-14` | A change the local file does not take is told in a bar until one is | `US-09-01#9` | desktop | edge | auto | ready |
 | `TC-09-15` | With an account and no local calendar, "My calendar" is added once | `US-09-02#8` | desktop | edge | auto | ready |
+| `TC-09-16` | Hiding the local calendars takes "Local" out of sight and showing them brings it back | `US-09-05#1`, `US-09-05#2`, `US-09-05#3`, `US-09-05#4` | desktop | happy-path | auto | ready |
+| `TC-09-17` | Without a Google account the local calendars cannot be hidden | `US-09-05#5` | desktop | edge | auto | ready |
