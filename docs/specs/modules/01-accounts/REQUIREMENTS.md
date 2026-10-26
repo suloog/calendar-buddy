@@ -51,7 +51,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-01-F11] A problem with an account (signed out, access revoked) is shown on the account, separately from a problem synchronizing a single calendar.
 - ~~[MOD-01-F12] On the first run, with no account connected, the user sees a welcome screen whose one action is connecting a Google account.~~ — changed by `DEC-179`, now `MOD-09-F17`, `MOD-09-F18`
 - [MOD-01-F13] On a first run without network, the app says that signing in is not possible offline and lets the user try again once the network is back.
-- ~~[MOD-01-F14] Removing the last connected account brings the user back to the welcome screen. — *source: `DEC-52`*~~ — changed by `DEC-179`, now `MOD-09-F19`
+- ~~[MOD-01-F14] Removing the last connected account brings the user back to the welcome screen. — *source: `DEC-52`*~~ — changed by `DEC-179` and `DEC-185`, now `MOD-09-F21`
 
 ## UI/UX requirements
 

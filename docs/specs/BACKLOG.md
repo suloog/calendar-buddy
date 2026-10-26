@@ -38,8 +38,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-05` Creating and editing events | 35 / 5 | 11 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 1 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| `MOD-09` Local calendars | 19 / 4 | 4 | 0 | sliced |
-| **Total** | **169 / 38** | **54** | **8** | 8 / 8 modules sliced |
+| `MOD-09` Local calendars | 20 / 5 | 4 | 0 | sliced |
+| **Total** | **170 / 39** | **54** | **8** | 8 / 8 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -148,7 +148,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-09-01` | As a User, I can start using the app without a Google account, with a calendar kept on my computer, so that I can plan my time before or without connecting Google | F01, F07, F08, F11, F17, F18, U02, U04, NFR-01 | must | review | `US-01-01`, `US-03-06`, `US-05-01`, `US-05-02` | — |
-| `US-09-02` | As a User, I can add, rename, recolour and delete local calendars in the settings, so that I keep separate calendars for different parts of my life without Google | F02, F03, F04, F05, F06, F11, F19, U01, U03 | must | review | `US-09-01`, `US-03-07`, `US-07-03`, `US-01-04` | — |
+| `US-09-01` | As a User, I can start using the app without a Google account, with a calendar kept on my computer, so that I can plan my time before or without connecting Google | F01, F07, F08, F11, F17, F18, F20, U02, U04, U05, NFR-01 | must | review | `US-01-01`, `US-03-06`, `US-05-01`, `US-05-02` | — |
+| `US-09-02` | As a User, I can add, rename, recolour and delete local calendars in the settings, so that I keep separate calendars for different parts of my life without Google | F02, F03, F04, F05, F06, F11, F21, U01, U03 | must | review | `US-09-01`, `US-03-07`, `US-07-03`, `US-01-04` | — |
 | `US-09-03` | As a User, I can change, move, repeat and delete local events the same way as my Google events, so that a local calendar is as handy as a Google one | F09, F10, F12, F16 | must | review | `US-09-01`, `US-05-03`, `US-05-04`, `US-05-07`, `US-05-09`, `US-05-11` | — |
 | `US-09-04` | As a User, I get notifications for my local events, with defaults I set for each local calendar, so that local events remind me as Google events do | F13, F14, F15, U01 | must | review | `US-09-02`, `US-07-01`, `US-07-02`, `US-07-04` | — |

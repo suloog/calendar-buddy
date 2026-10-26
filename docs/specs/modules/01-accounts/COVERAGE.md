@@ -37,7 +37,7 @@
 | `MOD-01-F11` | `US-01-03` |
 | ~~`MOD-01-F12`~~ | `US-01-01`; changed by `DEC-179`, now `MOD-09-F17`, `MOD-09-F18` |
 | `MOD-01-F13` | `US-01-01` |
-| ~~`MOD-01-F14`~~ | `US-01-04`; changed by `DEC-179`, now `MOD-09-F19` |
+| ~~`MOD-01-F14`~~ | `US-01-04`; changed by `DEC-179` and `DEC-185`, now `MOD-09-F21` |
 
 ### UI/UX requirements
 

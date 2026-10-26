@@ -1,7 +1,7 @@
 ---
 id: US-09-01 # US-NN-MM — NN is the parent module, MM a counter inside it; never reused
 module: MOD-09
-covers: [MOD-09-F01, MOD-09-F07, MOD-09-F08, MOD-09-F11, MOD-09-F17, MOD-09-F18, MOD-09-U02, MOD-09-U04, MOD-09-NFR-01] # every requirement this story delivers
+covers: [MOD-09-F01, MOD-09-F07, MOD-09-F08, MOD-09-F11, MOD-09-F17, MOD-09-F18, MOD-09-F20, MOD-09-U02, MOD-09-U04, MOD-09-U05, MOD-09-NFR-01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
 status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
@@ -13,7 +13,7 @@ depends_on: [US-01-01, US-03-06, US-05-01, US-05-02] # story IDs that must be do
 |  |  |
 | --- | --- |
 | **Module** | `[MOD-09]` Local calendars — `docs/specs/modules/09-local-calendars/REQUIREMENTS.md` |
-| **Covers** | `MOD-09-F01`, `F07`, `F08`, `F11`, `F17`, `F18`, `U02`, `U04`, `NFR-01` |
+| **Covers** | `MOD-09-F01`, `F07`, `F08`, `F11`, `F17`, `F18`, `F20`, `U02`, `U04`, `U05`, `NFR-01` |
 | **Priority** | must |
 | **Status** | review |
 | **Depends on** | blocked by `US-01-01`, `US-03-06`, `US-05-01`, `US-05-02` |
@@ -34,6 +34,7 @@ The foundation of local calendars: their own store on the device, a "Local" grou
 - [ ] With no account connected, a new event without a range lasts 60 minutes, and "Meet with…" is unavailable and says it needs a Google account.
 - [ ] A Google account connected later from the settings is listed above "Local" in the side panel and the calendar picker; local events stay as they were.
 - [ ] When the local file cannot be read at start, the app says so, leaves the file as it is and keeps working with Google calendars.
+- [ ] When a change cannot be written to the local file, a bar filled with the warning tone across the top of the main window says changes to local calendars are not being saved, why, and which file to check; it stays until a change is written again, and the change is not shown as made.
 
 ## Out of scope / what not to worry about
 
@@ -46,4 +47,4 @@ The foundation of local calendars: their own store on the device, a "Local" grou
 - `$XDG_DATA_HOME/<app ID>/local.sqlite3` with a schema version, owned by the cache worker and never deleted by it (`MOD-09` *Technical notes*, `DEC-87`, `DEC-164`).
 - "Local" is a pseudo-account with a fixed ID in `calendar-core`, so the side panel, the pickers and colours keyed by account and calendar (`DEC-99`) work unchanged; it is not in the accounts file and not checked with Google.
 - Writes of local events go to the local store behind the calendar-provider interface (`NFR-14`), not to the Google adapter, and need no network.
-- Decisions: `DEC-178`, `DEC-179`.
+- Decisions: `DEC-178`, `DEC-179`, `DEC-181`, `DEC-185`, `DEC-186`, `DEC-187`.

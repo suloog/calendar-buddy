@@ -2172,7 +2172,7 @@
 - **Why:** The welcome screen stays as onboarding towards Google, which most of the app's features need, but no longer blocks the app.
 - **Scope effect:** extension
 - **Resolves:** —
-- **Status:** accepted
+- **Status:** superseded by DEC-185
 
 ## [DEC-180] Local events in "Meet with…", and local calendars' defaults for all-day events
 
@@ -2230,6 +2230,42 @@
 - **Affects:** `US-09-04`, `MOD-09-F14`, `MOD-09-U01`, `TC-09-11`, `DEC-180`, `DEC-182`
 - **Decision:** In the settings' "Local calendars" section each local calendar has, under its colour, name and **Delete**, an "Event notifications" list, as Google Calendar names a calendar's default notifications: one row per notification with the editor's controls (a number of minutes, hours or days before, and **Remove**), notifications only, and **Add notification** (30 minutes, as in the editor) up to five. A change is kept in the local file as soon as it is finished, with no Save: a unit picked, a notification added or removed, a number left or let go of; a number while it is typed or dragged is not kept, so its passing values never remind. Escape while a number is typed closes the settings without it, as it leaves a name typed. A time beyond Google's four weeks is kept as four weeks; once kept, a notification shows in the largest unit its time is a whole number of, as the editor shows an event's (120 minutes as 2 hours). A local calendar may have no default notifications. The list is for timed events; an all-day event that uses it gives no notification (`DEC-180`). The editor's notifications of a local event were in place with `US-07-04` and `US-09-03` (notifications only, up to five, "Use calendar defaults"); local events' notifications, snoozing, dismissing, opening and the silences of muted, disabled or switched-off calendars go through the reminders of Google events unchanged.
 - **Why:** The simplest controls consistent with the section (`DEC-182`) and the editor (`MOD-07-F04`), following Google Calendar's calendar settings (`DEC-62`); a section without Save has nothing to refuse a time too early with.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-185] There is always a local calendar; the welcome screen is for the first run
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's review of the delivered `MOD-09`, 2026-10-26
+- **Affects:** `DEC-179`, `DEC-182` (its last sentence), `DEC-183`, `MOD-09-F18`, `MOD-09-F19`, `MOD-09-F21`, `MOD-01-F14`, `US-09-02`, `TC-09-07`, `TC-09-08`, `TC-09-15`
+- **Decision:** Once the app is in use there is always at least one local calendar. "Use without an account" makes "My calendar" as before; with a Google account connected and no local calendar — connecting Google from the welcome screen, or an installation from before local calendars — "My calendar" is added once under "Local", without becoming the default calendar. The last local calendar cannot be deleted: its **Delete** is unavailable and says why. The welcome screen still shows while there is neither an account nor a local calendar, which is now only the first run (and a local file that cannot be read with no account); removing the last Google account keeps the local calendars and the calendar views, and the settings stay open. `DEC-183` is ratified: the editor takes an event's times in the time zone chosen in it, as Google Calendar does, so `TC-09-08`'s event moved to London at 10:00–11:30 shows at 11:00–12:30 in a view in Warsaw time.
+- **Why:** A calendar the app always has, as Google always has a primary calendar, removes the cases where the app goes back to the welcome screen and where there is no calendar to create an event in; a user of Google only can hide or disable "My calendar".
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-186] A change the local file does not take is shown until one is
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's review of the delivered `MOD-09`, 2026-10-26
+- **Affects:** `DEC-181` (its last sentence), `DEC-182`, `MOD-09-F20`, `MOD-09-U05`, `US-09-01`, `TC-09-14`
+- **Decision:** When a change to local calendars or events cannot be written to the local file (a full disk, a file or directory that cannot be written, a file locked or damaged since it was read), a bar across the top of the main window, filled with the warning tone and in bold, says that changes to local calendars are not being saved, why, that the last change was lost, and which file to check. It stays, whatever the user does, until a change is written again; a change refused as at Google (changed elsewhere, an event no longer there) is no fault of the file's and does not show it. The change itself is not shown as made: an event's change comes back with the reason, as a refused change does, and a calendar's goes with the next events.
+- **Why:** The local file is the only copy of local calendars (`DEC-178`); losing what the user does without saying so is the worst failure the module can have.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-187] Smaller points left open by the delivery of `MOD-09`
+
+- **Date:** 2026-10-26
+- **Decided by:** analyst (Claude), at the product owner's word
+- **Source:** product owner's review of the delivered `MOD-09`, 2026-10-26 ("the rest is yours to decide")
+- **Affects:** `DEC-181`, `DEC-183`, `DEC-184`, `MOD-09-F07`, `MOD-09-F15`, `MOD-09-F16`, `MOD-02-F17`
+- **Decision:** With no account connected the synchronization indicator and **Refresh** are not shown, as only Google is synchronized. Local calendars the cache could not take when the file was opened are started again with the next polling round, instead of being gone for the run. With a local calendar picked, the editor lists only the event's notifications: an e-mail reminder carried over from a Google calendar is not shown, as it would not be kept, and comes back if a Google calendar is picked again. Left as they are: **Delete** of a local calendar acting once the worker gets to it (slower while Google is synchronized); picking another unit of a default notification counting as a finished change, which may show an already-passed reminder once, as any reminder change does (`MOD-07`); Escape dropping a number being typed in the settings (`DEC-184`); a refused move to a local calendar no longer there saying the event is no longer there. Tests were added for a local event made all-day and several days long in the editor, and for local events in the user's own column of "Meet with…" (`MOD-09-F16`).
+- **Why:** The first three are visible faults with small fixes; the others are rare or follow what the app does elsewhere.
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted

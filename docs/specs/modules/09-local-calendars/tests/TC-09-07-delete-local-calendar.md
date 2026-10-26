@@ -10,7 +10,7 @@ status: ready # draft | ready
 depends_on: [] # test case IDs that must pass first
 ---
 
-# [TC-09-07] Deleting a local calendar asks with the count of its events, forgets the default and brings back the welcome screen only when nothing is left
+# [TC-09-07] Deleting a local calendar asks with the count of its events, forgets the default and keeps the last one
 
 |  |  |
 | --- | --- |
@@ -23,7 +23,7 @@ depends_on: [] # test case IDs that must pass first
 
 ## Preconditions
 
-- Account A is connected; the local store holds "Family" with 3 events, the default calendar, and the empty "Sport"; a fixed clock (Thursday 2026-11-12 09:00, Europe/Warsaw).
+- Account A is connected; the local store holds "Family" with 3 events, the default calendar, the empty "Sport" and "My calendar"; a fixed clock (Thursday 2026-11-12 09:00, Europe/Warsaw).
 
 ## Steps
 
@@ -32,12 +32,12 @@ depends_on: [] # test case IDs that must pass first
 | 1 | Delete "Sport" in the settings. | It is deleted without a question. | app state |
 | 2 | Delete "Family". | A confirmation says 3 events will be deleted and that this cannot be undone. | app state |
 | 3 | Confirm; press Ctrl+Z. | "Family" and its events are nowhere in the app and Ctrl+Z does not bring them back; a new event starts in account A's primary calendar. | app state |
-| 4 | Add "Notes"; remove account A. | The week view stays, with only "Local" and "Notes". | app state |
-| 5 | Delete "Notes". | The welcome screen is shown. | app state |
+| 4 | Look at the **Delete** of "My calendar", now the only local calendar. | With only "My calendar" left, **Delete** is unavailable and says the last local calendar cannot be deleted. | app state |
+| 5 | Remove account A. | The week view and the settings stay, with only "Local" and "My calendar"; no welcome screen. | app state |
 
 ## Pass criterion
 
-- A local calendar goes away with its events only after the user confirms, and the welcome screen returns only with neither an account nor a local calendar.
+- A local calendar goes away with its events only after the user confirms, and there is always one left.
 
 ## Cleanup
 

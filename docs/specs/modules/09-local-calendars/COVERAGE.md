@@ -42,7 +42,9 @@
 | `MOD-09-F16` | `US-09-03` |
 | `MOD-09-F17` | `US-09-01` |
 | `MOD-09-F18` | `US-09-01` |
-| `MOD-09-F19` | `US-09-02` |
+| ~~`MOD-09-F19`~~ | withdrawn, `DEC-185` |
+| `MOD-09-F20` | `US-09-01` |
+| `MOD-09-F21` | `US-09-02` |
 
 ### UI/UX requirements
 
@@ -52,6 +54,7 @@
 | `MOD-09-U02` | `US-09-01` |
 | `MOD-09-U03` | `US-09-02` |
 | `MOD-09-U04` | `US-09-01` |
+| `MOD-09-U05` | `US-09-01` |
 
 ### Non-functional requirements
 
@@ -79,13 +82,15 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-09-01#6` | With no account connected, a new event without a range lasts 60 minu… | `TC-09-03` | auto | — |
 | `US-09-01#7` | A Google account connected later from the settings is listed above "… | `TC-09-03` | auto | — |
 | `US-09-01#8` | When the local file cannot be read at start, the app says so, leaves… | `TC-09-04` | auto | — |
+| `US-09-01#9` | When a change cannot be written to the local file, a bar filled with… | `TC-09-14` | auto | — |
 | `US-09-02#1` | The settings have a "Local calendars" section listing each local cal… | `TC-09-05` | auto | — |
 | `US-09-02#2` | Renaming a local calendar and choosing another colour from the palet… | `TC-09-05` | auto | — |
 | `US-09-02#3` | A local calendar can be hidden with the side panel's toggle, disable… | `TC-09-06` | auto | — |
 | `US-09-02#4` | A local calendar can be chosen as the default calendar in the settin… | `TC-09-05` | auto | — |
 | `US-09-02#5` | Deleting a local calendar with events asks for confirmation, naming … | `TC-09-07` | auto | — |
 | `US-09-02#6` | Deleting the default local calendar forgets the choice, and new even… | `TC-09-07` | auto | — |
-| `US-09-02#7` | With no account connected, deleting the last local calendar shows th… | `TC-09-07` | auto | — |
+| `US-09-02#7` | The last local calendar cannot be deleted: its **Delete** is unavail… | `TC-09-07` | auto | — |
+| `US-09-02#8` | With a Google account connected and no local calendar (Google connec… | `TC-09-15` | auto | — |
 | `US-09-03#1` | Every field of a local event the editor offers (title, description, … | `TC-09-08` | auto | — |
 | `US-09-03#2` | A local event can be dragged to another time or day and its end drag… | `TC-09-08` | auto | — |
 | `US-09-03#3` | Deleting a local event that is not part of a series deletes it witho… | `TC-09-08` | auto | — |
@@ -106,6 +111,8 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | The app runs offline → local events are created, changed and deleted… | `TC-09-08` | — |
 | No account is connected → the default event length is Google's defau… | `TC-09-03` | — |
 | No account is connected and every local calendar is disabled → creat… | — | smoke depth — not tested yet (`DEC-65`) |
+| The disk is full, or the file or its directory cannot be written → th… | `TC-09-14` | — |
+| The cache does not take the local calendars when the file is opened… | — | covered by a unit test, `local_calendars_the_cache_did_not_take_are_started_again` |
 | The local file cannot be read at start (damaged, or from a newer ver… | `TC-09-04` | — |
 | Deleting a local calendar is not undone with Ctrl+Z; the confirmatio… | `TC-09-07` | — |
 | A local calendar's name may repeat another calendar's name; it is no… | — | smoke depth — not tested yet (`DEC-65`) |

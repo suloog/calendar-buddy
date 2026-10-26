@@ -33,8 +33,8 @@ Calendars and events kept only on the device, never synchronized with Google, so
 | `SRC-06-11` A local calendar can be the default calendar for new events; without a Google accoun… | informal | `MOD-09-F11` |
 | `SRC-06-12` The group is named "Local" in the English interface and comes last in the side panel… | informal | `MOD-09-U02` |
 | `SRC-06-13` The welcome screen gets a second action, "Use without an account", which creates a f… | informal | `MOD-09-F17` |
-| `SRC-06-14` The welcome screen shows only when there is neither an account nor a local calendar;… | informal | `MOD-09-F18`, `MOD-09-F19` |
-| `SRC-06-15` Local data is kept apart from the cache, in the app's data directory, so that it is… | informal | `MOD-09-F01`, `MOD-09-NFR-01` |
+| `SRC-06-14` The welcome screen shows only when there is neither an account nor a local calendar;… | informal | `MOD-09-F18`, `MOD-09-F21` |
+| `SRC-06-15` Local data is kept apart from the cache, in the app's data directory, so that it is… | informal | `MOD-09-F01`, `MOD-09-F20`, `MOD-09-U05`, `MOD-09-NFR-01` |
 | `SRC-06-16` Local events do not make the user busy for others in "Meet with…" and availability,… | informal | `MOD-09-F16` |
 | `SRC-06-17` The work goes through the spec workflow: a source, a decision, a new module with req… | informal | this module (process, no requirement) |
 
@@ -67,8 +67,13 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ### Welcome screen
 
 - [MOD-09-F17] The welcome screen offers, next to connecting a Google account, "Use without an account", which creates a local calendar named "My calendar", makes it the default calendar and opens the calendar views. — *source: `DEC-179`*
-- [MOD-09-F18] The welcome screen shows only when there is neither a connected account nor a local calendar; a Google account can be connected later from the settings at any time. — *source: `DEC-179`*
-- [MOD-09-F19] Removing the last account goes back to the welcome screen only when no local calendar is left; deleting the last local calendar does the same when no account is connected. — *source: `DEC-179`*
+- [MOD-09-F18] The welcome screen shows only when there is neither a connected account nor a local calendar — in practice only on the first run, as there is always a local calendar afterwards (`MOD-09-F21`); a Google account can be connected later from the settings at any time. — *source: `DEC-179`, `DEC-185`*
+- ~~[MOD-09-F19] Removing the last account goes back to the welcome screen only when no local calendar is left; deleting the last local calendar does the same when no account is connected. — *source: `DEC-179`*~~ — withdrawn, `DEC-185`, now `MOD-09-F21`
+
+### Always a local calendar, and changes that are not saved
+
+- [MOD-09-F20] When a change to local calendars or events cannot be written to the device, the app says so at once and keeps saying it until a change is written again; the change is not shown as made. A change refused because the event changed or is gone does not count. — *source: `DEC-186`*
+- [MOD-09-F21] Once the app is in use there is always a local calendar: with a Google account connected and no local calendar, "My calendar" is added; the last local calendar cannot be deleted. Removing the last Google account keeps the local calendars and the calendar views. — *source: `DEC-185`*
 
 ## UI/UX requirements
 
@@ -76,6 +81,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-09-U02] In the side panel and the calendar picker the "Local" group comes last, after the accounts, and has no account address or account state. — *source: `DEC-178`*
 - [MOD-09-U03] Deleting a local calendar that has events asks for confirmation, saying how many events will be deleted and that this cannot be undone; an empty one is deleted without a question. — *source: `DEC-178`*
 - [MOD-09-U04] The welcome screen keeps connecting a Google account as its main action and says what it brings (synchronization, invitations, Google Meet); "Use without an account" is the secondary one. — *source: `DEC-179`*
+- [MOD-09-U05] A change not saved (`MOD-09-F20`) is told in a bar across the top of the main window, filled with the warning tone and in bold, naming the reason and the file to check. — *source: `DEC-186`*
 
 ## Non-functional requirements
 
@@ -86,6 +92,8 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - The app runs offline → local events are created, changed and deleted as usual; there is no "saving" mark (`MOD-05-U03`) and no offline refusal for them.
 - No account is connected → the default event length is Google's default, 60 minutes, as there is no Google setting to read (`MOD-05-F09`); the side panel shows only the "Local" group; "Meet with…" and anything needing Google is unavailable and says it needs a Google account.
 - No account is connected and every local calendar is disabled → creating an event says there is no calendar to create it in.
+- The disk is full, or the file or its directory cannot be written → the change is lost and the bar of `MOD-09-U05` stays until a change is written (`DEC-186`).
+- The cache does not take the local calendars when the file is opened → they are started again with the next polling round (`DEC-187`).
 - The local file cannot be read at start (damaged, or from a newer version) → the app says so, does not overwrite it, and keeps working with Google calendars; local calendars are unavailable until the problem is solved.
 - Deleting a local calendar is not undone with Ctrl+Z; the confirmation stands in for undo.
 - A local calendar's name may repeat another calendar's name; it is not required to be unique.
@@ -121,4 +129,5 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] The editor of a local event offers no guests, Meet, attachments, special types, busy/free or visibility, and its calendar picker lists only local calendars.
 - [ ] Deleting a local calendar with events asks for confirmation with their count; afterwards neither the calendar nor its events remain.
 - [ ] After deleting the cache file and restarting, local calendars and events are all still there.
-- [ ] With a Google account and local calendars, removing the account leaves the local calendars and does not show the welcome screen; deleting the last local calendar then shows it.
+- [ ] With a Google account and local calendars, removing the account leaves the local calendars and the calendar views; the last local calendar cannot be deleted.
+- [ ] With the local file's directory made read-only, adding a local calendar shows the bar saying changes are not being saved, until a change is written again.

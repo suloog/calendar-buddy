@@ -29,7 +29,7 @@ depends_on: [] # test case IDs that must pass first
 
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
-| 1 | Open "Dentist" in the editor; change the title to "Dentist — check-up", the end to 11:30, the time zone to Europe/London, the colour to Tomato; save. | The event shows the new title, 10:00–11:30 local time in Tomato, without a "saving" mark. | app state |
+| 1 | Open "Dentist" in the editor; change the title to "Dentist — check-up", the end to 11:30, the time zone to Europe/London, the colour to Tomato; save. | The event shows the new title in Tomato, without a "saving" mark, at 11:00–12:30 in the week view: 10:00–11:30 in London, the time zone chosen, as Google Calendar takes it (`DEC-183`, `DEC-185`). | app state |
 | 2 | Drag it to Monday 16 November 14:00. | It moves in 15-minute steps and lands at 14:00–15:30. | app state |
 | 3 | Drag its end down by 30 minutes. | It lasts until 16:00. | app state |
 | 4 | Press Ctrl+Z. | It ends at 15:30 again. | app state |
