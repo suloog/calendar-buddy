@@ -33,13 +33,13 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | ------ | ------------------ | ------- | ---- | ------- |
 | `MOD-01` Google accounts and sign-in | 12 / 2 | 4 | 0 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
-| `MOD-03` Views and navigation | 30 / 9 | 11 | 7 | sliced |
+| `MOD-03` Views and navigation | 30 / 9 | 11 | 8 | sliced |
 | `MOD-04` Appearance and themes | 4 / 6 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 35 / 5 | 11 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 1 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| `MOD-09` Local calendars | 21 / 6 | 5 | 0 | sliced |
-| **Total** | **172 / 41** | **56** | **8** | 8 / 8 modules sliced |
+| `MOD-09` Local calendars | 21 / 6 | 5 | 1 | sliced |
+| **Total** | **172 / 41** | **56** | **10** | 8 / 8 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -84,7 +84,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-03-08` | As a User, I can do everything from the keyboard with Google Calendar's shortcuts, so that I keep my muscle memory | F23, F24, U04, U07 | must | done | `US-03-05` | — |
 | `US-03-09` | As a User, I see dates, times and time zones the way my system is set, so that the calendar matches the rest of my desktop | F16, F17, F18 | must | done | `US-03-01` | — |
 | `US-03-10` | As a User, I can stretch or shrink the hours of the day, so that I see short events clearly or the whole day at once | F27, F28, F29, U08 | must | review | `US-03-01`, `US-03-02` | — |
-| `US-03-11` | As a User, I can put my accounts and the local calendars in the order I want, so that the calendars I use most are at the top | F30, U09 | must | review | `US-03-06`, `US-03-07`, `US-09-02` | — |
+| `US-03-11` | As a User, I can put my accounts and the local calendars in the order I want, so that the calendars I use most are at the top | F30, U09 | must | done | `US-03-06`, `US-03-07`, `US-09-02` | — |
 
 ## [MOD-04] Appearance and themes
 
@@ -153,4 +153,4 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-09-02` | As a User, I can add, rename, recolour and delete local calendars in the settings, so that I keep separate calendars for different parts of my life without Google | F02, F03, F04, F05, F06, F11, F21, U01, U03 | must | review | `US-09-01`, `US-03-07`, `US-07-03`, `US-01-04` | — |
 | `US-09-03` | As a User, I can change, move, repeat and delete local events the same way as my Google events, so that a local calendar is as handy as a Google one | F09, F10, F12, F16 | must | review | `US-09-01`, `US-05-03`, `US-05-04`, `US-05-07`, `US-05-09`, `US-05-11` | — |
 | `US-09-04` | As a User, I get notifications for my local events, with defaults I set for each local calendar, so that local events remind me as Google events do | F13, F14, F15, U01 | must | review | `US-09-02`, `US-07-01`, `US-07-02`, `US-07-04` | — |
-| `US-09-05` | As a User who uses only Google, I can hide the local calendars, so that "Local" does not clutter my calendar | F22, U06 | must | review | `US-09-02` | — |
+| `US-09-05` | As a User who uses only Google, I can hide the local calendars, so that "Local" does not clutter my calendar | F22, U06 | must | done | `US-09-02` | — |
