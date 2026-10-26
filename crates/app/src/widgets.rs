@@ -161,7 +161,7 @@ pub fn menu_dots(ui: &mut egui::Ui, shown: bool, content: impl FnOnce(&mut egui:
 }
 
 /// How wide the column of icons before the rows of an event's details is.
-const ROW_ICON: f32 = 28.0;
+pub const ROW_ICON: f32 = 28.0;
 /// How large those icons are: the emoji font draws them small.
 const ROW_ICON_SIZE: f32 = 17.0;
 

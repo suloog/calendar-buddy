@@ -9,7 +9,7 @@ use calendar_core::texts;
 use eframe::egui;
 
 use crate::grid_view::color;
-use crate::widgets::{close_button, color_mark, text_field};
+use crate::widgets::{ROW_ICON, close_button, color_mark, text_field};
 
 /// What the user did in "Meet with…".
 pub enum Action {
@@ -63,20 +63,26 @@ pub fn show(
         return action;
     }
     for (chosen, &seen) in meet.chosen.iter().zip(seen) {
-        ui.horizontal(|ui| {
-            color_mark(ui, color(chosen.color));
-            ui.vertical(|ui| {
+        // The cross first, so a long name is cut short before it rather than under it.
+        egui::Sides::new().shrink_left().show(
+            ui,
+            |ui| {
+                color_mark(ui, color(chosen.color));
                 ui.add(egui::Label::new(chosen.name()).truncate());
-                if !seen {
-                    ui.weak(texts::CALENDAR_CANNOT_BE_SEEN);
-                }
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            },
+            |ui| {
                 if close_button(ui, texts::REMOVE).clicked() {
                     action = Some(Action::Remove(chosen.person.email.clone()));
                 }
+            },
+        );
+        if !seen {
+            // Under the name, in line with it.
+            ui.horizontal(|ui| {
+                ui.add_space(ROW_ICON + ui.spacing().item_spacing.x);
+                ui.weak(texts::CALENDAR_CANNOT_BE_SEEN);
             });
-        });
+        }
     }
     ui.add_space(4.0);
     if ui.button(texts::CREATE_EVENT).clicked() {
