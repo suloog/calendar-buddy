@@ -2293,3 +2293,15 @@
 - **Scope effect:** extension
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-190] Hiding the local calendars and ordering the groups: how it is built
+
+- **Date:** 2026-10-26
+- **Decided by:** developer (Claude)
+- **Source:** implementation `US-09-05`, `US-03-11`
+- **Affects:** `DEC-188`, `DEC-189`, `MOD-09-F22`, `MOD-03-F30`, `MOD-03-U09`
+- **Decision:** Hidden local calendars are kept and synchronized from their file as before; like disabled calendars they are left out of the side panel, the pickers and the views by the settings, and their reminders are silenced, so showing them again needs nothing from the worker. The "Local" group is left out of the side panel and the pickers whenever none of its calendars is shown, also when each was disabled on its own; the settings' **Calendars** list keeps it. The settings file holds `local = hidden` and one `order = <account ID>` line per group, `local` for the local calendars; a removed account's line goes with it. In the **Accounts** section the arrows are chevrons at each row's end, up then down, grayed where the group cannot move, with "Move up" and "Move down" on hover; "Local calendars" is a row of its own with the arrows only. The checkbox's hover says what hiding does, or, unavailable without a Google account, why it cannot be unticked.
+- **Why:** The simplest reading of `DEC-188` and `DEC-189` that reuses what disabling a calendar and the settings file already do.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
