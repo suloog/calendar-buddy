@@ -42,8 +42,9 @@ pub struct Group {
     pub calendars: Vec<Row>,
 }
 
-/// The side panel's accounts in the order they were connected, each with its calendars in
-/// Google's order; calendars disabled in the settings are left out (`MOD-03-F13`).
+/// The side panel's accounts and local calendars in their order (`MOD-03-F30`), each with its
+/// calendars in Google's order; calendars disabled in the settings are left out (`MOD-03-F13`),
+/// and the local ones while they are hidden (`MOD-09-F22`).
 pub fn groups(
     accounts: &[Entry],
     calendars: &[Calendar],
@@ -51,8 +52,8 @@ pub fn groups(
     status: &Status,
     online: bool,
 ) -> Vec<Group> {
-    let rows = by_account(accounts, calendars, |calendar| {
-        (!settings.disabled.contains(&key(calendar))).then(|| Row {
+    let rows = by_account(accounts, calendars, &settings.order, |calendar| {
+        (!settings.is_disabled(&key(calendar))).then(|| Row {
             calendar: calendar.clone(),
             color: calendar_color(calendar, &settings.colors),
             shown: !settings.hidden.contains(&key(calendar)),
@@ -84,7 +85,7 @@ pub fn shown(events: &[Event], settings: &Settings) -> Vec<usize> {
             let event = &events[i];
             let key = (event.account_id.clone(), event.calendar_id.clone());
             !settings.hidden.contains(&key)
-                && !settings.disabled.contains(&key)
+                && !settings.is_disabled(&key)
                 && !(settings.hide_declined && event.about.declined())
         })
         .collect()
@@ -97,7 +98,7 @@ pub fn in_settings(
     calendars: &[Calendar],
     settings: &Settings,
 ) -> Vec<(String, Vec<(Calendar, bool)>)> {
-    by_account(accounts, calendars, |calendar| {
+    by_account(accounts, calendars, &settings.order, |calendar| {
         Some((
             calendar.clone(),
             !settings.disabled.contains(&key(calendar)),
@@ -113,16 +114,17 @@ pub fn pickable(
     calendars: &[Calendar],
     settings: &Settings,
 ) -> Vec<(String, Vec<Calendar>)> {
-    by_account(accounts, calendars, |calendar| {
-        (!settings.disabled.contains(&key(calendar))).then(|| calendar.clone())
+    by_account(accounts, calendars, &settings.order, |calendar| {
+        (!settings.is_disabled(&key(calendar))).then(|| calendar.clone())
     })
 }
 
-/// The accounts in the order they were connected, each with what `item` gives for its calendars,
-/// then "Local" with the local calendars, if there are any (`MOD-09-U02`).
+/// The groups in their order, each with what `item` gives for its calendars: the accounts, and
+/// "Local" with the local calendars when `item` gives any of them (`MOD-09-U02`, `MOD-09-F22`).
 fn by_account<T>(
     accounts: &[Entry],
     calendars: &[Calendar],
+    order: &[String],
     item: impl Fn(&Calendar) -> Option<T>,
 ) -> Vec<(String, Vec<T>)> {
     let of = |account_id: &str| -> Vec<T> {
@@ -131,14 +133,51 @@ fn by_account<T>(
             .filter_map(&item)
             .collect()
     };
+    let names = |id: &str| -> String {
+        (accounts.iter())
+            .find(|entry| entry.account.id == id)
+            .map_or_else(
+                || texts::LOCAL.to_string(),
+                |entry| entry.account.email.clone(),
+            )
+    };
+    (ordered(accounts, calendars, order).into_iter())
+        .map(|id| (names(&id), of(&id), id))
+        .filter(|(_, items, id)| !items.is_empty() || id != local::ACCOUNT_ID)
+        .map(|(name, items, _)| (name, items))
+        .collect()
+}
+
+/// The IDs of the side panel's groups in their order (`MOD-03-F30`): those `order` names as it
+/// names them, then the others — the accounts in the order they were connected, then the local
+/// calendars (`local::ACCOUNT_ID`) if there are any (`DEC-189`).
+pub fn ordered(accounts: &[Entry], calendars: &[Calendar], order: &[String]) -> Vec<String> {
     let local = (calendars.iter())
         .any(|calendar| calendar.account_id == local::ACCOUNT_ID)
-        .then(|| (texts::LOCAL.to_string(), of(local::ACCOUNT_ID)));
-    accounts
-        .iter()
-        .map(|entry| (entry.account.email.clone(), of(&entry.account.id)))
+        .then(|| local::ACCOUNT_ID.to_string());
+    let mut ids: Vec<String> = (accounts.iter())
+        .map(|entry| entry.account.id.clone())
         .chain(local)
-        .collect()
+        .collect();
+    ids.sort_by_key(|id| {
+        order
+            .iter()
+            .position(|named| named == id)
+            .unwrap_or(usize::MAX)
+    });
+    ids
+}
+
+/// The groups `ids`, in their order, with the one at `at` moved one place up or down
+/// (`MOD-03-U09`); the order to keep.
+pub fn moved(ids: &[String], at: usize, up: bool) -> Vec<String> {
+    let mut ids = ids.to_vec();
+    match up {
+        true if at > 0 && at < ids.len() => ids.swap(at, at - 1),
+        false if at + 1 < ids.len() => ids.swap(at, at + 1),
+        _ => {}
+    }
+    ids
 }
 
 /// Every calendar there is, is hidden or disabled: the view is empty and points to the side
@@ -147,7 +186,7 @@ pub fn nothing_shown(calendars: &[Calendar], settings: &Settings) -> bool {
     !calendars.is_empty()
         && calendars.iter().all(|calendar| {
             let key = key(calendar);
-            settings.hidden.contains(&key) || settings.disabled.contains(&key)
+            settings.hidden.contains(&key) || settings.is_disabled(&key)
         })
 }
 
@@ -487,6 +526,115 @@ mod tests {
         assert!(nothing_shown(&calendars, &settings));
         toggle(&mut settings.hidden, &calendars[0]);
         assert!(!nothing_shown(&calendars, &settings));
+    }
+
+    fn three_groups() -> ([Entry; 2], [Calendar; 3]) {
+        let accounts = [entry("a", "a@example.com"), entry("b", "b@example.com")];
+        let calendars = [
+            calendar("a", "a@example.com", Access::Owner),
+            calendar("b", "Home", Access::Owner),
+            calendar(local::ACCOUNT_ID, "Mine", Access::Owner),
+        ];
+        (accounts, calendars)
+    }
+
+    fn emails(accounts: &[Entry], calendars: &[Calendar], settings: &Settings) -> Vec<String> {
+        let groups = groups(accounts, calendars, settings, &Status::default(), true);
+        groups.into_iter().map(|group| group.email).collect()
+    }
+
+    #[test]
+    fn tc_03_15_the_groups_are_moved_up_and_down_and_follow_the_order_everywhere() {
+        let (accounts, calendars) = three_groups();
+        // 1. As connected, "Local" last; the first does not move up, the last not down.
+        let mut settings = Settings::default();
+        let ids = ordered(&accounts, &calendars, &settings.order);
+        assert_eq!(ids, ["a", "b", "local"]);
+        assert_eq!(moved(&ids, 0, true), ids);
+        assert_eq!(moved(&ids, 2, false), ids);
+        // 2. "Local" moved up twice: first in the panel, the pickers and the settings.
+        settings.order = moved(&moved(&ids, 2, true), 1, true);
+        assert_eq!(settings.order, ["local", "a", "b"]);
+        let local_a_b = ["Local", "a@example.com", "b@example.com"];
+        assert_eq!(emails(&accounts, &calendars, &settings), local_a_b);
+        let picked = pickable(&accounts, &calendars, &settings);
+        assert_eq!(
+            picked.iter().map(|(e, _)| e.as_str()).collect::<Vec<_>>(),
+            local_a_b
+        );
+        let listed = in_settings(&accounts, &calendars, &settings);
+        assert_eq!(
+            listed.iter().map(|(e, _)| e.as_str()).collect::<Vec<_>>(),
+            local_a_b
+        );
+        // 3. "b" moved up: "Local", "b", "a".
+        settings.order = moved(&settings.order, 2, true);
+        assert_eq!(
+            emails(&accounts, &calendars, &settings),
+            ["Local", "b@example.com", "a@example.com"]
+        );
+        // 4. Kept across a restart.
+        let restarted = Settings::parse(&settings.to_text());
+        assert_eq!(
+            emails(&accounts, &calendars, &restarted),
+            emails(&accounts, &calendars, &settings)
+        );
+    }
+
+    #[test]
+    fn tc_03_16_new_and_removed_accounts_fit_the_order_and_the_default_does_not_follow_it() {
+        let (accounts, calendars) = three_groups();
+        let mut settings = Settings::default();
+        // 1–2. "b" first; a new event still starts in "a"'s primary calendar.
+        let ids = ordered(&accounts, &calendars, &settings.order);
+        settings.order = moved(&ids, 1, true);
+        assert_eq!(settings.order, ["b", "a", "local"]);
+        let default = crate::create::default_calendar(&accounts, &calendars, &settings);
+        assert_eq!(default.map(|c| c.id), Some("a@example.com".to_string()));
+        // 3. "c" connected: last.
+        let more = [
+            accounts[0].clone(),
+            accounts[1].clone(),
+            entry("c", "c@example.com"),
+        ];
+        assert_eq!(
+            ordered(&more, &calendars, &settings.order),
+            ["b", "a", "local", "c"]
+        );
+        // 4. "a" removed: "b", "Local", "c".
+        assert!(settings.forget_account("a"));
+        let left = [more[1].clone(), more[2].clone()];
+        assert_eq!(
+            ordered(&left, &calendars, &settings.order),
+            ["b", "local", "c"]
+        );
+    }
+
+    #[test]
+    fn hidden_local_calendars_are_out_of_the_panel_the_pickers_and_the_views() {
+        let accounts = [entry("a", "a@example.com")];
+        let mine = calendar(local::ACCOUNT_ID, "Mine", Access::Owner);
+        let calendars = [calendar("a", "Work", Access::Owner), mine.clone()];
+        let events = [event("a", "Work", 12), event(local::ACCOUNT_ID, "Mine", 12)];
+        let settings = Settings {
+            local_hidden: true,
+            ..Settings::default()
+        };
+        let groups = groups(&accounts, &calendars, &settings, &Status::default(), true);
+        assert_eq!(
+            names(&groups),
+            [(
+                "a@example.com".to_string(),
+                vec![("Work".to_string(), true)]
+            )]
+        );
+        assert_eq!(pickable(&accounts, &calendars, &settings).len(), 1);
+        assert_eq!(shown(&events, &settings), [0]);
+        // Still listed in the settings, as they were.
+        let listed = in_settings(&accounts, &calendars, &settings);
+        assert_eq!(listed[1], ("Local".to_string(), vec![(mine, true)]));
+        // Shown again: back as they were.
+        assert_eq!(shown(&events, &Settings::default()), [0, 1]);
     }
 
     #[test]

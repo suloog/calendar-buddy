@@ -4,8 +4,10 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use crate::accounts::Entry;
 use crate::cache::{color_text, parse_color};
 use crate::colors::LocalColors;
+use crate::local;
 use crate::navigation::View;
 use crate::side_panel::Hidden;
 use crate::theme::Theme;
@@ -39,6 +41,11 @@ pub struct Settings {
     pub theme: Theme,
     /// The height of the hours of the day, 3-day and week views (`MOD-03-F29`).
     pub hour_zoom: HourZoom,
+    /// The local calendars are hidden as a whole, as if disabled (`MOD-09-F22`).
+    pub local_hidden: bool,
+    /// The order of the side panel's groups, by account ID, `local` for the local calendars,
+    /// once the user chose one (`MOD-03-F30`).
+    pub order: Vec<String>,
 }
 
 impl Settings {
@@ -71,6 +78,8 @@ impl Settings {
                 }
                 "theme" => settings.theme = Theme::from_key(value.trim()),
                 "hour_height" => settings.hour_zoom = HourZoom::from_key(value.trim()),
+                "local" => settings.local_hidden = value.trim() == "hidden",
+                "order" => settings.order.push(value.trim().to_string()),
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -125,13 +134,37 @@ impl Settings {
         if let Some(height) = self.hour_zoom.key() {
             text.push_str(&format!("hour_height = {height}\n"));
         }
+        if self.local_hidden {
+            text.push_str("local = hidden\n");
+        }
+        for group in &self.order {
+            text.push_str(&format!("order = {group}\n"));
+        }
         text
+    }
+
+    /// Shows the local calendars again when no Google account is connected, as they are always
+    /// shown then (`MOD-09-F22`); says whether that changed anything.
+    pub fn keep_local_shown(&mut self, accounts: &[Entry]) -> bool {
+        let hide = self.local_hidden && accounts.is_empty();
+        if hide {
+            self.local_hidden = false;
+        }
+        hide
+    }
+
+    /// Whether the calendar is out of the side panel, the pickers and the views: disabled in the
+    /// settings (`MOD-03-F13`), or local while the local calendars are hidden (`MOD-09-F22`).
+    pub fn is_disabled(&self, key: &(String, String)) -> bool {
+        self.disabled.contains(key) || (self.local_hidden && key.0 == local::ACCOUNT_ID)
     }
 
     /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
     /// anything.
     pub fn forget_account(&mut self, account_id: &str) -> bool {
-        self.forget(|(account, _)| account == account_id)
+        let ordered = self.order.len();
+        self.order.retain(|group| group != account_id);
+        self.forget(|(account, _)| account == account_id) || self.order.len() != ordered
     }
 
     /// Forgets what the settings hold for a deleted local calendar: hidden, disabled, muted,
@@ -228,6 +261,30 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(restarted.view, View::Grid(GridView::ThreeDays));
         assert_eq!(restarted.selected, d(2026, 11, 11));
+    }
+
+    #[test]
+    fn tc_09_17_without_a_google_account_the_local_calendars_are_shown() {
+        let mut settings = Settings {
+            local_hidden: true,
+            ..Settings::default()
+        };
+        // The last account removed: shown again, and kept so.
+        assert!(settings.keep_local_shown(&[]));
+        assert!(!settings.local_hidden);
+        assert!(!settings.keep_local_shown(&[]));
+    }
+
+    #[test]
+    fn hidden_local_calendars_and_the_order_of_groups_are_saved_and_read_back() {
+        let settings = Settings {
+            local_hidden: true,
+            order: vec!["local".to_string(), "2".to_string(), "1".to_string()],
+            ..Settings::default()
+        };
+        let text = settings.to_text();
+        assert!(text.contains("local = hidden\n"), "{text}");
+        assert_eq!(Settings::parse(&text), settings);
     }
 
     #[test]

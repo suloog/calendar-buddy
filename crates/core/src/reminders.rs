@@ -15,6 +15,7 @@ use std::collections::{BTreeSet, HashMap};
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 
+use crate::local;
 use crate::model::{Calendar, Event, Method, Reminders, Timing};
 use crate::regional::Regional;
 use crate::settings::Settings;
@@ -106,6 +107,8 @@ pub struct Silenced {
     pub all: bool,
     /// By account ID and calendar ID.
     pub muted: BTreeSet<(String, String)>,
+    /// The local calendars are hidden as a whole (`MOD-09-F22`).
+    pub local: bool,
 }
 
 impl Silenced {
@@ -113,13 +116,16 @@ impl Silenced {
         Silenced {
             all: settings.notifications_off,
             muted: settings.muted.clone(),
+            local: settings.local_hidden,
         }
     }
 
     /// Whether the notification is not to be shown.
     pub fn silences(&self, notification: &Notification) -> bool {
         let event = &notification.reminder.event;
-        self.all || (self.muted).contains(&(event.account_id.clone(), event.calendar_id.clone()))
+        self.all
+            || (self.local && event.account_id == local::ACCOUNT_ID)
+            || (self.muted).contains(&(event.account_id.clone(), event.calendar_id.clone()))
     }
 }
 

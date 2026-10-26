@@ -6799,6 +6799,7 @@ mod tests {
         let muted = Silenced {
             all: false,
             muted: [(ACCOUNT_ID.to_string(), "work".to_string())].into(),
+            ..Silenced::default()
         };
         *engine.silenced.lock().unwrap() = muted;
         *clock.lock().unwrap() = thursday(9, 55);
@@ -8174,6 +8175,72 @@ mod tests {
         );
         assert!(colors.is_empty());
         assert_eq!(pick(&mut colors, picked(None), &[my]), None);
+    }
+
+    #[test]
+    fn tc_09_16_hiding_the_local_calendars_takes_local_out_of_sight_and_showing_brings_it_back() {
+        let google = Google::start("tc-09-16");
+        personal(&google);
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let mut engine = first_sync(&google, Instant::now());
+        let time = clock.clone();
+        engine.clock = Box::new(move || *time.lock().unwrap());
+        let act: Acts = Arc::new(|_| {});
+        let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+        engine.handle(
+            Some(Job::Remind(Box::new(notifier.clone()), regional, act)),
+            Instant::now(),
+        );
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let my = add_local(&mut engine, "My calendar");
+        local_event(&mut engine, &my, "Dentist", ((9, 20), (10, 0)));
+        let calendars = engine.cache.calendar_list().unwrap();
+        let mut settings = Settings {
+            default_calendar: Some((my.account_id.clone(), my.id.clone())),
+            ..Settings::default()
+        };
+        let default = |settings: &Settings| {
+            create::default_calendar(&accounts(), &calendars, settings).map(|c| c.id)
+        };
+        let with_local = vec![
+            (
+                "owner@example.com".to_string(),
+                vec!["Personal".to_string()],
+            ),
+            ("Local".to_string(), vec!["My calendar".to_string()]),
+        ];
+
+        // 1. Shown by default.
+        assert!(!settings.local_hidden);
+        assert_eq!(panel(&accounts(), &calendars, &settings), with_local);
+
+        // 2. Hidden: out of the side panel, the picker and the views; still in the settings.
+        settings.local_hidden = true;
+        let [in_panel, in_picker, in_settings] = lists(&accounts(), &calendars, &settings);
+        assert_eq!(in_panel, with_local[..1]);
+        assert_eq!(in_picker, with_local[..1]);
+        assert_eq!(in_settings, with_local);
+        assert!(!titles_shown(&now_shown(&engine), &settings).contains(&"Dentist".to_string()));
+
+        // 3. No notification of "Dentist" at 9:10.
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings);
+        *clock.lock().unwrap() = thursday(9, 10);
+        engine.remind();
+        assert!(notifier.shown().is_empty());
+
+        // 4. A new event goes to the account's primary calendar.
+        assert_eq!(default(&settings), Some(EMAIL.to_string()));
+
+        // 5. Kept across a restart.
+        let restarted = Settings::parse(&settings.to_text());
+        assert!(restarted.local_hidden);
+
+        // 6. Shown again: "Local", "Dentist" and the local default are back.
+        settings.local_hidden = false;
+        assert_eq!(panel(&accounts(), &calendars, &settings), with_local);
+        assert!(titles_shown(&now_shown(&engine), &settings).contains(&"Dentist".to_string()));
+        assert_eq!(default(&settings), Some(my.id.clone()));
     }
 
     #[test]

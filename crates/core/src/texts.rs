@@ -599,6 +599,15 @@ pub const LOCAL_CALENDARS: &str = "Local calendars";
 /// The field naming a new local calendar, and its button (`MOD-09-F02`).
 pub const NEW_CALENDAR_NAME: &str = "Name of a new calendar";
 pub const ADD_CALENDAR: &str = "Add calendar";
+/// The settings' switch hiding the local calendars as a whole (`MOD-09-F22`, `MOD-09-U06`).
+pub const SHOW_LOCAL_CALENDARS: &str = "Show local calendars";
+pub const SHOW_LOCAL_CALENDARS_HINT: &str =
+    "Hidden local calendars are not in the side panel or the views and give no notifications";
+pub const LOCAL_SHOWN_WITHOUT_ACCOUNT: &str =
+    "Local calendars are shown while no Google account is connected";
+/// Moving a group of calendars in the settings' accounts (`MOD-03-U09`).
+pub const MOVE_UP: &str = "Move up";
+pub const MOVE_DOWN: &str = "Move down";
 /// Hovering "Delete" of the only local calendar in the settings (`MOD-09-F21`).
 pub const LAST_LOCAL_CALENDAR: &str = "The last local calendar cannot be deleted";
 /// Hovering a local calendar's name in the settings (`MOD-09-F03`).

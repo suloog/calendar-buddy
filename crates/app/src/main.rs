@@ -369,7 +369,7 @@ impl CalendarApp {
         let zone_changes = watch_zone(zone, ctx.clone());
         let today = Utc::now().with_timezone(&zone).date_naive();
         let settings_path = settings::default_path();
-        let settings = settings_path
+        let mut settings = settings_path
             .as_deref()
             .map(Settings::load)
             .unwrap_or_default();
@@ -389,6 +389,8 @@ impl CalendarApp {
             .as_deref()
             .map(Accounts::load)
             .unwrap_or_default();
+        // Without a Google account the local calendars are always shown (`MOD-09-F22`).
+        settings.keep_local_shown(accounts.list());
         let account_ids = accounts
             .list()
             .iter()
@@ -992,6 +994,8 @@ impl CalendarApp {
         let mut remove = None;
         let mut toggled = None;
         let mut local_actions = Vec::new();
+        let mut local_shown = None;
+        let mut moved_group = None;
         let mut save = None;
         let mut edit = None;
         let mut delete = None;
@@ -1559,8 +1563,44 @@ impl CalendarApp {
                                 widgets::outlined_controls(ui);
                                 widgets::heading(ui, texts::ACCOUNTS);
                                 // Each account a row: its address and state, what can be done
-                                // with it at the row's end.
-                                for entry in self.accounts.list() {
+                                // with it at the row's end; with the local calendars' row, in
+                                // the side panel's order, each moved up or down there
+                                // (`MOD-03-F30`, `MOD-03-U09`).
+                                let groups = side_panel::ordered(
+                                    self.accounts.list(),
+                                    self.sync.calendars(),
+                                    &self.settings.order,
+                                );
+                                let last = groups.len().saturating_sub(1);
+                                for (at, id) in groups.iter().enumerate() {
+                                    let arrows = |ui: &mut egui::Ui, moved: &mut Option<_>| {
+                                        let quarter = std::f32::consts::FRAC_PI_2;
+                                        // Grayed where it cannot move, as the period's arrows.
+                                        let arrow = |ui: &mut egui::Ui, icon, hint, can| {
+                                            ui.add_enabled_ui(can, |ui| {
+                                                icons::turned(ui, icon, hint, can, quarter)
+                                            })
+                                            .inner
+                                            .clicked()
+                                        };
+                                        if arrow(ui, Icon::Next, texts::MOVE_DOWN, at < last) {
+                                            *moved = Some((at, false));
+                                        }
+                                        if arrow(ui, Icon::Previous, texts::MOVE_UP, at > 0) {
+                                            *moved = Some((at, true));
+                                        }
+                                    };
+                                    let Some(entry) =
+                                        self.accounts.list().iter().find(|e| e.account.id == *id)
+                                    else {
+                                        egui::Sides::new().show(
+                                            ui,
+                                            |ui| ui.label(texts::LOCAL_CALENDARS),
+                                            |ui| arrows(ui, &mut moved_group),
+                                        );
+                                        ui.add_space(4.0);
+                                        continue;
+                                    };
                                     egui::Sides::new().show(
                                         ui,
                                         |ui| {
@@ -1581,6 +1621,8 @@ impl CalendarApp {
                                             });
                                         },
                                         |ui| {
+                                            // At the row's end, as on the local calendars' row.
+                                            arrows(ui, &mut moved_group);
                                             ui.add_enabled_ui(can_change, |ui| {
                                                 if widgets::outlined_button(ui, texts::REMOVE)
                                                     .clicked()
@@ -1613,6 +1655,30 @@ impl CalendarApp {
                                 widgets::heading(ui, texts::LOCAL_CALENDARS);
                                 match self.sync.local() {
                                     Some(Ok(())) => {
+                                        // All of them out of sight, as if disabled; always shown
+                                        // without a Google account (`MOD-09-F22`, `MOD-09-U06`).
+                                        let google = !self.accounts.list().is_empty();
+                                        let mut on = !self.settings.local_hidden;
+                                        let hint = if google {
+                                            texts::SHOW_LOCAL_CALENDARS_HINT
+                                        } else {
+                                            texts::LOCAL_SHOWN_WITHOUT_ACCOUNT
+                                        };
+                                        if ui
+                                            .add_enabled(
+                                                google,
+                                                egui::Checkbox::new(
+                                                    &mut on,
+                                                    texts::SHOW_LOCAL_CALENDARS,
+                                                ),
+                                            )
+                                            .on_hover_text(hint)
+                                            .on_disabled_hover_text(hint)
+                                            .changed()
+                                        {
+                                            local_shown = Some(on);
+                                        }
+                                        ui.add_space(4.0);
                                         let listed: Vec<Calendar> =
                                             local::of(self.sync.calendars()).cloned().collect();
                                         local_actions = local_calendars::show(
@@ -1716,6 +1782,21 @@ impl CalendarApp {
         }
         if let Some(calendar) = default_calendar {
             self.settings.default_calendar = Some((calendar.account_id, calendar.id));
+            self.save_settings();
+        }
+        if let Some(on) = local_shown {
+            self.settings.local_hidden = !on;
+            self.save_settings();
+            self.sync.set_silenced(Silenced::of(&self.settings));
+            self.rebuild();
+        }
+        if let Some((at, up)) = moved_group {
+            let groups = side_panel::ordered(
+                self.accounts.list(),
+                self.sync.calendars(),
+                &self.settings.order,
+            );
+            self.settings.order = side_panel::moved(&groups, at, up);
             self.save_settings();
         }
         for action in local_actions {
@@ -1908,6 +1989,11 @@ impl CalendarApp {
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
+        // Without a Google account the local calendars are always shown (`MOD-09-F22`).
+        if self.settings.keep_local_shown(self.accounts.list()) {
+            self.save_settings();
+            self.sync.set_silenced(Silenced::of(&self.settings));
+        }
         self.saving.forget_account(id);
         // Its events can no longer be changed back.
         self.last = LastChange::default();
