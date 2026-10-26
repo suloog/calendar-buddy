@@ -356,6 +356,7 @@ impl CalendarApp {
             connect: Connect::new(),
             connected: None,
             removal: Removal::new(),
+            local_calendars: crate::local_calendars::State::default(),
             sync,
             events: Vec::new(),
             cached: Vec::new(),
@@ -493,6 +494,16 @@ fn preview() {
     });
     picture("settings-light", week, Theme::Light, |app, _| {
         app.dialog = Some(Dialog::Settings)
+    });
+    // Local calendars, one of them being deleted.
+    picture("settings-local-light", week, Theme::Light, |app, _| {
+        let my = calendar_core::local::my_calendar(app.zone);
+        let others = std::slice::from_ref(&my);
+        let family = calendar_core::local::new_calendar("Family", app.zone, others);
+        app.sync.add_local(my);
+        app.sync.add_local(family.clone());
+        app.local_calendars.ask(family, 3);
+        app.dialog = Some(Dialog::Settings);
     });
     picture_sized(
         "settings-short-light",

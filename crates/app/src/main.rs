@@ -6,6 +6,7 @@ mod connect;
 mod editor;
 mod grid_view;
 mod icons;
+mod local_calendars;
 mod meet_with;
 mod mini_calendar;
 mod month_view;
@@ -67,7 +68,7 @@ use platform::{
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::time::Instant;
-use sync::{Opened, Saved, Synchronization};
+use sync::{LocalDeletion, Opened, Saved, Synchronization};
 
 fn system_zone() -> Tz {
     iana_time_zone::get_timezone()
@@ -243,13 +244,28 @@ fn answer_buttons(ui: &mut egui::Ui, own: Response, enabled: bool) -> Option<Res
 }
 
 /// Keeps a calendar's local colour picked in its menu, or forgets it on "Reset"; only in the
-/// app's settings, never sent to Google (`MOD-02-F04`).
-fn pick(colors: &mut LocalColors, picked: calendar_list::Picked) {
+/// app's settings, never sent to Google (`MOD-02-F04`). A local calendar's colour is its own,
+/// kept in the local calendars' file (`DEC-182`): the calendar is given back recoloured, to keep
+/// there.
+fn pick(
+    colors: &mut LocalColors,
+    picked: calendar_list::Picked,
+    calendars: &[Calendar],
+) -> Option<Calendar> {
     let key = (picked.account_id, picked.calendar_id);
+    if key.0 == local::ACCOUNT_ID {
+        colors.remove(&key);
+        let calendar = (calendars.iter()).find(|c| c.account_id == key.0 && c.id == key.1)?;
+        return (picked.color).map(|color| Calendar {
+            color,
+            ..calendar.clone()
+        });
+    }
     match picked.color {
         Some(color) => colors.insert(key, color),
         None => colors.remove(&key),
     };
+    None
 }
 
 struct CalendarApp {
@@ -267,6 +283,8 @@ struct CalendarApp {
     connected: Option<Account>,
     /// Removing an account, from the settings.
     removal: Removal,
+    /// The settings' section of local calendars.
+    local_calendars: local_calendars::State,
     /// Synchronizing with Google and reading the cache, off the UI thread.
     sync: Synchronization,
     /// What the views show: the events from the cache, empty until it is read, but those changed
@@ -433,6 +451,7 @@ impl CalendarApp {
             connect: Connect::new(),
             connected: None,
             removal: Removal::new(),
+            local_calendars: local_calendars::State::default(),
             sync,
             events,
             cached: Vec::new(),
@@ -965,6 +984,7 @@ impl CalendarApp {
         let mut again = None;
         let mut remove = None;
         let mut toggled = None;
+        let mut local_actions = Vec::new();
         let mut save = None;
         let mut edit = None;
         let mut delete = None;
@@ -1572,6 +1592,28 @@ impl CalendarApp {
                                     self.connect.show(ui, texts::ADD_ACCOUNT);
                                 }
                                 widgets::section(ui);
+                                // Next to the accounts, the other place calendars come from
+                                // (`MOD-09-U01`); unavailable while the file cannot be read.
+                                widgets::heading(ui, texts::LOCAL_CALENDARS);
+                                match self.sync.local() {
+                                    Some(Ok(())) => {
+                                        let listed: Vec<Calendar> =
+                                            local::of(self.sync.calendars()).cloned().collect();
+                                        local_actions = local_calendars::show(
+                                            ui,
+                                            &mut self.local_calendars,
+                                            &listed,
+                                        );
+                                    }
+                                    Some(Err(why)) => {
+                                        let warn = ui.visuals().warn_fg_color;
+                                        ui.add(egui::Label::new(
+                                            egui::RichText::new(why).color(warn),
+                                        ));
+                                    }
+                                    None => {}
+                                }
+                                widgets::section(ui);
                                 // All of them, on or off (`MOD-07-F11`); the reminders in Google stay.
                                 widgets::heading(ui, texts::NOTIFICATIONS);
                                 let mut on = !self.settings.notifications_off;
@@ -1659,6 +1701,18 @@ impl CalendarApp {
         if let Some(calendar) = default_calendar {
             self.settings.default_calendar = Some((calendar.account_id, calendar.id));
             self.save_settings();
+        }
+        for action in local_actions {
+            match action {
+                local_calendars::Action::Add(name) => {
+                    let calendar = local::new_calendar(&name, self.zone, self.sync.calendars());
+                    self.sync.add_local(calendar);
+                }
+                local_calendars::Action::Change(calendar) => self.change_local(calendar),
+                local_calendars::Action::Delete(calendar, confirmed) => {
+                    self.sync.delete_local(calendar, confirmed);
+                }
+            }
         }
         if let Some(on) = notifications {
             self.settings.notifications_off = !on;
@@ -1859,11 +1913,56 @@ impl CalendarApp {
         {
             self.connected = None;
         }
-        if self.accounts.is_empty() {
-            // The settings close, so they do not reopen over the calendar after a new connection.
+        self.close_on_welcome();
+    }
+
+    /// With neither an account nor a local calendar left, the welcome screen comes back
+    /// (`MOD-09-F19`): the settings close, so they do not reopen over the calendar after a new
+    /// connection.
+    fn close_on_welcome(&mut self) {
+        if local::welcome(self.accounts.list(), self.sync.calendars()) {
             self.dialog = None;
             self.connect.close();
         }
+    }
+
+    /// The local calendar is renamed or recoloured: the side panel, the pickers and its events
+    /// show it so at once (`MOD-09-F03`). Its colour is its own: one chosen replaces a local
+    /// colour kept for it before (`DEC-182`).
+    fn change_local(&mut self, calendar: Calendar) {
+        let key = (calendar.account_id.clone(), calendar.id.clone());
+        let recoloured = (self.sync.calendars().iter())
+            .any(|c| c.account_id == key.0 && c.id == key.1 && c.color != calendar.color);
+        if recoloured && self.settings.colors.remove(&key).is_some() {
+            self.save_settings();
+        }
+        for event in (self.cached.iter_mut())
+            .filter(|e| e.account_id == calendar.account_id && e.calendar_id == calendar.id)
+        {
+            event.color = calendar.color;
+        }
+        self.sync.change_local(calendar);
+        self.show_events(None);
+    }
+
+    /// The local calendar is gone with its events (`MOD-09-F04`): the settings forget it,
+    /// the default calendar too if it was (`MOD-09-F11`); nothing done before can be undone, and
+    /// the welcome screen comes back when nothing is left (`MOD-09-F19`).
+    fn local_deleted(&mut self, calendar: &Calendar) {
+        self.last = LastChange::default();
+        let disabled = self.settings.disabled.clone();
+        if self
+            .settings
+            .forget_calendar(&calendar.account_id, &calendar.id)
+        {
+            self.save_settings();
+            if self.settings.disabled != disabled {
+                self.sync.set_disabled(self.settings.disabled.clone());
+            }
+            self.sync.set_silenced(Silenced::of(&self.settings));
+            self.rebuild();
+        }
+        self.close_on_welcome();
     }
 
     /// Opens the settings and signs in again to an account that needs it.
@@ -1961,6 +2060,12 @@ impl CalendarApp {
             self.show_events(cached);
         }
         self.gone.extend(self.sync.take_gone());
+        for deletion in self.sync.take_local_deletions() {
+            match deletion {
+                LocalDeletion::Ask(calendar, events) => self.local_calendars.ask(calendar, events),
+                LocalDeletion::Deleted(calendar) => self.local_deleted(&calendar),
+            }
+        }
         if let Some(opened) = self.sync.take_opened() {
             self.notified = Some(opened);
         }
@@ -2280,7 +2385,10 @@ impl eframe::App for CalendarApp {
                 );
                 match calendar_list::show(ui, &groups, &self.settings.colors) {
                     Some(calendar_list::Action::Picked(picked)) => {
-                        pick(&mut self.settings.colors, picked)
+                        let calendars = self.sync.calendars();
+                        if let Some(calendar) = pick(&mut self.settings.colors, picked, calendars) {
+                            self.change_local(calendar);
+                        }
                     }
                     Some(calendar_list::Action::Toggled(calendar)) => {
                         side_panel::toggle(&mut self.settings.hidden, &calendar)
@@ -2299,6 +2407,7 @@ impl eframe::App for CalendarApp {
         if !matches!(self.dialog, Some(Dialog::Settings)) {
             self.connect.close();
             self.removal.close();
+            self.local_calendars.close();
         }
         self.navigated(before);
         // The people's calendars over the days shown, asked of Google as they change
@@ -2636,6 +2745,7 @@ mod tests {
             ("connect.rs", include_str!("connect.rs")),
             ("editor.rs", include_str!("editor.rs")),
             ("grid_view.rs", include_str!("grid_view.rs")),
+            ("local_calendars.rs", include_str!("local_calendars.rs")),
             ("main.rs", include_str!("main.rs")),
             ("meet_with.rs", include_str!("meet_with.rs")),
             ("mini_calendar.rs", include_str!("mini_calendar.rs")),

@@ -131,16 +131,23 @@ impl Settings {
     /// Forgets what the settings hold for a removed account (`DEC-85`); says whether they held
     /// anything.
     pub fn forget_account(&mut self, account_id: &str) -> bool {
+        self.forget(|(account, _)| account == account_id)
+    }
+
+    /// Forgets what the settings hold for a deleted local calendar: hidden, disabled, muted,
+    /// its colour and being the default calendar (`MOD-09-F04`); says whether they held anything.
+    pub fn forget_calendar(&mut self, account_id: &str, calendar_id: &str) -> bool {
+        self.forget(|(account, calendar)| account == account_id && calendar == calendar_id)
+    }
+
+    /// Forgets every line of the calendars `gone` holds for; says whether there were any.
+    fn forget(&mut self, gone: impl Fn(&(String, String)) -> bool) -> bool {
         let before = self.clone();
-        self.disabled.retain(|(account, _)| account != account_id);
-        self.colors.retain(|(account, _), _| account != account_id);
-        self.hidden.retain(|(account, _)| account != account_id);
-        self.muted.retain(|(account, _)| account != account_id);
-        if self
-            .default_calendar
-            .as_ref()
-            .is_some_and(|(account, _)| account == account_id)
-        {
+        self.disabled.retain(|key| !gone(key));
+        self.colors.retain(|key, _| !gone(key));
+        self.hidden.retain(|key| !gone(key));
+        self.muted.retain(|key| !gone(key));
+        if self.default_calendar.as_ref().is_some_and(&gone) {
             self.default_calendar = None;
         }
         *self != before
@@ -309,6 +316,32 @@ mod tests {
         assert!(!settings.forget_account("2"));
         assert!(settings.forget_account("1"));
         assert_eq!(settings.default_calendar, None);
+    }
+
+    #[test]
+    fn a_deleted_local_calendars_lines_are_forgotten_and_the_others_kept() {
+        let key = |account: &str, calendar: &str| (account.to_string(), calendar.to_string());
+        let mut settings = Settings::default();
+        for calendar in ["family", "sport"] {
+            settings.hidden.insert(key("local", calendar));
+            settings.disabled.insert(key("local", calendar));
+            settings.muted.insert(key("local", calendar));
+            settings.colors.insert(key("local", calendar), Rgb(1, 2, 3));
+        }
+        settings.muted.insert(key("1", "family"));
+        settings.default_calendar = Some(key("local", "family"));
+
+        assert!(settings.forget_calendar("local", "family"));
+        assert!(!settings.forget_calendar("local", "family"));
+
+        let kept = Settings {
+            hidden: [key("local", "sport")].into(),
+            disabled: [key("local", "sport")].into(),
+            muted: [key("1", "family"), key("local", "sport")].into(),
+            colors: [(key("local", "sport"), Rgb(1, 2, 3))].into(),
+            ..Settings::default()
+        };
+        assert_eq!(settings, kept);
     }
 
     #[test]

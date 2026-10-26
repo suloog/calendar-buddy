@@ -5,6 +5,7 @@
 //! calendars are disabled and enabled again (`MOD-03-F13`).
 
 use calendar_core::colors::{CALENDAR_COLORS, LocalColors};
+use calendar_core::local;
 use calendar_core::model::{Calendar, Rgb};
 use calendar_core::side_panel::{Group, Row};
 use calendar_core::texts::{self, ENABLED_HINT, READ_ONLY};
@@ -251,35 +252,14 @@ fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors, shown: bool) -> Optio
     let current = local
         .get(&(calendar.account_id.clone(), calendar.id.clone()))
         .copied();
+    // A local calendar's colour is its own, kept with it, not a local colour (`DEC-182`).
+    let ticked = current.or((calendar.account_id == local::ACCOUNT_ID).then_some(calendar.color));
     let mut picked = None;
     // The default fonts have no "⋮".
     crate::widgets::menu_dots(ui, shown, |ui| {
-        egui::Grid::new("palette")
-            .spacing([4.0, 4.0])
-            .show(ui, |ui| {
-                for (i, (name, rgb)) in CALENDAR_COLORS.iter().enumerate() {
-                    let size = Vec2::splat(PALETTE_SWATCH);
-                    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-                    let painter = ui.painter();
-                    painter.circle_filled(rect.center(), PALETTE_SWATCH / 2.0, color(*rgb));
-                    if current == Some(*rgb) {
-                        painter.text(
-                            rect.center(),
-                            egui::Align2::CENTER_CENTER,
-                            "✔",
-                            egui::FontId::proportional(12.0),
-                            text_on(*rgb),
-                        );
-                    }
-                    if response.on_hover_text(*name).clicked() {
-                        picked = Some(Chosen::Color(Some(*rgb)));
-                        ui.close();
-                    }
-                    if (i + 1) % PALETTE_COLUMNS == 0 {
-                        ui.end_row();
-                    }
-                }
-            });
+        if let Some(rgb) = palette(ui, ticked) {
+            picked = Some(Chosen::Color(Some(rgb)));
+        }
         // Google's colour comes back; nothing to reset while the calendar has it.
         if ui
             .add_enabled(current.is_some(), egui::Button::new(texts::RESET))
@@ -295,6 +275,39 @@ fn menu(ui: &mut egui::Ui, row: &Row, local: &LocalColors, shown: bool) -> Optio
             ui.close();
         }
     });
+    picked
+}
+
+/// Google Calendar's 24 calendar colours, named on hover, `current` ticked; gives the one
+/// clicked, closing the menu it is in.
+pub fn palette(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
+    let mut picked = None;
+    egui::Grid::new("palette")
+        .spacing([4.0, 4.0])
+        .show(ui, |ui| {
+            for (i, (name, rgb)) in CALENDAR_COLORS.iter().enumerate() {
+                let size = Vec2::splat(PALETTE_SWATCH);
+                let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+                let painter = ui.painter();
+                painter.circle_filled(rect.center(), PALETTE_SWATCH / 2.0, color(*rgb));
+                if current == Some(*rgb) {
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "✔",
+                        egui::FontId::proportional(12.0),
+                        text_on(*rgb),
+                    );
+                }
+                if response.on_hover_text(*name).clicked() {
+                    picked = Some(*rgb);
+                    ui.close();
+                }
+                if (i + 1) % PALETTE_COLUMNS == 0 {
+                    ui.end_row();
+                }
+            }
+        });
     picked
 }
 

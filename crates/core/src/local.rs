@@ -19,10 +19,10 @@ use crate::cache::{
     color_text, event_color_key, parse_color, parse_event_color, parse_reminders, parse_start,
     reminders_text, start_text, timing,
 };
-use crate::colors::EventColor;
+use crate::colors::{CALENDAR_COLORS, EventColor};
 use crate::create::{DEFAULT_LENGTH, NewEvent};
 use crate::editor::Patch;
-use crate::model::{About, Access, Calendar, Method, Reminder, Reminders, Timing};
+use crate::model::{About, Access, Calendar, Method, Reminder, Reminders, Rgb, Timing};
 use crate::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use crate::texts;
 
@@ -157,6 +157,48 @@ impl LocalStore {
                 ],
             )
             .map_err(failed)?;
+        revise(&transaction)?;
+        transaction.commit().map_err(failed)
+    }
+
+    /// Renames and recolours the calendar as `calendar` has it (`MOD-09-F03`).
+    pub fn change_calendar(&self, calendar: &Calendar) -> Result<(), SyncError> {
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        transaction
+            .execute(
+                "UPDATE calendars SET name = ?2, color = ?3 WHERE id = ?1",
+                params![calendar.id, calendar.name, color_text(calendar.color)],
+            )
+            .map_err(failed)?;
+        revise(&transaction)?;
+        transaction.commit().map_err(failed)
+    }
+
+    /// The number of the calendar's events, a series counted once (`MOD-09-U03`).
+    pub fn event_count(&self, calendar_id: &str) -> Result<usize, SyncError> {
+        let count: i64 = (self.connection())
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE calendar_id = ?1 AND series_id IS NULL",
+                params![calendar_id],
+                |row| row.get(0),
+            )
+            .map_err(failed)?;
+        Ok(count as usize)
+    }
+
+    /// Deletes the calendar and its events for good (`MOD-09-F04`).
+    pub fn delete_calendar(&self, calendar_id: &str) -> Result<(), SyncError> {
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        for table in [
+            "DELETE FROM events WHERE calendar_id = ?1",
+            "DELETE FROM calendars WHERE id = ?1",
+        ] {
+            transaction
+                .execute(table, params![calendar_id])
+                .map_err(failed)?;
+        }
         revise(&transaction)?;
         transaction.commit().map_err(failed)
     }
@@ -413,11 +455,30 @@ pub fn new_id() -> String {
 /// in Google Calendar's Peacock, with one notification 30 minutes before its timed events, as a
 /// new Google calendar has (`DEC-178`, `DEC-181`).
 pub fn my_calendar(zone: Tz) -> Calendar {
+    new_calendar(texts::MY_CALENDAR, zone, &[])
+}
+
+/// A new local calendar named `name`, in the system's time zone, with one notification 30
+/// minutes before its timed events (`DEC-178`). Its colour is the first of Google Calendar's
+/// calendar colours, from Peacock on, that no local calendar among `calendars` has; Peacock
+/// once all are taken (`DEC-182`).
+pub fn new_calendar(name: &str, zone: Tz, calendars: &[Calendar]) -> Calendar {
+    let peacock = EventColor::Peacock.rgb();
+    let from = (CALENDAR_COLORS.iter()).position(|(_, rgb)| *rgb == peacock);
+    let taken = |rgb: &Rgb| of(calendars).any(|calendar| calendar.color == *rgb);
+    let color = (CALENDAR_COLORS
+        .iter()
+        .cycle()
+        .skip(from.unwrap_or_default()))
+    .take(CALENDAR_COLORS.len())
+    .map(|(_, rgb)| *rgb)
+    .find(|rgb| !taken(rgb))
+    .unwrap_or(peacock);
     Calendar {
         id: new_id(),
         account_id: ACCOUNT_ID.to_string(),
-        name: texts::MY_CALENDAR.to_string(),
-        color: EventColor::Peacock.rgb(),
+        name: name.to_string(),
+        color,
         access: Access::Owner,
         zone,
         default_reminders: vec![Reminder {
@@ -427,10 +488,15 @@ pub fn my_calendar(zone: Tz) -> Calendar {
     }
 }
 
+/// The local calendars among `calendars`, in their order (`MOD-09-U01`).
+pub fn of(calendars: &[Calendar]) -> impl Iterator<Item = &Calendar> {
+    (calendars.iter()).filter(|calendar| calendar.account_id == ACCOUNT_ID)
+}
+
 /// Whether the welcome screen shows: there is neither a connected account nor a local calendar
 /// (`MOD-09-F18`).
 pub fn welcome(accounts: &[Entry], calendars: &[Calendar]) -> bool {
-    accounts.is_empty() && !calendars.iter().any(|c| c.account_id == ACCOUNT_ID)
+    accounts.is_empty() && of(calendars).next().is_none()
 }
 
 /// `$XDG_DATA_HOME/calendar-buddy/local.sqlite3`, or under `~/.local/share` when that is not set
@@ -629,6 +695,66 @@ mod tests {
 
         store.create(&calendar, &dentist()).unwrap();
         assert_eq!(store.changes(&calendar, &state).unwrap(), None);
+    }
+
+    #[test]
+    fn a_calendar_is_renamed_recoloured_and_deleted_with_its_events() {
+        let store = LocalStore::in_memory();
+        let family = new_calendar("Family", Warsaw, &[]);
+        let sport = new_calendar("Sport", Warsaw, std::slice::from_ref(&family));
+        store.add_calendar(&family).unwrap();
+        store.add_calendar(&sport).unwrap();
+        store.create(&family, &dentist()).unwrap();
+        store.create(&family, &gym()).unwrap();
+        let state = store.events(&family, window()).unwrap().sync_token.unwrap();
+
+        let private = Calendar {
+            name: "Private".to_string(),
+            color: EventColor::Basil.rgb(),
+            ..family.clone()
+        };
+        store.change_calendar(&private).unwrap();
+        assert_eq!(store.calendars().unwrap(), [private.clone(), sport.clone()]);
+        assert_eq!(store.changes(&family, &state).unwrap(), None);
+        assert_eq!(
+            (store.event_count(&family.id), store.event_count(&sport.id)),
+            (Ok(2), Ok(0))
+        );
+
+        store.delete_calendar(&family.id).unwrap();
+        assert_eq!(store.calendars().unwrap(), [sport]);
+        assert_eq!(store.event_count(&family.id), Ok(0));
+        assert!(store.events(&family, window()).unwrap().events.is_empty());
+    }
+
+    #[test]
+    fn a_new_calendar_takes_the_first_colour_from_peacock_on_no_local_calendar_has() {
+        let my = my_calendar(Warsaw);
+        assert_eq!(my.color, EventColor::Peacock.rgb());
+        let second = new_calendar("Family", Warsaw, std::slice::from_ref(&my));
+        let names: Vec<&str> = (CALENDAR_COLORS.iter())
+            .filter(|(_, rgb)| *rgb == second.color)
+            .map(|(name, _)| *name)
+            .collect();
+        assert_eq!(names, [texts::WISTERIA]);
+        assert_eq!(second.default_reminders, my.default_reminders);
+        assert_eq!(second.account_id, ACCOUNT_ID);
+
+        // A Google calendar's colour is not counted; with all 24 taken, Peacock again.
+        let google = Calendar {
+            account_id: "1".to_string(),
+            ..my.clone()
+        };
+        assert_eq!(new_calendar("A", Warsaw, &[google]).color, my.color);
+        let all: Vec<Calendar> = (CALENDAR_COLORS.iter())
+            .map(|(_, rgb)| Calendar {
+                color: *rgb,
+                ..my.clone()
+            })
+            .collect();
+        assert_eq!(new_calendar("B", Warsaw, &all).color, my.color);
+        let radicchio = new_calendar("C", Warsaw, &all[1..]).color;
+        assert_eq!(radicchio, CALENDAR_COLORS[0].1);
     }
 
     #[test]

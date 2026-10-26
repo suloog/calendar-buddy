@@ -594,6 +594,23 @@ pub const HOUR_HEIGHT: &str = "Hour height";
 pub const LOCAL: &str = "Local";
 /// The local calendar "Use without an account" makes (`MOD-09-F17`).
 pub const MY_CALENDAR: &str = "My calendar";
+/// The settings' section of local calendars (`MOD-09-U01`).
+pub const LOCAL_CALENDARS: &str = "Local calendars";
+/// The field naming a new local calendar, and its button (`MOD-09-F02`).
+pub const NEW_CALENDAR_NAME: &str = "Name of a new calendar";
+pub const ADD_CALENDAR: &str = "Add calendar";
+/// Hovering a local calendar's name in the settings (`MOD-09-F03`).
+pub const RENAME_HINT: &str = "Type a new name and press Enter";
+/// Hovering a local calendar's colour in the settings (`MOD-09-F03`).
+pub const COLOR_HINT: &str = "Choose its colour";
+/// Deleting a local calendar with events asks first (`MOD-09-U03`).
+pub fn confirm_local_deletion(name: &str, events: usize) -> String {
+    let events = match events {
+        1 => "its event".to_string(),
+        n => format!("its {n} events"),
+    };
+    format!("Delete “{name}”? It will be deleted with {events}. This cannot be undone.")
+}
 /// The local file could not be read at start; it is left as it is (`MOD-09-NFR-01`).
 pub fn local_not_read(path: &Path, reason: &str) -> String {
     format!(

@@ -2197,3 +2197,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-182] Managing local calendars: the section, a new calendar's colour, renaming and deleting
+
+- **Date:** 2026-10-26
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-09-02
+- **Affects:** `US-09-02`, `MOD-09-F02`, `MOD-09-F03`, `MOD-09-F04`, `MOD-09-U01`, `MOD-09-U03`, `MOD-02-F04`, `DEC-99`, `DEC-178`, `DEC-181`
+- **Decision:** The settings' "Local calendars" section comes right after **Accounts**: each local calendar in its order, as a round swatch of its colour that opens Google Calendar's 24 calendar colours (its own ticked), its name in a text field and **Delete**; under them a field for a new calendar's name and **Add calendar** (or Enter), unavailable while the name is blank. A renamed name is kept when the field is left; a blank one gives way to the name it had; names need not be unique. A new local calendar takes the first of Google Calendar's calendar colours, in the palette's order from Peacock on, that no local calendar has, and Peacock once all 24 are taken; it is in the system's time zone with one notification 30 minutes before, as "My calendar" (`DEC-181`). A local calendar's colour is its own, kept in the local file: choosing a colour in its side-panel menu changes it there too, and a local colour kept for it in the settings before is dropped, so **Reset** has nothing to bring back. The confirmation counts a series as one event, its changed occurrences not counted. Deleting a local calendar also ends the undo of the last change, as removing an account does; the deletion itself is never undone. While the local file cannot be read, the section shows why instead of its calendars. The settings close when the welcome screen comes back, after deleting the last local calendar with no account connected or removing the last account with no local calendar.
+- **Why:** The simplest controls consistent with the settings as they are (the account rows, the side panel's palette); a different colour for each new calendar keeps them apart in the views, as Google Calendar gives a new calendar a colour of its palette (`DEC-62`). The technical note keeps a local calendar's colour in the local store, not as a local colour (`MOD-02-F04` stays for Google calendars), so both places it can be chosen write it there.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

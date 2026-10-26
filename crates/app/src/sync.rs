@@ -109,8 +109,13 @@ enum Job {
     /// The local calendars' file is to be opened and its calendars synchronized; `None` keeps
     /// them in memory (`MOD-09-F01`).
     Local(Option<PathBuf>),
-    /// A local calendar to add (`MOD-09-F17`).
+    /// A local calendar to add (`MOD-09-F02`, `MOD-09-F17`).
     AddLocal(Calendar),
+    /// A local calendar to rename and recolour as it now is (`MOD-09-F03`).
+    ChangeLocal(Calendar),
+    /// A local calendar to delete with its events; one with events only once the user confirmed
+    /// it (`MOD-09-F04`, `MOD-09-U03`).
+    DeleteLocal(Calendar, bool),
 }
 
 /// What the user chose on a notification, for the app to do.
@@ -170,6 +175,17 @@ enum Update {
     Their(meet_with::Asked, Vec<(String, Shared)>),
     /// Whether the local calendars' file was read, or why not.
     Local(Result<(), String>),
+    /// What became of deleting a local calendar.
+    LocalDeletion(LocalDeletion),
+}
+
+/// What became of deleting a local calendar (`MOD-09-F04`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum LocalDeletion {
+    /// It has this many events, so the user is to confirm first (`MOD-09-U03`).
+    Ask(Calendar, usize),
+    /// It is gone with its events.
+    Deleted(Calendar),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -216,6 +232,8 @@ pub struct Synchronization {
     silenced: Arc<Mutex<Silenced>>,
     /// Whether the local calendars' file was read, or why not; `None` until the worker tried.
     local: Option<Result<(), String>>,
+    /// What became of deleting local calendars, not yet taken.
+    deletions: Vec<LocalDeletion>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -356,6 +374,7 @@ impl Synchronization {
             opened,
             silenced,
             local: None,
+            deletions: Vec::new(),
         }
     }
 
@@ -365,10 +384,31 @@ impl Synchronization {
         let _ = self.jobs.send(Job::Local(path));
     }
 
-    /// Adds the local calendar, listed at once (`MOD-09-F17`).
+    /// Adds the local calendar, listed at once (`MOD-09-F02`, `MOD-09-F17`).
     pub fn add_local(&mut self, calendar: Calendar) {
         self.calendars.push(calendar.clone());
         let _ = self.jobs.send(Job::AddLocal(calendar));
+    }
+
+    /// Renames and recolours the local calendar as it now is, listed so at once (`MOD-09-F03`).
+    pub fn change_local(&mut self, calendar: Calendar) {
+        let listed = (self.calendars.iter_mut())
+            .find(|c| c.account_id == calendar.account_id && c.id == calendar.id);
+        if let Some(listed) = listed {
+            *listed = calendar.clone();
+        }
+        let _ = self.jobs.send(Job::ChangeLocal(calendar));
+    }
+
+    /// Deletes the local calendar with its events; one with events only when `confirmed`, else
+    /// `take_local_deletions` asks for it (`MOD-09-F04`, `MOD-09-U03`).
+    pub fn delete_local(&self, calendar: Calendar, confirmed: bool) {
+        let _ = self.jobs.send(Job::DeleteLocal(calendar, confirmed));
+    }
+
+    /// What became of deleting local calendars since last asked; each is given once.
+    pub fn take_local_deletions(&mut self) -> Vec<LocalDeletion> {
+        std::mem::take(&mut self.deletions)
     }
 
     /// Whether the local calendars' file was read, or why not; `None` until it was tried
@@ -658,6 +698,7 @@ impl Synchronization {
                 Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
                 Update::Their(asked, answer) => self.their = Some((asked, answer)),
                 Update::Local(read) => self.local = Some(read),
+                Update::LocalDeletion(deletion) => self.deletions.push(deletion),
             }
         }
         events
@@ -880,6 +921,10 @@ impl Engine {
             }
             Some(Job::Local(path)) => return self.open_local(path, now),
             Some(Job::AddLocal(calendar)) => return self.add_local(&calendar, now),
+            Some(Job::ChangeLocal(calendar)) => return self.change_local(&calendar, now),
+            Some(Job::DeleteLocal(calendar, confirmed)) => {
+                return self.delete_local(calendar, confirmed, now);
+            }
         };
         let mut updates = self.round(&calendars, now);
         // With the polling round, not each time the window is activated or an event opened.
@@ -931,7 +976,10 @@ impl Engine {
         if let Ok(minutes) = session.default_length() {
             updates.push(Update::DefaultLength(id.to_string(), minutes));
         }
-        updates.extend(gone(list.gone));
+        // A local calendar goes only when the user deletes it.
+        if id != local::ACCOUNT_ID {
+            updates.extend(gone(list.gone));
+        }
         let calendars = enabled(&self.disabled, &list.calendars);
         let synced = sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
         self.schedule.set_account(id, &calendars, now);
@@ -966,9 +1014,52 @@ impl Engine {
     /// Adds the local calendar to the file and synchronizes it (`MOD-09-F17`); one the file did
     /// not take is gone from the views with the next events.
     fn add_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
+        self.write_local(now, |store| store.add_calendar(calendar))
+    }
+
+    /// Renames and recolours the local calendar in the file, and shows it so with its events
+    /// (`MOD-09-F03`); one the file did not take is shown as it was with the next events.
+    fn change_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
+        self.write_local(now, |store| store.change_calendar(calendar))
+    }
+
+    /// Deletes the local calendar and its events from the file and the cache, unless it has
+    /// events and the user has not confirmed: then they are asked to (`MOD-09-F04`,
+    /// `MOD-09-U03`). One the file did not delete stays.
+    fn delete_local(&mut self, calendar: Calendar, confirmed: bool, now: Instant) -> Vec<Update> {
+        let Some(store) = self.local.clone() else {
+            return Vec::new();
+        };
+        // Events that cannot be counted are not deleted unasked.
+        match store.event_count(&calendar.id) {
+            Ok(count) if count > 0 && !confirmed => {
+                return vec![Update::LocalDeletion(LocalDeletion::Ask(calendar, count))];
+            }
+            Err(_) if !confirmed => return Vec::new(),
+            _ => {}
+        }
+        let mut deleted = false;
+        let mut updates = self.write_local(now, |store| {
+            let result = store.delete_calendar(&calendar.id);
+            deleted = result.is_ok();
+            result
+        });
+        if deleted {
+            (self.problems).remove(&(calendar.account_id.clone(), calendar.id.clone()));
+            updates.push(Update::LocalDeletion(LocalDeletion::Deleted(calendar)));
+        }
+        updates
+    }
+
+    /// Writes to the local calendars' file with `write`, then synchronizes its calendars again.
+    fn write_local(
+        &mut self,
+        now: Instant,
+        write: impl FnOnce(&LocalStore) -> Result<(), SyncError>,
+    ) -> Vec<Update> {
         let mut updates = Vec::new();
         if let Some(store) = self.local.clone() {
-            let _ = store.add_calendar(calendar);
+            let _ = write(&store);
             updates = (self.start(local::ACCOUNT_ID, Box::new(store), now)).unwrap_or_default();
         }
         updates.push(self.shown());
@@ -1502,6 +1593,8 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Snooze(..)
                 | Job::Local(_)
                 | Job::AddLocal(_)
+                | Job::ChangeLocal(_)
+                | Job::DeleteLocal(..)
         )
     )
 }
@@ -2901,7 +2994,10 @@ mod tests {
 
         // 1. A local colour of green, picked from the calendar's menu, kept in the settings.
         let (_, green) = colors::CALENDAR_COLORS[3];
-        pick(&mut settings.colors, picked(Some(green)));
+        assert_eq!(
+            pick(&mut settings.colors, picked(Some(green)), &calendars),
+            None
+        );
         settings = Settings::parse(&settings.to_text());
         assert_eq!(shown(&settings), [green, green]);
 
@@ -2919,7 +3015,7 @@ mod tests {
         );
 
         // 3. Reset.
-        pick(&mut settings.colors, picked(None));
+        assert_eq!(pick(&mut settings.colors, picked(None), &calendars), None);
         assert_eq!(shown(&settings), [blue, blue]);
     }
 
@@ -7653,5 +7749,378 @@ mod tests {
 
         sync.add_local(local::my_calendar(Warsaw));
         assert!(!local::welcome(&[], sync.calendars()));
+    }
+
+    // Managing local calendars (`US-09-02`).
+
+    /// Adds the local calendar named so, as the settings' "Local calendars" section does.
+    fn add_local(engine: &mut Engine, name: &str) -> Calendar {
+        let listed = engine.cache.calendar_list().unwrap();
+        let calendar = local::new_calendar(name, Warsaw, &listed);
+        engine.handle(Some(Job::AddLocal(calendar.clone())), Instant::now());
+        calendar
+    }
+
+    /// Creates the event in the local calendar on Thursday 12 November, from and to the times in
+    /// Warsaw, with one notification 10 minutes before.
+    fn local_event(
+        engine: &mut Engine,
+        calendar: &Calendar,
+        title: &str,
+        (from, to): ((u32, u32), (u32, u32)),
+    ) {
+        let event = NewEvent {
+            title: title.to_string(),
+            timing: Timing::Timed {
+                start: thursday(from.0, from.1),
+                end: thursday(to.0, to.1),
+                zone: Warsaw,
+            },
+            about: calendar_core::model::About {
+                reminders: Reminders::Own(vec![Reminder {
+                    method: Method::Notification,
+                    minutes: 10,
+                }]),
+                ..calendar_core::model::About::default()
+            },
+            recurrence: Vec::new(),
+            meet: false,
+        };
+        let updates = engine.handle(
+            Some(Job::Create(1, calendar.clone(), event)),
+            Instant::now(),
+        );
+        assert!(matches!(saved(&updates).as_slice(), [Saved::Created(1, _)]));
+    }
+
+    /// Google Calendar's calendar colour of that name.
+    fn named_color(name: &str) -> Rgb {
+        (colors::CALENDAR_COLORS.iter())
+            .find(|(n, _)| *n == name)
+            .map(|(_, rgb)| *rgb)
+            .unwrap()
+    }
+
+    /// The side panel, the calendar picker and the settings' list of calendars to disable: each
+    /// group's label with its calendars' names.
+    fn lists(
+        accounts: &[calendar_core::accounts::Entry],
+        calendars: &[Calendar],
+        settings: &Settings,
+    ) -> [Vec<(String, Vec<String>)>; 3] {
+        let names = |calendars: Vec<Calendar>| calendars.into_iter().map(|c| c.name).collect();
+        let picker = (create::choices(accounts, calendars, settings).into_iter())
+            .map(|(label, calendars)| (label, names(calendars)))
+            .collect();
+        let in_settings = (side_panel::in_settings(accounts, calendars, settings).into_iter())
+            .map(|(label, rows)| (label, names(rows.into_iter().map(|(c, _)| c).collect())))
+            .collect();
+        [panel(accounts, calendars, settings), picker, in_settings]
+    }
+
+    /// What became of deleting local calendars, as the views are told.
+    fn deletions(updates: &[Update]) -> Vec<LocalDeletion> {
+        (updates.iter())
+            .filter_map(|update| match update {
+                Update::LocalDeletion(deletion) => Some(deletion.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The titles of the events the views show with the settings, sorted.
+    fn titles_shown(events: &[Event], settings: &Settings) -> Vec<String> {
+        let mut titles: Vec<String> = (side_panel::shown(events, settings).into_iter())
+            .map(|i| events[i].title.clone())
+            .collect();
+        titles.sort();
+        titles
+    }
+
+    #[test]
+    fn tc_09_05_local_calendars_are_added_renamed_recoloured_and_made_the_default_in_the_settings()
+    {
+        let google = Google::start("tc-09-05");
+        personal(&google);
+        let mut engine = first_sync(&google, Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let mut settings = Settings::default();
+        let (my, _) = use_without_account(&mut engine, &mut settings);
+        local_dentist(&mut engine, &settings, 60);
+
+        // 1. "Family" and "Sport" added: the section lists three calendars with their colours;
+        //    the side panel, the picker and the settings' list show them under "Local", after
+        //    account A.
+        add_local(&mut engine, "Family");
+        let sport = add_local(&mut engine, "Sport");
+        let calendars = engine.cache.calendar_list().unwrap();
+        let section: Vec<(&str, Rgb)> = (local::of(&calendars))
+            .map(|calendar| (calendar.name.as_str(), calendar.color))
+            .collect();
+        assert_eq!(
+            section,
+            [
+                ("My calendar", named_color(texts::PEACOCK)),
+                ("Family", named_color(texts::WISTERIA)),
+                ("Sport", named_color(texts::GRAPHITE)),
+            ]
+        );
+        let grouped = |first: &str| {
+            vec![
+                (EMAIL.to_string(), vec!["Personal".to_string()]),
+                (
+                    "Local".to_string(),
+                    [first, "Family", "Sport"].map(String::from).to_vec(),
+                ),
+            ]
+        };
+        let listed = grouped("My calendar");
+        assert_eq!(
+            lists(&accounts(), &calendars, &settings),
+            [listed.clone(), listed.clone(), listed]
+        );
+
+        // 2. "My calendar" renamed "Private" in Basil: the side panel, the picker and "Dentist"
+        //    show it.
+        let basil = named_color(texts::BASIL);
+        let private = Calendar {
+            name: "Private".to_string(),
+            color: basil,
+            ..my.clone()
+        };
+        let updates = engine.handle(Some(Job::ChangeLocal(private)), Instant::now());
+        let events = shown(&updates).unwrap();
+        let dentist = events.iter().find(|e| e.title == "Dentist").unwrap();
+        assert_eq!(dentist.color, basil);
+        let calendars = engine.cache.calendar_list().unwrap();
+        let listed = grouped("Private");
+        assert_eq!(
+            lists(&accounts(), &calendars, &settings),
+            [listed.clone(), listed.clone(), listed]
+        );
+        let status = calendar_core::status::Status::default();
+        let groups = side_panel::groups(&accounts(), &calendars, &settings, &status, true);
+        assert_eq!(groups[1].calendars[0].color, basil);
+        assert!(deletions(&updates).is_empty() && gone_told(&updates).is_empty());
+
+        // 3. "Sport" the default calendar: a click at 18:00 on 13 November starts the quick box
+        //    in it.
+        settings.default_calendar = Some((sport.account_id.clone(), sport.id.clone()));
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 18 * 60, 60, Warsaw),
+            Warsaw,
+            create::default_calendar(&accounts(), &calendars, &settings),
+        );
+        assert_eq!(entry.calendar, Some(sport));
+    }
+
+    #[test]
+    fn a_local_calendar_renamed_or_recoloured_is_listed_so_at_once() {
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            Cache::in_memory,
+            unreachable_google(),
+            Vec::new(),
+            window(),
+            Disabled::new(),
+        );
+        let my = local::my_calendar(Warsaw);
+        sync.add_local(my.clone());
+        let private = Calendar {
+            name: "Private".to_string(),
+            color: named_color(texts::BASIL),
+            ..my
+        };
+
+        sync.change_local(private.clone());
+
+        assert_eq!(sync.calendars(), [private]);
+    }
+
+    #[test]
+    fn a_colour_picked_in_the_side_panel_recolours_a_local_calendar_not_as_a_local_colour() {
+        let my = local::my_calendar(Warsaw);
+        let basil = named_color(texts::BASIL);
+        let key = (my.account_id.clone(), my.id.clone());
+        let mut colors = colors::LocalColors::from([(key.clone(), Rgb(1, 2, 3))]);
+        let picked = |color| Picked {
+            account_id: key.0.clone(),
+            calendar_id: key.1.clone(),
+            color,
+        };
+
+        let recoloured = pick(&mut colors, picked(Some(basil)), std::slice::from_ref(&my));
+
+        assert_eq!(
+            recoloured,
+            Some(Calendar {
+                color: basil,
+                ..my.clone()
+            })
+        );
+        assert!(colors.is_empty());
+        assert_eq!(pick(&mut colors, picked(None), &[my]), None);
+    }
+
+    #[test]
+    fn tc_09_06_a_local_calendar_is_hidden_disabled_and_muted_as_a_google_calendar_is() {
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        let time = clock.clone();
+        engine.clock = Box::new(move || *time.lock().unwrap());
+        let act: Acts = Arc::new(|_| {});
+        let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+        let job = Job::Remind(Box::new(notifier.clone()), regional, act);
+        engine.handle(Some(job), Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let family = add_local(&mut engine, "Family");
+        local_event(&mut engine, &family, "Dinner", ((9, 20), (10, 0)));
+        // Another local calendar, never muted, whose reminder shows that reminders are given.
+        let sport = add_local(&mut engine, "Sport");
+        local_event(&mut engine, &sport, "Run", ((9, 20), (10, 0)));
+        let mut settings = Settings::default();
+        let both = vec![(
+            "Local".to_string(),
+            vec!["Family".to_string(), "Sport".to_string()],
+        )];
+
+        // 1. "Family" unticked in the side panel: "Dinner" leaves the views, "Family" stays.
+        side_panel::toggle(&mut settings.hidden, &family);
+        let calendars = engine.cache.calendar_list().unwrap();
+        assert_eq!(titles_shown(&now_shown(&engine), &settings), ["Run"]);
+        assert_eq!(panel(&[], &calendars, &settings), both);
+
+        // 2. Ticked again and muted from its menu; at 9:10 no notification of "Dinner".
+        side_panel::toggle(&mut settings.hidden, &family);
+        side_panel::toggle(&mut settings.muted, &family);
+        let settings_read = Settings::parse(&settings.to_text());
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings_read);
+        *clock.lock().unwrap() = thursday(9, 10);
+        engine.remind();
+        assert_eq!(
+            titles_shown(&now_shown(&engine), &settings),
+            ["Dinner", "Run"]
+        );
+        let notified: Vec<String> = notifier.shown().into_iter().map(|(t, _, _)| t).collect();
+        assert_eq!(notified, ["Run"]);
+        let groups = side_panel::groups(&[], &calendars, &settings, &Default::default(), true);
+        assert!(groups[0].calendars[0].muted);
+
+        // 3. Disabled in the settings: gone from the side panel, the picker and the views.
+        side_panel::toggle(&mut settings.disabled, &family);
+        let updates = engine.handle(
+            Some(Job::Disabled(settings.disabled.clone())),
+            Instant::now(),
+        );
+        assert_eq!(told(updates), Some(vec!["Run".to_string()]));
+        let only_sport = vec![("Local".to_string(), vec!["Sport".to_string()])];
+        let [in_panel, in_picker, in_settings] = lists(&[], &calendars, &settings);
+        assert_eq!((in_panel, in_picker), (only_sport.clone(), only_sport));
+        assert_eq!(in_settings, both);
+
+        // 4. Enabled again: "Family" and "Dinner" are back.
+        side_panel::toggle(&mut settings.disabled, &family);
+        let updates = engine.handle(
+            Some(Job::Disabled(settings.disabled.clone())),
+            Instant::now(),
+        );
+        assert_eq!(
+            told(updates),
+            Some(vec!["Dinner".to_string(), "Run".to_string()])
+        );
+        assert_eq!(
+            lists(&[], &calendars, &settings),
+            [both.clone(), both.clone(), both]
+        );
+    }
+
+    #[test]
+    fn tc_09_07_deleting_a_local_calendar_asks_with_its_events_forgets_the_default_and_welcomes_only_when_nothing_is_left()
+     {
+        let google = Google::start("tc-09-07");
+        personal(&google);
+        let mut engine = first_sync(&google, Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let family = add_local(&mut engine, "Family");
+        for title in ["Breakfast", "Lunch", "Dinner"] {
+            local_event(&mut engine, &family, title, ((9, 20), (10, 0)));
+        }
+        let sport = add_local(&mut engine, "Sport");
+        let mut settings = Settings {
+            default_calendar: Some((family.account_id.clone(), family.id.clone())),
+            ..Settings::default()
+        };
+        let local_names = |engine: &Engine| -> Vec<String> {
+            let calendars = engine.cache.calendar_list().unwrap();
+            local::of(&calendars).map(|c| c.name.clone()).collect()
+        };
+        let store = engine.local.clone().unwrap();
+
+        // 1. "Sport", empty, is deleted without a question.
+        let updates = engine.handle(Some(Job::DeleteLocal(sport.clone(), false)), Instant::now());
+        assert_eq!(deletions(&updates), [LocalDeletion::Deleted(sport.clone())]);
+        // Deleted by the user, it is not told of as gone from its account (`MOD-02-F21`).
+        assert!(gone_told(&updates).is_empty());
+        settings.forget_calendar(&sport.account_id, &sport.id);
+        assert_eq!(local_names(&engine), ["Family"]);
+
+        // 2. Deleting "Family" asks first, saying 3 events will be deleted for good.
+        let updates = engine.handle(
+            Some(Job::DeleteLocal(family.clone(), false)),
+            Instant::now(),
+        );
+        assert_eq!(deletions(&updates), [LocalDeletion::Ask(family.clone(), 3)]);
+        let question = texts::confirm_local_deletion(&family.name, 3);
+        assert!(question.contains("3 events"), "{question}");
+        assert!(question.contains("cannot be undone"), "{question}");
+        assert_eq!(local_names(&engine), ["Family"]);
+        assert_eq!(store.event_count(&family.id), Ok(3));
+
+        // 3. Confirmed: "Family" and its events are nowhere, not even in the file, so nothing
+        //    can bring them back; a new event starts in account A's primary calendar.
+        let updates = engine.handle(Some(Job::DeleteLocal(family.clone(), true)), Instant::now());
+        assert_eq!(
+            deletions(&updates),
+            [LocalDeletion::Deleted(family.clone())]
+        );
+        assert!(gone_told(&updates).is_empty());
+        assert!(settings.forget_calendar(&family.account_id, &family.id));
+        assert_eq!(settings.default_calendar, None);
+        let events = shown(&updates).unwrap();
+        assert!(!events.iter().any(|e| e.calendar_id == family.id));
+        assert!(local_names(&engine).is_empty());
+        assert_eq!(store.event_count(&family.id), Ok(0));
+        assert!(store.calendars().unwrap().is_empty());
+        let calendars = engine.cache.calendar_list().unwrap();
+        let default = create::default_calendar(&accounts(), &calendars, &settings);
+        assert_eq!(default.map(|c| c.id), Some(EMAIL.to_string()));
+
+        // 4. "Notes" added and account A removed: the week view stays, with only "Local" and
+        //    "Notes".
+        let notes = add_local(&mut engine, "Notes");
+        engine.handle(
+            Some(Job::Forget(ACCOUNT_ID.into(), window())),
+            Instant::now(),
+        );
+        settings.forget_account(ACCOUNT_ID);
+        let calendars = engine.cache.calendar_list().unwrap();
+        assert!(!local::welcome(&[], &calendars));
+        assert_eq!(
+            panel(&[], &calendars, &settings),
+            [("Local".to_string(), vec!["Notes".to_string()])]
+        );
+
+        // 5. "Notes" deleted: the welcome screen.
+        let updates = engine.handle(Some(Job::DeleteLocal(notes.clone(), false)), Instant::now());
+        assert_eq!(deletions(&updates), [LocalDeletion::Deleted(notes)]);
+        assert!(gone_told(&updates).is_empty());
+        assert!(local::welcome(&[], &engine.cache.calendar_list().unwrap()));
     }
 }
