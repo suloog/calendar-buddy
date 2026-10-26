@@ -1942,9 +1942,9 @@ impl CalendarApp {
         }
     }
 
-    /// The local calendar is renamed or recoloured: the side panel, the pickers and its events
-    /// show it so at once (`MOD-09-F03`). Its colour is its own: one chosen replaces a local
-    /// colour kept for it before (`DEC-182`).
+    /// The local calendar is renamed, recoloured or given other default notifications: the side
+    /// panel, the pickers and its events show it so at once (`MOD-09-F03`, `MOD-09-F14`). Its
+    /// colour is its own: one chosen replaces a local colour kept for it before (`DEC-182`).
     fn change_local(&mut self, calendar: Calendar) {
         let key = (calendar.account_id.clone(), calendar.id.clone());
         let recoloured = (self.sync.calendars().iter())

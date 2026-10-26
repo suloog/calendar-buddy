@@ -2221,3 +2221,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-184] A local calendar's default notifications in the settings
+
+- **Date:** 2026-10-26
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-09-04
+- **Affects:** `US-09-04`, `MOD-09-F14`, `MOD-09-U01`, `TC-09-11`, `DEC-180`, `DEC-182`
+- **Decision:** In the settings' "Local calendars" section each local calendar has, under its colour, name and **Delete**, an "Event notifications" list, as Google Calendar names a calendar's default notifications: one row per notification with the editor's controls (a number of minutes, hours or days before, and **Remove**), notifications only, and **Add notification** (30 minutes, as in the editor) up to five. A change is kept in the local file as soon as it is finished, with no Save: a unit picked, a notification added or removed, a number left or let go of; a number while it is typed or dragged is not kept, so its passing values never remind. Escape while a number is typed closes the settings without it, as it leaves a name typed. A time beyond Google's four weeks is kept as four weeks; once kept, a notification shows in the largest unit its time is a whole number of, as the editor shows an event's (120 minutes as 2 hours). A local calendar may have no default notifications. The list is for timed events; an all-day event that uses it gives no notification (`DEC-180`). The editor's notifications of a local event were in place with `US-07-04` and `US-09-03` (notifications only, up to five, "Use calendar defaults"); local events' notifications, snoozing, dismissing, opening and the silences of muted, disabled or switched-off calendars go through the reminders of Google events unchanged.
+- **Why:** The simplest controls consistent with the section (`DEC-182`) and the editor (`MOD-07-F04`), following Google Calendar's calendar settings (`DEC-62`); a section without Save has nothing to refuse a time too early with.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

@@ -176,14 +176,20 @@ impl LocalStore {
         transaction.commit().map_err(failed)
     }
 
-    /// Renames and recolours the calendar as `calendar` has it (`MOD-09-F03`).
+    /// Renames and recolours the calendar and sets its default notifications as `calendar` has
+    /// them (`MOD-09-F03`, `MOD-09-F14`); its events that use the defaults follow.
     pub fn change_calendar(&self, calendar: &Calendar) -> Result<(), SyncError> {
         let connection = self.connection();
         let transaction = connection.unchecked_transaction().map_err(failed)?;
         transaction
             .execute(
-                "UPDATE calendars SET name = ?2, color = ?3 WHERE id = ?1",
-                params![calendar.id, calendar.name, color_text(calendar.color)],
+                "UPDATE calendars SET name = ?2, color = ?3, reminders = ?4 WHERE id = ?1",
+                params![
+                    calendar.id,
+                    calendar.name,
+                    color_text(calendar.color),
+                    reminders_text(&calendar.default_reminders),
+                ],
             )
             .map_err(failed)?;
         revise(&transaction)?;
@@ -919,6 +925,40 @@ mod tests {
         assert_eq!(store.calendars().unwrap(), [sport]);
         assert_eq!(store.event_count(&family.id), Ok(0));
         assert!(store.events(&family, window()).unwrap().events.is_empty());
+    }
+
+    #[test]
+    fn a_calendars_default_notifications_are_changed_and_its_events_keep_using_them() {
+        let store = LocalStore::in_memory();
+        let private = new_calendar("Private", Warsaw, &[]);
+        store.add_calendar(&private).unwrap();
+        store.create(&private, &dentist()).unwrap();
+        let ten = Reminder {
+            method: Method::Notification,
+            minutes: 10,
+        };
+
+        let changed = Calendar {
+            default_reminders: vec![
+                ten,
+                Reminder {
+                    minutes: 1440,
+                    ..ten
+                },
+            ],
+            ..private.clone()
+        };
+        store.change_calendar(&changed).unwrap();
+        assert_eq!(store.calendars().unwrap(), std::slice::from_ref(&changed));
+        let events = store.events(&changed, window()).unwrap().events;
+        assert_eq!(events[0].about.reminders, Reminders::Default);
+
+        let none = Calendar {
+            default_reminders: Vec::new(),
+            ..changed
+        };
+        store.change_calendar(&none).unwrap();
+        assert_eq!(store.calendars().unwrap(), [none]);
     }
 
     #[test]

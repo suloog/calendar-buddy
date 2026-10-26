@@ -111,7 +111,8 @@ enum Job {
     Local(Option<PathBuf>),
     /// A local calendar to add (`MOD-09-F02`, `MOD-09-F17`).
     AddLocal(Calendar),
-    /// A local calendar to rename and recolour as it now is (`MOD-09-F03`).
+    /// A local calendar to rename, recolour and give default notifications as it now is
+    /// (`MOD-09-F03`, `MOD-09-F14`).
     ChangeLocal(Calendar),
     /// A local calendar to delete with its events; one with events only once the user confirmed
     /// it (`MOD-09-F04`, `MOD-09-U03`).
@@ -390,7 +391,8 @@ impl Synchronization {
         let _ = self.jobs.send(Job::AddLocal(calendar));
     }
 
-    /// Renames and recolours the local calendar as it now is, listed so at once (`MOD-09-F03`).
+    /// Renames, recolours and sets the default notifications of the local calendar as it now is,
+    /// listed so at once (`MOD-09-F03`, `MOD-09-F14`).
     pub fn change_local(&mut self, calendar: Calendar) {
         let listed = (self.calendars.iter_mut())
             .find(|c| c.account_id == calendar.account_id && c.id == calendar.id);
@@ -1017,8 +1019,9 @@ impl Engine {
         self.write_local(now, |store| store.add_calendar(calendar))
     }
 
-    /// Renames and recolours the local calendar in the file, and shows it so with its events
-    /// (`MOD-09-F03`); one the file did not take is shown as it was with the next events.
+    /// Renames, recolours and sets the default notifications of the local calendar in the file,
+    /// and shows it so with its events, which remind as its defaults now say (`MOD-09-F03`,
+    /// `MOD-09-F14`); one the file did not take is shown as it was with the next events.
     fn change_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
         self.write_local(now, |store| store.change_calendar(calendar))
     }
@@ -8544,5 +8547,315 @@ mod tests {
         assert!(google.fake.patched().is_empty());
         let sent = asked_before.join("\n");
         assert!(!sent.contains(&private.id) && !sent.contains(&family.id));
+    }
+
+    // Notifications of local events (`US-09-04`).
+
+    /// Only local calendars, the app started at 9:00 on Thursday 12 November with the clock the
+    /// test moves, and reminders shown through the fake notifications; with what the user chose
+    /// on them.
+    fn local_reminding(
+        clock: &Arc<Mutex<DateTime<Utc>>>,
+        notifier: &FakeNotifier,
+    ) -> (Engine, Receiver<Chosen>) {
+        *clock.lock().unwrap() = thursday(9, 0);
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        let time = clock.clone();
+        engine.clock = Box::new(move || *time.lock().unwrap());
+        let (acts, chosen) = mpsc::channel();
+        let act: Acts = Arc::new(move |choice| acts.send(choice).unwrap());
+        let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+        let job = Job::Remind(Box::new(notifier.clone()), regional, act);
+        engine.handle(Some(job), Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        (engine, chosen)
+    }
+
+    /// The editor of a new event in the calendar, started by a click on the day at the minute,
+    /// the length long, with the title.
+    fn new_in(
+        calendar: &Calendar,
+        (date, minute, length): (chrono::NaiveDate, u32, u32),
+        title: &str,
+    ) -> Editor {
+        let entry = QuickEntry::new(
+            create::clicked(date, minute, length, Warsaw),
+            Warsaw,
+            Some(calendar.clone()),
+        );
+        let mut editor = Editor::from_quick(&entry, &polish());
+        editor.title = title.to_string();
+        editor
+    }
+
+    /// Saves the new event of the editor: as the views are told it.
+    fn create_from(engine: &mut Engine, editor: &Editor) -> Event {
+        let Ok(Save::Create(calendar, event)) = editor.save(&polish()) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), Instant::now());
+        let saved = saved(&updates);
+        let [Saved::Created(1, id)] = saved.as_slice() else {
+            panic!("the local file did not take the event");
+        };
+        (shown(&updates).unwrap().into_iter())
+            .find(|event| event.id == *id)
+            .unwrap()
+    }
+
+    /// The clock moved to each time in turn, the reminders due shown at each.
+    fn remind_at(engine: &mut Engine, clock: &Arc<Mutex<DateTime<Utc>>>, times: &[DateTime<Utc>]) {
+        for &at in times {
+            *clock.lock().unwrap() = at;
+            engine.remind();
+        }
+    }
+
+    /// The titles of the notifications shown, in order.
+    fn notified(notifier: &FakeNotifier) -> Vec<String> {
+        notifier
+            .shown()
+            .into_iter()
+            .map(|(title, _, _)| title)
+            .collect()
+    }
+
+    fn minutes_before(minutes: u32) -> Reminder {
+        Reminder {
+            method: Method::Notification,
+            minutes,
+        }
+    }
+
+    #[test]
+    fn tc_09_11_a_local_calendars_default_of_30_minutes_reminds_once_and_its_change_is_followed() {
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, _) = local_reminding(&clock, &notifier);
+        let private = add_local(&mut engine, "Private");
+
+        // 1. "Private" in the "Local calendars" section: one notification 30 minutes before.
+        let listed = engine.cache.calendar_list().unwrap();
+        let in_section = local::of(&listed).next().unwrap();
+        assert_eq!(in_section.default_reminders, [minutes_before(30)]);
+        assert_eq!(
+            ReminderField::of(in_section.default_reminders[0]),
+            ReminderField {
+                method: Method::Notification,
+                amount: 30,
+                unit: Unit::Minutes,
+            }
+        );
+
+        // 2. "Dentist" at 10:00 in "Main St 5": exactly one notification at 9:30, with its title,
+        //    start and location.
+        let mut dentist = new_in(&private, (d(2026, 11, 12), 600, 60), "Dentist");
+        dentist.location = "Main St 5".to_string();
+        let dentist = create_from(&mut engine, &dentist);
+        assert_eq!(dentist.about.reminders, Reminders::Default);
+        remind_at(&mut engine, &clock, &[thursday(9, 29)]);
+        assert_eq!(notifier.shown(), []);
+        let times = [thursday(9, 30), thursday(9, 31), thursday(9, 45)];
+        remind_at(&mut engine, &clock, &times);
+        let dentist_shown = ("Dentist".into(), "10:00".into(), "Main St 5".into());
+        assert_eq!(notifier.shown(), std::slice::from_ref(&dentist_shown));
+
+        // 3. "Call" at 12:00, and "Private"'s default changed to 10 minutes: nothing at 11:30,
+        //    "Call" at 11:50.
+        create_from(
+            &mut engine,
+            &new_in(&private, (d(2026, 11, 12), 720, 30), "Call"),
+        );
+        let ten = Calendar {
+            default_reminders: vec![minutes_before(10)],
+            ..private.clone()
+        };
+        engine.handle(Some(Job::ChangeLocal(ten)), Instant::now());
+        remind_at(&mut engine, &clock, &[thursday(11, 30), thursday(11, 31)]);
+        assert_eq!(notified(&notifier), ["Dentist"]);
+        remind_at(&mut engine, &clock, &[thursday(11, 50)]);
+        assert_eq!(notified(&notifier), ["Dentist", "Call"]);
+
+        // 4. The all-day "Birthday" on 14 November, with the calendar's defaults: no
+        //    notification, before its midnight or at it.
+        let mut birthday = new_in(&private, (d(2026, 11, 14), 600, 60), "Birthday");
+        birthday.all_day = true;
+        let birthday = create_from(&mut engine, &birthday);
+        assert!(matches!(birthday.timing, Timing::AllDay { .. }));
+        assert_eq!(birthday.about.reminders, Reminders::Default);
+        let midnight = Warsaw.with_ymd_and_hms(2026, 11, 14, 0, 0, 0).unwrap();
+        let midnight = midnight.with_timezone(&Utc);
+        let around = [
+            midnight - chrono::Duration::minutes(10),
+            midnight,
+            midnight + chrono::Duration::minutes(1),
+        ];
+        remind_at(&mut engine, &clock, &around);
+        assert_eq!(notified(&notifier), ["Dentist", "Call"]);
+    }
+
+    #[test]
+    fn tc_09_12_a_local_events_own_notifications_are_set_in_the_editor_and_silences_hold() {
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, _) = local_reminding(&clock, &notifier);
+        let private = add_local(&mut engine, "Private");
+        let family = add_local(&mut engine, "Family");
+        let regional = polish();
+
+        // 1. "Lunch" at 13:00: the 30-minute notification removed, 1 hour and 5 minutes added.
+        //    Minutes, hours and days are offered, no e-mail, and a sixth notification is refused.
+        let mut lunch = new_in(&private, (d(2026, 11, 12), 780, 60), "Lunch");
+        assert_eq!(lunch.reminder_methods(), [Method::Notification]);
+        assert_eq!(Unit::ALL, [Unit::Minutes, Unit::Hours, Unit::Days]);
+        let mut fields = lunch.reminder_fields();
+        assert_eq!(fields, [ReminderField::of(minutes_before(30))]);
+        fields.remove(0);
+        let field = |amount, unit| ReminderField {
+            method: Method::Notification,
+            amount,
+            unit,
+        };
+        fields.extend([field(1, Unit::Hours), field(5, Unit::Minutes)]);
+        lunch.reminders = Some(vec![field(1, Unit::Days); 6]);
+        assert_eq!(
+            lunch.save(&regional),
+            Err(texts::TOO_MANY_REMINDERS.to_string())
+        );
+        lunch.reminders = Some(fields);
+        let lunch = create_from(&mut engine, &lunch);
+        assert_eq!(
+            lunch.about.reminders,
+            Reminders::Own(vec![minutes_before(60), minutes_before(5)])
+        );
+
+        // 2. One notification at 12:00 and one at 12:55.
+        remind_at(&mut engine, &clock, &[thursday(12, 0)]);
+        assert_eq!(notified(&notifier), ["Lunch"]);
+        remind_at(&mut engine, &clock, &[thursday(12, 30), thursday(12, 55)]);
+        assert_eq!(notified(&notifier), ["Lunch", "Lunch"]);
+
+        // 3. "Use calendar defaults" and saved; reopened, "Lunch" shows the calendar's 30 minutes.
+        let mut editor = Editor::of(&lunch, private.clone(), &regional);
+        assert!(editor.reminders.is_some());
+        editor.reminders = None;
+        let updates = engine.handle(
+            Some(Job::Change(2, edit(&editor, &regional))),
+            Instant::now(),
+        );
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(2, _)]
+        ));
+        let lunch = (shown(&updates).unwrap().into_iter())
+            .find(|event| event.id == lunch.id)
+            .unwrap();
+        assert_eq!(lunch.about.reminders, Reminders::Default);
+        let reopened = Editor::of(&lunch, private.clone(), &regional);
+        assert_eq!(reopened.reminders, None);
+        assert_eq!(
+            reopened.reminder_fields(),
+            [ReminderField::of(minutes_before(30))]
+        );
+
+        // 4. "Tea" at 16:00 in "Family", muted; "Walk" at 17:00 in "Private" with notifications
+        //    turned off: neither reminds, up to 17:00.
+        create_from(
+            &mut engine,
+            &new_in(&family, (d(2026, 11, 12), 960, 60), "Tea"),
+        );
+        let mut settings = Settings::default();
+        side_panel::toggle(&mut settings.muted, &family);
+        *engine.silenced.lock().unwrap() = Silenced::of(&settings);
+        create_from(
+            &mut engine,
+            &new_in(&private, (d(2026, 11, 12), 1020, 60), "Walk"),
+        );
+        // Muted only, at "Tea"'s 15:30.
+        remind_at(&mut engine, &clock, &[thursday(15, 30), thursday(16, 0)]);
+        assert_eq!(notified(&notifier), ["Lunch", "Lunch"]);
+        // Then notifications off, at "Walk"'s 16:30.
+        settings.notifications_off = true;
+        *engine.silenced.lock().unwrap() = Silenced::of(&Settings::parse(&settings.to_text()));
+        remind_at(&mut engine, &clock, &[thursday(16, 30), thursday(17, 0)]);
+        assert_eq!(notified(&notifier), ["Lunch", "Lunch"]);
+    }
+
+    #[test]
+    fn a_disabled_local_calendar_gives_no_notifications() {
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, _) = local_reminding(&clock, &notifier);
+        let private = add_local(&mut engine, "Private");
+        let family = add_local(&mut engine, "Family");
+        create_from(
+            &mut engine,
+            &new_in(&private, (d(2026, 11, 12), 600, 60), "Dentist"),
+        );
+        create_from(
+            &mut engine,
+            &new_in(&family, (d(2026, 11, 12), 600, 60), "Dinner"),
+        );
+
+        let mut settings = Settings::default();
+        side_panel::toggle(&mut settings.disabled, &family);
+        engine.handle(Some(Job::Disabled(settings.disabled)), Instant::now());
+        remind_at(&mut engine, &clock, &[thursday(9, 30), thursday(10, 0)]);
+
+        assert_eq!(notified(&notifier), ["Dentist"]);
+    }
+
+    #[test]
+    fn a_local_events_notification_is_snoozed_dismissed_and_opens_its_event() {
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let (mut engine, chosen) = local_reminding(&clock, &notifier);
+        let private = add_local(&mut engine, "Private");
+        let dentist = create_from(
+            &mut engine,
+            &new_in(&private, (d(2026, 11, 12), 600, 60), "Dentist"),
+        );
+        remind_at(&mut engine, &clock, &[thursday(9, 30)]);
+        assert_eq!(
+            notifier.actions(0),
+            [Action::Snooze(5), Action::Snooze(10), Action::Dismiss]
+        );
+
+        // Snoozed for 5 minutes: shown again at 9:35.
+        notifier.choose(0, Action::Snooze(5));
+        let Ok(Chosen::Snooze(reminder, 5)) = chosen.try_recv() else {
+            panic!("Snooze 5 minutes was not chosen");
+        };
+        engine.handle(
+            Some(Job::Snooze(reminder, 5, thursday(9, 30))),
+            Instant::now(),
+        );
+        remind_at(&mut engine, &clock, &[thursday(9, 34), thursday(9, 35)]);
+        assert_eq!(notified(&notifier), ["Dentist", "Dentist"]);
+
+        // Dismissed: it does not come back.
+        notifier.choose(1, Action::Dismiss);
+        assert!(chosen.try_recv().is_err());
+        remind_at(&mut engine, &clock, &[thursday(9, 45), thursday(10, 0)]);
+        assert_eq!(notified(&notifier), ["Dentist", "Dentist"]);
+
+        // Clicked: its event opens in the app.
+        notifier.choose(1, Action::Open);
+        let Ok(Chosen::Open(opened)) = chosen.try_recv() else {
+            panic!("the notification was not clicked");
+        };
+        assert_eq!(
+            opened.event,
+            EventId {
+                account_id: local::ACCOUNT_ID.to_string(),
+                calendar_id: private.id.clone(),
+                id: dentist.id,
+            }
+        );
     }
 }

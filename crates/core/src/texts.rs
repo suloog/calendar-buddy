@@ -603,6 +603,11 @@ pub const ADD_CALENDAR: &str = "Add calendar";
 pub const RENAME_HINT: &str = "Type a new name and press Enter";
 /// Hovering a local calendar's colour in the settings (`MOD-09-F03`).
 pub const COLOR_HINT: &str = "Choose its colour";
+/// A local calendar's default notifications in the settings, as Google Calendar names them
+/// (`MOD-09-F14`).
+pub const EVENT_NOTIFICATIONS: &str = "Event notifications";
+pub const EVENT_NOTIFICATIONS_HINT: &str = "Given by its events that use the calendar's \
+                                            defaults; all-day events give none";
 /// Deleting a local calendar with events asks first (`MOD-09-U03`).
 pub fn confirm_local_deletion(name: &str, events: usize) -> String {
     let events = match events {

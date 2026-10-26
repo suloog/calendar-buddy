@@ -3,7 +3,7 @@ id: US-09-04 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-09
 covers: [MOD-09-F13, MOD-09-F14, MOD-09-F15, MOD-09-U01] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-09-02, US-07-01, US-07-02, US-07-04] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-09-02, US-07-01, US-07-02, US-07-04] # story IDs that must be do
 | **Module** | `[MOD-09]` Local calendars — `docs/specs/modules/09-local-calendars/REQUIREMENTS.md` |
 | **Covers** | `MOD-09-F13`, `F14`, `F15`, `U01` (default notifications) |
 | **Priority** | must |
-| **Status** | ready |
+| **Status** | review |
 | **Depends on** | blocked by `US-09-02`, `US-07-01`, `US-07-02`, `US-07-04` |
 | **YouTrack** | — |
 | **Open questions** | — |

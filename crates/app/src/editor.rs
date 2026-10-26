@@ -356,38 +356,7 @@ fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
     let mut fields = shown.clone();
     let methods = editor.reminder_methods();
     ui.vertical(|ui| {
-        let mut removed = None;
-        for (i, field) in fields.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt(("editor-reminder-method", i))
-                    .selected_text(method_label(field.method))
-                    .show_ui(ui, |ui| {
-                        for &method in methods {
-                            ui.selectable_value(&mut field.method, method, method_label(method));
-                        }
-                    });
-                // A number too large for the unit picked stays, and Save says why.
-                let most = LONGEST_REMINDER / field.unit.minutes();
-                ui.add(
-                    egui::DragValue::new(&mut field.amount)
-                        .range(0..=most)
-                        .clamp_existing_to_range(false),
-                );
-                egui::ComboBox::from_id_salt(("editor-reminder-unit", i))
-                    .selected_text(unit_label(field.unit))
-                    .show_ui(ui, |ui| {
-                        for unit in Unit::ALL {
-                            ui.selectable_value(&mut field.unit, unit, unit_label(unit));
-                        }
-                    });
-                if ui.button(texts::REMOVE).clicked() {
-                    removed = Some(i);
-                }
-            });
-        }
-        if let Some(i) = removed {
-            fields.remove(i);
-        }
+        reminder_rows(ui, &mut fields, methods);
         ui.horizontal(|ui| {
             if fields.len() < MOST_REMINDERS && ui.button(texts::ADD_NOTIFICATION).clicked() {
                 fields.push(ReminderField::NEW);
@@ -399,6 +368,55 @@ fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
             }
         });
     });
+}
+
+/// One row per reminder: how it reaches the user, among `methods`, and how many minutes, hours or
+/// days before, and "Remove". Also a local calendar's default notifications (`MOD-09-F14`).
+/// Whether an edit was finished: a choice picked, a row removed, or a number left or let go of.
+pub fn reminder_rows(
+    ui: &mut egui::Ui,
+    fields: &mut Vec<ReminderField>,
+    methods: &[Method],
+) -> bool {
+    let mut finished = false;
+    let mut removed = None;
+    for (i, field) in fields.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt(("editor-reminder-method", i))
+                .selected_text(method_label(field.method))
+                .show_ui(ui, |ui| {
+                    for &method in methods {
+                        finished |=
+                            (ui.selectable_value(&mut field.method, method, method_label(method)))
+                                .changed();
+                    }
+                });
+            // A number too large for the unit picked stays, and Save says why.
+            let most = LONGEST_REMINDER / field.unit.minutes();
+            let amount = ui.add(
+                egui::DragValue::new(&mut field.amount)
+                    .range(0..=most)
+                    .clamp_existing_to_range(false),
+            );
+            finished |= amount.drag_stopped() || amount.lost_focus();
+            egui::ComboBox::from_id_salt(("editor-reminder-unit", i))
+                .selected_text(unit_label(field.unit))
+                .show_ui(ui, |ui| {
+                    for unit in Unit::ALL {
+                        finished |= (ui.selectable_value(&mut field.unit, unit, unit_label(unit)))
+                            .changed();
+                    }
+                });
+            if ui.button(texts::REMOVE).clicked() {
+                removed = Some(i);
+            }
+        });
+    }
+    if let Some(i) = removed {
+        fields.remove(i);
+        finished = true;
+    }
+    finished
 }
 
 /// One strip per guest, their busy times on the day filled in, and the chosen time highlighted

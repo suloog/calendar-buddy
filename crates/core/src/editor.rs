@@ -144,6 +144,16 @@ impl ReminderField {
         }
     }
 
+    /// The reminder no earlier than Google's limit of four weeks, in the unit chosen: what a
+    /// local calendar's default notifications keep, set with no Save to refuse them
+    /// (`MOD-09-F14`).
+    pub fn within_limit(self) -> Self {
+        ReminderField {
+            amount: self.amount.min(LONGEST_REMINDER / self.unit.minutes()),
+            ..self
+        }
+    }
+
     pub fn reminder(self) -> Reminder {
         Reminder {
             method: self.method,
@@ -1883,6 +1893,24 @@ mod tests {
         // No reminders at all is the event's own choice too.
         editor.reminders = Some(Vec::new());
         assert_eq!(created(&editor).about.reminders, Reminders::Own(Vec::new()));
+    }
+
+    #[test]
+    fn a_default_notification_is_kept_within_four_weeks_in_the_unit_chosen() {
+        let field = |amount, unit| ReminderField {
+            method: Method::Notification,
+            amount,
+            unit,
+        };
+        assert_eq!(field(30, Unit::Days).within_limit(), field(28, Unit::Days));
+        assert_eq!(
+            field(1000, Unit::Hours).within_limit(),
+            field(672, Unit::Hours)
+        );
+        assert_eq!(
+            field(30, Unit::Minutes).within_limit(),
+            field(30, Unit::Minutes)
+        );
     }
 
     #[test]
