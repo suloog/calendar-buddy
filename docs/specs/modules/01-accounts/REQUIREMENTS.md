@@ -49,9 +49,9 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-01-F09] Removing an account also withdraws the app's access to that account at Google; if Google cannot be reached, the local deletion still happens. — *source: `DEC-52`*
 - [MOD-01-F10] When the system has no running secret store, connecting an account stops and the app explains what to install or start. — *source: `DEC-47`*
 - [MOD-01-F11] A problem with an account (signed out, access revoked) is shown on the account, separately from a problem synchronizing a single calendar.
-- [MOD-01-F12] On the first run, with no account connected, the user sees a welcome screen whose one action is connecting a Google account.
+- ~~[MOD-01-F12] On the first run, with no account connected, the user sees a welcome screen whose one action is connecting a Google account.~~ — changed by `DEC-179`, now `MOD-09-F17`, `MOD-09-F18`
 - [MOD-01-F13] On a first run without network, the app says that signing in is not possible offline and lets the user try again once the network is back.
-- [MOD-01-F14] Removing the last connected account brings the user back to the welcome screen. — *source: `DEC-52`*
+- ~~[MOD-01-F14] Removing the last connected account brings the user back to the welcome screen. — *source: `DEC-52`*~~ — changed by `DEC-179`, now `MOD-09-F19`
 
 ## UI/UX requirements
 
@@ -94,6 +94,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Out of scope / what not to worry about
 
 - Providers other than Google (CalDAV, Microsoft 365) — `MOD-08`.
+- Using the app without an account, with local calendars — `MOD-09` (`DEC-178`, `DEC-179`).
 - Choosing permission scopes by hand — the app asks for the minimal set itself (`SRC-02-27`, `MOD-08`).
 - A fallback credential store (encrypted file) when no secret store runs — `DEC-47`.
 - Google OAuth verification and removing the "unverified app" warning — only before a public release (`DEC-10`).

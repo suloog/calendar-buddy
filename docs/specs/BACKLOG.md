@@ -31,14 +31,15 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 
 | Module | Requirements (F/U) | Stories | done | Slicing |
 | ------ | ------------------ | ------- | ---- | ------- |
-| `MOD-01` Google accounts and sign-in | 14 / 2 | 4 | 0 | sliced |
+| `MOD-01` Google accounts and sign-in | 12 / 2 | 4 | 0 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 0 | sliced |
 | `MOD-03` Views and navigation | 29 / 8 | 10 | 7 | sliced |
 | `MOD-04` Appearance and themes | 4 / 6 | 3 | 0 | sliced |
 | `MOD-05` Creating and editing events | 35 / 5 | 11 | 0 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 1 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 0 | sliced |
-| **Total** | **152 / 34** | **50** | **8** | 7 / 7 modules sliced |
+| `MOD-09` Local calendars | 19 / 4 | 4 | 0 | sliced |
+| **Total** | **169 / 38** | **54** | **8** | 8 / 8 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -140,3 +141,14 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-07-04` | As a User, I can set an event's reminders in the editor, starting from my calendar's defaults, so that my phone and computer remind me the same way | F03, F04, F05 | must | review | `US-05-02` | — |
 | `US-07-05` | As a User, the app keeps reminding me from the tray when its window is closed and can start with my session, so that reminders don't depend on an open window | F14, F15, F16, F17, U02 | must | review | `US-07-01` | — |
 | `US-07-06` | As a User, I can open calendar subscription links from anywhere on my system, so that subscribing to a calendar works like in the browser | F18 | must | review | `US-01-01` | — |
+
+## [MOD-09] Local calendars
+
+`docs/specs/modules/09-local-calendars/REQUIREMENTS.md` · `docs/specs/modules/09-local-calendars/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-09-01` | As a User, I can start using the app without a Google account, with a calendar kept on my computer, so that I can plan my time before or without connecting Google | F01, F07, F08, F11, F17, F18, U02, U04, NFR-01 | must | ready | `US-01-01`, `US-03-06`, `US-05-01`, `US-05-02` | — |
+| `US-09-02` | As a User, I can add, rename, recolour and delete local calendars in the settings, so that I keep separate calendars for different parts of my life without Google | F02, F03, F04, F05, F06, F11, F19, U01, U03 | must | ready | `US-09-01`, `US-03-07`, `US-07-03`, `US-01-04` | — |
+| `US-09-03` | As a User, I can change, move, repeat and delete local events the same way as my Google events, so that a local calendar is as handy as a Google one | F09, F10, F12, F16 | must | ready | `US-09-01`, `US-05-03`, `US-05-04`, `US-05-07`, `US-05-09`, `US-05-11` | — |
+| `US-09-04` | As a User, I get notifications for my local events, with defaults I set for each local calendar, so that local events remind me as Google events do | F13, F14, F15, U01 | must | ready | `US-09-02`, `US-07-01`, `US-07-02`, `US-07-04` | — |

@@ -14,14 +14,14 @@ analyst: Maciej
 
 ## Overview
 
-calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache.
+calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache. It can also be used without a Google account, with local calendars kept only on the device (`DEC-178`).
 
 ## Sources
 
 The scope comes from the register in `SOURCES.md`.
 
 - Binding: none — the project is internal; the product owner's rulings in `DECISIONS.md` settle the scope
-- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items)
+- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items); `SRC-06` analyst notes, product owner's request 2026-10-26 (local calendars)
 
 ## Goals
 
@@ -34,27 +34,28 @@ The scope comes from the register in `SOURCES.md`.
 
 | Actor | Who they are | How they sign in | Access, in short | Source |
 | ----- | ------------ | ---------------- | ---------------- | ------ |
-| User | A person using the app on their own Linux computer with one or more of their own Google accounts (personal or Workspace) — for now the product owner, later possibly colleagues | Google account through the system browser (OAuth); no password in the app | Their own calendars and those shared with their accounts, within Google's permissions; on each event they act as organizer or guest | `SRC-01-18`, `SRC-01-79`, `SRC-02-01`, `DEC-01`, `DEC-10`, `DEC-48` |
+| User | A person using the app on their own Linux computer with one or more of their own Google accounts (personal or Workspace) — for now the product owner, later possibly colleagues | Google account through the system browser (OAuth); no password in the app — or no sign-in at all, with local calendars only (`DEC-179`) | Their own calendars and those shared with their accounts, within Google's permissions; on each event they act as organizer or guest | `SRC-01-18`, `SRC-01-79`, `SRC-02-01`, `DEC-01`, `DEC-10`, `DEC-48` |
 
 ## Glossary
 
 | Term | Means exactly |
 | ---- | ------------- |
 | Account | A Google account (personal or Workspace) connected to the app. (`SRC-01-18`, `DEC-10`) |
-| Calendar | A Google calendar accessible to a connected account, including read-only and subscribed ones. (`SRC-01-25`, `DEC-22`) |
+| Calendar | A Google calendar accessible to a connected account, including read-only and subscribed ones, or a local calendar. (`SRC-01-25`, `DEC-22`, `DEC-178`) |
+| Local calendar | A calendar kept only on the device, never synchronized with Google; local calendars are grouped under "Local". (`SRC-06-01`, `DEC-178`) |
 | Primary calendar | An account's main calendar; invitations land there, and on a Workspace account only there can special event types be created. (`DEC-34`, `DEC-41`) |
 | Default calendar | The calendar, chosen by the user, that new events go to. (`SRC-02-23`) |
 | Hidden calendar | A calendar whose events are temporarily hidden by the quick toggle; it stays listed and keeps synchronizing. (`DEC-28`) |
 | Disabled calendar | A calendar turned off in the settings; it is not listed, not synchronized and gives no reminders. (`DEC-28`) |
 | Muted calendar | A calendar whose notifications are off; its events stay visible. (`DEC-45`) |
-| Event | A single entry in a Google calendar. (`SRC-01-54`) |
+| Event | A single entry in a Google calendar or a local calendar. (`SRC-01-54`, `DEC-178`) |
 | Series / occurrence | A recurring event / one of its instances. (`SRC-01-64`) |
 | Edit scope | The reach of a change to a series: *this event*, *this and following*, or *all*. (`DEC-36`) |
 | Special event type | *Out of office*, *focus time*, *working location* or *birthday*. (`DEC-34`) |
 | Organizer / Guest | The person who invites to an event / an invited person, required or optional. (`SRC-01-72`, `SRC-01-79`) |
 | Invitation | An event in which the user is a guest. (`SRC-01-75`) |
 | Response | A guest's answer: *Accept*, *Decline* or *Maybe* (Google's "tentative"). (`SRC-01-76`, `SRC-01-103`) |
-| Reminder | A per-user Google reminder on an event, as a notification or an e-mail, synchronized with Google. (`DEC-43`) |
+| Reminder | A per-user Google reminder on an event, as a notification or an e-mail, synchronized with Google; or a local event's notification, kept on the device. (`DEC-43`, `DEC-178`) |
 | Notification | The desktop notification the app shows for a notification-type reminder. (`SRC-01-80`, `DEC-43`) |
 | Cache | The local copy of calendar data, from one year back to two years ahead. (`SRC-01-30`, `DEC-23`) |
 | Offline | No network; only what is in the cache can be browsed. (`DEC-25`) |
@@ -72,13 +73,14 @@ The scope comes from the register in `SOURCES.md`.
 - Creating and editing events — quick entry and full editor, dragging, recurrence presets with three edit scopes, special event types, event colours, attachments as links (`discovery/07-events.md` · `SRC-01-54`…`SRC-01-66`, `SRC-01-100`, `SRC-01-101`, `SRC-01-124`, `SRC-01-125`; `SRC-02-23`, `SRC-02-44`…`SRC-02-49`)
 - Guests, invitations, RSVP and Google Meet — guest suggestions (contacts, Workspace directory, recent), responses, asking before notifying guests, free/busy preview, Meet with Join (`discovery/08-guests-rsvp-meet.md` · `SRC-01-60`, `SRC-01-67`…`SRC-01-79`, `SRC-01-102`…`SRC-01-104`, `SRC-01-112`, `SRC-01-122`, `SRC-01-123`, `SRC-01-126`; `SRC-03-01`…`SRC-03-06`)
 - Reminders and notifications — notifications from Google reminders, editing reminders, snooze, muting calendars, tray and autostart, single instance, `webcal:` links (`discovery/09-notifications.md` · `SRC-01-80`…`SRC-01-85`, `SRC-01-105`, `SRC-01-127`; `SRC-03-07`…`SRC-03-11`)
+- Local calendars — calendars and events kept only on the device, managed in the settings, grouped under "Local"; using the app without a Google account, with the welcome screen inviting to connect one (`SRC-06-01`…`SRC-06-16`, `DEC-178`, `DEC-179`)
 
 ### Out of scope (non-goals)
 
-- Providers other than Google — CalDAV, Microsoft 365 / Outlook. (`SRC-01-109`, `SRC-01-110`)
+- Providers other than Google — CalDAV, Microsoft 365 / Outlook; synchronizing local calendars anywhere. (`SRC-01-109`, `SRC-01-110`, `DEC-178`)
 - macOS and Windows releases; public distribution, Google verification and choosing a licence. (`DEC-02`, `DEC-08`, `DEC-10`)
 - Offline editing with a change queue and conflict resolution. (`SRC-01-111`, `DEC-25`)
-- Calendar management — creating, renaming, deleting, sharing, administration. (`SRC-01-118`, `DEC-21`)
+- Managing Google calendars — creating, renaming, deleting, sharing, administration; local calendars are managed in the app. (`SRC-01-118`, `DEC-21`, `DEC-178`)
 - Event search, basic or advanced. (`SRC-01-113`, `DEC-30`)
 - A workweek view; a second time zone or choosing the display time zone by hand. (`DEC-27`, `DEC-29`)
 - Advanced theming and layout customization, interface translations, mock-ups. (`SRC-01-117`, `DEC-31`, `DEC-32`)
@@ -86,7 +88,7 @@ The scope comes from the register in `SOURCES.md`.
 - Adding Google Drive attachments; ICS import and export. (`SRC-01-114`, `DEC-37`)
 - A full recurrence-rule editor; creating working-location events. (`DEC-36`, `DEC-34`)
 - Advanced scheduling with guests (multi-day grid, free-slot suggestions); responding with a comment or proposing another time. (`SRC-01-112`, `DEC-42`, `SRC-03-01`)
-- App-level default reminders and local-only reminders. (`DEC-43`)
+- App-level default reminders and local-only reminders on Google events; local calendars have their own. (`DEC-43`, `DEC-178`)
 - Handling `mailto:` links; update checking and automatic updates. (`DEC-46`)
 - Telemetry and remote crash reports; screen-reader support; package formats other than .deb; a fallback token store when no secret store runs. (`DEC-11`, `DEC-12`, `DEC-13`, `DEC-47`)
 
@@ -98,7 +100,7 @@ Rust. The interface is built with egui (eframe on wgpu), with Iced as the fallba
 
 | Milestone | Contains | Target |
 | --------- | -------- | ------ |
-| M1 MVP | All seven scope areas; the UI toolkit (egui or Iced) settled in the first stories | no date (`DEC-06`) |
+| M1 MVP | All eight scope areas; the UI toolkit (egui or Iced) settled in the first stories | no date (`DEC-06`) |
 
 ## Risks
 

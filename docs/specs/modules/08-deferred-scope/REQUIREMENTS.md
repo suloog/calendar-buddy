@@ -46,3 +46,5 @@ Also deferred, recorded in the delivery modules' *Out of scope* sections rather 
 - A second time zone, choosing the display time zone by hand — `DEC-29` (`MOD-03`).
 - Interface translations — `DEC-31` (`MOD-04`).
 - `mailto:` links, update checking and automatic updates — `DEC-46` (`MOD-07`).
+
+Narrowed by a later decision: `SRC-01-118` (calendar management) and `SRC-02-27` (providers other than Google) stay deferred for Google calendars and other providers, but calendars kept only on the device — created, renamed and deleted in the app — are delivered by `MOD-09` (`DEC-178`).

@@ -42,7 +42,7 @@
 ## Availability and scalability
 
 - [NFR-16] The app recovers on its own from network failures, Google API quotas, and expired or revoked access. (`SRC-01-32`, `SRC-01-90`)
-- [NFR-17] There are no backups: Google is the system of record, and the cache is rebuilt by resynchronization. — *source: `DEC-15`*
+- [NFR-17] There are no backups: Google is the system of record, and the cache is rebuilt by resynchronization. — *source: `DEC-15`* Local calendars (`MOD-09`) are the exception: their file on the device is their only copy, kept apart from the cache. — *`DEC-178`*
 
 ## Compliance and audit
 

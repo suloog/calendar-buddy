@@ -50,7 +50,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 36 | 27 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
-| **Total** | **210** | **127** | **58 / 14** | 7 / 7 modules written |
+| `MOD-09` Local calendars | 27 | 27 | 12 / 1 | written |
+| **Total** | **237** | **154** | **70 / 15** | 8 / 8 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -183,3 +184,23 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-07-07` | On KDE, clicking a notification opens its event and Join opens the Meet meeting | `US-07-01#3`, `US-07-02#3` | desktop | happy-path | manual-only | ready |
 | `TC-07-08` | With the window closed to the tray reminders keep arriving, quitting stops them, and "Start at login" starts the app in the tray | `US-07-05#1`, `US-07-05#3`, `US-07-05#4` | desktop | happy-path | manual-only | ready |
 | `TC-07-09` | A `webcal:` link opened in another app opens Google Calendar's "add calendar from URL" page | `US-07-06#1` | desktop | happy-path | manual-only | ready |
+
+## [MOD-09] Local calendars
+
+`docs/specs/modules/09-local-calendars/REQUIREMENTS.md` · `docs/specs/modules/09-local-calendars/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-09-01` | A first run without an account starts with "My calendar", where an event is created and shown offline | `US-09-01#1`, `US-09-01#2`, `US-09-01#3`, `US-09-01#4` | desktop | happy-path | auto | ready |
+| `TC-09-02` | Local calendars and events survive a restart and a deleted cache | `US-09-01#5` | desktop | nfr | auto | ready |
+| `TC-09-03` | Without an account new events last 60 minutes and "Meet with…" waits for Google; an account connected later goes above "Local" | `US-09-01#6`, `US-09-01#7` | desktop | edge | auto | ready |
+| `TC-09-04` | An unreadable local file is reported and left as it is, while Google calendars keep working | `US-09-01#8` | desktop | edge | auto | ready |
+| `TC-09-05` | Local calendars are added, renamed, recoloured and made the default in the settings | `US-09-02#1`, `US-09-02#2`, `US-09-02#4` | desktop | happy-path | auto | ready |
+| `TC-09-06` | A local calendar is hidden, disabled and muted as a Google calendar is | `US-09-02#3` | desktop | happy-path | auto | ready |
+| `TC-09-07` | Deleting a local calendar asks with the count of its events, forgets the default and brings back the welcome screen only when nothing is left | `US-09-02#5`, `US-09-02#6`, `US-09-02#7` | desktop | edge | auto | ready |
+| `TC-09-08` | A local event is edited, dragged, resized, deleted and undone offline | `US-09-03#1`, `US-09-03#2`, `US-09-03#3` | desktop | happy-path | auto | ready |
+| `TC-09-09` | A local weekly series is changed for this and following events | `US-09-03#4` | desktop | happy-path | auto | ready |
+| `TC-09-10` | A local event offers nothing that only Google has, stays in its kind of calendar and never reaches Google | `US-09-03#5`, `US-09-03#6`, `US-09-03#7` | desktop | negative | auto | ready |
+| `TC-09-11` | A local calendar's default notification of 30 minutes reminds once, and changing the default changes the events that use it | `US-09-04#1`, `US-09-04#3` | desktop | happy-path | auto | ready |
+| `TC-09-12` | A local event's own notifications are set in the editor, and muted, disabled or switched-off calendars stay silent | `US-09-04#4`, `US-09-04#5` | desktop | edge | auto | ready |
+| `TC-09-13` | On KDE, a local event's notification snoozes, dismisses and opens its event | `US-09-04#2` | desktop | happy-path | manual-only | ready |

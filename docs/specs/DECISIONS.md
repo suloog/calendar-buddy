@@ -2149,3 +2149,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-178] Local calendars: calendars and events kept only on the device
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-26 (`SRC-06-01`…`SRC-06-02`, `SRC-06-04`…`SRC-06-12`, `SRC-06-15`…`SRC-06-17`)
+- **Affects:** `DEC-15`, `DEC-21`, `DEC-43`, `NFR-17`, PROJECT.md (scope, glossary, non-goals), `MOD-02`, `MOD-03-F10`, `MOD-05`, `MOD-06`, `MOD-07`, `MOD-08`, new module `MOD-09`
+- **Decision:** The app gets local calendars, kept only on the device and never synchronized with Google. The user adds them in the settings and can rename, recolour and delete them there; deleting a calendar with events asks for confirmation and deletes its events for good. They are listed under one group, "Local", after the accounts, in the side panel, the calendar picker and the settings, and can be hidden, disabled and muted like Google calendars. A local event has what a Google event has in the app: title, start and end or all-day, description, location, colour, repeating with the three edit scopes, the quick box, the full editor, dragging, deleting and undo. It has no guests, Google Meet, responses, attachments or special event types. It gives notifications like a Google event; each local calendar has default notifications of its own, set in the settings; a new local calendar starts with one notification 30 minutes before its timed events and none for all-day events, as a new Google calendar does. A local calendar can be the default calendar; an event is not moved between a local and a Google calendar. Local calendars and events are stored apart from the cache, in a file in the app's data directory (`$XDG_DATA_HOME/<app ID>/`), never deleted with the cache or an account; there is no backup, import or export. Local events are not known to Google, so they do not make the user busy in "Meet with…" or in others' availability. `DEC-21` (no calendar management) and `DEC-43` (no local-only reminders) stay for Google calendars; `DEC-15` / `NFR-17` hold for the cache, while the local file is the only copy of local calendars.
+- **Why:** The product owner wants to use the app without connecting a Google account. Google Calendar has no such calendars, so this goes beyond following Google (`DEC-62`) at the product owner's word; where a local event can behave as a Google event does, it does.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-179] The welcome screen invites but does not require a Google account
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request of 2026-10-26 (`SRC-06-03`, `SRC-06-13`, `SRC-06-14`)
+- **Affects:** `MOD-01-F12`, `MOD-01-F14`, `DEC-52`, `US-01-01`, `US-01-04`, `MOD-09`
+- **Decision:** The welcome screen shows when there is neither a connected account nor a local calendar. Next to connecting a Google account it offers "Use without an account", which creates a local calendar named "My calendar", makes it the default calendar and opens the calendar views. Removing the last account goes back to the welcome screen only if no local calendar is left; deleting the last local calendar does the same when no account is connected. A Google account can be connected at any time later from the settings.
+- **Why:** The welcome screen stays as onboarding towards Google, which most of the app's features need, but no longer blocks the app.
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-180] Local events in "Meet with…", and local calendars' defaults for all-day events
+
+- **Date:** 2026-10-26
+- **Decided by:** client (product owner — Maciej)
+- **Source:** `/og:clarify` of `MOD-09`, 2026-10-26 (`SRC-06-08`, `SRC-06-16`)
+- **Affects:** `MOD-09-F14`, `MOD-09-F16`, `US-09-03`, `US-09-04`, `TC-09-11`, `DEC-178`
+- **Decision:** Local events are seen only by the user and never make the user busy for others; in the user's own views, the user's own column of "Meet with…" included, they are shown as other events are. A local calendar has one list of default notifications; events that use them follow when they change, and an all-day event that uses them gives no notification, as an all-day Google event does (`DEC-137`); an all-day local event can have notifications of its own, set in the editor.
+- **Why:** `MOD-09-F16` could be read as hiding local events from "Meet with…"; the user's own time should stay visible when looking for a meeting. The app already gives all-day events no notification from calendar defaults (`DEC-137`) and its editor has no "at a time of day" form (`DEC-141`); a separate all-day list would add both.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

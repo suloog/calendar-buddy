@@ -20,6 +20,7 @@
 | `SRC-03` | Analyst notes — discovery session 2026-10-23 (39 items) | informal | analyst — Maciej (product owner), interview | 2026-10-23 | — | `sources/03-analyst-notes-2026-10-23.md` |
 | `SRC-04` | Analyst notes — product owner's requests 2026-10-24 (5 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-24 | — | `sources/04-analyst-notes-2026-10-24.md` |
 | `SRC-05` | Analyst notes — product owner's request 2026-10-25 (6 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-25 | — | `sources/05-analyst-notes-2026-10-25.md` |
+| `SRC-06` | Analyst notes — product owner's request 2026-10-26 (17 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-26 | — | `sources/06-analyst-notes-2026-10-26.md` |
 
 ## Originals
 
@@ -28,3 +29,4 @@
 - `SRC-03` — written directly in this repo during `/og:discovery`; no separate original
 - `SRC-04` — written directly in this repo from the conversation; no separate original
 - `SRC-05` — written directly in this repo from the conversation; no separate original
+- `SRC-06` — written directly in this repo from the conversation; no separate original
