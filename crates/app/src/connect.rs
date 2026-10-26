@@ -180,29 +180,48 @@ impl Connect {
 /// How large the app's icon is on the welcome screen.
 const WELCOME_ICON: f32 = 72.0;
 /// How tall the welcome screen's content is, to centre it in the window.
-const WELCOME_HEIGHT: f32 = 240.0;
+const WELCOME_HEIGHT: f32 = 280.0;
 
-/// The welcome screen of a first run: the app's icon, a word of welcome and its one action, which
-/// connects a Google account (`MOD-01-F12`); in the middle of the window.
-pub fn welcome(ui: &mut egui::Ui, connect: &mut Connect) {
-    egui::CentralPanel::default().show(ui, |ui| {
-        ui.vertical_centered(|ui| {
-            ui.set_max_width(480.0);
-            ui.add_space(((ui.available_height() - WELCOME_HEIGHT) / 2.0).max(16.0));
-            if let Some(icon) = icon(ui.ctx()) {
-                ui.add(egui::Image::new(&icon).fit_to_exact_size(egui::Vec2::splat(WELCOME_ICON)));
-                ui.add_space(16.0);
-            }
-            let title = egui::RichText::new(texts::WELCOME)
-                .font(crate::appearance::strong(24.0))
-                .color(ui.visuals().strong_text_color());
-            ui.label(title);
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(texts::WELCOME_HINT).size(15.0).weak());
-            ui.add_space(20.0);
-            connect.show(ui, texts::CONNECT);
-        });
-    });
+/// The welcome screen of a first run: the app's icon, a word of welcome and what Google brings;
+/// connecting a Google account as its main action (`MOD-01-F12`, `MOD-09-U04`), and "Use without
+/// an account" as the second (`MOD-09-F17`), unavailable while the local calendars cannot be read,
+/// as `unread` says why; in the middle of the window. Whether "Use without an account" was
+/// clicked.
+pub fn welcome(ui: &mut egui::Ui, connect: &mut Connect, unread: Option<&str>) -> bool {
+    egui::CentralPanel::default()
+        .show(ui, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.set_max_width(480.0);
+                ui.add_space(((ui.available_height() - WELCOME_HEIGHT) / 2.0).max(16.0));
+                if let Some(icon) = icon(ui.ctx()) {
+                    let size = egui::Vec2::splat(WELCOME_ICON);
+                    ui.add(egui::Image::new(&icon).fit_to_exact_size(size));
+                    ui.add_space(16.0);
+                }
+                let title = egui::RichText::new(texts::WELCOME)
+                    .font(crate::appearance::strong(24.0))
+                    .color(ui.visuals().strong_text_color());
+                ui.label(title);
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(texts::WELCOME_HINT).size(15.0).weak());
+                ui.add_space(20.0);
+                connect.show(ui, texts::CONNECT);
+                ui.add_space(8.0);
+                let used = ui
+                    .add_enabled_ui(unread.is_none(), |ui| {
+                        crate::widgets::outlined_button(ui, texts::USE_WITHOUT_ACCOUNT)
+                    })
+                    .inner
+                    .clicked();
+                if let Some(why) = unread {
+                    ui.add_space(8.0);
+                    ui.colored_label(ui.visuals().warn_fg_color, why);
+                }
+                used
+            })
+            .inner
+        })
+        .inner
 }
 
 /// The app's icon as a texture, loaded once.
@@ -217,4 +236,50 @@ fn icon(ctx: &egui::Context) -> Option<egui::TextureHandle> {
     let icon = ctx.load_texture("welcome-icon", image, egui::TextureOptions::LINEAR);
     ctx.data_mut(|data| data.insert_temp(id, icon.clone()));
     Some(icon)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::screen::{self, texts as drawn_texts};
+    use calendar_core::theme::Scheme;
+
+    /// The texts the welcome screen draws, with where each is, when the local calendars could be
+    /// read or, with `unread`, could not.
+    fn drawn(unread: Option<&str>) -> Vec<(f32, String)> {
+        let mut connect = Connect::new();
+        let shapes = screen::drawn(egui::vec2(900.0, 700.0), 1.0, Scheme::Light, None, |ui| {
+            welcome(ui, &mut connect, unread);
+        });
+        (drawn_texts(&shapes).into_iter())
+            .map(|(_, text)| (text.pos.y, text.galley.text().to_string()))
+            .collect()
+    }
+
+    fn at(texts: &[(f32, String)], text: &str) -> f32 {
+        let found = texts.iter().find(|(_, t)| t == text);
+        found.unwrap_or_else(|| panic!("{text:?} in {texts:?}")).0
+    }
+
+    #[test]
+    fn tc_09_01_the_welcome_screen_offers_google_first_and_use_without_an_account_second() {
+        let texts = drawn(None);
+
+        let hint = at(&texts, texts::WELCOME_HINT);
+        let connect = at(&texts, texts::CONNECT);
+        let without = at(&texts, texts::USE_WITHOUT_ACCOUNT);
+        assert!(hint < connect && connect < without, "{texts:?}");
+        for brought in ["synchronize", "invitations", "Google Meet"] {
+            assert!(texts::WELCOME_HINT.contains(brought));
+        }
+    }
+
+    #[test]
+    fn unreadable_local_calendars_are_told_on_the_welcome_screen() {
+        let why = "Local calendars cannot be read from /x/local.sqlite3: damaged.";
+
+        let texts = drawn(Some(why));
+
+        assert!(at(&texts, why) > at(&texts, texts::USE_WITHOUT_ACCOUNT));
+    }
 }

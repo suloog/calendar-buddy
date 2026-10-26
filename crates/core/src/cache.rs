@@ -538,7 +538,7 @@ fn insert(
     Ok(())
 }
 
-fn timing(start: &str, end: &str, zone: Option<&str>) -> Option<Timing> {
+pub(crate) fn timing(start: &str, end: &str, zone: Option<&str>) -> Option<Timing> {
     Some(match (parse_start(start)?, parse_start(end)?, zone) {
         (Start::At(start), Start::At(end), Some(zone)) => Timing::Timed {
             start,
@@ -684,14 +684,14 @@ fn parse_guests(text: &str) -> Vec<Guest> {
 }
 
 /// Reminders as a JSON list of `[method, minutes]`, `method` as Google names it.
-fn reminders_text(reminders: &[Reminder]) -> String {
+pub(crate) fn reminders_text(reminders: &[Reminder]) -> String {
     let rows: Vec<(&str, u32)> = (reminders.iter())
         .map(|reminder| (method_key(reminder.method), reminder.minutes))
         .collect();
     serde_json::to_string(&rows).expect("strings serialize")
 }
 
-fn parse_reminders(text: &str) -> Option<Vec<Reminder>> {
+pub(crate) fn parse_reminders(text: &str) -> Option<Vec<Reminder>> {
     let rows: Vec<(String, u32)> = serde_json::from_str(text).ok()?;
     (rows.into_iter())
         .map(|(method, minutes)| {
@@ -721,7 +721,7 @@ pub fn parse_method(key: &str) -> Option<Method> {
 }
 
 /// How an event colour is kept: its English name, fixed whatever language the interface is in.
-fn event_color_key(color: EventColor) -> &'static str {
+pub(crate) fn event_color_key(color: EventColor) -> &'static str {
     match color {
         EventColor::Tomato => "Tomato",
         EventColor::Flamingo => "Flamingo",
@@ -737,7 +737,7 @@ fn event_color_key(color: EventColor) -> &'static str {
     }
 }
 
-fn parse_event_color(key: &str) -> Option<EventColor> {
+pub(crate) fn parse_event_color(key: &str) -> Option<EventColor> {
     EventColor::ALL
         .into_iter()
         .find(|&color| event_color_key(color) == key)
@@ -763,14 +763,14 @@ pub fn parse_access(key: &str) -> Option<Access> {
     })
 }
 
-fn start_text(start: Start) -> String {
+pub(crate) fn start_text(start: Start) -> String {
     match start {
         Start::At(at) => at.to_rfc3339(),
         Start::On(date) => date.to_string(),
     }
 }
 
-fn parse_start(text: &str) -> Option<Start> {
+pub(crate) fn parse_start(text: &str) -> Option<Start> {
     match DateTime::parse_from_rfc3339(text) {
         Ok(at) => Some(Start::At(at.with_timezone(&Utc))),
         Err(_) => text.parse::<NaiveDate>().ok().map(Start::On),

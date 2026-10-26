@@ -2185,3 +2185,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-181] Local calendars' file, "My calendar" and what is shown until US-09-03
+
+- **Date:** 2026-10-26
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-09-01
+- **Affects:** `US-09-01`, `MOD-09-F01`, `MOD-09-F07`, `MOD-09-F11`, `MOD-09-F17`, `MOD-09-F18`, `MOD-09-NFR-01`, MOD-09 *Technical notes*, `DEC-87`, `DEC-178`, `DEC-179`
+- **Decision:** The local file (`local.sqlite3`, schema version 1) is opened by the synchronization worker as the session of the "Local" pseudo-account (account ID `local`); its calendars are synchronized into the cache and polled like an account's, without network, so the views, the side panel, the pickers and the reminders read them as they read Google's, and a deleted cache is filled again from the file; reading them is not counted as a synchronization with Google in the indicator. The whole file is read when it is opened; one that cannot be read whole (not a database, damaged anywhere, or of a later schema version) is never written to: a bar at the top of the main window says so with the file's path, and the "Local" group is absent; with no account connected, the welcome screen shows the same reason and "Use without an account" is unavailable. Until the file has been read at start, a window with no account shows nothing rather than the welcome screen, so the welcome screen never flashes before the calendar. "My calendar" is made in Google Calendar's Peacock, in the system's time zone, with one notification 30 minutes before (`DEC-178`). A new event in a local calendar lasts 60 minutes when started without a range, also with a Google account connected. Until `US-09-03`, changing, moving or deleting a local event is refused with the reason "local events cannot be changed or deleted yet", and guests, Google Meet, busy/free and visibility chosen in the editor for a new local event are not kept (`MOD-09-F10`). Local events give notifications from their calendar's defaults through the existing reminders before `US-09-04` sets them. A local calendar the file does not take (e.g. a full disk) is gone from the views with the next events, without a message.
+- **Why:** One read model and one write path behind the calendar-provider interface (`NFR-14`, MOD-09 *Technical notes*) reuse the cache, the views and the reminders unchanged. The welcome screen must not offer to create a calendar in a file that is left as it is (`MOD-09-NFR-01`). Peacock is the colour Google Calendar gives a new account's calendar (`DEC-62`). Local calendars have no Google setting for the event length.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

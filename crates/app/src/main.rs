@@ -31,6 +31,7 @@ use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
+use calendar_core::local;
 use calendar_core::meet_with::{self as meeting, MeetWith, Overlay};
 use calendar_core::model::{Calendar, Event, Timing};
 use calendar_core::month::{MonthViewModel, month_view};
@@ -1128,7 +1129,9 @@ impl CalendarApp {
                                         &mut entry.calendar,
                                     );
                                 });
-                                // No network, no calendar: creating is unavailable, and the box says why.
+                                // No network, no calendar: creating is unavailable, and the box says why;
+                                // a local calendar needs no network (MOD-09).
+                                let refused = offline::refused_in(online, entry.calendar.as_ref());
                                 let unavailable =
                                     refused.or(entry.calendar.is_none().then_some(NO_CALENDAR));
                                 if let Some(reason) = unavailable {
@@ -1197,6 +1200,7 @@ impl CalendarApp {
                                     suggested: &suggested,
                                     availability: preview.as_ref(),
                                 };
+                                let refused = offline::refused_in(online, editor.calendar.as_ref());
                                 match editor::show(
                                     ui, editor, regional, &choices, accounts, refused, google,
                                 ) {
@@ -1789,7 +1793,8 @@ impl CalendarApp {
         let seen: Vec<bool> = (self.meet_with.chosen.iter())
             .map(|chosen| !meeting::cannot_be_seen(&chosen.person.email, answer))
             .collect();
-        let action = meet_with::show(ui, &mut self.meet_with, &suggested, &seen, online);
+        let unavailable = meeting::unavailable(!self.accounts.is_empty(), online);
+        let action = meet_with::show(ui, &mut self.meet_with, &suggested, &seen, unavailable);
         let account_id = account.clone().unwrap_or_default();
         match action {
             Some(meet_with::Action::Choose(person)) => {
@@ -1865,6 +1870,15 @@ impl CalendarApp {
     fn sign_in_again(&mut self, ctx: &egui::Context, email: &str) {
         self.dialog = Some(Dialog::Settings);
         self.connect.sign_in_again(ctx, email);
+    }
+
+    /// "Use without an account": a local calendar, "My calendar", becomes the default calendar,
+    /// and the calendar views open (`MOD-09-F17`).
+    fn use_without_account(&mut self) {
+        let calendar = local::my_calendar(self.zone);
+        self.settings.default_calendar = Some((calendar.account_id.clone(), calendar.id.clone()));
+        self.save_settings();
+        self.sync.add_local(calendar);
     }
 
     /// Shows what `navigation` now points at: the mini calendar follows it, and a new view is
@@ -2004,9 +2018,14 @@ impl eframe::App for CalendarApp {
         }
         self.focused = focused;
         self.sync.set_shown(!minimized);
-        // With no account connected there is only the welcome screen (`MOD-01-F12`).
-        if self.accounts.is_empty() {
-            connect::welcome(ui, &mut self.connect);
+        // With neither an account nor a local calendar there is only the welcome screen
+        // (`MOD-09-F18`); nothing until the local calendars are read.
+        if local::welcome(self.accounts.list(), self.sync.calendars()) {
+            if let Some(read) = self.sync.local()
+                && connect::welcome(ui, &mut self.connect, read.err())
+            {
+                self.use_without_account();
+            }
             return;
         }
         // The now line and today move; nothing else changes on its own.
@@ -2183,6 +2202,12 @@ impl eframe::App for CalendarApp {
                 self.problem = None;
                 self.checks.now();
             }
+        }
+        // Local calendars that cannot be read are told of, the file left as it is (`MOD-09-NFR-01`).
+        if let Some(Err(why)) = self.sync.local() {
+            egui::Panel::top("local-problem").show(ui, |ui| {
+                ui.colored_label(ui.visuals().warn_fg_color, why);
+            });
         }
         // The user is told about every account Google turned away (`MOD-01-F05`).
         let mut again = None;

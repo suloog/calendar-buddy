@@ -328,6 +328,7 @@ impl CalendarApp {
             window,
             Default::default(),
         );
+        sync.use_local(None);
         let settings = Settings {
             last_view: Some(view),
             theme,
@@ -605,6 +606,11 @@ fn preview() {
     );
     picture("welcome-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default()
+    });
+    // "Use without an account" chosen: "My calendar" under "Local", after no account.
+    picture("without-account-light", week, Theme::Light, |app, _| {
+        app.accounts = Accounts::default();
+        app.use_without_account();
     });
 }
 

@@ -7,9 +7,11 @@ use std::collections::BTreeSet;
 
 use crate::accounts::Entry;
 use crate::colors::calendar_color;
+use crate::local;
 use crate::model::{Calendar, Event, Rgb};
 use crate::settings::Settings;
 use crate::status::{self, Status};
+use crate::texts;
 
 /// The calendars whose events are hidden by the quick toggle, by account ID and calendar ID.
 pub type Hidden = BTreeSet<(String, String)>;
@@ -116,23 +118,26 @@ pub fn pickable(
     })
 }
 
-/// The accounts in the order they were connected, each with what `item` gives for its calendars.
+/// The accounts in the order they were connected, each with what `item` gives for its calendars,
+/// then "Local" with the local calendars, if there are any (`MOD-09-U02`).
 fn by_account<T>(
     accounts: &[Entry],
     calendars: &[Calendar],
     item: impl Fn(&Calendar) -> Option<T>,
 ) -> Vec<(String, Vec<T>)> {
+    let of = |account_id: &str| -> Vec<T> {
+        (calendars.iter())
+            .filter(|calendar| calendar.account_id == account_id)
+            .filter_map(&item)
+            .collect()
+    };
+    let local = (calendars.iter())
+        .any(|calendar| calendar.account_id == local::ACCOUNT_ID)
+        .then(|| (texts::LOCAL.to_string(), of(local::ACCOUNT_ID)));
     accounts
         .iter()
-        .map(|entry| {
-            let of_account = calendars
-                .iter()
-                .filter(|calendar| calendar.account_id == entry.account.id);
-            (
-                entry.account.email.clone(),
-                of_account.filter_map(&item).collect(),
-            )
-        })
+        .map(|entry| (entry.account.email.clone(), of(&entry.account.id)))
+        .chain(local)
         .collect()
 }
 

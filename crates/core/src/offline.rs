@@ -5,6 +5,8 @@
 
 use chrono::NaiveDate;
 
+use crate::local;
+use crate::model::Calendar;
 use crate::sync::Window;
 use crate::texts::{NO_CHANGES_OFFLINE, NOT_CACHED, OFFLINE_INDICATOR};
 
@@ -17,6 +19,13 @@ pub fn indicator(online: bool) -> Option<&'static str> {
 /// while online.
 pub fn refused(online: bool) -> Option<&'static str> {
     (!online).then_some(NO_CHANGES_OFFLINE)
+}
+
+/// Why creating or editing an event in the calendar is refused now: as `refused`, but never in a
+/// local calendar, which needs no Google (MOD-09 *Constraints and edge cases*).
+pub fn refused_in(online: bool, calendar: Option<&Calendar>) -> Option<&'static str> {
+    refused(online)
+        .filter(|_| calendar.is_none_or(|calendar| calendar.account_id != local::ACCOUNT_ID))
 }
 
 /// What becomes of the days on screen, from `first` to `last`, that the cache window does not
@@ -45,6 +54,20 @@ mod tests {
 
     fn window() -> Window {
         Window::around(d(2026, 11, 11), Warsaw)
+    }
+
+    #[test]
+    fn offline_a_local_calendar_still_takes_new_events_and_a_google_one_does_not() {
+        let mine = local::my_calendar(Warsaw);
+        let google = Calendar {
+            account_id: "1".to_string(),
+            ..mine.clone()
+        };
+
+        assert_eq!(refused_in(false, Some(&mine)), None);
+        assert_eq!(refused_in(false, Some(&google)), Some(NO_CHANGES_OFFLINE));
+        assert_eq!(refused_in(false, None), Some(NO_CHANGES_OFFLINE));
+        assert_eq!(refused_in(true, Some(&google)), None);
     }
 
     #[test]

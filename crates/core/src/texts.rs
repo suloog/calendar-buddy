@@ -16,9 +16,13 @@ pub const APP_NAME: &str = if crate::background::DEV {
 // The welcome screen and signing in (`MOD-01`).
 
 pub const WELCOME: &str = "Welcome to Calendar Buddy";
-pub const WELCOME_HINT: &str = "Connect a Google account to see your calendars.";
-/// The welcome screen's one action (`MOD-01-F12`).
+/// What connecting Google brings, under the welcome (`MOD-09-U04`).
+pub const WELCOME_HINT: &str = "Connect a Google account to synchronize your calendars, answer \
+     invitations and meet on Google Meet.";
+/// The welcome screen's main action (`MOD-01-F12`).
 pub const CONNECT: &str = "Connect Google account";
+/// The welcome screen's second action, which starts with a local calendar (`MOD-09-F17`).
+pub const USE_WITHOUT_ACCOUNT: &str = "Use without an account";
 pub const ADD_ACCOUNT: &str = "Add account";
 /// The action that signs in to an account again (`MOD-01-F06`).
 pub const SIGN_IN_AGAIN: &str = "Sign in again";
@@ -543,6 +547,8 @@ pub fn invitations_awaiting(count: usize) -> String {
 /// offline, a person whose calendar shares nothing, and the button starting a meeting.
 pub const MEET_WITH: &str = "Meet with…";
 pub const MEET_WITH_OFFLINE: &str = "Meet with… needs a connection to Google.";
+/// "Meet with…" with no Google account connected (MOD-09 *Constraints and edge cases*).
+pub const MEET_WITH_NEEDS_ACCOUNT: &str = "Meet with… needs a Google account.";
 pub const CALENDAR_CANNOT_BE_SEEN: &str = "Calendar can't be seen";
 pub const CREATE_EVENT: &str = "Create event";
 /// What a strip says of a guest who does not share their availability.
@@ -581,6 +587,30 @@ pub const LIGHT: &str = "Light";
 pub const DARK: &str = "Dark";
 /// The setting of how tall the hours of the day, 3-day and week views are (`MOD-03-F28`).
 pub const HOUR_HEIGHT: &str = "Hour height";
+
+// Local calendars (`MOD-09`).
+
+/// The group of local calendars, after the accounts (`MOD-09-U02`).
+pub const LOCAL: &str = "Local";
+/// The local calendar "Use without an account" makes (`MOD-09-F17`).
+pub const MY_CALENDAR: &str = "My calendar";
+/// The local file could not be read at start; it is left as it is (`MOD-09-NFR-01`).
+pub fn local_not_read(path: &Path, reason: &str) -> String {
+    format!(
+        "Local calendars cannot be read from {}: {reason}. The file is left as it is.",
+        path.display()
+    )
+}
+/// Why a change to the local calendars was not kept.
+pub fn local_not_used(error: &str) -> String {
+    format!("the local calendars could not be used ({error})")
+}
+/// Why the local file could not be read: something in it is damaged.
+pub const LOCAL_DAMAGED: &str = "a calendar or an event in it is damaged";
+/// Why the local file could not be read: a later version of the app made it.
+pub const LOCAL_FROM_NEWER: &str = "it was made by a newer version of Calendar Buddy";
+/// Changing a local event before it can be (`DEC-181`).
+pub const LOCAL_NOT_CHANGED_YET: &str = "local events cannot be changed or deleted yet";
 
 #[cfg(test)]
 mod tests {

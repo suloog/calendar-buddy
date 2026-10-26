@@ -8,6 +8,7 @@ use chrono_tz::Tz;
 
 use crate::accounts::Entry;
 use crate::details::When;
+use crate::local;
 use crate::model::{About, Calendar, Event, Timing};
 use crate::settings::Settings;
 use crate::side_panel::pickable;
@@ -238,7 +239,9 @@ pub struct Saving {
 }
 
 impl Saving {
-    /// Shows the new event as saving and returns the number it is told by.
+    /// Shows the new event as saving and returns the number it is told by; one in a local
+    /// calendar has no Google to wait for, and is shown without the mark (MOD-09 *Constraints and
+    /// edge cases*).
     pub fn add(&mut self, calendar: &Calendar, event: &NewEvent) -> u64 {
         let title = if event.title.is_empty() {
             NO_TITLE
@@ -255,7 +258,7 @@ impl Saving {
             busy_only: false,
             read_only: false,
             organizer_only: false,
-            saving: true,
+            saving: calendar.account_id != local::ACCOUNT_ID,
             recurring: !event.recurrence.is_empty(),
             series: None,
             recurrence: Vec::new(),

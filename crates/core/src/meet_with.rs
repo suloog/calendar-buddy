@@ -17,6 +17,7 @@ use crate::guests::{self, Guest, Person};
 use crate::model::{About, Event, Rgb, Timing};
 use crate::regional::Regional;
 use crate::sync::SyncedEvent;
+use crate::texts;
 use crate::view_model::{DayColumn, GridViewModel, Whose, grid_view};
 use crate::week::{GridView, day_start};
 
@@ -152,6 +153,18 @@ pub enum Shared {
 /// What the provider answered, by the person's address; a person it could not answer for is not
 /// in it.
 pub type Answer = [(String, Shared)];
+
+/// Why "Meet with…" cannot be used now: it needs a Google account (MOD-09 *Constraints and edge
+/// cases*), and a connection to Google (`MOD-06-F27`); `None` when it can.
+pub fn unavailable(accounts: bool, online: bool) -> Option<&'static str> {
+    if !accounts {
+        Some(texts::MEET_WITH_NEEDS_ACCOUNT)
+    } else if !online {
+        Some(texts::MEET_WITH_OFFLINE)
+    } else {
+        None
+    }
+}
 
 /// Whether the person's calendar shares nothing with the account, as answered: marked so in
 /// the list (`MOD-06-F25`).

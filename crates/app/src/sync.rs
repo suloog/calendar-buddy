@@ -20,11 +20,14 @@
 //! with every synchronization round (`US-06-09`). The reminders of the events the cache holds are shown as desktop notifications
 //! when due, and a click on one opens its event (`US-07-01`). Join on a notification opens the
 //! event's Google Meet call in the browser, and Snooze shows it again 5 or 10 minutes later,
-//! without telling Google (`US-07-02`).
+//! without telling Google (`US-07-02`). The local calendars' file is one more provider, the
+//! "Local" pseudo-account: its calendars are synchronized into the cache as an account's are, and
+//! new events in them are written there, never to Google (`US-09-01`).
 
 use std::collections::hash_map::RandomState;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -35,6 +38,7 @@ use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
 use calendar_core::guests::{Person, Reach};
+use calendar_core::local::{self, LocalStore};
 use calendar_core::meet_with::{self, Shared};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{Browser, Notifier, SecretStore, Wakeups};
@@ -102,6 +106,11 @@ enum Job {
     /// A reminder shown is to be shown again in so many minutes from when Snooze was chosen
     /// (`MOD-07-F10`).
     Snooze(ReminderId, u32, DateTime<Utc>),
+    /// The local calendars' file is to be opened and its calendars synchronized; `None` keeps
+    /// them in memory (`MOD-09-F01`).
+    Local(Option<PathBuf>),
+    /// A local calendar to add (`MOD-09-F17`).
+    AddLocal(Calendar),
 }
 
 /// What the user chose on a notification, for the app to do.
@@ -159,6 +168,8 @@ enum Update {
     Busy(Asked, Option<Vec<Availability>>),
     /// The people's calendars as Google gave them for what was asked.
     Their(meet_with::Asked, Vec<(String, Shared)>),
+    /// Whether the local calendars' file was read, or why not.
+    Local(Result<(), String>),
 }
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
@@ -203,6 +214,8 @@ pub struct Synchronization {
     opened: Receiver<Opened>,
     /// The notifications not shown, shared with the worker so a change holds at once.
     silenced: Arc<Mutex<Silenced>>,
+    /// Whether the local calendars' file was read, or why not; `None` until the worker tried.
+    local: Option<Result<(), String>>,
 }
 
 /// What became of a new, changed or deleted event at Google.
@@ -249,6 +262,7 @@ impl Synchronization {
         sync.wake_on(&SystemWakeups);
         sync.set_silenced(silenced);
         sync.remind_with(ctx, Box::new(SystemNotifier::new()), regional);
+        sync.use_local(local::default_path());
         sync
     }
 
@@ -341,7 +355,26 @@ impl Synchronization {
             opens,
             opened,
             silenced,
+            local: None,
         }
+    }
+
+    /// Opens the local calendars' file at `path`, or keeps them in memory without one, and shows
+    /// their events with the accounts' (`MOD-09-F07`); `local` tells whether it could be read.
+    pub fn use_local(&self, path: Option<PathBuf>) {
+        let _ = self.jobs.send(Job::Local(path));
+    }
+
+    /// Adds the local calendar, listed at once (`MOD-09-F17`).
+    pub fn add_local(&mut self, calendar: Calendar) {
+        self.calendars.push(calendar.clone());
+        let _ = self.jobs.send(Job::AddLocal(calendar));
+    }
+
+    /// Whether the local calendars' file was read, or why not; `None` until it was tried
+    /// (MOD-09 *Constraints and edge cases*).
+    pub fn local(&self) -> Option<Result<(), &str>> {
+        (self.local.as_ref()).map(|read| read.as_ref().map(|_| ()).map_err(String::as_str))
     }
 
     /// Shows the reminders of the cached events through the desktop's notifications from now
@@ -463,8 +496,8 @@ impl Synchronization {
         }
     }
 
-    /// Creates the event in the calendar at Google, then synchronizes the calendar
-    /// (`MOD-05-F16`); `poll` tells what became of it by `local`.
+    /// Creates the event in the calendar at Google, or in the local calendars' file, then
+    /// synchronizes the calendar (`MOD-05-F16`); `poll` tells what became of it by `local`.
     pub fn create(&self, local: u64, calendar: Calendar, event: NewEvent) {
         let _ = self.jobs.send(Job::Create(local, calendar, event));
     }
@@ -624,12 +657,13 @@ impl Synchronization {
                 Update::People(account, people) => self.people = Some((account, people)),
                 Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
                 Update::Their(asked, answer) => self.their = Some((asked, answer)),
+                Update::Local(read) => self.local = Some(read),
             }
         }
         events
     }
 
-    /// The calendars of the connected accounts, as last read from the cache.
+    /// The calendars of the connected accounts and the local ones, as last read from the cache.
     pub fn calendars(&self) -> &[Calendar] {
         &self.calendars
     }
@@ -680,6 +714,9 @@ struct Engine {
     silenced: Arc<Mutex<Silenced>>,
     /// The people's calendars "Meet with…" asks for, fetched again with every round.
     meeting: Option<meet_with::Asked>,
+    /// The local calendars' file, once read; its calendars are also those of the "Local"
+    /// session.
+    local: Option<LocalStore>,
 }
 
 /// Reminders, and how they are shown.
@@ -710,6 +747,7 @@ impl Engine {
             reminding: None,
             silenced: Arc::default(),
             meeting: None,
+            local: None,
             cache,
         }
     }
@@ -840,6 +878,8 @@ impl Engine {
                 }
                 return Vec::new();
             }
+            Some(Job::Local(path)) => return self.open_local(path, now),
+            Some(Job::AddLocal(calendar)) => return self.add_local(&calendar, now),
         };
         let mut updates = self.round(&calendars, now);
         // With the polling round, not each time the window is activated or an event opened.
@@ -868,30 +908,68 @@ impl Engine {
     fn first(&mut self, id: &str, now: Instant) -> Vec<Update> {
         self.pending.remove(id);
         self.stopped.remove(id);
-        let listed = (self.sign_in)(id).and_then(|session| {
-            let list = sync_calendar_list(session.as_ref(), id, &mut self.cache)?;
-            Ok((session, list))
+        let started = (self.sign_in)(id).and_then(|session| self.start(id, session, now));
+        let mut updates = started.unwrap_or_else(|_| {
+            self.pending.insert(id.to_string());
+            vec![Update::Failed(id.to_string())]
         });
+        updates.push(self.shown());
+        updates
+    }
+
+    /// Lists the account's calendars with its session and synchronizes the enabled ones; from
+    /// then on they are polled with it.
+    fn start(
+        &mut self,
+        id: &str,
+        session: Box<dyn Provider + Send>,
+        now: Instant,
+    ) -> Result<Vec<Update>, SyncError> {
+        let list = sync_calendar_list(session.as_ref(), id, &mut self.cache)?;
         let mut updates = Vec::new();
-        match listed {
-            Ok((session, list)) => {
-                // Without it, new events take Google's default length.
-                if let Ok(minutes) = session.default_length() {
-                    updates.push(Update::DefaultLength(id.to_string(), minutes));
-                }
-                updates.extend(gone(list.gone));
-                let calendars = enabled(&self.disabled, &list.calendars);
-                let synced =
-                    sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
-                self.schedule.set_account(id, &calendars, now);
-                self.record(&calendars, &synced);
-                self.sessions.insert(id.to_string(), session);
-                self.fetch_outside();
-            }
-            Err(_) => {
-                self.pending.insert(id.to_string());
-                updates.push(Update::Failed(id.to_string()));
-            }
+        // Without it, new events take Google's default length.
+        if let Ok(minutes) = session.default_length() {
+            updates.push(Update::DefaultLength(id.to_string(), minutes));
+        }
+        updates.extend(gone(list.gone));
+        let calendars = enabled(&self.disabled, &list.calendars);
+        let synced = sync_calendars(session.as_ref(), &calendars, self.window, &mut self.cache);
+        self.schedule.set_account(id, &calendars, now);
+        self.record(&calendars, &synced);
+        self.sessions.insert(id.to_string(), session);
+        self.fetch_outside();
+        Ok(updates)
+    }
+
+    /// Opens the local calendars' file and synchronizes its calendars as the "Local" account's
+    /// (`MOD-09-F07`). One that cannot be read is left as it is, and its calendars are not
+    /// shown (MOD-09 *Constraints and edge cases*); the views are told after the events, so they
+    /// never take the file for one without calendars.
+    fn open_local(&mut self, path: Option<PathBuf>, now: Instant) -> Vec<Update> {
+        let store = match &path {
+            Some(path) => LocalStore::open(path),
+            None => Ok(LocalStore::in_memory()),
+        };
+        let started = store.and_then(|store| {
+            let started = self.start(local::ACCOUNT_ID, Box::new(store.clone()), now);
+            let started = started.map_err(|error| error.0)?;
+            self.local = Some(store);
+            Ok(started)
+        });
+        let read = started.as_ref().map(|_| ()).map_err(String::clone);
+        let mut updates = started.unwrap_or_default();
+        updates.push(self.shown());
+        updates.push(Update::Local(read));
+        updates
+    }
+
+    /// Adds the local calendar to the file and synchronizes it (`MOD-09-F17`); one the file did
+    /// not take is gone from the views with the next events.
+    fn add_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
+        let mut updates = Vec::new();
+        if let Some(store) = self.local.clone() {
+            let _ = store.add_calendar(calendar);
+            updates = (self.start(local::ACCOUNT_ID, Box::new(store), now)).unwrap_or_default();
         }
         updates.push(self.shown());
         updates
@@ -1220,7 +1298,8 @@ impl Engine {
             let key = (calendar.account_id.clone(), calendar.id.clone());
             match result {
                 Ok(_) => {
-                    through = true;
+                    // Reading the local calendars is no synchronization with Google.
+                    through |= calendar.account_id != local::ACCOUNT_ID;
                     self.schedule.succeeded(calendar);
                     self.problems.remove(&key);
                 }
@@ -1421,6 +1500,8 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Their(_)
                 | Job::Remind(..)
                 | Job::Snooze(..)
+                | Job::Local(_)
+                | Job::AddLocal(_)
         )
     )
 }
@@ -7154,5 +7235,423 @@ mod tests {
             &done[1],
             Some(Job::Their(Some(asked))) if asked.people[0].1 == "adam@example.com"
         ));
+    }
+
+    // Local calendars (`US-09-01`).
+
+    /// Thursday 12 November 2026, 9:00 in Warsaw: the clock of the local calendars' test cases.
+    fn thursday_nine() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 11, 12, 8, 0, 0).unwrap()
+    }
+
+    /// Whether the local calendars' file was read, as the views are told.
+    fn local_read(updates: &[Update]) -> Option<Result<(), String>> {
+        updates.iter().find_map(|update| match update {
+            Update::Local(read) => Some(read.clone()),
+            _ => None,
+        })
+    }
+
+    /// The length of a new local event without a range, as the views are told.
+    fn local_length(updates: &[Update]) -> Option<u32> {
+        updates.iter().find_map(|update| match update {
+            Update::DefaultLength(account, minutes) if account == local::ACCOUNT_ID => {
+                Some(*minutes)
+            }
+            _ => None,
+        })
+    }
+
+    /// The side panel: each group's label with its calendars' names.
+    fn panel(
+        accounts: &[calendar_core::accounts::Entry],
+        calendars: &[Calendar],
+        settings: &Settings,
+    ) -> Vec<(String, Vec<String>)> {
+        let status = calendar_core::status::Status::default();
+        (side_panel::groups(accounts, calendars, settings, &status, true).into_iter())
+            .map(|group| {
+                let names = group.calendars.into_iter().map(|row| row.calendar.name);
+                (group.email, names.collect())
+            })
+            .collect()
+    }
+
+    /// "Use without an account": "My calendar" made the default calendar and added.
+    fn use_without_account(
+        engine: &mut Engine,
+        settings: &mut Settings,
+    ) -> (Calendar, Vec<Update>) {
+        let calendar = local::my_calendar(Warsaw);
+        settings.default_calendar = Some((calendar.account_id.clone(), calendar.id.clone()));
+        let updates = engine.handle(Some(Job::AddLocal(calendar.clone())), Instant::now());
+        (calendar, updates)
+    }
+
+    /// Clicks 10:00 on Friday 13 November, types "Dentist" and presses Enter, offline: the event
+    /// as first shown, and the events the views are then told.
+    fn local_dentist(engine: &mut Engine, settings: &Settings, length: u32) -> (Event, Vec<Event>) {
+        let calendars = engine.cache.calendar_list().unwrap();
+        let default = create::default_calendar(&[], &calendars, settings);
+        let mut entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 600, length, Warsaw),
+            Warsaw,
+            default,
+        );
+        entry.title = "Dentist".to_string();
+        assert_eq!(offline::refused_in(false, entry.calendar.as_ref()), None);
+        let (calendar, event) = entry.new_event().unwrap();
+        let mut saving = Saving::default();
+        let number = saving.add(&calendar, &event);
+        let first = saving.events().next().unwrap().clone();
+        let updates = engine.handle(Some(Job::Create(number, calendar, event)), Instant::now());
+        assert!(matches!(
+            saved(&updates).as_slice(),
+            [Saved::Created(n, _)] if *n == number
+        ));
+        (first, shown(&updates).unwrap())
+    }
+
+    /// The titles the day, 3-day, week, month and agenda views show with Friday 13 November
+    /// selected, and whether the mini calendar marks that day.
+    fn in_views(events: &[Event], settings: &Settings) -> (Vec<Vec<String>>, bool) {
+        let date = d(2026, 11, 13);
+        let views = [
+            View::Grid(GridView::Day),
+            View::Grid(GridView::ThreeDays),
+            View::Grid(GridView::Week),
+            View::Month,
+            View::Agenda,
+        ];
+        let titles = views.map(|view| {
+            let navigation = Navigation::start(Some(view), date, chrono::Weekday::Mon);
+            let now = thursday_nine();
+            let titles: Vec<Option<String>> =
+                match build(events, settings, navigation, 30, Warsaw, now, &none()).0 {
+                    Built::Grid(grid) => (grid.blocks.into_iter().map(|b| b.title))
+                        .chain(grid.bars.into_iter().map(|b| b.title))
+                        .collect(),
+                    Built::Month(month) => (month.weeks.into_iter().flatten())
+                        .flat_map(|day| day.items.into_iter().map(|i| i.title))
+                        .chain(month.bars.into_iter().flatten().map(|b| b.item.title))
+                        .collect(),
+                    Built::Agenda(agenda) => (agenda.days.into_iter())
+                        .flat_map(|day| day.items.into_iter().map(|i| i.title))
+                        .collect(),
+                };
+            titles.into_iter().flatten().collect()
+        });
+        let navigation = Navigation::start(None, date, chrono::Weekday::Mon);
+        let mini = calendar_core::navigation::mini_calendar(date, &navigation, d(2026, 11, 12))
+            .with_events(events, Warsaw);
+        let marked = (mini.weeks.iter().flatten()).any(|day| day.date == date && day.has_events);
+        (titles.to_vec(), marked)
+    }
+
+    #[test]
+    fn tc_09_01_a_first_run_without_an_account_starts_with_my_calendar_and_creates_offline() {
+        let google = Google::start("tc-09-01");
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            google.sign_in(),
+            window(),
+            Disabled::new(),
+        );
+        let mut settings = Settings::default();
+        let regional = polish();
+
+        // 1. The app starts with empty directories: the local calendars are read, after the
+        //    events, and there are none, so the welcome screen shows.
+        let updates = engine.handle(Some(Job::Local(None)), Instant::now());
+        assert!(matches!(updates.last(), Some(Update::Local(Ok(())))));
+        let length = local_length(&updates).unwrap();
+        assert!(local::welcome(&[], &engine.cache.calendar_list().unwrap()));
+
+        // 2. "Use without an account": the week of 9 November, the side panel holding only
+        //    "Local" with "My calendar", which is the default calendar.
+        let (my, _) = use_without_account(&mut engine, &mut settings);
+        let calendars = engine.cache.calendar_list().unwrap();
+        assert!(!local::welcome(&[], &calendars));
+        let navigation = Navigation::start(None, d(2026, 11, 12), chrono::Weekday::Mon);
+        assert_eq!(navigation.period(), Some((d(2026, 11, 9), d(2026, 11, 15))));
+        assert_eq!(
+            panel(&[], &calendars, &settings),
+            [("Local".to_string(), vec!["My calendar".to_string()])]
+        );
+        assert_eq!(
+            create::default_calendar(&[], &calendars, &settings),
+            Some(my.clone())
+        );
+
+        // 3. "Dentist" at 10:00 on Friday 13 November, offline: shown at once without the
+        //    "saving" mark, 10:00–11:00 in "My calendar"'s colour.
+        let (first, events) = local_dentist(&mut engine, &settings, length);
+        assert!(!first.saving);
+        let dentist = events.iter().find(|e| e.title == "Dentist").unwrap();
+        let Timing::Timed { start, end, .. } = dentist.timing else {
+            panic!("a timed event");
+        };
+        assert_eq!(
+            (local(start), local(end)),
+            (
+                "2026-11-13 10:00".to_string(),
+                "2026-11-13 11:00".to_string()
+            )
+        );
+        assert_eq!(
+            (dentist.color, dentist.saving, dentist.calendar_id.as_str()),
+            (my.color, false, my.id.as_str())
+        );
+
+        // 4. In the day, 3-day, week, month and agenda views, and marked in the mini calendar.
+        let (titles, marked) = in_views(&events, &settings);
+        for shown in &titles {
+            assert!(shown.contains(&"Dentist".to_string()), "{titles:?}");
+        }
+        assert!(marked);
+
+        // 5. "Gym" from 15:00, made all-day in the full editor with a location and a
+        //    description: in the all-day strip of 13 November, its details showing both.
+        let mut entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 900, length, Warsaw),
+            Warsaw,
+            create::default_calendar(&[], &calendars, &settings),
+        );
+        entry.title = "Gym".to_string();
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.location = "Fit Club".to_string();
+        editor.description = "Legs".to_string();
+        editor.all_day = true;
+        assert_eq!(offline::refused_in(false, editor.calendar.as_ref()), None);
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(2, calendar, *event)), Instant::now());
+        assert!(matches!(saved(&updates).as_slice(), [Saved::Created(2, _)]));
+        let events = shown(&updates).unwrap();
+        let gym = events.iter().find(|e| e.title == "Gym").unwrap();
+        assert_eq!(
+            gym.timing,
+            Timing::AllDay {
+                start: d(2026, 11, 13),
+                end_exclusive: d(2026, 11, 14)
+            }
+        );
+        let navigation = Navigation::start(None, d(2026, 11, 13), chrono::Weekday::Mon);
+        let now = thursday_nine();
+        let (Built::Grid(week), _) =
+            build(&events, &settings, navigation, 30, Warsaw, now, &none())
+        else {
+            panic!("the week view is built");
+        };
+        assert!(
+            week.bars
+                .iter()
+                .any(|bar| bar.title.as_deref() == Some("Gym"))
+        );
+        let details = event_details(gym, Warsaw);
+        assert_eq!(details.location.as_deref(), Some("Fit Club"));
+        let description: String = (details.description.unwrap().into_iter().flatten())
+            .map(|span| span.text)
+            .collect();
+        assert_eq!(description, "Legs");
+
+        // 6. Google received nothing.
+        assert_eq!(google.fake.requests(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn tc_09_02_local_calendars_and_events_survive_a_restart_and_a_deleted_cache() {
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-tc-09-02-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let cache_path = dir.join("cache").join("cache.sqlite3");
+        let local_path = dir.join("data").join("local.sqlite3");
+        let start = || {
+            let cache = Cache::open(&cache_path).unwrap();
+            let mut engine = Engine::new(cache, unreachable_google(), window(), Disabled::new());
+            let updates = engine.handle(Some(Job::Local(Some(local_path.clone()))), Instant::now());
+            assert_eq!(local_read(&updates), Some(Ok(())));
+            let Some(Update::Events(calendars, events)) =
+                (updates.into_iter()).rfind(|update| matches!(update, Update::Events(..)))
+            else {
+                panic!("the views are told what to show");
+            };
+            (engine, calendars, events)
+        };
+        // Started without an account, "My calendar" holds "Dentist".
+        let (mut engine, _, _) = start();
+        let mut settings = Settings::default();
+        use_without_account(&mut engine, &mut settings);
+        let (_, events) = local_dentist(&mut engine, &settings, 60);
+        let made = events.into_iter().find(|e| e.title == "Dentist").unwrap();
+        drop(engine);
+
+        // 1. Quit and start: the week view, not the welcome screen, and "Dentist".
+        let (engine, calendars, events) = start();
+        assert!(!local::welcome(&[], &calendars));
+        assert_eq!(events, std::slice::from_ref(&made));
+        drop(engine);
+
+        // 2. Quit, delete the cache, start: "My calendar" and "Dentist" are there, and the
+        //    local file is as it was.
+        let kept = std::fs::read(&local_path).unwrap();
+        std::fs::remove_file(&cache_path).unwrap();
+        let (engine, calendars, events) = start();
+        assert!(!local::welcome(&[], &calendars));
+        assert_eq!(
+            panel(&[], &calendars, &settings),
+            [("Local".to_string(), vec!["My calendar".to_string()])]
+        );
+        assert_eq!(events, [made]);
+        drop(engine);
+        assert_eq!(std::fs::read(&local_path).unwrap(), kept);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tc_09_03_without_an_account_new_events_last_an_hour_and_an_account_connected_later_comes_first()
+     {
+        let google = Google::start("tc-09-03");
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "standup",
+                "status": "confirmed",
+                "summary": "Standup",
+                "start": {"dateTime": "2026-11-13T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-13T09:15:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            google.sign_in(),
+            window(),
+            Disabled::new(),
+        );
+        let length = local_length(&engine.handle(Some(Job::Local(None)), Instant::now())).unwrap();
+        let mut settings = Settings::default();
+        use_without_account(&mut engine, &mut settings);
+        let (_, events) = local_dentist(&mut engine, &settings, length);
+        let made = events.into_iter().find(|e| e.title == "Dentist").unwrap();
+
+        // 1. `c` on Thursday 12 November at 9:00: the quick box from 10:00 to 11:00.
+        let (start, end) = create::keyed(d(2026, 11, 12), thursday_nine(), length, Warsaw);
+        assert_eq!(
+            (local(start), local(end)),
+            (
+                "2026-11-12 10:00".to_string(),
+                "2026-11-12 11:00".to_string()
+            )
+        );
+
+        // 2. "Meet with…" is unavailable and says it needs a Google account.
+        assert_eq!(
+            meet_with::unavailable(false, true),
+            Some(texts::MEET_WITH_NEEDS_ACCOUNT)
+        );
+
+        // 3. Account A connected from the settings: its group comes before "Local" in the side
+        //    panel and the calendar picker.
+        let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), Instant::now());
+        assert!(told(updates).is_some());
+        let calendars = engine.cache.calendar_list().unwrap();
+        let grouped = vec![
+            (EMAIL.to_string(), vec!["Personal".to_string()]),
+            ("Local".to_string(), vec!["My calendar".to_string()]),
+        ];
+        assert_eq!(panel(&accounts(), &calendars, &settings), grouped);
+        let picker: Vec<(String, Vec<String>)> =
+            (create::choices(&accounts(), &calendars, &settings).into_iter())
+                .map(|(label, calendars)| (label, calendars.into_iter().map(|c| c.name).collect()))
+                .collect();
+        assert_eq!(picker, grouped);
+
+        // 4. 13 November shows "Standup" and "Dentist", "Dentist" as it was.
+        let events = now_shown(&engine);
+        assert!(events.iter().any(|e| e.title == "Standup"));
+        assert_eq!(events.iter().find(|e| e.title == "Dentist"), Some(&made));
+    }
+
+    #[test]
+    fn tc_09_04_an_unreadable_local_file_is_told_left_as_it_is_and_google_keeps_working() {
+        let google = Google::start("tc-09-04");
+        personal(&google);
+        google.event(EMAIL, "standup", "Standup");
+        let path = google.dir.join("data").join("local.sqlite3");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let bytes = b"Not an SQLite database at all; the app must leave it alone.".repeat(30);
+        std::fs::write(&path, &bytes).unwrap();
+        let mut engine = first_sync(&google, Instant::now());
+
+        // 1. The app says the local calendars cannot be read, and where the file is; the side
+        //    panel shows account A without "Local", and "Standup".
+        let updates = engine.handle(Some(Job::Local(Some(path.clone()))), Instant::now());
+        let Some(Err(why)) = local_read(&updates) else {
+            panic!("the file was read");
+        };
+        assert!(
+            why.starts_with("Local calendars cannot be read from"),
+            "{why}"
+        );
+        assert!(why.contains(&path.display().to_string()), "{why}");
+        let calendars = engine.cache.calendar_list().unwrap();
+        assert_eq!(
+            panel(&accounts(), &calendars, &Settings::default()),
+            [(EMAIL.to_string(), vec!["Personal".to_string()])]
+        );
+        assert_eq!(told(updates), Some(vec!["Standup".to_string()]));
+
+        // 2. The file is unchanged.
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+
+    #[test]
+    fn reading_and_writing_the_local_calendars_is_no_synchronization_with_google() {
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let mut settings = Settings::default();
+        use_without_account(&mut engine, &mut settings);
+        local_dentist(&mut engine, &settings, 60);
+
+        assert_eq!(engine.last_synced, None);
+        assert_eq!(engine.cache.last_synced().unwrap(), None);
+    }
+
+    #[test]
+    fn the_local_calendars_are_known_before_the_welcome_screen_is_decided_and_listed_once_added() {
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            Cache::in_memory,
+            unreachable_google(),
+            Vec::new(),
+            window(),
+            Disabled::new(),
+        );
+        assert_eq!(sync.local(), None);
+
+        sync.use_local(None);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while sync.local().is_none() {
+            assert!(
+                Instant::now() < deadline,
+                "the local calendars were not read"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+            sync.poll();
+        }
+        assert_eq!(sync.local(), Some(Ok(())));
+        assert!(local::welcome(&[], sync.calendars()));
+
+        sync.add_local(local::my_calendar(Warsaw));
+        assert!(!local::welcome(&[], sync.calendars()));
     }
 }

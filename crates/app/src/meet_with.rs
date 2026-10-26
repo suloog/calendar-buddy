@@ -24,18 +24,19 @@ pub enum Action {
 }
 
 /// Draws `meet` with the people `suggested` for what is typed; `seen` says of each person chosen
-/// whether their calendar can be seen. Offline the field is unavailable and says why
-/// (`MOD-06-F27`).
+/// whether their calendar can be seen. Offline or without a Google account the field is
+/// unavailable and says why (`MOD-06-F27`, MOD-09 *Constraints and edge cases*).
 pub fn show(
     ui: &mut egui::Ui,
     meet: &mut MeetWith,
     suggested: &[Person],
     seen: &[bool],
-    online: bool,
+    unavailable: Option<&str>,
 ) -> Option<Action> {
     let mut action = None;
+    let available = unavailable.is_none();
     let field = ui
-        .add_enabled_ui(online, |ui| {
+        .add_enabled_ui(available, |ui| {
             text_field(
                 ui,
                 egui::TextEdit::singleline(&mut meet.field)
@@ -44,15 +45,15 @@ pub fn show(
             )
         })
         .inner;
-    if !online {
-        ui.weak(texts::MEET_WITH_OFFLINE);
+    if let Some(why) = unavailable {
+        ui.weak(why);
     }
     if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
         action = Some(Action::Enter);
         // The field keeps the keyboard for the next person.
         field.request_focus();
     }
-    if online {
+    if available {
         for person in suggested {
             if ui.button(person.label()).clicked() {
                 action = Some(Action::Choose(person.clone()));
@@ -95,13 +96,13 @@ pub fn show(
 mod tests {
     use super::*;
     use crate::screen::{self, texts as drawn_texts};
-    use calendar_core::meet_with::Chosen;
+    use calendar_core::meet_with::{Chosen, unavailable};
     use calendar_core::model::Rgb;
     use calendar_core::theme::Scheme;
 
-    /// The texts "Meet with…" draws with Anna chosen, whose calendar cannot be seen, online or
-    /// not.
-    fn drawn(online: bool) -> Vec<String> {
+    /// The texts "Meet with…" draws with Anna chosen, whose calendar cannot be seen, when it is
+    /// available or, as `why_not` says, not.
+    fn drawn(why_not: Option<&str>) -> Vec<String> {
         let mut meet = MeetWith {
             field: String::new(),
             chosen: vec![Chosen {
@@ -114,7 +115,7 @@ mod tests {
             }],
         };
         let shapes = screen::drawn(egui::vec2(300.0, 400.0), 1.0, Scheme::Light, None, |ui| {
-            show(ui, &mut meet, &[], &[false], online);
+            show(ui, &mut meet, &[], &[false], why_not);
         });
         (drawn_texts(&shapes).into_iter())
             .map(|(_, text)| text.galley.text().to_string())
@@ -123,16 +124,27 @@ mod tests {
 
     #[test]
     fn tc_06_16_offline_the_field_says_it_needs_a_connection_and_the_list_stays() {
-        let offline = drawn(false);
+        let offline = drawn(unavailable(true, false));
         assert!(
             offline.iter().any(|t| t == texts::MEET_WITH_OFFLINE),
             "{offline:?}"
         );
         assert!(offline.iter().any(|t| t == "Anna Nowak"));
 
-        let online = drawn(true);
+        let online = drawn(unavailable(true, true));
         assert!(!online.iter().any(|t| t == texts::MEET_WITH_OFFLINE));
         assert!(online.iter().any(|t| t == texts::CALENDAR_CANNOT_BE_SEEN));
         assert!(online.iter().any(|t| t == texts::CREATE_EVENT));
+    }
+
+    #[test]
+    fn tc_09_03_without_a_google_account_the_field_says_it_needs_one() {
+        let texts = drawn(unavailable(false, true));
+
+        assert!(
+            texts.iter().any(|t| t == texts::MEET_WITH_NEEDS_ACCOUNT),
+            "{texts:?}"
+        );
+        assert!(!texts.iter().any(|t| t == texts::MEET_WITH_OFFLINE));
     }
 }
