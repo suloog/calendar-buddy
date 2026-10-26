@@ -599,6 +599,8 @@ pub const LOCAL_CALENDARS: &str = "Local calendars";
 /// The field naming a new local calendar, and its button (`MOD-09-F02`).
 pub const NEW_CALENDAR_NAME: &str = "Name of a new calendar";
 pub const ADD_CALENDAR: &str = "Add calendar";
+/// Hovering "Delete" of the only local calendar in the settings (`MOD-09-F21`).
+pub const LAST_LOCAL_CALENDAR: &str = "The last local calendar cannot be deleted";
 /// Hovering a local calendar's name in the settings (`MOD-09-F03`).
 pub const RENAME_HINT: &str = "Type a new name and press Enter";
 /// Hovering a local calendar's colour in the settings (`MOD-09-F03`).
@@ -621,6 +623,15 @@ pub fn local_not_read(path: &Path, reason: &str) -> String {
     format!(
         "Local calendars cannot be read from {}: {reason}. The file is left as it is.",
         path.display()
+    )
+}
+/// Changes to the local calendars are not written to their file: told until one is
+/// (`MOD-09-F20`).
+pub fn local_not_saved(why: &str, path: Option<&Path>) -> String {
+    let file = path.map_or("the file".to_string(), |path| path.display().to_string());
+    format!(
+        "Changes to local calendars are not being saved: {why}. The last change was lost; \
+         check the free disk space and that {file} can be written."
     )
 }
 /// Why a change to the local calendars was not kept.

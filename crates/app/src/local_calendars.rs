@@ -56,8 +56,12 @@ impl State {
 /// the order it was done: a name left by clicking elsewhere is kept before that click's action.
 pub fn show(ui: &mut egui::Ui, state: &mut State, calendars: &[Calendar]) -> Vec<Action> {
     let mut actions = Vec::new();
+    // There is always a local calendar: the last one is not deleted (`MOD-09-F21`).
+    let deletable = calendars.len() > 1;
     for calendar in calendars {
-        ui.push_id(&calendar.id, |ui| actions.extend(row(ui, state, calendar)));
+        ui.push_id(&calendar.id, |ui| {
+            actions.extend(row(ui, state, calendar, deletable));
+        });
     }
     ui.add_space(4.0);
     ui.horizontal(|ui| {
@@ -79,9 +83,9 @@ pub fn show(ui: &mut egui::Ui, state: &mut State, calendars: &[Calendar]) -> Vec
     actions
 }
 
-/// One local calendar: its colour, its name and "Delete", with the question under it while the
-/// user is asked.
-fn row(ui: &mut egui::Ui, state: &mut State, calendar: &Calendar) -> Vec<Action> {
+/// One local calendar: its colour, its name and "Delete", unavailable when it is the last one, with
+/// the question under it while the user is asked.
+fn row(ui: &mut egui::Ui, state: &mut State, calendar: &Calendar, deletable: bool) -> Vec<Action> {
     let mut changed = calendar.clone();
     let ((), deleted) = egui::Sides::new().show(
         ui,
@@ -105,7 +109,12 @@ fn row(ui: &mut egui::Ui, state: &mut State, calendar: &Calendar) -> Vec<Action>
                 state.names.remove(&calendar.id);
             }
         },
-        |ui| widgets::outlined_button(ui, texts::DELETE).clicked(),
+        |ui| {
+            ui.add_enabled_ui(deletable, |ui| widgets::outlined_button(ui, texts::DELETE))
+                .inner
+                .on_disabled_hover_text(texts::LAST_LOCAL_CALENDAR)
+                .clicked()
+        },
     );
     if let Some(defaults) = defaults(ui, state, calendar) {
         changed.default_reminders = defaults;

@@ -627,15 +627,20 @@ impl Editor {
     }
 
     /// The reminders the editor shows: the event's own, or the defaults of the calendar picked
-    /// (`MOD-07-F03`).
+    /// (`MOD-07-F03`); in a local calendar notifications only, as it keeps no other
+    /// (`MOD-09-F15`).
     pub fn reminder_fields(&self) -> Vec<ReminderField> {
-        match (&self.reminders, &self.calendar) {
+        let fields = match (&self.reminders, &self.calendar) {
             (Some(own), _) => own.clone(),
             (None, Some(calendar)) => (calendar.default_reminders.iter().copied())
                 .map(ReminderField::of)
                 .collect(),
             (None, None) => Vec::new(),
-        }
+        };
+        let methods = self.reminder_methods();
+        (fields.into_iter())
+            .filter(|field| methods.contains(&field.method))
+            .collect()
     }
 
     /// The reminders as the fields say; why they cannot be saved otherwise. New out of office and
@@ -1993,6 +1998,22 @@ mod tests {
             [ReminderField::of(reminder(Method::Notification, 15))]
         );
         assert_eq!(change(&editor).patch.reminders, Some(Reminders::Default));
+    }
+
+    #[test]
+    fn a_local_calendar_picked_shows_no_e_mail_reminders() {
+        let mut event = standup();
+        event.about.reminders = Reminders::Own(vec![
+            reminder(Method::Email, 60),
+            reminder(Method::Notification, 10),
+        ]);
+        let mut editor = Editor::of(&event, calendar("1", "a@example.com"), &regional());
+        assert_eq!(editor.reminder_fields().len(), 2);
+        editor.calendar = Some(local::my_calendar(chrono_tz::Europe::Warsaw));
+        assert_eq!(
+            editor.reminder_fields(),
+            [ReminderField::of(reminder(Method::Notification, 10))]
+        );
     }
 
     #[test]

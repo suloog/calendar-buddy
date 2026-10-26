@@ -1903,8 +1903,8 @@ impl CalendarApp {
         }
     }
 
-    /// The removed account's credentials are gone: the app forgets it, and with the last one gone
-    /// the welcome screen comes back (`MOD-01-F14`).
+    /// The removed account's credentials are gone: the app forgets it; the local calendars stay,
+    /// so the views do too (`MOD-09-F21`).
     fn removed(&mut self, id: &str) {
         self.accounts.remove(id);
         self.save_accounts();
@@ -1932,8 +1932,9 @@ impl CalendarApp {
         self.close_on_welcome();
     }
 
-    /// With neither an account nor a local calendar left, the welcome screen comes back
-    /// (`MOD-09-F19`): the settings close, so they do not reopen over the calendar after a new
+    /// With neither an account nor a local calendar, the welcome screen comes back — only while
+    /// the local file cannot be read, as there is always a local calendar otherwise
+    /// (`MOD-09-F21`): the settings close, so they do not reopen over the calendar after a new
     /// connection.
     fn close_on_welcome(&mut self) {
         if local::welcome(self.accounts.list(), self.sync.calendars()) {
@@ -1962,8 +1963,7 @@ impl CalendarApp {
     }
 
     /// The local calendar is gone with its events (`MOD-09-F04`): the settings forget it,
-    /// the default calendar too if it was (`MOD-09-F11`); nothing done before can be undone, and
-    /// the welcome screen comes back when nothing is left (`MOD-09-F19`).
+    /// the default calendar too if it was (`MOD-09-F11`); nothing done before can be undone.
     fn local_deleted(&mut self, calendar: &Calendar) {
         self.last = LastChange::default();
         let disabled = self.settings.disabled.clone();
@@ -1978,7 +1978,6 @@ impl CalendarApp {
             self.sync.set_silenced(Silenced::of(&self.settings));
             self.rebuild();
         }
-        self.close_on_welcome();
     }
 
     /// Opens the settings and signs in again to an account that needs it.
@@ -2040,6 +2039,10 @@ impl CalendarApp {
         }
         self.checks.tick(ctx, &self.accounts);
         let cached = self.sync.poll();
+        // Once an account is connected there is a local calendar too (`MOD-09-F21`).
+        if !self.accounts.list().is_empty() {
+            self.sync.keep_local(self.zone);
+        }
         let saved = self.sync.take_saved();
         let now = Instant::now();
         for saved in &saved {
@@ -2201,6 +2204,7 @@ impl eframe::App for CalendarApp {
         ];
         let widest: Vec<&str> = widest.iter().map(String::as_str).collect();
         let declined = !self.settings.hide_declined;
+        let google = !self.accounts.list().is_empty();
         let names: Vec<&str> = View::ALL.iter().map(|view| view.name()).collect();
         let picked = View::ALL
             .iter()
@@ -2242,17 +2246,22 @@ impl eframe::App for CalendarApp {
                             icons::button(ui, Icon::Settings, texts::SETTINGS, true).clicked();
                         // The shortcuts' list, also on `?`, where Google Calendar has its help.
                         help = widgets::help_button(ui, texts::KEYBOARD_SHORTCUTS).clicked();
-                        // Turns while synchronizing.
-                        let turning = state == State::Synchronizing;
-                        refresh = widgets::refresh_button(ui, texts::REFRESH, turning).clicked();
-                        let shown = egui::RichText::new(indicator).small();
-                        let shown = if matches!(state, State::Delayed | State::Error) {
-                            shown.color(ui.visuals().warn_fg_color)
-                        } else {
-                            shown.weak()
-                        };
-                        widgets::steady_label(ui, shown, &widest).on_hover_text(synced);
-                        ui.add_space(8.0);
+                        // Only Google is synchronized: with no account there is nothing to
+                        // refresh or tell of (`DEC-181`).
+                        if google {
+                            // Turns while synchronizing.
+                            let turning = state == State::Synchronizing;
+                            refresh =
+                                widgets::refresh_button(ui, texts::REFRESH, turning).clicked();
+                            let shown = egui::RichText::new(indicator).small();
+                            let shown = if matches!(state, State::Delayed | State::Error) {
+                                shown.color(ui.visuals().warn_fg_color)
+                            } else {
+                                shown.weak()
+                            };
+                            widgets::steady_label(ui, shown, &widest).on_hover_text(synced);
+                            ui.add_space(8.0);
+                        }
                         switched = widgets::segmented(ui, &names, picked);
                         // One switch shows or hides declined events, shown by default
                         // (`MOD-06-F22`).
@@ -2329,6 +2338,22 @@ impl eframe::App for CalendarApp {
             egui::Panel::top("local-problem").show(ui, |ui| {
                 ui.colored_label(ui.visuals().warn_fg_color, why);
             });
+        }
+        // Changes the local file does not take are told until one is: what the user does there is
+        // being lost (`MOD-09-F20`).
+        if let Some(why) = self.sync.unsaved() {
+            let text = texts::local_not_saved(why, local::default_path().as_deref());
+            // Filled with the warning tone, unlike the quieter bars, as changes are being lost.
+            let warn = ui.visuals().warn_fg_color;
+            let ink = grid_view::text_on(calendar_core::model::Rgb(warn.r(), warn.g(), warn.b()));
+            let frame = egui::Frame::new()
+                .fill(warn)
+                .inner_margin(egui::Margin::symmetric(12, 8));
+            egui::Panel::top("local-unsaved")
+                .frame(frame)
+                .show(ui, |ui| {
+                    ui.label(egui::RichText::new(text).strong().color(ink));
+                });
         }
         // The user is told about every account Google turned away (`MOD-01-F05`).
         let mut again = None;

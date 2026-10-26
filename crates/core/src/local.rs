@@ -80,6 +80,8 @@ pub struct LocalStore {
     /// The events deleted since the file was opened, kept to be restored as Google keeps a
     /// deleted event for a while (`MOD-05-F27`); lost when the app quits, as the undo is.
     deleted: Arc<Mutex<Deleted>>,
+    /// Why the last change could not be written to the file, until one is (`MOD-09-F20`).
+    unsaved: Arc<Mutex<Option<String>>>,
 }
 
 fn failed(error: rusqlite::Error) -> SyncError {
@@ -142,6 +144,7 @@ impl LocalStore {
         Ok(LocalStore {
             connection: Arc::new(Mutex::new(connection)),
             deleted: Arc::default(),
+            unsaved: Arc::default(),
         })
     }
 
@@ -155,45 +158,67 @@ impl LocalStore {
         self.connection.lock().unwrap()
     }
 
+    /// Writes with `write`, and keeps why the file did not take it until a write gets through;
+    /// a change refused as at Google is no fault of the file's (`MOD-09-F20`).
+    fn noted<T>(&self, write: impl FnOnce() -> Result<T, SyncError>) -> Result<T, SyncError> {
+        let result = write();
+        let mut unsaved = self.unsaved.lock().unwrap();
+        match &result {
+            Ok(_) => *unsaved = None,
+            Err(error) if error.is_changed_elsewhere() || error.0 == texts::LOCAL_EVENT_GONE => {}
+            Err(error) => *unsaved = Some(error.0.clone()),
+        }
+        result
+    }
+
+    /// Why the last change could not be written to the file, while none has been since.
+    pub fn unsaved(&self) -> Option<String> {
+        self.unsaved.lock().unwrap().clone()
+    }
+
     /// Adds the calendar after the others.
     pub fn add_calendar(&self, calendar: &Calendar) -> Result<(), SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        transaction
-            .execute(
-                "INSERT INTO calendars VALUES \
-                 (?1, (SELECT COALESCE(MAX(position) + 1, 0) FROM calendars), ?2, ?3, ?4, ?5)",
-                params![
-                    calendar.id,
-                    calendar.name,
-                    color_text(calendar.color),
-                    calendar.zone.name(),
-                    reminders_text(&calendar.default_reminders),
-                ],
-            )
-            .map_err(failed)?;
-        revise(&transaction)?;
-        transaction.commit().map_err(failed)
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            transaction
+                .execute(
+                    "INSERT INTO calendars VALUES \
+                     (?1, (SELECT COALESCE(MAX(position) + 1, 0) FROM calendars), ?2, ?3, ?4, ?5)",
+                    params![
+                        calendar.id,
+                        calendar.name,
+                        color_text(calendar.color),
+                        calendar.zone.name(),
+                        reminders_text(&calendar.default_reminders),
+                    ],
+                )
+                .map_err(failed)?;
+            revise(&transaction)?;
+            transaction.commit().map_err(failed)
+        })
     }
 
     /// Renames and recolours the calendar and sets its default notifications as `calendar` has
     /// them (`MOD-09-F03`, `MOD-09-F14`); its events that use the defaults follow.
     pub fn change_calendar(&self, calendar: &Calendar) -> Result<(), SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        transaction
-            .execute(
-                "UPDATE calendars SET name = ?2, color = ?3, reminders = ?4 WHERE id = ?1",
-                params![
-                    calendar.id,
-                    calendar.name,
-                    color_text(calendar.color),
-                    reminders_text(&calendar.default_reminders),
-                ],
-            )
-            .map_err(failed)?;
-        revise(&transaction)?;
-        transaction.commit().map_err(failed)
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            transaction
+                .execute(
+                    "UPDATE calendars SET name = ?2, color = ?3, reminders = ?4 WHERE id = ?1",
+                    params![
+                        calendar.id,
+                        calendar.name,
+                        color_text(calendar.color),
+                        reminders_text(&calendar.default_reminders),
+                    ],
+                )
+                .map_err(failed)?;
+            revise(&transaction)?;
+            transaction.commit().map_err(failed)
+        })
     }
 
     /// The number of the calendar's events, a series counted once (`MOD-09-U03`).
@@ -210,18 +235,20 @@ impl LocalStore {
 
     /// Deletes the calendar and its events for good (`MOD-09-F04`).
     pub fn delete_calendar(&self, calendar_id: &str) -> Result<(), SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        for table in [
-            "DELETE FROM events WHERE calendar_id = ?1",
-            "DELETE FROM calendars WHERE id = ?1",
-        ] {
-            transaction
-                .execute(table, params![calendar_id])
-                .map_err(failed)?;
-        }
-        revise(&transaction)?;
-        transaction.commit().map_err(failed)
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            for table in [
+                "DELETE FROM events WHERE calendar_id = ?1",
+                "DELETE FROM calendars WHERE id = ?1",
+            ] {
+                transaction
+                    .execute(table, params![calendar_id])
+                    .map_err(failed)?;
+            }
+            revise(&transaction)?;
+            transaction.commit().map_err(failed)
+        })
     }
 
     /// The number of the last change, which an event's version and the state of the calendars
@@ -342,21 +369,23 @@ impl Provider for LocalStore {
 
     /// Keeps what a local event has (`MOD-09-F09`); guests and Google Meet are Google's.
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let created = SyncedEvent {
-            id: new_id(),
-            title: event.title.clone(),
-            timing: Some(event.timing),
-            recurrence: event.recurrence.clone(),
-            instance_of: None,
-            about: event.about.clone(),
-            etag: revise(&transaction)?.to_string(),
-            organizer_only: false,
-        };
-        put(&transaction, &calendar.id, &created)?;
-        transaction.commit().map_err(failed)?;
-        Ok(created.id)
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            let created = SyncedEvent {
+                id: new_id(),
+                title: event.title.clone(),
+                timing: Some(event.timing),
+                recurrence: event.recurrence.clone(),
+                instance_of: None,
+                about: event.about.clone(),
+                etag: revise(&transaction)?.to_string(),
+                organizer_only: false,
+            };
+            put(&transaction, &calendar.id, &created)?;
+            transaction.commit().map_err(failed)?;
+            Ok(created.id)
+        })
     }
 
     /// The new series of a split: all a local event keeps is in `new`.
@@ -380,40 +409,43 @@ impl Provider for LocalStore {
         patch: &Patch,
         _: bool,
     ) -> Result<String, SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let mut event = kept(&transaction, &calendar.id, id)?.ok_or_else(gone)?;
-        of_version(&event, etag)?;
-        let patch = patch.clone();
-        // A series moved to other times on the same days takes its occurrences changed or
-        // deleted on their own with it, as Google keeps them with it.
-        if let (None, Some(first), Some(timing)) = (&event.instance_of, event.timing, patch.timing)
-        {
-            let of_series = "calendar_id = ?1 AND series_id = ?2";
-            for exception in read(&transaction, of_series, params![calendar.id, id])? {
-                let Some((series, original)) = exception.instance_of else {
-                    continue;
-                };
-                let original = at_new_time(original, first, timing);
-                let moved = SyncedEvent {
-                    instance_of: Some((series, original)),
-                    ..exception
-                };
-                put(&transaction, &calendar.id, &moved)?;
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            let mut event = kept(&transaction, &calendar.id, id)?.ok_or_else(gone)?;
+            of_version(&event, etag)?;
+            let patch = patch.clone();
+            // A series moved to other times on the same days takes its occurrences changed or
+            // deleted on their own with it, as Google keeps them with it.
+            if let (None, Some(first), Some(timing)) =
+                (&event.instance_of, event.timing, patch.timing)
+            {
+                let of_series = "calendar_id = ?1 AND series_id = ?2";
+                for exception in read(&transaction, of_series, params![calendar.id, id])? {
+                    let Some((series, original)) = exception.instance_of else {
+                        continue;
+                    };
+                    let original = at_new_time(original, first, timing);
+                    let moved = SyncedEvent {
+                        instance_of: Some((series, original)),
+                        ..exception
+                    };
+                    put(&transaction, &calendar.id, &moved)?;
+                }
             }
-        }
-        event.title = patch.title.unwrap_or(event.title);
-        event.timing = patch.timing.or(event.timing);
-        event.recurrence = patch.recurrence.unwrap_or(event.recurrence);
-        let about = &mut event.about;
-        about.description = patch.description.unwrap_or(take(&mut about.description));
-        about.location = patch.location.unwrap_or(take(&mut about.location));
-        about.color = patch.color.unwrap_or(about.color);
-        about.reminders = patch.reminders.unwrap_or(take(&mut about.reminders));
-        event.etag = revise(&transaction)?.to_string();
-        put(&transaction, &calendar.id, &event)?;
-        transaction.commit().map_err(failed)?;
-        Ok(event.etag)
+            event.title = patch.title.unwrap_or(event.title);
+            event.timing = patch.timing.or(event.timing);
+            event.recurrence = patch.recurrence.unwrap_or(event.recurrence);
+            let about = &mut event.about;
+            about.description = patch.description.unwrap_or(take(&mut about.description));
+            about.location = patch.location.unwrap_or(take(&mut about.location));
+            about.color = patch.color.unwrap_or(about.color);
+            about.reminders = patch.reminders.unwrap_or(take(&mut about.reminders));
+            event.etag = revise(&transaction)?.to_string();
+            put(&transaction, &calendar.id, &event)?;
+            transaction.commit().map_err(failed)?;
+            Ok(event.etag)
+        })
     }
 
     /// Moves the event, a series with its occurrences changed on their own, to another local
@@ -425,76 +457,82 @@ impl Provider for LocalStore {
         destination: &Calendar,
         _: bool,
     ) -> Result<String, SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let etag = revise(&transaction)?.to_string();
-        let moved = transaction
-            .execute(
-                "UPDATE events SET calendar_id = ?3, etag = ?4 \
-                 WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2) \
-                 AND EXISTS (SELECT 1 FROM calendars WHERE id = ?3)",
-                params![calendar.id, id, destination.id, etag],
-            )
-            .map_err(failed)?;
-        if moved == 0 {
-            return Err(gone());
-        }
-        transaction.commit().map_err(failed)?;
-        Ok(etag)
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            let etag = revise(&transaction)?.to_string();
+            let moved = transaction
+                .execute(
+                    "UPDATE events SET calendar_id = ?3, etag = ?4 \
+                     WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2) \
+                     AND EXISTS (SELECT 1 FROM calendars WHERE id = ?3)",
+                    params![calendar.id, id, destination.id, etag],
+                )
+                .map_err(failed)?;
+            if moved == 0 {
+                return Err(gone());
+            }
+            transaction.commit().map_err(failed)?;
+            Ok(etag)
+        })
     }
 
     /// Deletes the event; an occurrence of a series is cancelled in its place, and a series goes
     /// with its occurrences changed on their own. One no longer there is deleted, as Google
     /// answers.
     fn delete(&self, calendar: &Calendar, id: &str, etag: &str, _: bool) -> Result<(), SyncError> {
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let Some(event) = kept(&transaction, &calendar.id, id)? else {
-            return Ok(());
-        };
-        of_version(&event, etag)?;
-        let revision = revise(&transaction)?.to_string();
-        let mut before = vec![event.clone()];
-        if event.instance_of.is_some() {
-            let cancelled = SyncedEvent {
-                timing: None,
-                etag: revision,
-                ..event
+        self.noted(|| {
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            let Some(event) = kept(&transaction, &calendar.id, id)? else {
+                return Ok(());
             };
-            put(&transaction, &calendar.id, &cancelled)?;
-        } else {
-            let of_series = "calendar_id = ?1 AND series_id = ?2";
-            before.extend(read(&transaction, of_series, params![calendar.id, id])?);
-            transaction
-                .execute(
-                    "DELETE FROM events WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2)",
-                    params![calendar.id, id],
-                )
-                .map_err(failed)?;
-        }
-        transaction.commit().map_err(failed)?;
-        let key = (calendar.id.clone(), id.to_string());
-        self.deleted.lock().unwrap().insert(key, before);
-        Ok(())
+            of_version(&event, etag)?;
+            let revision = revise(&transaction)?.to_string();
+            let mut before = vec![event.clone()];
+            if event.instance_of.is_some() {
+                let cancelled = SyncedEvent {
+                    timing: None,
+                    etag: revision,
+                    ..event
+                };
+                put(&transaction, &calendar.id, &cancelled)?;
+            } else {
+                let of_series = "calendar_id = ?1 AND series_id = ?2";
+                before.extend(read(&transaction, of_series, params![calendar.id, id])?);
+                transaction
+                    .execute(
+                        "DELETE FROM events WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2)",
+                        params![calendar.id, id],
+                    )
+                    .map_err(failed)?;
+            }
+            transaction.commit().map_err(failed)?;
+            let key = (calendar.id.clone(), id.to_string());
+            self.deleted.lock().unwrap().insert(key, before);
+            Ok(())
+        })
     }
 
     /// Brings back the event deleted since the file was opened, as it was.
     fn restore(&self, calendar: &Calendar, id: &str, _: bool) -> Result<String, SyncError> {
-        let key = (calendar.id.clone(), id.to_string());
-        let before = (self.deleted.lock().unwrap().get(&key).cloned()).ok_or_else(gone)?;
-        let connection = self.connection();
-        let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let etag = revise(&transaction)?.to_string();
-        for event in before {
-            let event = SyncedEvent {
-                etag: etag.clone(),
-                ..event
-            };
-            put(&transaction, &calendar.id, &event)?;
-        }
-        transaction.commit().map_err(failed)?;
-        self.deleted.lock().unwrap().remove(&key);
-        Ok(etag)
+        self.noted(|| {
+            let key = (calendar.id.clone(), id.to_string());
+            let before = (self.deleted.lock().unwrap().get(&key).cloned()).ok_or_else(gone)?;
+            let connection = self.connection();
+            let transaction = connection.unchecked_transaction().map_err(failed)?;
+            let etag = revise(&transaction)?.to_string();
+            for event in before {
+                let event = SyncedEvent {
+                    etag: etag.clone(),
+                    ..event
+                };
+                put(&transaction, &calendar.id, &event)?;
+            }
+            transaction.commit().map_err(failed)?;
+            self.deleted.lock().unwrap().remove(&key);
+            Ok(etag)
+        })
     }
 
     /// Google's default, as there is no Google setting to read (MOD-09 *Constraints and edge
@@ -1223,6 +1261,35 @@ mod tests {
 
         assert_eq!(refused.unwrap_err().0, texts::LOCAL_EVENT_GONE);
         assert!(kept(&store, &calendar, &id).is_some());
+    }
+
+    #[test]
+    fn a_change_the_file_does_not_take_is_kept_as_unsaved_until_one_is_taken() {
+        let store = LocalStore::in_memory();
+        let calendar = my_calendar(Warsaw);
+        store.add_calendar(&calendar).unwrap();
+        assert_eq!(store.unsaved(), None);
+        // A file that takes no writes, as a full disk or a read-only file.
+        let read_only = |on: &str| {
+            store
+                .connection()
+                .execute_batch(&format!("PRAGMA query_only = {on}"))
+        };
+        read_only("ON").unwrap();
+        assert!(store.create(&calendar, &dentist()).is_err());
+        let why = store.unsaved().expect("why the change was not kept");
+        assert!(why.contains("readonly"), "{why}");
+        read_only("OFF").unwrap();
+        // A refusal as Google's leaves it as it is: the file was not written to.
+        let patch = Patch {
+            title: Some("X".to_string()),
+            ..Patch::default()
+        };
+        assert!(store.update(&calendar, "gone", "", &patch, false).is_err());
+        assert_eq!(store.unsaved(), Some(why));
+        // The next change the file takes clears it.
+        store.create(&calendar, &dentist()).unwrap();
+        assert_eq!(store.unsaved(), None);
     }
 
     #[test]

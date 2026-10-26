@@ -497,13 +497,16 @@ fn preview() {
     });
     // Local calendars, one of them being deleted.
     picture("settings-local-light", week, Theme::Light, |app, _| {
-        let my = calendar_core::local::my_calendar(app.zone);
-        let others = std::slice::from_ref(&my);
-        let family = calendar_core::local::new_calendar("Family", app.zone, others);
-        app.sync.add_local(my);
+        // "My calendar" is there already, as with every connected account.
+        let family = calendar_core::local::new_calendar("Family", app.zone, app.sync.calendars());
         app.sync.add_local(family.clone());
         app.local_calendars.ask(family, 3);
         app.dialog = Some(Dialog::Settings);
+    });
+    // A change the local file did not take, as on a full disk.
+    picture("local-unsaved-light", week, Theme::Light, |app, _| {
+        let why = calendar_core::texts::local_not_used("database or disk is full");
+        app.sync.told_unsaved(&why);
     });
     picture_sized(
         "settings-short-light",
@@ -618,10 +621,9 @@ fn preview() {
     picture("welcome-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default()
     });
-    // "Use without an account" chosen: "My calendar" under "Local", after no account.
+    // Without an account: "My calendar" alone under "Local".
     picture("without-account-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default();
-        app.use_without_account();
     });
 }
 

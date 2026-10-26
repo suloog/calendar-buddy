@@ -111,6 +111,9 @@ enum Job {
     Local(Option<PathBuf>),
     /// A local calendar to add (`MOD-09-F02`, `MOD-09-F17`).
     AddLocal(Calendar),
+    /// A local calendar to add only when the file has none, so there always is one
+    /// (`MOD-09-F21`).
+    KeepLocal(Calendar),
     /// A local calendar to rename, recolour and give default notifications as it now is
     /// (`MOD-09-F03`, `MOD-09-F14`).
     ChangeLocal(Calendar),
@@ -176,6 +179,8 @@ enum Update {
     Their(meet_with::Asked, Vec<(String, Shared)>),
     /// Whether the local calendars' file was read, or why not.
     Local(Result<(), String>),
+    /// Why the last change to the local calendars' file was not written, `None` once one is.
+    Unsaved(Option<String>),
     /// What became of deleting a local calendar.
     LocalDeletion(LocalDeletion),
 }
@@ -233,6 +238,10 @@ pub struct Synchronization {
     silenced: Arc<Mutex<Silenced>>,
     /// Whether the local calendars' file was read, or why not; `None` until the worker tried.
     local: Option<Result<(), String>>,
+    /// Why the last change to the local calendars' file was not written, until one is.
+    unsaved: Option<String>,
+    /// Whether "My calendar" was asked for when there is no local calendar, this run.
+    kept_local: bool,
     /// What became of deleting local calendars, not yet taken.
     deletions: Vec<LocalDeletion>,
 }
@@ -375,6 +384,8 @@ impl Synchronization {
             opened,
             silenced,
             local: None,
+            unsaved: None,
+            kept_local: false,
             deletions: Vec::new(),
         }
     }
@@ -389,6 +400,18 @@ impl Synchronization {
     pub fn add_local(&mut self, calendar: Calendar) {
         self.calendars.push(calendar.clone());
         let _ = self.jobs.send(Job::AddLocal(calendar));
+    }
+
+    /// Adds "My calendar" when there is no local calendar once an account is connected: from
+    /// then on there always is one (`MOD-09-F21`). Asked once a run, after the file was read.
+    pub fn keep_local(&mut self, zone: chrono_tz::Tz) {
+        if self.kept_local || self.local != Some(Ok(())) {
+            return;
+        }
+        self.kept_local = true;
+        if local::of(&self.calendars).next().is_none() {
+            let _ = self.jobs.send(Job::KeepLocal(local::my_calendar(zone)));
+        }
     }
 
     /// Renames, recolours and sets the default notifications of the local calendar as it now is,
@@ -406,6 +429,12 @@ impl Synchronization {
     /// `take_local_deletions` asks for it (`MOD-09-F04`, `MOD-09-U03`).
     pub fn delete_local(&self, calendar: Calendar, confirmed: bool) {
         let _ = self.jobs.send(Job::DeleteLocal(calendar, confirmed));
+    }
+
+    /// Why the last change to the local calendars' file was not written, while none has been
+    /// since (`MOD-09-F20`).
+    pub fn unsaved(&self) -> Option<&str> {
+        self.unsaved.as_deref()
     }
 
     /// What became of deleting local calendars since last asked; each is given once.
@@ -649,6 +678,12 @@ impl Synchronization {
         self.their = Some((asked, answer));
     }
 
+    /// Takes `why` as the reason the local file took no change, for pictures of its bar.
+    #[cfg(test)]
+    pub fn told_unsaved(&mut self, why: &str) {
+        self.unsaved = Some(why.to_string());
+    }
+
     /// Takes `busy` as Google's answer to `asked`, for pictures of the availability preview.
     #[cfg(test)]
     pub fn answered_busy(&mut self, asked: Asked, busy: Vec<Availability>) {
@@ -700,6 +735,7 @@ impl Synchronization {
                 Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
                 Update::Their(asked, answer) => self.their = Some((asked, answer)),
                 Update::Local(read) => self.local = Some(read),
+                Update::Unsaved(why) => self.unsaved = why,
                 Update::LocalDeletion(deletion) => self.deletions.push(deletion),
             }
         }
@@ -760,6 +796,8 @@ struct Engine {
     /// The local calendars' file, once read; its calendars are also those of the "Local"
     /// session.
     local: Option<LocalStore>,
+    /// Why the last change to the file was not written, as the views were last told.
+    unsaved: Option<String>,
 }
 
 /// Reminders, and how they are shown.
@@ -791,6 +829,7 @@ impl Engine {
             silenced: Arc::default(),
             meeting: None,
             local: None,
+            unsaved: None,
             cache,
         }
     }
@@ -798,7 +837,17 @@ impl Engine {
     /// Does the job, or with none the polling round that is due; returns what the views are to
     /// be told. The reminders follow the events the views are given, as they are now.
     fn handle(&mut self, job: Option<Job>, now: Instant) -> Vec<Update> {
-        let updates = self.handle_job(job, now);
+        let polled = job.is_none();
+        let mut updates = self.handle_job(job, now);
+        if polled {
+            updates.extend(self.restart_local(now));
+        }
+        // A change the file did not take is told until one is (`MOD-09-F20`).
+        let unsaved = (self.local.as_ref()).and_then(LocalStore::unsaved);
+        if unsaved != self.unsaved {
+            self.unsaved = unsaved.clone();
+            updates.push(Update::Unsaved(unsaved));
+        }
         if let Some(reminding) = &mut self.reminding {
             for update in &updates {
                 if let Update::Events(calendars, events) = update {
@@ -923,6 +972,7 @@ impl Engine {
             }
             Some(Job::Local(path)) => return self.open_local(path, now),
             Some(Job::AddLocal(calendar)) => return self.add_local(&calendar, now),
+            Some(Job::KeepLocal(calendar)) => return self.keep_local(&calendar, now),
             Some(Job::ChangeLocal(calendar)) => return self.change_local(&calendar, now),
             Some(Job::DeleteLocal(calendar, confirmed)) => {
                 return self.delete_local(calendar, confirmed, now);
@@ -1000,23 +1050,52 @@ impl Engine {
             Some(path) => LocalStore::open(path),
             None => Ok(LocalStore::in_memory()),
         };
-        let started = store.and_then(|store| {
-            let started = self.start(local::ACCOUNT_ID, Box::new(store.clone()), now);
-            let started = started.map_err(|error| error.0)?;
-            self.local = Some(store);
-            Ok(started)
-        });
-        let read = started.as_ref().map(|_| ()).map_err(String::clone);
-        let mut updates = started.unwrap_or_default();
+        let (mut updates, read) = match store {
+            Ok(store) => {
+                // One the cache did not take now is started again with the next round.
+                let started = self.start(local::ACCOUNT_ID, Box::new(store.clone()), now);
+                self.local = Some(store);
+                (started.unwrap_or_default(), Ok(()))
+            }
+            Err(why) => (Vec::new(), Err(why)),
+        };
         updates.push(self.shown());
         updates.push(Update::Local(read));
         updates
+    }
+
+    /// Starts the local calendars again when the cache did not take them as the file was
+    /// opened, so they are not gone for the whole run.
+    fn restart_local(&mut self, now: Instant) -> Vec<Update> {
+        let Some(store) = self.local.clone() else {
+            return Vec::new();
+        };
+        if self.sessions.contains_key(local::ACCOUNT_ID) {
+            return Vec::new();
+        }
+        match self.start(local::ACCOUNT_ID, Box::new(store), now) {
+            Ok(mut updates) => {
+                updates.push(self.shown());
+                updates
+            }
+            Err(_) => Vec::new(),
+        }
     }
 
     /// Adds the local calendar to the file and synchronizes it (`MOD-09-F17`); one the file did
     /// not take is gone from the views with the next events.
     fn add_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
         self.write_local(now, |store| store.add_calendar(calendar))
+    }
+
+    /// Adds the local calendar when the file has none, so there always is one (`MOD-09-F21`).
+    fn keep_local(&mut self, calendar: &Calendar, now: Instant) -> Vec<Update> {
+        let none = (self.local.as_ref())
+            .is_some_and(|store| store.calendars().is_ok_and(|c| c.is_empty()));
+        if !none {
+            return Vec::new();
+        }
+        self.add_local(calendar, now)
     }
 
     /// Renames, recolours and sets the default notifications of the local calendar in the file,
@@ -1033,6 +1112,13 @@ impl Engine {
         let Some(store) = self.local.clone() else {
             return Vec::new();
         };
+        // There is always a local calendar: the last one stays (`MOD-09-F21`).
+        if store
+            .calendars()
+            .map_or(true, |calendars| calendars.len() <= 1)
+        {
+            return Vec::new();
+        }
         // Events that cannot be counted are not deleted unasked.
         match store.event_count(&calendar.id) {
             Ok(count) if count > 0 && !confirmed => {
@@ -1596,6 +1682,7 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Snooze(..)
                 | Job::Local(_)
                 | Job::AddLocal(_)
+                | Job::KeepLocal(_)
                 | Job::ChangeLocal(_)
                 | Job::DeleteLocal(..)
         )
@@ -7060,6 +7147,40 @@ mod tests {
     }
 
     #[test]
+    fn local_events_are_in_the_users_own_column_of_meet_with_and_never_reach_google() {
+        let google = meet_with_google("local-meet-with", &[]);
+        let mut engine = first_sync(&google, Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let private = add_local(&mut engine, "Private");
+        local_event(&mut engine, &private, "Dentist", ((9, 0), (10, 0)));
+        let mut meet = MeetWith::default();
+        let anna = Person {
+            name: "Anna Nowak".to_string(),
+            email: "anna.nowak@example.com".to_string(),
+        };
+        meet.choose(&anna, ACCOUNT_ID, &[EMAIL.to_string()]);
+        let day = Navigation::start(
+            Some(View::Grid(GridView::Day)),
+            d(2026, 11, 12),
+            chrono::Weekday::Mon,
+        );
+        let answer = their_answer(&mut engine, &meet, day);
+        let (grid, ..) = grid_with(&engine, &meet, &answer, day);
+        // Shown to the user as their other events are, in their own column (`MOD-09-F16`).
+        let dentist = (grid.blocks.iter())
+            .find(|block| block.title.as_deref() == Some("Dentist"))
+            .expect("Dentist is shown");
+        assert_eq!(dentist.placement.day, 0);
+        // Google is never told of it, so it never makes the user busy for others.
+        let requests = google.fake.requests();
+        assert!(
+            !requests
+                .iter()
+                .any(|r| r.contains("Dentist") || r.contains(&private.id))
+        );
+    }
+
+    #[test]
     fn tc_06_15_with_people_chosen_the_day_view_has_their_columns_and_create_event_invites_them() {
         let google = meet_with_google(
             "tc-06-15",
@@ -7757,6 +7878,95 @@ mod tests {
     // Managing local calendars (`US-09-02`).
 
     /// Adds the local calendar named so, as the settings' "Local calendars" section does.
+    #[test]
+    fn tc_09_15_an_account_without_a_local_calendar_gets_my_calendar_once() {
+        let google = Google::start("keep-local");
+        personal(&google);
+        let mut engine = first_sync(&google, Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        // Asked twice, as by two runs: there is one "My calendar".
+        for _ in 0..2 {
+            let my = local::my_calendar(Warsaw);
+            engine.handle(Some(Job::KeepLocal(my)), Instant::now());
+        }
+        let calendars = engine.cache.calendar_list().unwrap();
+        let names: Vec<&str> = local::of(&calendars).map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["My calendar"]);
+    }
+
+    #[test]
+    fn local_calendars_the_cache_did_not_take_are_started_again() {
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        add_local(&mut engine, "Private");
+        // As when the cache did not take them as the file was opened.
+        engine.sessions.remove(local::ACCOUNT_ID);
+        let updates = engine.handle(None, Instant::now());
+        assert!(engine.sessions.contains_key(local::ACCOUNT_ID));
+        let Some(Update::Events(calendars, _)) =
+            (updates.into_iter()).rfind(|update| matches!(update, Update::Events(..)))
+        else {
+            panic!("the views are told what to show");
+        };
+        let names: Vec<&str> = local::of(&calendars).map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Private"]);
+    }
+
+    /// What the views were told of changes the local file did not take, if anything.
+    fn unsaved(updates: &[Update]) -> Option<Option<String>> {
+        updates.iter().find_map(|update| match update {
+            Update::Unsaved(why) => Some(why.clone()),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn tc_09_14_a_change_the_local_file_does_not_take_is_told_until_one_is() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "calendar-buddy-local-unsaved-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("local.sqlite3");
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        let updates = engine.handle(Some(Job::Local(Some(path.clone()))), Instant::now());
+        assert_eq!(local_read(&updates), Some(Ok(())));
+        assert_eq!(unsaved(&updates), None);
+        let mode = |mode| std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode));
+        // A directory that takes no new file: the file cannot keep its journal, so it takes no
+        // change, as on a full disk. Not so for a user every directory takes files from.
+        mode(0o555).unwrap();
+        if std::fs::write(dir.join("probe"), "").is_ok() {
+            mode(0o755).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            return;
+        }
+        let family = local::new_calendar("Family", Warsaw, &[]);
+        let updates = engine.handle(Some(Job::AddLocal(family)), Instant::now());
+        let why = unsaved(&updates).flatten().expect("the views are told");
+        assert!(!why.is_empty());
+        assert!(engine.cache.calendar_list().unwrap().is_empty());
+        // Told once, not with every round.
+        assert_eq!(unsaved(&engine.handle(None, Instant::now())), None);
+        // The next change the file takes ends it.
+        mode(0o755).unwrap();
+        let sport = local::new_calendar("Sport", Warsaw, &[]);
+        let updates = engine.handle(Some(Job::AddLocal(sport)), Instant::now());
+        assert_eq!(unsaved(&updates), Some(None));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn add_local(engine: &mut Engine, name: &str) -> Calendar {
         let listed = engine.cache.calendar_list().unwrap();
         let calendar = local::new_calendar(name, Warsaw, &listed);
@@ -8045,12 +8255,13 @@ mod tests {
     }
 
     #[test]
-    fn tc_09_07_deleting_a_local_calendar_asks_with_its_events_forgets_the_default_and_welcomes_only_when_nothing_is_left()
+    fn tc_09_07_deleting_a_local_calendar_asks_with_its_events_forgets_the_default_and_keeps_the_last()
      {
         let google = Google::start("tc-09-07");
         personal(&google);
         let mut engine = first_sync(&google, Instant::now());
         engine.handle(Some(Job::Local(None)), Instant::now());
+        let my = add_local(&mut engine, "My calendar");
         let family = add_local(&mut engine, "Family");
         for title in ["Breakfast", "Lunch", "Dinner"] {
             local_event(&mut engine, &family, title, ((9, 20), (10, 0)));
@@ -8072,7 +8283,7 @@ mod tests {
         // Deleted by the user, it is not told of as gone from its account (`MOD-02-F21`).
         assert!(gone_told(&updates).is_empty());
         settings.forget_calendar(&sport.account_id, &sport.id);
-        assert_eq!(local_names(&engine), ["Family"]);
+        assert_eq!(local_names(&engine), ["My calendar", "Family"]);
 
         // 2. Deleting "Family" asks first, saying 3 events will be deleted for good.
         let updates = engine.handle(
@@ -8083,7 +8294,7 @@ mod tests {
         let question = texts::confirm_local_deletion(&family.name, 3);
         assert!(question.contains("3 events"), "{question}");
         assert!(question.contains("cannot be undone"), "{question}");
-        assert_eq!(local_names(&engine), ["Family"]);
+        assert_eq!(local_names(&engine), ["My calendar", "Family"]);
         assert_eq!(store.event_count(&family.id), Ok(3));
 
         // 3. Confirmed: "Family" and its events are nowhere, not even in the file, so nothing
@@ -8098,16 +8309,24 @@ mod tests {
         assert_eq!(settings.default_calendar, None);
         let events = shown(&updates).unwrap();
         assert!(!events.iter().any(|e| e.calendar_id == family.id));
-        assert!(local_names(&engine).is_empty());
+        assert_eq!(local_names(&engine), ["My calendar"]);
         assert_eq!(store.event_count(&family.id), Ok(0));
-        assert!(store.calendars().unwrap().is_empty());
+        assert_eq!(store.calendars().unwrap(), std::slice::from_ref(&my));
         let calendars = engine.cache.calendar_list().unwrap();
         let default = create::default_calendar(&accounts(), &calendars, &settings);
         assert_eq!(default.map(|c| c.id), Some(EMAIL.to_string()));
 
-        // 4. "Notes" added and account A removed: the week view stays, with only "Local" and
-        //    "Notes".
-        let notes = add_local(&mut engine, "Notes");
+        // 4. "My calendar" is the last local calendar: it is not deleted, confirmed or not.
+        for confirmed in [false, true] {
+            let updates = engine.handle(
+                Some(Job::DeleteLocal(my.clone(), confirmed)),
+                Instant::now(),
+            );
+            assert_eq!(deletions(&updates), []);
+        }
+        assert_eq!(local_names(&engine), ["My calendar"]);
+
+        // 5. Account A removed: the week view stays, with only "Local" and "My calendar".
         engine.handle(
             Some(Job::Forget(ACCOUNT_ID.into(), window())),
             Instant::now(),
@@ -8117,14 +8336,8 @@ mod tests {
         assert!(!local::welcome(&[], &calendars));
         assert_eq!(
             panel(&[], &calendars, &settings),
-            [("Local".to_string(), vec!["Notes".to_string()])]
+            [("Local".to_string(), vec!["My calendar".to_string()])]
         );
-
-        // 5. "Notes" deleted: the welcome screen.
-        let updates = engine.handle(Some(Job::DeleteLocal(notes.clone(), false)), Instant::now());
-        assert_eq!(deletions(&updates), [LocalDeletion::Deleted(notes)]);
-        assert!(gone_told(&updates).is_empty());
-        assert!(local::welcome(&[], &engine.cache.calendar_list().unwrap()));
     }
 
     // Local events changed, moved, repeated and deleted as Google events are (`US-09-03`).
@@ -8190,6 +8403,35 @@ mod tests {
             end: at(to),
             zone,
         }
+    }
+
+    #[test]
+    fn a_local_event_is_made_all_day_and_several_days_long_in_the_editor() {
+        let (mut engine, private, dentist) = private_with_dentist();
+        let regional = polish();
+        let (mut saving, mut last) = (Saving::default(), LastChange::default());
+        let mut editor = Editor::of(&dentist, private.clone(), &regional);
+        editor.all_day = true;
+        let events = change_locally(
+            &mut engine,
+            &mut saving,
+            &mut last,
+            edit(&editor, &regional),
+        );
+        let all_day = |start, end| Timing::AllDay {
+            start,
+            end_exclusive: end,
+        };
+        assert_eq!(events[0].timing, all_day(d(2026, 11, 13), d(2026, 11, 14)));
+        let mut editor = Editor::of(&events[0], private, &regional);
+        editor.end_date = "15.11.2026".to_string();
+        let events = change_locally(
+            &mut engine,
+            &mut saving,
+            &mut last,
+            edit(&editor, &regional),
+        );
+        assert_eq!(events[0].timing, all_day(d(2026, 11, 13), d(2026, 11, 16)));
     }
 
     #[test]
