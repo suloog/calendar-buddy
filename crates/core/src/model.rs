@@ -3,6 +3,7 @@ use chrono_tz::Tz;
 
 use crate::colors::EventColor;
 use crate::guests::{Guest, Response};
+use crate::local;
 use crate::sync::Start;
 use crate::texts;
 
@@ -87,6 +88,13 @@ impl Event {
     /// The colour the views show the event in: its own (`MOD-05-F25`), or else its calendar's.
     pub fn shown_color(&self) -> Rgb {
         self.about.color.map_or(self.color, EventColor::rgb)
+    }
+
+    /// Whether the views mark the event "saving" (`MOD-05-U03`): while Google has not answered;
+    /// never a local event's, which has no Google to wait for, though it is waited for all the
+    /// same (MOD-09 *Constraints and edge cases*).
+    pub fn marked_saving(&self) -> bool {
+        self.saving && self.account_id != local::ACCOUNT_ID
     }
 
     /// Why the user may not drag, resize, edit or delete the event; `None` when they may.

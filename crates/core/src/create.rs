@@ -8,7 +8,6 @@ use chrono_tz::Tz;
 
 use crate::accounts::Entry;
 use crate::details::When;
-use crate::local;
 use crate::model::{About, Calendar, Event, Timing};
 use crate::settings::Settings;
 use crate::side_panel::pickable;
@@ -240,8 +239,7 @@ pub struct Saving {
 
 impl Saving {
     /// Shows the new event as saving and returns the number it is told by; one in a local
-    /// calendar has no Google to wait for, and is shown without the mark (MOD-09 *Constraints and
-    /// edge cases*).
+    /// calendar is waited for too, but has no mark (`Event::marked_saving`).
     pub fn add(&mut self, calendar: &Calendar, event: &NewEvent) -> u64 {
         let title = if event.title.is_empty() {
             NO_TITLE
@@ -258,7 +256,7 @@ impl Saving {
             busy_only: false,
             read_only: false,
             organizer_only: false,
-            saving: calendar.account_id != local::ACCOUNT_ID,
+            saving: true,
             recurring: !event.recurrence.is_empty(),
             series: None,
             recurrence: Vec::new(),
@@ -404,6 +402,7 @@ mod tests {
     use super::*;
     use crate::accounts::{Account, AccountState};
     use crate::fixtures::d;
+    use crate::local;
     use crate::model::{Access, Rgb};
     use chrono_tz::Europe::Warsaw;
 
@@ -760,6 +759,42 @@ mod tests {
         saving.synced(&synced);
         assert!(saving.is_empty());
         assert_eq!(saving.shown(&synced), synced);
+    }
+
+    #[test]
+    fn a_local_event_changed_or_deleted_is_waited_for_but_never_marked_saving() {
+        let before = Event {
+            account_id: local::ACCOUNT_ID.to_string(),
+            ..crate::fixtures::timed("Dentist", d(2026, 11, 13), (10, 0), (11, 0))
+        };
+        let after = Event {
+            title: "Dentist — check-up".to_string(),
+            ..before.clone()
+        };
+        let mut saving = Saving::default();
+        let local = saving.change(&before, after);
+        let shown = saving.shown(std::slice::from_ref(&before));
+        let marks: Vec<(&str, bool)> = (shown.iter())
+            .map(|e| (e.title.as_str(), e.marked_saving()))
+            .collect();
+        assert_eq!(marks, [("Dentist — check-up", false)]);
+        // A synchronization before the store answers keeps it.
+        saving.synced(std::slice::from_ref(&before));
+        assert!(saving.holds(&before));
+        saving.changed(local, "2");
+        saving.synced(&[Event {
+            etag: "2".to_string(),
+            ..before.clone()
+        }]);
+        assert!(saving.is_empty());
+
+        let deleted = saving.delete(&before);
+        assert!(saving.shown(std::slice::from_ref(&before)).is_empty());
+        saving.synced(std::slice::from_ref(&before));
+        assert!(saving.holds(&before));
+        saving.deleted(deleted);
+        saving.synced(&[]);
+        assert!(saving.is_empty());
     }
 
     #[test]

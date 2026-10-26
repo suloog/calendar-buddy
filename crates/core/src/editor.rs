@@ -22,6 +22,7 @@ use crate::accounts::Entry;
 use crate::colors::EventColor;
 use crate::create::{NewEvent, QuickEntry, wall};
 use crate::guests::{self, Guest, Person, Response};
+use crate::local;
 use crate::model::{
     About, Access, Calendar, Event, Kind, Method, Reminder, Reminders, Show, Timing, Visibility,
 };
@@ -380,8 +381,9 @@ impl Editor {
     }
 
     /// The calendars the event can be saved to, under their accounts: any of `choices` for a new
-    /// event, those of its own account for an existing one (`MOD-05-F15`), only its own for an
-    /// existing one of a special type, which Google does not move.
+    /// event, those of its own account for an existing one (`MOD-05-F15`), the local ones for a
+    /// local event (`MOD-09-F12`), only its own for an existing one of a special type, which
+    /// Google does not move.
     pub fn choices(&self, choices: Vec<(String, Vec<Calendar>)>) -> Vec<(String, Vec<Calendar>)> {
         let Some((event, own)) = &self.opened else {
             return choices;
@@ -398,6 +400,22 @@ impl Editor {
                 )
             })
             .collect()
+    }
+
+    /// Whether the calendar picked is a Google one, for which the editor offers guests, Google
+    /// Meet, busy or free, visibility and e-mail reminders; a local calendar has none of them
+    /// (`MOD-09-F10`, `MOD-09-F15`).
+    pub fn google(&self) -> bool {
+        (self.calendar.as_ref()).is_none_or(|calendar| calendar.account_id != local::ACCOUNT_ID)
+    }
+
+    /// How the event's reminders can reach the user in the calendar picked.
+    pub fn reminder_methods(&self) -> &'static [Method] {
+        if self.google() {
+            &[Method::Notification, Method::Email]
+        } else {
+            &[Method::Notification]
+        }
     }
 
     /// The types a new event can be given in the calendar picked (`MOD-05-F24`): out of office

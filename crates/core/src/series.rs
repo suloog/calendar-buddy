@@ -314,8 +314,24 @@ fn on_first_day(first: Timing, new: Timing) -> Timing {
     }
 }
 
+/// Where the occurrence of a series first at `first` that started at `start` starts once the
+/// series is moved to `timing` on the same days: on its day, at the time `timing` starts.
+pub(crate) fn at_new_time(start: Start, first: Timing, timing: Timing) -> Start {
+    match (start, first, timing) {
+        (
+            Start::At(occurrence),
+            Timing::Timed { zone: old, .. },
+            Timing::Timed { start, zone, .. },
+        ) => {
+            let day = local(occurrence, old).date();
+            Start::At(at(day.and_time(local(start, zone).time()), zone))
+        }
+        (start, ..) => start,
+    }
+}
+
 /// The occurrence starting at `original` by the series' rule, as long as the first.
-fn regular(first: Timing, original: Start) -> Timing {
+pub(crate) fn regular(first: Timing, original: Start) -> Timing {
     match (first, original) {
         (Timing::Timed { start, end, zone }, Start::At(at)) => Timing::Timed {
             start: at,
@@ -417,18 +433,9 @@ fn following(
     let gone: Vec<String> = (excluded(first, &master.recurrence).into_iter())
         .filter(|start| !before(*start, original))
         .chain(cancelled)
-        .map(|start| match (start, first, timing) {
-            (
-                Start::At(gone),
-                Timing::Timed { zone: old, .. },
-                Timing::Timed { start, zone, .. },
-            ) => {
-                let day = local(gone, old).date();
-                let gone = at(day.and_time(local(start, zone).time()), zone);
-                gone.format("%Y%m%dT%H%M%SZ").to_string()
-            }
-            (Start::At(gone), ..) => gone.format("%Y%m%dT%H%M%SZ").to_string(),
-            (Start::On(date), ..) => date.format("%Y%m%d").to_string(),
+        .map(|start| match at_new_time(start, first, timing) {
+            Start::At(gone) => gone.format("%Y%m%dT%H%M%SZ").to_string(),
+            Start::On(date) => date.format("%Y%m%d").to_string(),
         })
         .collect();
     if !gone.is_empty() {

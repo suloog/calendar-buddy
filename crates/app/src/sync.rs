@@ -7482,7 +7482,7 @@ mod tests {
         // 3. "Dentist" at 10:00 on Friday 13 November, offline: shown at once without the
         //    "saving" mark, 10:00–11:00 in "My calendar"'s colour.
         let (first, events) = local_dentist(&mut engine, &settings, length);
-        assert!(!first.saving);
+        assert!(!first.marked_saving());
         let dentist = events.iter().find(|e| e.title == "Dentist").unwrap();
         let Timing::Timed { start, end, .. } = dentist.timing else {
             panic!("a timed event");
@@ -8122,5 +8122,427 @@ mod tests {
         assert_eq!(deletions(&updates), [LocalDeletion::Deleted(notes)]);
         assert!(gone_told(&updates).is_empty());
         assert!(local::welcome(&[], &engine.cache.calendar_list().unwrap()));
+    }
+
+    // Local events changed, moved, repeated and deleted as Google events are (`US-09-03`).
+
+    /// An engine without network holding the local calendar "Private" with "Dentist" on Friday
+    /// 13 November 10:00–11:00.
+    fn private_with_dentist() -> (Engine, Calendar, Event) {
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let private = add_local(&mut engine, "Private");
+        let settings = Settings {
+            default_calendar: Some((private.account_id.clone(), private.id.clone())),
+            ..Settings::default()
+        };
+        let (_, events) = local_dentist(&mut engine, &settings, 60);
+        let dentist = events.into_iter().find(|e| e.title == "Dentist").unwrap();
+        (engine, private, dentist)
+    }
+
+    /// Saves the change as the app does: shown at once without a "saving" mark, taken by the
+    /// local store and undoable; the events then shown.
+    fn change_locally(
+        engine: &mut Engine,
+        saving: &mut Saving,
+        last: &mut LastChange,
+        edit: Box<Edit>,
+    ) -> Vec<Event> {
+        let cached = now_shown(engine);
+        let local = saving.change(&edit.event, edit.changed());
+        assert!(saving.shown(&cached).iter().all(|e| !e.marked_saving()));
+        last.changing(local, &edit);
+        let updates = engine.handle(Some(Job::Change(local, edit)), Instant::now());
+        let [Saved::Changed(_, etag)] = <[Saved; 1]>::try_from(saved_changes(&updates)).unwrap()
+        else {
+            panic!("the local store did not take the change");
+        };
+        saving.changed(local, &etag);
+        last.changed(local, &etag, Instant::now());
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        events
+    }
+
+    /// The times of a timed event in `zone` on `date`, from and to the hours and minutes.
+    fn timed_in(
+        zone: chrono_tz::Tz,
+        date: chrono::NaiveDate,
+        from: (u32, u32),
+        to: (u32, u32),
+    ) -> Timing {
+        let at = |(hour, minute)| {
+            let time = date.and_hms_opt(hour, minute, 0).unwrap();
+            zone.from_local_datetime(&time).unwrap().with_timezone(&Utc)
+        };
+        Timing::Timed {
+            start: at(from),
+            end: at(to),
+            zone,
+        }
+    }
+
+    #[test]
+    fn tc_09_08_a_local_event_is_edited_dragged_resized_deleted_and_undone_offline() {
+        let (mut engine, private, dentist) = private_with_dentist();
+        let regional = polish();
+        let mut saving = Saving::default();
+        let mut last = LastChange::default();
+        // Google cannot be reached, and nothing waits for it.
+        assert_eq!(offline::refused_for(false, &dentist), None);
+
+        // 1. The title, the end, the time zone and the colour changed in the editor: shown at
+        //    once, 10:00–11:30 in its own time zone, London, in Tomato.
+        let mut editor = Editor::of(&dentist, private.clone(), &regional);
+        editor.title = "Dentist — check-up".to_string();
+        editor.end_time = "11:30".to_string();
+        editor.zone = chrono_tz::Europe::London;
+        editor.color = Some(colors::EventColor::Tomato);
+        let edit = edit(&editor, &regional);
+        let events = change_locally(&mut engine, &mut saving, &mut last, edit);
+        let [checkup] = events.as_slice() else {
+            panic!("one event");
+        };
+        assert_eq!(checkup.title, "Dentist — check-up");
+        assert_eq!(
+            checkup.timing,
+            timed_in(
+                chrono_tz::Europe::London,
+                d(2026, 11, 13),
+                (10, 0),
+                (11, 30)
+            )
+        );
+        assert_eq!(checkup.shown_color(), colors::EventColor::Tomato.rgb());
+        assert!(!checkup.saving);
+
+        // 2. Dragged to Monday 16 November 14:00, in 15-minute steps: 14:00–15:30.
+        let hour = grid_view::HOUR_HEIGHT;
+        let delta = egui::Vec2::new(300.0, hour * 187.0 / 60.0);
+        let drop = grid_view::moved(delta, 100.0, 0, 7, hour);
+        assert_eq!(
+            drop,
+            Target::Moved {
+                days: 3,
+                minutes: 180
+            }
+        );
+        let timing = drag::dropped(checkup, drop, Warsaw, 60).unwrap();
+        let edit = Box::new(drag::edit(checkup, private.clone(), timing));
+        let events = change_locally(&mut engine, &mut saving, &mut last, edit);
+        let moved = [(
+            "Dentist — check-up".to_string(),
+            "2026-11-16 14:00".to_string(),
+            "2026-11-16 15:30".to_string(),
+        )];
+        assert_eq!(times(events.clone()), moved);
+
+        // 3. Its end dragged down by 30 minutes: it lasts until 16:00.
+        let drop = Target::Resized {
+            minutes: drag::snap(37.0),
+        };
+        let timing = drag::dropped(&events[0], drop, Warsaw, 60).unwrap();
+        let edit = Box::new(drag::edit(&events[0], private.clone(), timing));
+        let events = change_locally(&mut engine, &mut saving, &mut last, edit);
+        assert_eq!(times(events)[0].2, "2026-11-16 16:00");
+
+        // 4. Ctrl+Z, offline too: it ends at 15:30 again.
+        assert!(crate::undo_pressed(&mut ctrl_z()));
+        assert_eq!(offline::refused_for(false, last.undoes().unwrap()), None);
+        let Some(Undo::Revert(undo)) = last.undo() else {
+            panic!("the change is undone");
+        };
+        let local = saving.change(&undo.event, undo.changed());
+        last.undoing(local);
+        let updates = engine.handle(Some(Job::Change(local, undo)), Instant::now());
+        let changes = saved_changes(&updates);
+        let [Saved::Changed(n, etag)] = changes.as_slice() else {
+            panic!("the local store did not undo the change");
+        };
+        assert_eq!(*n, local);
+        saving.changed(local, etag);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert_eq!(times(events.clone()), moved);
+
+        // 5. Deleted: gone with no question, and the Undo notice is shown.
+        let event = events[0].clone();
+        let Ok((calendar, event)) = Question::deleting(private.clone(), event) else {
+            panic!("no question for an event not of a series");
+        };
+        let local = saving.delete(&event);
+        last.deleting(local, &calendar, &event, false);
+        assert!(saving.shown(&events).is_empty());
+        let updates = engine.handle(
+            Some(Job::Delete(local, calendar, event, false)),
+            Instant::now(),
+        );
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(local)]);
+        saving.deleted(local);
+        let deleted_at = Instant::now();
+        last.deleted(local, deleted_at);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(events.is_empty() && saving.is_empty());
+        assert_eq!(
+            last.notice(deleted_at),
+            Some((texts::DELETED, undo::NOTICE))
+        );
+
+        // 6. Undo: it is back at 14:00–15:30.
+        assert_eq!(offline::refused_for(false, last.undoes().unwrap()), None);
+        let Some(Undo::Restore(deleted, notify)) = last.undo() else {
+            panic!("the deletion is undone");
+        };
+        let (calendar, event) = *deleted;
+        let local = saving.change(&event, event.clone());
+        let updates = engine.handle(
+            Some(Job::Restore(local, calendar, event, notify)),
+            Instant::now(),
+        );
+        let changes = saved_changes(&updates);
+        let [Saved::Changed(n, etag)] = changes.as_slice() else {
+            panic!("the local store did not restore the event");
+        };
+        assert_eq!(*n, local);
+        saving.changed(local, etag);
+        let events = shown(&updates).unwrap();
+        saving.synced(&events);
+        assert!(saving.is_empty());
+        assert_eq!(times(events), moved);
+    }
+
+    #[test]
+    fn tc_09_09_a_local_weekly_series_is_changed_for_this_and_following_events() {
+        let mut engine = Engine::new(
+            Cache::in_memory(),
+            unreachable_google(),
+            window(),
+            Disabled::new(),
+        );
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let private = add_local(&mut engine, "Private");
+        let regional = us();
+        let on = |engine: &Engine, date| {
+            (now_shown(engine).into_iter())
+                .find(|e| {
+                    matches!(e.timing, Timing::Timed { start, .. }
+                        if start.with_timezone(&Warsaw).date_naive() == date)
+                })
+                .unwrap()
+        };
+
+        // 1. "Swimming" on Monday 16 November 18:00–19:00, "Weekly on Monday": every Monday.
+        let span = create::selected(d(2026, 11, 16), 18 * 60, 19 * 60, Warsaw);
+        let entry = QuickEntry::new(span, Warsaw, Some(private.clone()));
+        let mut editor = Editor::from_quick(&entry, &regional);
+        editor.title = "Swimming".to_string();
+        let (weekly, _) = (editor.repeat_choices(&regional).into_iter())
+            .find(|(_, words)| words == "Weekly on Monday")
+            .unwrap();
+        editor.repeat = weekly;
+        let Ok(Save::Create(calendar, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        let updates = engine.handle(Some(Job::Create(1, calendar, *event)), Instant::now());
+        assert!(matches!(saved(&updates)[..], [Saved::Created(1, _)]));
+        let swims = days_of(&shown(&updates).unwrap(), "Swimming");
+        assert_eq!(
+            swims[..3],
+            ["2026-11-16 18:00", "2026-11-23 18:00", "2026-11-30 18:00"]
+        );
+        let mondays = (swims.iter()).map(|day| day[..10].parse::<chrono::NaiveDate>().unwrap());
+        let weeks: Vec<i64> = (mondays.clone().zip(mondays.skip(1)))
+            .map(|(a, b)| (b - a).num_days())
+            .collect();
+        assert!(weeks.len() > 50 && weeks.iter().all(|days| *days == 7));
+
+        // 2. The occurrence of 30 November starts at 19:00: the three scopes are asked.
+        let thirtieth = on(&engine, d(2026, 11, 30));
+        let mut editor = Editor::of(&thirtieth, private.clone(), &regional);
+        editor.start_time = "7:00 PM".to_string();
+        editor.follow_start(&regional);
+        let Err(question) = Question::changing(*edit(&editor, &regional)) else {
+            panic!("the scope is asked first");
+        };
+        let labels: Vec<&str> = (question.scopes().into_iter())
+            .map(|(scope, why)| {
+                assert_eq!(why, None);
+                scope.label()
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            ["This event", "This and following events", "All events"]
+        );
+
+        // 3. "This and following events": 16 and 23 November stay at 18:00, 30 November and
+        //    later Mondays are at 19:00–20:00.
+        let Question::Change(change) = question else {
+            panic!("a change");
+        };
+        let mut saving = Saving::default();
+        let local = saving.change_series(&change.event, change.changed());
+        let updates = engine.handle(
+            Some(Job::ChangeSeries(local, change, Scope::Following)),
+            Instant::now(),
+        );
+        assert!(matches!(
+            saved_changes(&updates)[..],
+            [Saved::Changed(n, _)] if n == local
+        ));
+        let events = shown(&updates).unwrap();
+        let swims = days_of(&events, "Swimming");
+        assert_eq!(
+            swims[..4],
+            [
+                "2026-11-16 18:00",
+                "2026-11-23 18:00",
+                "2026-11-30 19:00",
+                "2026-12-07 19:00"
+            ]
+        );
+        assert!(swims[2..].iter().all(|day| day.ends_with("19:00")));
+        let later: Vec<(String, String, String)> = (times(events).into_iter())
+            .filter(|(title, start, _)| title == "Swimming" && start.as_str() >= "2026-11-30")
+            .collect();
+        assert!(!later.is_empty());
+        assert!(
+            (later.iter())
+                .all(|(_, start, end)| start.ends_with("19:00") && end.ends_with("20:00"))
+        );
+
+        // 4. The occurrence of 7 December deleted, "This event": only it disappears.
+        let seventh = on(&engine, d(2026, 12, 7));
+        let Err(Question::Delete(deleted)) = Question::deleting(private.clone(), seventh) else {
+            panic!("the scope is asked first");
+        };
+        let (calendar, event) = *deleted;
+        let updates = engine.handle(Some(Job::Delete(2, calendar, event, false)), Instant::now());
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(2)]);
+        let after = days_of(&shown(&updates).unwrap(), "Swimming");
+        let mut expected = swims.clone();
+        expected.retain(|day| day != "2026-12-07 19:00");
+        assert_eq!(after, expected);
+
+        // 5. "Custom…" on the occurrence of 14 December shows the series' rule, every week on
+        //    Monday.
+        let fourteenth = on(&engine, d(2026, 12, 14));
+        let mut editor = Editor::of(&fourteenth, private, &regional);
+        assert_eq!(editor.repeat_label(&regional), "Weekly on Monday");
+        editor.open_custom(&regional);
+        let custom = editor.custom.as_ref().unwrap();
+        assert_eq!(custom.frequency(), calendar_core::repeat::Frequency::Weekly);
+        assert_eq!(custom.interval, "1");
+        assert_eq!(custom.days(), [chrono::Weekday::Mon]);
+    }
+
+    #[test]
+    fn tc_09_10_a_local_event_offers_nothing_only_google_has_stays_local_and_never_reaches_google()
+    {
+        let google = Google::start("tc-09-10");
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            json!({
+                "id": "standup",
+                "status": "confirmed",
+                "summary": "Standup",
+                "start": {"dateTime": "2026-11-13T09:00:00+01:00", "timeZone": "Europe/Warsaw"},
+                "end": {"dateTime": "2026-11-13T09:15:00+01:00", "timeZone": "Europe/Warsaw"},
+            }),
+        );
+        let mut engine = first_sync(&google, Instant::now());
+        engine.handle(Some(Job::Local(None)), Instant::now());
+        let private = add_local(&mut engine, "Private");
+        let family = add_local(&mut engine, "Family");
+        let settings = Settings {
+            default_calendar: Some((private.account_id.clone(), private.id.clone())),
+            ..Settings::default()
+        };
+        let (_, events) = local_dentist(&mut engine, &settings, 60);
+        let dentist = (events.iter()).find(|e| e.title == "Dentist").unwrap();
+        let standup = (events.iter()).find(|e| e.title == "Standup").unwrap();
+        let asked_before = google.fake.requests();
+        let regional = polish();
+        let calendars = engine.cache.calendar_list().unwrap();
+        let choices = || create::choices(&accounts(), &calendars, &settings);
+        let names = |choices: Vec<(String, Vec<Calendar>)>| -> Vec<String> {
+            (choices.into_iter())
+                .flat_map(|(_, calendars)| calendars.into_iter().map(|c| c.name))
+                .collect()
+        };
+
+        // 1. "Dentist" in the editor: no guests, Google Meet, event type, busy/free or
+        //    visibility, notifications without e-mail, only "Private" and "Family" to pick; and
+        //    no availability preview, which is of guests. A local event has no attachments.
+        let mut editor = Editor::of(dentist, private.clone(), &regional);
+        assert!(!editor.google());
+        assert_eq!(editor.reminder_methods(), [Method::Notification]);
+        assert_eq!(editor.kinds(&accounts()), []);
+        editor.guests = standup.about.guests.clone();
+        assert_eq!(availability::asked(&editor, &regional, true), None);
+        assert!(dentist.about.attachments.is_empty());
+        assert_eq!(names(editor.choices(choices())), ["Private", "Family"]);
+
+        // 2. "Standup" in the editor: no local calendar to pick; a new event can go to any.
+        let opened = Editor::of(standup, calendars[0].clone(), &regional);
+        assert!(opened.google());
+        assert_eq!(
+            opened.reminder_methods(),
+            [Method::Notification, Method::Email]
+        );
+        assert_eq!(names(opened.choices(choices())), ["Personal"]);
+        let entry = QuickEntry::new(
+            create::clicked(d(2026, 11, 13), 600, 60, Warsaw),
+            Warsaw,
+            None,
+        );
+        assert_eq!(
+            names(Editor::from_quick(&entry, &regional).choices(choices())),
+            ["Personal", "Private", "Family"]
+        );
+
+        // 3. "Dentist" moved to "Family", dragged to 11:00, then deleted: each shown at once.
+        let mut saving = Saving::default();
+        let mut last = LastChange::default();
+        editor.calendar = Some(family.clone());
+        let edit = edit(&editor, &regional);
+        assert_eq!(edit.to.as_ref(), Some(&family));
+        let events = change_locally(&mut engine, &mut saving, &mut last, edit);
+        let dentist = (events.iter()).find(|e| e.title == "Dentist").unwrap();
+        assert_eq!(dentist.calendar_id, family.id);
+        let drop = Target::Moved {
+            days: 0,
+            minutes: 60,
+        };
+        let timing = drag::dropped(dentist, drop, Warsaw, 60).unwrap();
+        let edit = Box::new(drag::edit(dentist, family.clone(), timing));
+        let events = change_locally(&mut engine, &mut saving, &mut last, edit);
+        let dentist = (events.into_iter()).find(|e| e.title == "Dentist").unwrap();
+        assert_eq!(times(vec![dentist.clone()])[0].1, "2026-11-13 11:00");
+        let updates = engine.handle(
+            Some(Job::Delete(9, family.clone(), dentist, false)),
+            Instant::now(),
+        );
+        assert_eq!(saved_changes(&updates), [Saved::Deleted(9)]);
+        let events = shown(&updates).unwrap();
+        assert!(!events.iter().any(|e| e.title == "Dentist"));
+
+        // 4. Google was asked nothing more, so it cannot count "Dentist" among the user's busy
+        //    times; nor was it ever sent "Private" or "Family".
+        assert_eq!(google.fake.requests(), asked_before);
+        assert!(google.fake.patched().is_empty());
+        let sent = asked_before.join("\n");
+        assert!(!sent.contains(&private.id) && !sent.contains(&family.id));
     }
 }

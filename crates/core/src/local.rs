@@ -4,15 +4,17 @@
 //! synchronization brings them into the cache and the views as it does an account's; nothing
 //! about them reaches Google (`MOD-09-F01`).
 
+use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
+use std::mem::take;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::SystemTime;
 
 use chrono::NaiveDate;
 use chrono_tz::Tz;
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, Params, Transaction, params};
 
 use crate::accounts::Entry;
 use crate::cache::{
@@ -23,6 +25,8 @@ use crate::colors::{CALENDAR_COLORS, EventColor};
 use crate::create::{DEFAULT_LENGTH, NewEvent};
 use crate::editor::Patch;
 use crate::model::{About, Access, Calendar, Method, Reminder, Reminders, Rgb, Timing};
+use crate::recurrence::occurrence_of;
+use crate::series::{at_new_time, regular};
 use crate::sync::{Fetched, Provider, Start, SyncError, SyncedEvent, Window};
 use crate::texts;
 
@@ -66,10 +70,16 @@ const SCHEMA: &str = "
     INSERT INTO revision VALUES (0);
 ";
 
+/// The events of a calendar, by the ID each was deleted under, as they were before.
+type Deleted = HashMap<(String, String), Vec<SyncedEvent>>;
+
 /// The local calendars' file, shared by the synchronization worker's handles to it.
 #[derive(Clone)]
 pub struct LocalStore {
     connection: Arc<Mutex<Connection>>,
+    /// The events deleted since the file was opened, kept to be restored as Google keeps a
+    /// deleted event for a while (`MOD-05-F27`); lost when the app quits, as the undo is.
+    deleted: Arc<Mutex<Deleted>>,
 }
 
 fn failed(error: rusqlite::Error) -> SyncError {
@@ -78,6 +88,10 @@ fn failed(error: rusqlite::Error) -> SyncError {
 
 fn unreadable() -> SyncError {
     SyncError(texts::LOCAL_DAMAGED.to_string())
+}
+
+fn gone() -> SyncError {
+    SyncError(texts::LOCAL_EVENT_GONE.to_string())
 }
 
 impl LocalStore {
@@ -127,6 +141,7 @@ impl LocalStore {
         }
         Ok(LocalStore {
             connection: Arc::new(Mutex::new(connection)),
+            deleted: Arc::default(),
         })
     }
 
@@ -300,40 +315,10 @@ impl Provider for LocalStore {
 
     fn events(&self, calendar: &Calendar, window: Window) -> Result<Fetched, SyncError> {
         let revision = self.revision()?;
-        let connection = self.connection();
-        let mut select = connection
-            .prepare(
-                "SELECT id, title, start, end, zone, recurrence, series_id, original_start, \
-                 description, location, color, reminders, etag FROM events WHERE calendar_id = ?1",
-            )
-            .map_err(failed)?;
-        let rows = select
-            .query_map(params![calendar.id], |row| {
-                let text = |i: usize| row.get::<_, String>(i);
-                let maybe = |i: usize| row.get::<_, Option<String>>(i);
-                Ok(event(
-                    [text(0)?, text(1)?, text(5)?, text(8)?, text(9)?, text(12)?],
-                    [
-                        maybe(2)?,
-                        maybe(3)?,
-                        maybe(4)?,
-                        maybe(6)?,
-                        maybe(7)?,
-                        maybe(10)?,
-                        maybe(11)?,
-                    ],
-                ))
-            })
-            .map_err(failed)?;
-        let mut events = Vec::new();
-        for row in rows {
-            let event = row.map_err(failed)??;
-            if window.keeps(&event) {
-                events.push(event);
-            }
-        }
+        let events = read(&self.connection(), "calendar_id = ?1", params![calendar.id])?;
+        let events = (events.into_iter()).filter(|event| window.keeps(event));
         Ok(Fetched {
-            events,
+            events: events.collect(),
             removed: Vec::new(),
             sync_token: Some(revision.to_string()),
         })
@@ -353,76 +338,157 @@ impl Provider for LocalStore {
     fn create(&self, calendar: &Calendar, event: &NewEvent) -> Result<String, SyncError> {
         let connection = self.connection();
         let transaction = connection.unchecked_transaction().map_err(failed)?;
-        let revision = revise(&transaction)?;
-        let id = new_id();
-        let (start, end, zone) = match event.timing {
-            Timing::Timed { start, end, zone } => (
-                start_text(Start::At(start)),
-                start_text(Start::At(end)),
-                Some(zone.name()),
-            ),
-            Timing::AllDay {
-                start,
-                end_exclusive,
-            } => (
-                start_text(Start::On(start)),
-                start_text(Start::On(end_exclusive)),
-                None,
-            ),
+        let created = SyncedEvent {
+            id: new_id(),
+            title: event.title.clone(),
+            timing: Some(event.timing),
+            recurrence: event.recurrence.clone(),
+            instance_of: None,
+            about: event.about.clone(),
+            etag: revise(&transaction)?.to_string(),
+            organizer_only: false,
         };
-        let about = &event.about;
-        transaction
-            .execute(
-                "INSERT INTO events VALUES \
-                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, ?8, ?9, ?10, ?11, ?12)",
-                params![
-                    calendar.id,
-                    id,
-                    event.title,
-                    start,
-                    end,
-                    zone,
-                    event.recurrence.join("\n"),
-                    about.description,
-                    about.location,
-                    about.color.map(event_color_key),
-                    match &about.reminders {
-                        Reminders::Default => None,
-                        Reminders::Own(own) => Some(reminders_text(own)),
-                    },
-                    revision.to_string(),
-                ],
-            )
-            .map_err(failed)?;
+        put(&transaction, &calendar.id, &created)?;
         transaction.commit().map_err(failed)?;
-        Ok(id)
+        Ok(created.id)
     }
 
-    fn copy(&self, _: &Calendar, _: &str, _: &NewEvent, _: bool) -> Result<String, SyncError> {
-        Err(not_yet())
-    }
-
-    fn update(
+    /// The new series of a split: all a local event keeps is in `new`.
+    fn copy(
         &self,
-        _: &Calendar,
+        calendar: &Calendar,
         _: &str,
-        _: &str,
-        _: &Patch,
+        new: &NewEvent,
         _: bool,
     ) -> Result<String, SyncError> {
-        Err(not_yet())
+        self.create(calendar, new)
     }
 
-    fn move_to(&self, _: &Calendar, _: &str, _: &Calendar, _: bool) -> Result<String, SyncError> {
-        Err(not_yet())
+    /// Changes what a local event has (`MOD-09-F09`); an occurrence of a series not changed yet
+    /// becomes one changed on its own, as at Google.
+    fn update(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        etag: &str,
+        patch: &Patch,
+        _: bool,
+    ) -> Result<String, SyncError> {
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        let mut event = kept(&transaction, &calendar.id, id)?.ok_or_else(gone)?;
+        of_version(&event, etag)?;
+        let patch = patch.clone();
+        // A series moved to other times on the same days takes its occurrences changed or
+        // deleted on their own with it, as Google keeps them with it.
+        if let (None, Some(first), Some(timing)) = (&event.instance_of, event.timing, patch.timing)
+        {
+            let of_series = "calendar_id = ?1 AND series_id = ?2";
+            for exception in read(&transaction, of_series, params![calendar.id, id])? {
+                let Some((series, original)) = exception.instance_of else {
+                    continue;
+                };
+                let original = at_new_time(original, first, timing);
+                let moved = SyncedEvent {
+                    instance_of: Some((series, original)),
+                    ..exception
+                };
+                put(&transaction, &calendar.id, &moved)?;
+            }
+        }
+        event.title = patch.title.unwrap_or(event.title);
+        event.timing = patch.timing.or(event.timing);
+        event.recurrence = patch.recurrence.unwrap_or(event.recurrence);
+        let about = &mut event.about;
+        about.description = patch.description.unwrap_or(take(&mut about.description));
+        about.location = patch.location.unwrap_or(take(&mut about.location));
+        about.color = patch.color.unwrap_or(about.color);
+        about.reminders = patch.reminders.unwrap_or(take(&mut about.reminders));
+        event.etag = revise(&transaction)?.to_string();
+        put(&transaction, &calendar.id, &event)?;
+        transaction.commit().map_err(failed)?;
+        Ok(event.etag)
     }
 
-    fn delete(&self, _: &Calendar, _: &str, _: &str, _: bool) -> Result<(), SyncError> {
-        Err(not_yet())
+    /// Moves the event, a series with its occurrences changed on their own, to another local
+    /// calendar.
+    fn move_to(
+        &self,
+        calendar: &Calendar,
+        id: &str,
+        destination: &Calendar,
+        _: bool,
+    ) -> Result<String, SyncError> {
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        let etag = revise(&transaction)?.to_string();
+        let moved = transaction
+            .execute(
+                "UPDATE events SET calendar_id = ?3, etag = ?4 \
+                 WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2) \
+                 AND EXISTS (SELECT 1 FROM calendars WHERE id = ?3)",
+                params![calendar.id, id, destination.id, etag],
+            )
+            .map_err(failed)?;
+        if moved == 0 {
+            return Err(gone());
+        }
+        transaction.commit().map_err(failed)?;
+        Ok(etag)
     }
 
-    fn restore(&self, _: &Calendar, _: &str, _: bool) -> Result<String, SyncError> {
-        Err(not_yet())
+    /// Deletes the event; an occurrence of a series is cancelled in its place, and a series goes
+    /// with its occurrences changed on their own. One no longer there is deleted, as Google
+    /// answers.
+    fn delete(&self, calendar: &Calendar, id: &str, etag: &str, _: bool) -> Result<(), SyncError> {
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        let Some(event) = kept(&transaction, &calendar.id, id)? else {
+            return Ok(());
+        };
+        of_version(&event, etag)?;
+        let revision = revise(&transaction)?.to_string();
+        let mut before = vec![event.clone()];
+        if event.instance_of.is_some() {
+            let cancelled = SyncedEvent {
+                timing: None,
+                etag: revision,
+                ..event
+            };
+            put(&transaction, &calendar.id, &cancelled)?;
+        } else {
+            let of_series = "calendar_id = ?1 AND series_id = ?2";
+            before.extend(read(&transaction, of_series, params![calendar.id, id])?);
+            transaction
+                .execute(
+                    "DELETE FROM events WHERE calendar_id = ?1 AND (id = ?2 OR series_id = ?2)",
+                    params![calendar.id, id],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)?;
+        let key = (calendar.id.clone(), id.to_string());
+        self.deleted.lock().unwrap().insert(key, before);
+        Ok(())
+    }
+
+    /// Brings back the event deleted since the file was opened, as it was.
+    fn restore(&self, calendar: &Calendar, id: &str, _: bool) -> Result<String, SyncError> {
+        let key = (calendar.id.clone(), id.to_string());
+        let before = (self.deleted.lock().unwrap().get(&key).cloned()).ok_or_else(gone)?;
+        let connection = self.connection();
+        let transaction = connection.unchecked_transaction().map_err(failed)?;
+        let etag = revise(&transaction)?.to_string();
+        for event in before {
+            let event = SyncedEvent {
+                etag: etag.clone(),
+                ..event
+            };
+            put(&transaction, &calendar.id, &event)?;
+        }
+        transaction.commit().map_err(failed)?;
+        self.deleted.lock().unwrap().remove(&key);
+        Ok(etag)
     }
 
     /// Google's default, as there is no Google setting to read (MOD-09 *Constraints and edge
@@ -432,9 +498,136 @@ impl Provider for LocalStore {
     }
 }
 
-/// Changing, moving and deleting local events come with `US-09-03` (`DEC-181`).
-fn not_yet() -> SyncError {
-    SyncError(texts::LOCAL_NOT_CHANGED_YET.to_string())
+/// The events of the file `filter` picks, as their rows keep them.
+fn read(
+    connection: &Connection,
+    filter: &str,
+    params: impl Params,
+) -> Result<Vec<SyncedEvent>, SyncError> {
+    let mut select = connection
+        .prepare(&format!(
+            "SELECT id, title, start, end, zone, recurrence, series_id, original_start, \
+             description, location, color, reminders, etag FROM events WHERE {filter}"
+        ))
+        .map_err(failed)?;
+    let rows = select
+        .query_map(params, |row| {
+            let text = |i: usize| row.get::<_, String>(i);
+            let maybe = |i: usize| row.get::<_, Option<String>>(i);
+            Ok(event(
+                [text(0)?, text(1)?, text(5)?, text(8)?, text(9)?, text(12)?],
+                [
+                    maybe(2)?,
+                    maybe(3)?,
+                    maybe(4)?,
+                    maybe(6)?,
+                    maybe(7)?,
+                    maybe(10)?,
+                    maybe(11)?,
+                ],
+            ))
+        })
+        .map_err(failed)?;
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(row.map_err(failed)??);
+    }
+    Ok(events)
+}
+
+/// The calendar's event `id` as the file keeps it; an occurrence of a series not changed yet as
+/// its series has it, at its start by the series' rule.
+fn kept(
+    connection: &Connection,
+    calendar_id: &str,
+    id: &str,
+) -> Result<Option<SyncedEvent>, SyncError> {
+    let one = "calendar_id = ?1 AND id = ?2";
+    if let Some(event) = read(connection, one, params![calendar_id, id])?.pop() {
+        return Ok(Some(event));
+    }
+    let Some((series, original)) = occurrence_of(id) else {
+        return Ok(None);
+    };
+    let master = read(connection, one, params![calendar_id, series])?.pop();
+    Ok(master.and_then(|master| {
+        let first = master.timing?;
+        Some(SyncedEvent {
+            id: id.to_string(),
+            timing: Some(regular(first, original)),
+            recurrence: Vec::new(),
+            instance_of: Some((series.to_string(), original)),
+            etag: String::new(),
+            ..master
+        })
+    }))
+}
+
+/// Refuses a change made to a version of the event other than the one kept, as Google does; an
+/// empty `etag` changes it whatever its version.
+fn of_version(event: &SyncedEvent, etag: &str) -> Result<(), SyncError> {
+    if etag.is_empty() || etag == event.etag {
+        Ok(())
+    } else {
+        Err(SyncError::changed_elsewhere())
+    }
+}
+
+/// Writes the event to the calendar, in place of the one with its ID. Its reminders are
+/// notifications only: a local event has no e-mail (`MOD-09-F15`).
+fn put(connection: &Connection, calendar_id: &str, event: &SyncedEvent) -> Result<(), SyncError> {
+    let (start, end, zone) = match event.timing {
+        Some(Timing::Timed { start, end, zone }) => (
+            Some(start_text(Start::At(start))),
+            Some(start_text(Start::At(end))),
+            Some(zone.name()),
+        ),
+        Some(Timing::AllDay {
+            start,
+            end_exclusive,
+        }) => (
+            Some(start_text(Start::On(start))),
+            Some(start_text(Start::On(end_exclusive))),
+            None,
+        ),
+        // A cancelled occurrence.
+        None => (None, None, None),
+    };
+    let (series, original) = match &event.instance_of {
+        Some((series, original)) => (Some(series), Some(start_text(*original))),
+        None => (None, None),
+    };
+    let about = &event.about;
+    let reminders = match &about.reminders {
+        Reminders::Default => None,
+        Reminders::Own(own) => {
+            let notifications = own.iter().filter(|r| r.method == Method::Notification);
+            Some(reminders_text(&notifications.copied().collect::<Vec<_>>()))
+        }
+    };
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO events VALUES \
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                calendar_id,
+                event.id,
+                event.title,
+                start,
+                end,
+                zone,
+                event.recurrence.join("\n"),
+                series,
+                original,
+                about.description,
+                about.location,
+                about.color.map(event_color_key),
+                reminders,
+                event.etag,
+            ],
+        )
+        .map_err(failed)?;
+    Ok(())
 }
 
 /// A new ID for a local calendar or event, unique on the device.
@@ -516,8 +709,9 @@ mod tests {
     use super::*;
     use crate::fixtures::d;
     use crate::model::Rgb;
-    use chrono::{Duration, TimeZone, Utc};
-    use chrono_tz::Europe::Warsaw;
+    use crate::recurrence::expand;
+    use chrono::{DateTime, Duration, TimeZone, Utc};
+    use chrono_tz::Europe::{London, Warsaw};
 
     fn window() -> Window {
         Window::around(d(2026, 11, 12), Warsaw)
@@ -758,11 +952,282 @@ mod tests {
     }
 
     #[test]
-    fn local_events_take_googles_default_length_and_cannot_be_changed_yet() {
+    fn local_events_take_googles_default_length() {
+        assert_eq!(LocalStore::in_memory().default_length(), Ok(60));
+    }
+
+    /// The events of the calendar as the views show them, by title and start in Warsaw, in
+    /// order of their starts.
+    fn shown(store: &LocalStore, calendar: &Calendar) -> Vec<(String, String)> {
+        let fetched = store.events(calendar, window()).unwrap().events;
+        let mut shown: Vec<(DateTime<Utc>, String)> = expand(calendar, &fetched, window())
+            .into_iter()
+            .map(|event| match event.timing {
+                Timing::Timed { start, .. } => (start, event.title),
+                Timing::AllDay { .. } => panic!("timed events"),
+            })
+            .collect();
+        shown.sort();
+        (shown.into_iter())
+            .map(|(start, title)| {
+                let start = start.with_timezone(&Warsaw).format("%F %R").to_string();
+                (title, start)
+            })
+            .collect()
+    }
+
+    fn at(title: &str, start: &str) -> (String, String) {
+        (title.to_string(), start.to_string())
+    }
+
+    /// The event as the file keeps it.
+    fn kept(store: &LocalStore, calendar: &Calendar, id: &str) -> Option<SyncedEvent> {
+        let events = store.events(calendar, window()).unwrap().events;
+        events.into_iter().find(|event| event.id == id)
+    }
+
+    #[test]
+    fn a_local_event_is_changed_against_its_version_moved_deleted_and_restored() {
+        let store = LocalStore::in_memory();
+        let private = new_calendar("Private", Warsaw, &[]);
+        let family = new_calendar("Family", Warsaw, std::slice::from_ref(&private));
+        store.add_calendar(&private).unwrap();
+        store.add_calendar(&family).unwrap();
+        let id = store.create(&private, &dentist()).unwrap();
+        let version = kept(&store, &private, &id).unwrap().etag;
+
+        // Every field a local event has is changed; the version changes with it.
+        let start = Utc.with_ymd_and_hms(2026, 11, 16, 13, 0, 0).unwrap();
+        let timing = Timing::Timed {
+            start,
+            end: start + Duration::minutes(90),
+            zone: London,
+        };
+        let patch = Patch {
+            title: Some("Dentist — check-up".to_string()),
+            description: Some("Bring the card".to_string()),
+            location: Some("Smile".to_string()),
+            timing: Some(timing),
+            color: Some(Some(EventColor::Tomato)),
+            ..Patch::default()
+        };
+        let changed = store
+            .update(&private, &id, &version, &patch, false)
+            .unwrap();
+        assert_ne!(changed, version);
+        let event = kept(&store, &private, &id).unwrap();
+        assert_eq!(event.title, "Dentist — check-up");
+        assert_eq!(event.timing, Some(timing));
+        assert_eq!(event.etag, changed);
+        let about = &event.about;
+        assert_eq!(
+            (about.description.as_str(), about.location.as_str()),
+            ("Bring the card", "Smile")
+        );
+        assert_eq!(about.color, Some(EventColor::Tomato));
+
+        // A change against the version before is refused, as Google refuses it.
+        let refused = store.update(&private, &id, &version, &patch, false);
+        assert!(refused.unwrap_err().is_changed_elsewhere());
+
+        // Moved to "Family", with its version.
+        let moved = store.move_to(&private, &id, &family, false).unwrap();
+        assert_eq!(kept(&store, &private, &id), None);
+        assert_eq!(kept(&store, &family, &id).unwrap().etag, moved);
+
+        // Deleted, and brought back whole.
+        store.delete(&family, &id, &moved, false).unwrap();
+        assert_eq!(kept(&store, &family, &id), None);
+        let restored = store.restore(&family, &id, false).unwrap();
+        let back = kept(&store, &family, &id).unwrap();
+        assert_eq!(back.etag, restored);
+        assert_eq!(
+            SyncedEvent {
+                etag: changed,
+                ..back
+            },
+            event
+        );
+        // Once only: it was not deleted again.
+        assert!(store.restore(&family, &id, false).is_err());
+    }
+
+    /// "Swimming" weekly on Monday 18:00–19:00 from 16 November, in "Private".
+    fn swimming(store: &LocalStore) -> (Calendar, String) {
+        let calendar = my_calendar(Warsaw);
+        store.add_calendar(&calendar).unwrap();
+        let start = Utc.with_ymd_and_hms(2026, 11, 16, 17, 0, 0).unwrap();
+        let swimming = NewEvent {
+            title: "Swimming".to_string(),
+            timing: Timing::Timed {
+                start,
+                end: start + Duration::hours(1),
+                zone: Warsaw,
+            },
+            recurrence: vec!["RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4".to_string()],
+            ..dentist()
+        };
+        let id = store.create(&calendar, &swimming).unwrap();
+        (calendar, id)
+    }
+
+    #[test]
+    fn an_occurrence_is_changed_and_deleted_on_its_own_and_its_deletion_undone() {
+        let store = LocalStore::in_memory();
+        let (calendar, series) = swimming(&store);
+
+        // The occurrence of 23 November, not changed yet, has no version of its own.
+        let second = format!("{series}_20261123T170000Z");
+        let start = Utc.with_ymd_and_hms(2026, 11, 23, 18, 0, 0).unwrap();
+        let patch = Patch {
+            timing: Some(Timing::Timed {
+                start,
+                end: start + Duration::hours(1),
+                zone: Warsaw,
+            }),
+            ..Patch::default()
+        };
+        store.update(&calendar, &second, "", &patch, false).unwrap();
+        let changed = kept(&store, &calendar, &second).unwrap();
+        assert_eq!(changed.title, "Swimming");
+        let original = Utc.with_ymd_and_hms(2026, 11, 23, 17, 0, 0).unwrap();
+        assert_eq!(
+            changed.instance_of,
+            Some((series.clone(), Start::At(original)))
+        );
+
+        // The occurrence of 30 November is deleted alone.
+        let third = format!("{series}_20261130T170000Z");
+        store.delete(&calendar, &third, "", false).unwrap();
+        let swims = [
+            at("Swimming", "2026-11-16 18:00"),
+            at("Swimming", "2026-11-23 19:00"),
+            at("Swimming", "2026-12-07 18:00"),
+        ];
+        assert_eq!(shown(&store, &calendar), swims);
+
+        // Undone, it is back at its time.
+        store.restore(&calendar, &third, false).unwrap();
+        let mut back = swims.to_vec();
+        back.insert(2, at("Swimming", "2026-11-30 18:00"));
+        assert_eq!(shown(&store, &calendar), back);
+    }
+
+    #[test]
+    fn a_deleted_series_takes_its_changed_occurrences_with_it_and_brings_them_back() {
+        let store = LocalStore::in_memory();
+        let (calendar, series) = swimming(&store);
+        let second = format!("{series}_20261123T170000Z");
+        let patch = Patch {
+            title: Some("Swimming with Ola".to_string()),
+            ..Patch::default()
+        };
+        store.update(&calendar, &second, "", &patch, false).unwrap();
+        let before = shown(&store, &calendar);
+        assert_eq!(before[1], at("Swimming with Ola", "2026-11-23 18:00"));
+
+        store.delete(&calendar, &series, "", false).unwrap();
+        assert_eq!(shown(&store, &calendar), []);
+        // Nothing is left of the series in the file.
+        assert_eq!(store.event_count(&calendar.id), Ok(0));
+
+        store.restore(&calendar, &series, false).unwrap();
+        assert_eq!(shown(&store, &calendar), before);
+    }
+
+    #[test]
+    fn a_series_moved_to_another_time_keeps_its_changed_and_deleted_occurrences() {
+        let store = LocalStore::in_memory();
+        let (calendar, series) = swimming(&store);
+        let second = format!("{series}_20261123T170000Z");
+        let patch = Patch {
+            title: Some("Swimming with Ola".to_string()),
+            ..Patch::default()
+        };
+        store.update(&calendar, &second, "", &patch, false).unwrap();
+        let third = format!("{series}_20261130T170000Z");
+        store.delete(&calendar, &third, "", false).unwrap();
+
+        // "All events" at 19:00–20:00, from the first occurrence on.
+        let start = Utc.with_ymd_and_hms(2026, 11, 16, 18, 0, 0).unwrap();
+        let patch = Patch {
+            timing: Some(Timing::Timed {
+                start,
+                end: start + Duration::hours(1),
+                zone: Warsaw,
+            }),
+            ..Patch::default()
+        };
+        store.update(&calendar, &series, "", &patch, false).unwrap();
+
+        // The changed one keeps its own time, as at Google; the deleted one stays deleted.
+        assert_eq!(
+            shown(&store, &calendar),
+            [
+                at("Swimming", "2026-11-16 19:00"),
+                at("Swimming with Ola", "2026-11-23 18:00"),
+                at("Swimming", "2026-12-07 19:00"),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_event_is_not_moved_to_a_calendar_the_file_does_not_have() {
         let store = LocalStore::in_memory();
         let calendar = my_calendar(Warsaw);
-        assert_eq!(store.default_length(), Ok(60));
-        let refused = store.delete(&calendar, "x", "", false).unwrap_err();
-        assert_eq!(refused.0, texts::LOCAL_NOT_CHANGED_YET);
+        store.add_calendar(&calendar).unwrap();
+        let id = store.create(&calendar, &dentist()).unwrap();
+        let unknown = new_calendar("Gone", Warsaw, &[]);
+
+        let refused = store.move_to(&calendar, &id, &unknown, false);
+
+        assert_eq!(refused.unwrap_err().0, texts::LOCAL_EVENT_GONE);
+        assert!(kept(&store, &calendar, &id).is_some());
+    }
+
+    #[test]
+    fn deleting_an_event_no_longer_there_deletes_nothing_and_changing_it_is_refused() {
+        let store = LocalStore::in_memory();
+        let calendar = my_calendar(Warsaw);
+        store.add_calendar(&calendar).unwrap();
+        assert_eq!(store.delete(&calendar, "gone", "", false), Ok(()));
+        let patch = Patch {
+            title: Some("X".to_string()),
+            ..Patch::default()
+        };
+        let refused = store.update(&calendar, "gone", "", &patch, false);
+        assert_eq!(refused.unwrap_err().0, texts::LOCAL_EVENT_GONE);
+        let refused = store.move_to(&calendar, "gone", &calendar, false);
+        assert_eq!(refused.unwrap_err().0, texts::LOCAL_EVENT_GONE);
+    }
+
+    #[test]
+    fn a_copy_is_a_new_event_with_the_fields_given_and_e_mail_reminders_are_not_kept() {
+        let store = LocalStore::in_memory();
+        let calendar = my_calendar(Warsaw);
+        store.add_calendar(&calendar).unwrap();
+        let id = store.create(&calendar, &dentist()).unwrap();
+        let reminder = |method, minutes| Reminder { method, minutes };
+        let new = NewEvent {
+            title: "Dentist again".to_string(),
+            about: About {
+                reminders: Reminders::Own(vec![
+                    reminder(Method::Email, 60),
+                    reminder(Method::Notification, 10),
+                ]),
+                ..About::default()
+            },
+            ..dentist()
+        };
+
+        let copy = store.copy(&calendar, &id, &new, false).unwrap();
+
+        assert_ne!(copy, id);
+        let kept = kept(&store, &calendar, &copy).unwrap();
+        assert_eq!(kept.title, "Dentist again");
+        assert_eq!(
+            kept.about.reminders,
+            Reminders::Own(vec![reminder(Method::Notification, 10)])
+        );
     }
 }

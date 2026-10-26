@@ -36,10 +36,11 @@ pub struct Asked {
 
 /// What the editor asks for its preview, and the time chosen in it; `None` when there is no
 /// preview: offline, without a calendar or guests, for an all-day event, for out of office and
-/// focus time, which take no guests, and while the time cannot be read. The day is the one the
-/// event starts on in the editor's time zone.
+/// focus time and in a local calendar, which take no guests (`MOD-09-F10`), and while the time
+/// cannot be read. The day is the one the event starts on in the editor's time zone.
 pub fn asked(editor: &Editor, regional: &Regional, online: bool) -> Option<(Asked, Span)> {
-    let calendar = (editor.calendar.as_ref()).filter(|_| online && !editor.kind.timed_only())?;
+    let calendar = (editor.calendar.as_ref())
+        .filter(|_| online && !editor.kind.timed_only() && editor.google())?;
     let Ok(Timing::Timed { start, end, zone }) = editor.timing(regional) else {
         return None;
     };

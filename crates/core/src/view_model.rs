@@ -4,6 +4,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, timed_placements};
+use crate::local;
 use crate::model::{Event, Kind, Rgb, Timing};
 use crate::week::wall_minute;
 
@@ -44,6 +45,9 @@ pub struct Block {
     pub saving: bool,
     /// The event can be dragged and resized (`MOD-05-F13`, `MOD-05-F14`).
     pub movable: bool,
+    /// A local event, which needs no Google to be moved, offline too (MOD-09 *Constraints and
+    /// edge cases*).
+    pub local: bool,
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
@@ -63,6 +67,7 @@ pub struct Bar {
     pub read_only: bool,
     pub saving: bool,
     pub movable: bool,
+    pub local: bool,
     /// An invitation awaiting the user's answer, drawn with a dashed outline and a light fill
     /// (`MOD-06-U04`).
     pub awaiting: bool,
@@ -139,10 +144,11 @@ pub fn grid_view(
                 title: shown_title(event),
                 color: event.shown_color(),
                 read_only: event.read_only,
-                saving: event.saving,
+                saving: event.marked_saving(),
                 awaiting: event.about.awaiting(),
                 declined: event.about.declined(),
                 movable: movable(event),
+                local: event.account_id == local::ACCOUNT_ID,
                 hatched: event.about.kind == Kind::OutOfOffice,
                 start,
                 end,
@@ -159,10 +165,11 @@ pub fn grid_view(
                 title: shown_title(event),
                 color: event.shown_color(),
                 read_only: event.read_only,
-                saving: event.saving,
+                saving: event.marked_saving(),
                 awaiting: event.about.awaiting(),
                 declined: event.about.declined(),
                 movable: movable(event),
+                local: event.account_id == local::ACCOUNT_ID,
                 all_day: matches!(event.timing, Timing::AllDay { .. }),
                 hatched: event.about.kind == Kind::OutOfOffice,
                 label: event.about.kind.display_only(),

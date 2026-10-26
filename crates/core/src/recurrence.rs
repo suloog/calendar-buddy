@@ -290,6 +290,17 @@ fn occurrence_id(series: &str, start: Start) -> String {
     }
 }
 
+/// The series and the start an occurrence's ID names, as `occurrence_id` makes it; `None` for
+/// the ID of an event of its own.
+pub(crate) fn occurrence_of(id: &str) -> Option<(&str, Start)> {
+    let (series, start) = id.rsplit_once('_')?;
+    let start = match NaiveDateTime::parse_from_str(start, "%Y%m%dT%H%M%SZ") {
+        Ok(at) => Start::At(at.and_utc()),
+        Err(_) => Start::On(NaiveDate::parse_from_str(start, "%Y%m%d").ok()?),
+    };
+    Some((series, start))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,6 +469,17 @@ mod tests {
         assert_eq!(starts.first().unwrap(), "2025-11-11 08:00");
         assert_eq!(starts.last().unwrap(), "2028-11-10 08:00");
         assert_eq!(shown.len(), 1096);
+    }
+
+    #[test]
+    fn an_occurrences_id_names_its_series_and_start() {
+        let at = Utc.with_ymd_and_hms(2026, 11, 16, 8, 0, 0).unwrap();
+        for start in [Start::At(at), Start::On(d(2026, 11, 16))] {
+            let id = occurrence_id("weekly", start);
+            assert_eq!(occurrence_of(&id), Some(("weekly", start)));
+        }
+        assert_eq!(occurrence_of("0123456789abcdef0123456789abcdef"), None);
+        assert_eq!(occurrence_of("weekly_monday"), None);
     }
 
     #[test]

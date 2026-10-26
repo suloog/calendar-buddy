@@ -2209,3 +2209,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-183] Changing local events: the local store's writes, undo, offline and the editor
+
+- **Date:** 2026-10-26
+- **Decided by:** delivery loop (Claude)
+- **Source:** implementation US-09-03
+- **Affects:** `US-09-03`, `MOD-09-F09`, `MOD-09-F10`, `MOD-09-F12`, `MOD-09-F15`, `MOD-09-F16`, MOD-09 *Constraints and edge cases*, `TC-09-08`, `DEC-181`
+- **Decision:** The local file takes every change the app sends Google, as Google takes it: a change is made to the version shown and refused as changed elsewhere otherwise; an occurrence of a series not changed yet becomes one changed on its own (named as Google names it, the series' ID and its start), and deleting one leaves it cancelled in its place; a series moved to other times on the same days ("all events") keeps its occurrences changed on their own, at their own times, and its deleted ones deleted, as Google keeps them with it; deleting a series deletes its occurrences changed on their own with it; the new series of a "this and following" split is a new event; a local event moves to another local calendar with its series. Undo brings a deleted local event back as it was, a series with its changed occurrences, from what the app keeps of it until it quits, as Google keeps a deleted event for a while; a deleted occurrence comes back as one changed on its own, as Google confirms it. The file keeps a local event's notifications only: an e-mail reminder is not kept (`MOD-09-F15`). Without network a local event is edited, dragged, resized, deleted and its change undone (Ctrl+Z and the notice's Undo) as online; the undo of a Google event's change still waits for the network. A local event's change or deletion is never marked "saving", though it is not dragged again until the file has taken it, as a Google event is not until Google answers. The editor offers no guests, Google Meet, busy/free or visibility, and no availability preview, when a local calendar is picked, also for a new event; its notifications are notifications only. `TC-09-08`'s "10:00–11:30 local time" is read in the event's own time zone, London, as the editor takes the times in the zone chosen (`MOD-03-F18`).
+- **Why:** One write path behind the calendar-provider interface (`NFR-14`) keeps the series' scopes, dragging and undo shared with Google events (MOD-09 *Technical notes*); a deleted local event kept in memory serves the undo of the last change, which lasts only while the app runs, without changing the file's schema. Following Google wherever a local event can (`DEC-62`, `DEC-178`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

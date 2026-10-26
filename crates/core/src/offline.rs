@@ -6,7 +6,7 @@
 use chrono::NaiveDate;
 
 use crate::local;
-use crate::model::Calendar;
+use crate::model::{Calendar, Event};
 use crate::sync::Window;
 use crate::texts::{NO_CHANGES_OFFLINE, NOT_CACHED, OFFLINE_INDICATOR};
 
@@ -26,6 +26,12 @@ pub fn refused(online: bool) -> Option<&'static str> {
 pub fn refused_in(online: bool, calendar: Option<&Calendar>) -> Option<&'static str> {
     refused(online)
         .filter(|_| calendar.is_none_or(|calendar| calendar.account_id != local::ACCOUNT_ID))
+}
+
+/// Why changing or deleting the event is refused now: as `refused`, but never for a local event
+/// (MOD-09 *Constraints and edge cases*).
+pub fn refused_for(online: bool, event: &Event) -> Option<&'static str> {
+    refused(online).filter(|_| event.account_id != local::ACCOUNT_ID)
 }
 
 /// What becomes of the days on screen, from `first` to `last`, that the cache window does not

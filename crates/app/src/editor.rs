@@ -354,6 +354,7 @@ fn person(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32, fil
 fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
     let shown = editor.reminder_fields();
     let mut fields = shown.clone();
+    let methods = editor.reminder_methods();
     ui.vertical(|ui| {
         let mut removed = None;
         for (i, field) in fields.iter_mut().enumerate() {
@@ -361,7 +362,7 @@ fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
                 egui::ComboBox::from_id_salt(("editor-reminder-method", i))
                     .selected_text(method_label(field.method))
                     .show_ui(ui, |ui| {
-                        for method in [Method::Notification, Method::Email] {
+                        for &method in methods {
                             ui.selectable_value(&mut field.method, method, method_label(method));
                         }
                     });
@@ -651,14 +652,17 @@ pub fn show(
                 .desired_width(f32::INFINITY),
         );
     });
-    // Google takes no guests for out of office and focus time, nor a Meet call.
+    // Google takes no guests for out of office and focus time, nor a Meet call; a local
+    // calendar has neither (`MOD-09-F10`).
     if !editor.kind.timed_only() {
-        form_row(ui, texts::GUESTS, |ui| {
-            guests(ui, editor, google.suggested, &own)
-        });
-        form_row(ui, "", |ui| {
-            ui.checkbox(&mut editor.meet, texts::ADD_GOOGLE_MEET)
-        });
+        if editor.google() {
+            form_row(ui, texts::GUESTS, |ui| {
+                guests(ui, editor, google.suggested, &own)
+            });
+            form_row(ui, "", |ui| {
+                ui.checkbox(&mut editor.meet, texts::ADD_GOOGLE_MEET)
+            });
+        }
         form_row(ui, texts::NOTIFICATIONS, |ui| reminders(ui, editor));
     }
     form_row(ui, texts::DESCRIPTION, |ui| description(ui, editor));
@@ -669,28 +673,32 @@ pub fn show(
         calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
     });
     form_row(ui, texts::COLOUR, |ui| event_color(ui, &mut editor.color));
-    // Out of office and focus time are always busy.
-    if !editor.kind.timed_only() {
-        form_row(ui, texts::SHOW_AS, |ui| {
-            egui::ComboBox::from_id_salt("editor-show")
-                .selected_text(show_label(editor.show))
+    // Out of office and focus time are always busy; a local event has neither busy or free nor
+    // visibility (`MOD-09-F10`).
+    if editor.google() {
+        if !editor.kind.timed_only() {
+            form_row(ui, texts::SHOW_AS, |ui| {
+                egui::ComboBox::from_id_salt("editor-show")
+                    .selected_text(show_label(editor.show))
+                    .show_ui(ui, |ui| {
+                        for show in [Show::Busy, Show::Free] {
+                            ui.selectable_value(&mut editor.show, show, show_label(show));
+                        }
+                    });
+            });
+        }
+        form_row(ui, texts::VISIBILITY, |ui| {
+            egui::ComboBox::from_id_salt("editor-visibility")
+                .selected_text(visibility_label(editor.visibility))
                 .show_ui(ui, |ui| {
-                    for show in [Show::Busy, Show::Free] {
-                        ui.selectable_value(&mut editor.show, show, show_label(show));
+                    for visibility in [Visibility::Default, Visibility::Public, Visibility::Private]
+                    {
+                        let label = visibility_label(visibility);
+                        ui.selectable_value(&mut editor.visibility, visibility, label);
                     }
                 });
         });
     }
-    form_row(ui, texts::VISIBILITY, |ui| {
-        egui::ComboBox::from_id_salt("editor-visibility")
-            .selected_text(visibility_label(editor.visibility))
-            .show_ui(ui, |ui| {
-                for visibility in [Visibility::Default, Visibility::Public, Visibility::Private] {
-                    let label = visibility_label(visibility);
-                    ui.selectable_value(&mut editor.visibility, visibility, label);
-                }
-            });
-    });
     if open_series {
         return Some(Edited::OpenSeries);
     }

@@ -138,6 +138,14 @@ impl LastChange {
         self.undo.take().map(|(undo, ..)| undo)
     }
 
+    /// The event the undo of the last change puts back, while it can be undone.
+    pub fn undoes(&self) -> Option<&Event> {
+        self.undo.as_ref().map(|(undo, ..)| match undo {
+            Undo::Restore(deleted, _) => &deleted.1,
+            Undo::Revert(edit) => &edit.event,
+        })
+    }
+
     /// The undo goes to Google, told by `local`.
     pub fn undoing(&mut self, local: u64) {
         self.undoing = Some(local);

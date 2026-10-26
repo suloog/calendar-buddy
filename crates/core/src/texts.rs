@@ -626,8 +626,8 @@ pub fn local_not_used(error: &str) -> String {
 pub const LOCAL_DAMAGED: &str = "a calendar or an event in it is damaged";
 /// Why the local file could not be read: a later version of the app made it.
 pub const LOCAL_FROM_NEWER: &str = "it was made by a newer version of Calendar Buddy";
-/// Changing a local event before it can be (`DEC-181`).
-pub const LOCAL_NOT_CHANGED_YET: &str = "local events cannot be changed or deleted yet";
+/// A local event changed, moved or restored that is no longer in the local calendars' file.
+pub const LOCAL_EVENT_GONE: &str = "the event is no longer in the local calendar";
 
 #[cfg(test)]
 mod tests {

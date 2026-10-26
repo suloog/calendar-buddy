@@ -831,6 +831,7 @@ impl CalendarApp {
             self.gone.clear();
         }
         let undo = self.last.notice(now);
+        let undoable = self.undoable(online);
         let lefts = lefts.into_iter().chain([undo.map(|(_, left)| left)]);
         let Some(soonest) = lefts.flatten().min() else {
             return;
@@ -874,7 +875,7 @@ impl CalendarApp {
                         ui.horizontal_wrapped(|ui| {
                             ui.label(says);
                             undone = ui
-                                .add_enabled(online, egui::Button::new(texts::UNDO))
+                                .add_enabled(undoable, egui::Button::new(texts::UNDO))
                                 .clicked();
                         });
                     });
@@ -892,6 +893,12 @@ impl CalendarApp {
         if undone {
             self.undo();
         }
+    }
+
+    /// Whether the last change can be undone now: offline, only a local event's
+    /// (`MOD-02-F15`, MOD-09 *Constraints and edge cases*).
+    fn undoable(&self, online: bool) -> bool {
+        (self.last.undoes()).is_none_or(|event| offline::refused_for(online, event).is_none())
     }
 
     /// Opens "Go to date" on the selected date, from its key or its button (`MOD-03-F23`).
@@ -914,8 +921,8 @@ impl CalendarApp {
         if ctx.text_edit_focused() || ctx.input(|i| i.modifiers.alt) {
             return;
         }
-        // Offline the undo waits, as changes need Google (`MOD-02-F15`).
-        if self.online.get() && ctx.input_mut(undo_pressed) {
+        // Offline the undo waits, as changes need Google (`MOD-02-F15`), but a local event's.
+        if self.undoable(self.online.get()) && ctx.input_mut(undo_pressed) {
             self.undo();
         }
         let typed: Vec<char> = ctx.input(|i| {
@@ -1261,6 +1268,9 @@ impl CalendarApp {
                                     .unwrap_or(event);
                                 let details = event_details(event, self.zone);
                                 let not_yet = self.saving.holds(event).then_some(texts::SAVING);
+                                // A local event is changed offline too (MOD-09 *Constraints and edge
+                                // cases*).
+                                let refused = offline::refused_for(online, event);
                                 // Editing is not offered for an event the user may not change (`MOD-05-F17`),
                                 // though a guest still answers it (`MOD-06-F15`).
                                 let protected = event.protected();
@@ -1462,7 +1472,12 @@ impl CalendarApp {
                                 let reasons = [
                                     protected.map(|protected| protected.why()),
                                     refused.filter(|_| protected.is_none() || own_answer.is_some()),
-                                    not_yet.filter(|_| changeable.is_some()),
+                                    // A local event has no "saving" (MOD-09 *Constraints and edge
+                                    // cases*).
+                                    not_yet.filter(|_| {
+                                        changeable.is_some()
+                                            && event.account_id != local::ACCOUNT_ID
+                                    }),
                                 ];
                                 if reasons.iter().any(Option::is_some) {
                                     ui.add_space(4.0);
@@ -1472,6 +1487,7 @@ impl CalendarApp {
                                 }
                             }
                             Dialog::Scope(question, _) => {
+                                let refused = offline::refused_for(online, question.event());
                                 let scopes = question.scopes();
                                 for (choice, why) in &scopes {
                                     let button = egui::Button::new(choice.label());
@@ -2438,7 +2454,8 @@ impl eframe::App for CalendarApp {
             }
             match &self.built {
                 Built::Grid(view) => {
-                    // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way.
+                    // Offline, only local events can be moved (`MOD-02-F15`), also by a drag under
+                    // way.
                     let state = &mut self.view_state;
                     let hours = &mut self.settings.hour_zoom;
                     match grid_view::show(
@@ -2450,8 +2467,13 @@ impl eframe::App for CalendarApp {
                         &mut opened,
                         hours,
                     ) {
-                        Some(grid_view::Action::Dropped { event, drop }) if online => {
-                            dropped = self.places.get(event).map(|&place| (place, drop));
+                        // Offline, only a local event is moved (MOD-09 *Constraints and edge cases*).
+                        Some(grid_view::Action::Dropped { event, drop }) => {
+                            dropped = (self.places.get(event))
+                                .filter(|&&place| {
+                                    offline::refused_for(online, &self.events[place]).is_none()
+                                })
+                                .map(|&place| (place, drop));
                         }
                         Some(grid_view::Action::Unmovable { event }) => {
                             unmovable = Some(event);

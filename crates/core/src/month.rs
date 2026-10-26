@@ -186,7 +186,7 @@ pub fn month_view(
             title: shown_title(event),
             color: event.shown_color(),
             read_only: event.read_only,
-            saving: event.saving,
+            saving: event.marked_saving(),
             awaiting: event.about.awaiting(),
             declined: event.about.declined(),
             start: timed_start(event),

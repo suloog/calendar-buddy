@@ -114,7 +114,7 @@ pub fn agenda_view(
                             title: shown_title(event),
                             color: event.shown_color(),
                             read_only: event.read_only,
-                            saving: event.saving,
+                            saving: event.marked_saving(),
                             awaiting: event.about.awaiting(),
                             declined: event.about.declined(),
                             meet: event.about.meet.clone().filter(|_| !event.busy_only),

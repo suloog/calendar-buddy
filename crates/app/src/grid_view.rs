@@ -345,7 +345,7 @@ pub fn show(
     view: &GridViewModel,
     regional: &Regional,
     state: &mut State,
-    movable: bool,
+    online: bool,
     opened: &mut Option<usize>,
     zoom: &mut HourZoom,
 ) -> Option<Action> {
@@ -361,15 +361,15 @@ pub fn show(
     let visuals = ui.visuals().clone();
     let grid_line = grid_line(&visuals);
     let weak_text = visuals.weak_text_color();
-    // Offline, events cannot be moved (`MOD-02-F15`), also by a drag under way; one whose event
-    // left the view is dropped.
+    // Offline, only local events can be moved (`MOD-02-F15`, MOD-09 *Constraints and edge
+    // cases*), also by a drag under way; one whose event left the view is dropped.
+    let movable = |local: bool| online || local;
     let grabbed = state.drag.as_ref().map(|drag| drag.grabbed);
-    let gone = match grabbed {
-        Some(Grabbed::Block(i) | Grabbed::End(i)) => i >= view.blocks.len(),
-        Some(Grabbed::Bar(i)) => i >= view.bars.len(),
-        None => false,
-    };
-    if !movable || gone {
+    let local = grabbed.map(|grabbed| match grabbed {
+        Grabbed::Block(i) | Grabbed::End(i) => view.blocks.get(i).map(|block| block.local),
+        Grabbed::Bar(i) => view.bars.get(i).map(|bar| bar.local),
+    });
+    if local.is_some_and(|local| !local.is_some_and(movable)) {
         state.drag = None;
     }
     let pointer = ui.input(|i| i.pointer.latest_pos());
@@ -469,7 +469,7 @@ pub fn show(
             ui.scope_id().with(("bar", bar.bar.event)),
             Sense::click_and_drag(),
         );
-        if response.drag_started_by(PointerButton::Primary) && movable {
+        if response.drag_started_by(PointerButton::Primary) && movable(bar.local) {
             if bar.movable {
                 state.drag = Some(Drag {
                     grabbed: Grabbed::Bar(index),
@@ -697,7 +697,7 @@ pub fn show(
                 .unwrap_or(view.days[p.day].date);
             let ends_here = block.end.with_timezone(&view.zone).naive_local()
                 <= next_day.and_time(chrono::NaiveTime::MIN);
-            let end = (movable && block.movable && ends_here).then(|| {
+            let end = (movable(block.local) && block.movable && ends_here).then(|| {
                 let handle = Rect::from_min_max(
                     Pos2::new(rect.left(), rect.bottom() - END_HANDLE),
                     rect.right_bottom(),
@@ -709,7 +709,7 @@ pub fn show(
                 )
                 .on_hover_cursor(CursorIcon::ResizeVertical)
             });
-            if response.drag_started_by(PointerButton::Primary) && movable {
+            if response.drag_started_by(PointerButton::Primary) && movable(block.local) {
                 if block.movable {
                     state.drag = Some(Drag {
                         grabbed: Grabbed::Block(index),
