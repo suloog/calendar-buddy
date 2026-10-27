@@ -44,7 +44,7 @@ and whose dependencies are met. Stories waiting on the owner never stop the othe
 | A failed story | one more attempt on the retry's model and effort, then skipped with its dependents |
 | Decisions | every story is mode A: decided on the recommendation and recorded; critical ones flagged in the log and the thread (the run's default, semi-automatic, applies only to a story without a mode) |
 | Code review | standard — code reviewer and spec-compliance reviewer, up to 3 rounds, blocking findings fixed, the rest listed |
-| Merge | every story is mode A: merged once review is clean and gates green — except a story with manual-only criteria (`US-10-01`: `TC-10-05`; `US-10-02` and `US-10-04`: `TC-10-19`) or whose diff trips a signal (dependencies, …): those wait for the owner |
+| Merge | every story is mode A, and mode A merges everything (`autonomy.a_waits: false`, changed 2026-10-27): merged once review is clean and the tests pass — manual-only criteria (`US-10-02` and `US-10-04`: `TC-10-19`) are listed under *Before you push*, and what the diff touches (dependencies, CI, the agent's settings, the spec) is reported, not waited for; only a missing or failing test stops a merge · modes B and C always wait for the owner (none in scope) |
 | Approving a waiting merge | the owner's word — in the thread, on the page or in the loop's session |
 | Protected paths | only the built-in signals · size ceiling none |
 | Dependents of an unmerged story | wait |
@@ -75,7 +75,7 @@ rely on, refactors beyond the story.
 
 The owner's standing consent, in plain words — what the loop may do without asking:
 
-- squash each story into the local `main` when review is clean, the gates are green and every criterion has automatic evidence — stories with a manual-only test case or a dependency change wait for the owner's word;
+- squash each story into the local `main` when review is clean and the tests pass — including a story with manual-only criteria or one that changes dependencies, CI or the agent's own settings; the owner chose on 2026-10-27 that "the agent merges everything" ("Agent merguje wszystko") and checks the batch before pushing;
 - decide implementation questions itself, critical ones included, record each as a DEC entry and flag the critical ones in the thread;
 - push its state backup to the branch `og-delivery/state` on `origin` after every iteration;
 - commit the `chore(delivery)` log and report to the local `main` when the loop ends;
@@ -152,7 +152,7 @@ on: *Start* on the page — or `og-delivery set status=active`, then `og-loop up
 ⚠ no .claude/og-test-targets.json — by design (DEC-65): tests are cargo test against fakes
 ⚠ the app start was not checked — a desktop GUI; the preview pictures and cargo test stand in for it
 ⚠ gh is not installed — not needed for a local target; the backup goes by git push
-⚠ manual-only test cases TC-10-05 (US-10-01) and TC-10-19 (US-10-02, US-10-04): those merges wait for the owner, and their dependents with them
+⚠ manual-only test cases TC-10-05 (US-10-01) and TC-10-19 (US-10-02, US-10-04): with a_waits false (2026-10-27) they do not hold a merge — they are listed under Before you push
 ⚠ auto mode: the loop needs a new session with --permission-mode auto — the driver starts it; the repo default is plan mode
 ```
 
