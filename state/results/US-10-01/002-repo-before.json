@@ -1,0 +1,13 @@
+{
+  "branch": "feature/US-10-01",
+  "commit": "2a3b65b897d39018124134e3478ef46217cf8d49",
+  "dirty": false,
+  "tree": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+  "taken": "2026-10-27T17:31:41+00:00",
+  "build": {
+    "environment": "local",
+    "source": "unknown",
+    "commit": null
+  },
+  "targets": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+}

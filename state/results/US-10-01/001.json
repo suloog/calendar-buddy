@@ -1,0 +1,71 @@
+{
+  "n": 1,
+  "attempt": 1,
+  "ts": "2026-10-27T17:25:44Z",
+  "story": "US-10-01",
+  "mode": "implement",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-01",
+    "branch": "feature/US-10-01",
+    "commits": [
+      "4c42a94 feat(descriptions): Ollama settings and the description box [US-10-01]",
+      "96a293e test(scripts): cargo test results for the og run collector [US-10-01]",
+      "94a466b test(descriptions): a wrong Ollama address is refused [US-10-01]"
+    ],
+    "decisions": [
+      "DEC-215 critical Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02",
+      "DEC-216 critical The Ollama client in calendar-core uses ureq and url, already in the workspace",
+      "DEC-217 routine When Ollama is checked, and the fake Ollama on a free local port"
+    ],
+    "evidence": [
+      "#1 Settings section, defaults, kept after restart — TC-10-01 pass (description::tests::tc_10_01_the_section_starts_on_with_the_defaults_and_keeps_changes_after_a_restart, steps 1-3)",
+      "#2 Unticked: box, q and shortcut entry gone; back when ticked — TC-10-02 pass (tc_10_02_turned_off_the_box_its_key_and_its_shortcut_are_gone_and_back_when_on, steps 1-3)",
+      "#3 Warning for an address off this computer only — TC-10-03 pass (tc_10_03_an_address_off_this_computer_warns_and_a_local_one_does_not, steps 1-4)",
+      "#4 Default address: no request beyond Google and this computer — BLOCKED: all steps of TC-10-04 send a description and open \"New event\", which is US-10-02 (DEC-215); what this story adds is proven by description::tests::ollama_is_asked_only_at_its_address_and_google_nothing and ollama::tests::ollama_is_asked_only_for_its_version_and_its_models (only GET /api/version and /api/tags, at the address set; both pass in cargo test --workspace)",
+      "#5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")",
+      "#6 Ollama not running: greyed box \"Ollama is not available at <address>\" with a link to the settings — TC-10-06 steps 1-2 pass (the link opens the settings scrolled to the section, checked in a 560-pt window)",
+      "#7 Model missing: greyed box \"The model gemma4:e4b is not installed\" with the link — TC-10-06 step 3 pass",
+      "#8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops, Enter greys the box and keeps \"Kino jutro o 20\"; Ollama starts again, a click makes the box available with the text kept, no restart); step 4 (Enter opens \"New event\") needs US-10-02 (DEC-215)"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_182453",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 2,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-05"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "none (NFR-06 already had the Ollama exception from DEC-207)",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "notes": "TC-10-04 and step 4 of TC-10-07 are blocked until US-10-02 adds reading a description (DEC-215); test cases unchanged. calendar-core now depends on ureq and url, the versions calendar-google already uses, so Cargo.lock gains no crate but the manifests changed (DEC-216).\nNew scripts/cargo_report.py turns cargo test output into the report collect_run.py reads (test-case steps announced as og-step lines). App tests drive the whole app with egui_kittest; CalendarApp::preview is now pub(crate).\nManual check left for the owner: a real Ollama stopped and started while the app runs, the warning's wording, and the README section read from start to end.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")"
+      ],
+      "blocked": [
+        "#4 Default address: no request beyond Google and this computer — BLOCKED: all steps of TC-10-04 send a description and open \"New event\", which is US-10-02 (DEC-215); what this story adds is proven by description::tests::ollama_is_asked_only_at_its_address_and_google_nothing and ollama::tests::ollama_is_asked_only_for_its_version_and_its_models (only GET /api/version and /api/tags, at the address set; both pass in cargo test --workspace)",
+        "#8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops, Enter greys the box and keeps \"Kino jutro o 20\"; Ollama starts again, a click makes the box available with the text kept, no restart); step 4 (Enter opens \"New event\") needs US-10-02 (DEC-215)"
+      ]
+    },
+    "critical_decisions": [
+      "DEC-215 critical Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02",
+      "DEC-216 critical The Ollama client in calendar-core uses ureq and url, already in the workspace"
+    ]
+  },
+  "raw": "US-10-01 is implemented and committed on feature/US-10-01. Gates are green. The run on the final head 94a466b gives: TC-10-01, 02, 03 and 06 pass; TC-10-05 is manual-only; TC-10-04 and TC-10-07 are blocked.\n\nWhy those two are blocked: TC-10-04 (all three steps) and step 4 of TC-10-07 need a description to be sent and the \"New event\" window to open. That is reading a description, which this story's Out of scope leaves to US-10-02. I did not pull it forward and did not edit either test case (DEC-215). In this story, Enter in the box only asks Ollama again whether it can be used.\n\nWhat else needs to know:\n- **Ollama client:** it lives in calendar-core (`crates/core/src/ollama.rs`), with a fake Ollama behind a new `fake` feature. calendar-core now depends on `ureq` and `url`. Both are at the versions calendar-google already uses, so `Cargo.lock` gains no new crate, but the manifests changed and the dependency signal may fire (DEC-216).\n- **Tests drive the whole app:** they live in `crates/app/src/description.rs` and use egui_kittest on the app itself. To make that possible, `CalendarApp::preview` is now `pub(crate)`.\n- **Evidence script:** new `scripts/cargo_report.py`. It turns `cargo test -- --show-output` into the Playwright-shaped report that `collect_run.py` reads. Tests announce each test-case step with `og-step <TC> <n> — …`, so a step that never ran is shown as missing.\n- **Bug fixed along the way:** pressing `q` used to type \"q\" into the box it focused. The keystroke is now dropped.\n\n```\nRESULT: ready\nSTORY: US-10-01\nBRANCH: feature/US-10-01\nCOMMITS: 4c42a94 feat(descriptions): Ollama settings and the description box [US-10-01]; 96a293e test(scripts): cargo test results for the og run collector [US-10-01]; 94a466b test(descriptions): a wrong Ollama address is refused [US-10-01]\nDECISIONS: DEC-215 critical Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02; DEC-216 critical The Ollama client in calendar-core uses ureq and url, already in the workspace; DEC-217 routine When Ollama is checked, and the fake Ollama on a free local port\nEVIDENCE:\n  #1 Settings section, defaults, kept after restart — TC-10-01 pass (description::tests::tc_10_01_the_section_starts_on_with_the_defaults_and_keeps_changes_after_a_restart, steps 1-3)\n  #2 Unticked: box, q and shortcut entry gone; back when ticked — TC-10-02 pass (tc_10_02_turned_off_the_box_its_key_and_its_shortcut_are_gone_and_back_when_on, steps 1-3)\n  #3 Warning for an address off this computer only — TC-10-03 pass (tc_10_03_an_address_off_this_computer_warns_and_a_local_one_does_not, steps 1-4)\n  #4 Default address: no request beyond Google and this computer — BLOCKED: all steps of TC-10-04 send a description and open \"New event\", which is US-10-02 (DEC-215); what this story adds is proven by description::tests::ollama_is_asked_only_at_its_address_and_google_nothing and ollama::tests::ollama_is_asked_only_for_its_version_and_its_models (only GET /api/version and /api/tags, at the address set; both pass in cargo test --workspace)\n  #5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")\n  #6 Ollama not running: greyed box \"Ollama is not available at <address>\" with a link to the settings — TC-10-06 steps 1-2 pass (the link opens the settings scrolled to the section, checked in a 560-pt window)\n  #7 Model missing: greyed box \"The model gemma4:e4b is not installed\" with the link — TC-10-06 step 3 pass\n  #8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops, Enter greys the box and keeps \"Kino jutro o 20\"; Ollama starts again, a click makes the box available with the text kept, no restart); step 4 (Enter opens \"New event\") needs US-10-02 (DEC-215)\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_182453 pass=4 fail=0 blocked=2 manual=1 manual_tests=TC-10-05\nDERIVED_TESTS: none\nPREEXISTING: none (NFR-06 already had the Ollama exception from DEC-207)\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nNOTES: TC-10-04 and step 4 of TC-10-07 are blocked until US-10-02 adds reading a description (DEC-215); test cases unchanged. calendar-core now depends on ureq and url, the versions calendar-google already uses, so Cargo.lock gains no crate but the manifests changed (DEC-216).\nNew scripts/cargo_report.py turns cargo test output into the report collect_run.py reads (test-case steps announced as og-step lines). App tests drive the whole app with egui_kittest; CalendarApp::preview is now pub(crate).\nManual check left for the owner: a real Ollama stopped and started while the app runs, the warning's wording, and the README section read from start to end.\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

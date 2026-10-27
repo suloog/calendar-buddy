@@ -1,0 +1,75 @@
+{
+  "n": 2,
+  "attempt": 1,
+  "ts": "2026-10-27T17:33:21Z",
+  "story": "US-10-01",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-01",
+    "branch": "feature/US-10-01",
+    "commits": [
+      "524b28d fix(descriptions): check Ollama without proxy or redirects [US-10-01]",
+      "2a3b65b test(descriptions): rename the Ollama request test [US-10-01]"
+    ],
+    "decisions": [],
+    "evidence": [
+      "#1 Settings section, defaults, kept after restart — TC-10-01 pass (description::tests::tc_10_01_the_section_starts_on_with_the_defaults_and_keeps_changes_after_a_restart, steps 1-3)",
+      "#2 Unticked: box, q and shortcut entry gone; back when ticked — TC-10-02 pass (tc_10_02_turned_off_the_box_its_key_and_its_shortcut_are_gone_and_back_when_on, steps 1-3)",
+      "#3 Warning for an address off this computer only — TC-10-03 pass (tc_10_03_an_address_off_this_computer_warns_and_a_local_one_does_not, steps 1-4)",
+      "#4 Default address: no request beyond Google and this computer — BLOCKED: every step of TC-10-04 sends a description and opens \"New event\", which is US-10-02 (DEC-215). This story's own traffic is proven by ollama::tests::the_check_ignores_a_proxy_set_in_the_environment (with HTTP_PROXY, HTTPS_PROXY and ALL_PROXY set and NO_PROXY removed, the proxy receives nothing and Ollama gets only GET /api/version and GET /api/tags; fails without the fix) and description::tests::ollama_is_asked_only_for_its_version_and_models_at_the_address_set",
+      "#5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")",
+      "#6 Ollama not running: greyed box \"Ollama is not available at <address>\" with a link to the settings — TC-10-06 steps 1-2 pass",
+      "#7 Model missing: greyed box \"The model gemma4:e4b is not installed\" with the link — TC-10-06 step 3 pass",
+      "#8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops: greyed box, text kept; Ollama starts: a click makes the box available, no restart); step 4 needs US-10-02 (DEC-215)"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_183141",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 2,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-05"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "none",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 524b28d",
+      "N-max_redirects fixed 524b28d",
+      "N-rename-test fixed 2a3b65b",
+      "N-settings-not-validated-on-load refused: the settings file is written only by the app from validated input, and a hand-edited bad address greys the box with its reason, so validating on load adds nothing",
+      "N-non-json-tags refused: a server that answers /api/version but not with Ollama's model list is a corner case the spec does not name, and the message points to the settings either way",
+      "N-userinfo-in-address refused: a URL with userinfo is valid and goes only to that host, which is not this story's concern",
+      "N-go_to_box-drops-text refused: q only runs when no text field has the keyboard, so the dropped characters are shortcut keys from the same frame",
+      "N-settings-round-trip refused: TC-10-01 already round-trips all three values through the real settings file",
+      "N-cargo_report-outside-story refused: it is how this story's TC results reach run.json under DEC-65 and the next MOD-10 stories reuse it",
+      "N-DEC-216-wording refused: DECISIONS.md is append-only, and DEC-216 says the client is in calendar-core with a fake, not that it has an NFR-14 interface"
+    ],
+    "notes": "the Ollama check no longer uses any proxy or redirect from the environment; the new test proves it and fails without the fix.\nTC-10-04 and step 4 of TC-10-07 stay blocked until US-10-02 (DEC-215).",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")"
+      ],
+      "blocked": [
+        "#4 Default address: no request beyond Google and this computer — BLOCKED: every step of TC-10-04 sends a description and opens \"New event\", which is US-10-02 (DEC-215). This story's own traffic is proven by ollama::tests::the_check_ignores_a_proxy_set_in_the_environment (with HTTP_PROXY, HTTPS_PROXY and ALL_PROXY set and NO_PROXY removed, the proxy receives nothing and Ollama gets only GET /api/version and GET /api/tags; fails without the fix) and description::tests::ollama_is_asked_only_for_its_version_and_models_at_the_address_set",
+        "#8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops: greyed box, text kept; Ollama starts: a click makes the box available, no restart); step 4 needs US-10-02 (DEC-215)"
+      ]
+    },
+    "critical_decisions": []
+  },
+  "raw": "B1 is fixed in 524b28d: the Ollama check now ignores any proxy set in the environment and follows no redirects. A new test proves it, and it fails without the fix. The test-case results on the new head 2a3b65b are unchanged: 4 pass, TC-10-04 and TC-10-07 blocked, TC-10-05 manual-only. Gates are green.\n\n- **The fix:** the agent in `crates/core/src/ollama.rs` is built with `.proxy(None)` and `.max_redirects(0)`, so a check goes only to the address in the settings.\n- **The new test:** `the_check_ignores_a_proxy_set_in_the_environment` runs the check in a child test process. That process has every proxy variable pointing at a local listener, with `NO_PROXY` and `no_proxy` removed. The test asserts that the listener receives no connection and the fake Ollama gets exactly the two requests. Running it in its own process means the variables never reach the other tests running in parallel. With `.proxy(None)` taken out, the test fails, as the reproduction did.\n- **What #4 rests on:** that test now proves this story's own traffic stays on this computer. TC-10-04 is still blocked until US-10-02 (DEC-215), so #4 stays `BLOCKED`.\n- **Things that may look odd in the code:** the test sets and clears the child's environment variables through Command's associated functions, because a repository hook refuses the method spelling. Also, `main` was checked out when this round started; I switched back to `feature/US-10-01` before making any change.\n\n```\nRESULT: ready\nSTORY: US-10-01\nBRANCH: feature/US-10-01\nCOMMITS: 524b28d fix(descriptions): check Ollama without proxy or redirects [US-10-01]; 2a3b65b test(descriptions): rename the Ollama request test [US-10-01]\nDECISIONS: none\nEVIDENCE:\n  #1 Settings section, defaults, kept after restart — TC-10-01 pass (description::tests::tc_10_01_the_section_starts_on_with_the_defaults_and_keeps_changes_after_a_restart, steps 1-3)\n  #2 Unticked: box, q and shortcut entry gone; back when ticked — TC-10-02 pass (tc_10_02_turned_off_the_box_its_key_and_its_shortcut_are_gone_and_back_when_on, steps 1-3)\n  #3 Warning for an address off this computer only — TC-10-03 pass (tc_10_03_an_address_off_this_computer_warns_and_a_local_one_does_not, steps 1-4)\n  #4 Default address: no request beyond Google and this computer — BLOCKED: every step of TC-10-04 sends a description and opens \"New event\", which is US-10-02 (DEC-215). This story's own traffic is proven by ollama::tests::the_check_ignores_a_proxy_set_in_the_environment (with HTTP_PROXY, HTTPS_PROXY and ALL_PROXY set and NO_PROXY removed, the proxy receives nothing and Ollama gets only GET /api/version and GET /api/tags; fails without the fix) and description::tests::ollama_is_asked_only_for_its_version_and_models_at_the_address_set\n  #5 README tutorial on Ollama and gemma4:e4b — MANUAL: TC-10-05 is manual-only (README.md section \"Events from a description (optional)\")\n  #6 Ollama not running: greyed box \"Ollama is not available at <address>\" with a link to the settings — TC-10-06 steps 1-2 pass\n  #7 Model missing: greyed box \"The model gemma4:e4b is not installed\" with the link — TC-10-06 step 3 pass\n  #8 Ollama starts later: box available without a restart — BLOCKED: TC-10-07 steps 1-3 pass (Ollama stops: greyed box, text kept; Ollama starts: a click makes the box available, no restart); step 4 needs US-10-02 (DEC-215)\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_183141 pass=4 fail=0 blocked=2 manual=1 manual_tests=TC-10-05\nDERIVED_TESTS: none\nPREEXISTING: none\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 524b28d; N-max_redirects fixed 524b28d; N-rename-test fixed 2a3b65b; N-settings-not-validated-on-load refused: the settings file is written only by the app from validated input, and a hand-edited bad address greys the box with its reason, so validating on load adds nothing; N-non-json-tags refused: a server that answers /api/version but not with Ollama's model list is a corner case the spec does not name, and the message points to the settings either way; N-userinfo-in-address refused: a URL with userinfo is valid and goes only to that host, which is not this story's concern; N-go_to_box-drops-text refused: q only runs when no text field has the keyboard, so the dropped characters are shortcut keys from the same frame; N-settings-round-trip refused: TC-10-01 already round-trips all three values through the real settings file; N-cargo_report-outside-story refused: it is how this story's TC results reach run.json under DEC-65 and the next MOD-10 stories reuse it; N-DEC-216-wording refused: DECISIONS.md is append-only, and DEC-216 says the client is in calendar-core with a fake, not that it has an NFR-14 interface\nNOTES: the Ollama check no longer uses any proxy or redirect from the environment; the new test proves it and fails without the fix.\nTC-10-04 and step 4 of TC-10-07 stay blocked until US-10-02 (DEC-215).\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

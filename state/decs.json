@@ -1,0 +1,26 @@
+[
+  {
+    "dec": "DEC-215",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:54Z"
+  },
+  {
+    "dec": "DEC-216",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "The Ollama client in calendar-core uses ureq and url, already in the workspace",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:58Z"
+  },
+  {
+    "dec": "DEC-217",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "When Ollama is checked, and the fake Ollama on a free local port",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:58Z"
+  }
+]

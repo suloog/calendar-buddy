@@ -1,0 +1,87 @@
+{
+  "story": "US-10-01",
+  "attempt": 1,
+  "round": 2,
+  "sha": "2a3b65b897d39018124134e3478ef46217cf8d49",
+  "reviewer": "spec",
+  "ts": "2026-10-27T17:36:46Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-01",
+    "impact": "Only ollama::check changed (its HTTP client config); its callers are the app's checks at start, on settings change and on box focus/Enter in crates/app/src/description.rs and main.rs. The Google adapter has its own ureq agent in crates/google/src/lib.rs:476 and is untouched; the only behaviour change is that a 3xx at the Ollama address is no longer followed (see N1).",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:101 — with max_redirects(0) ureq returns a 3xx as Ok and get() ignores the status, so a redirecting server at the address reads as \"Ollama answers\" and the box says \"The model … is not installed\" instead of \"Ollama is not available at …\" (MOD-10-F21) → treat non-2xx as None in get() and test with a fake answering 301"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:89 — \"never to where a redirect points\" has no test; removing .max_redirects(0) keeps every test green → fake answers 301 to a second listener that must receive nothing"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:358 — checked_with_a_proxy_in_the_environment passes without checking anything in every normal run (child-only half) → mark #[ignore] and have the parent run it with --ignored --exact"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs — round-1 non-blocking items still open (UI test of the invalid-address label, CalendarApp::new start-up check, NFR-14/DEC-216 wording, scripts/cargo_report.py outside the story, interim Enter behaviour, constitution drift); several refused with reasons, carried over for the record"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "external",
+        "note": "BLOCKED TC-10-04 (description traffic is US-10-02, DEC-215); this story's own traffic proven by ollama_is_asked_only_for_its_version_and_models_at_the_address_set and the_check_ignores_a_proxy_set_in_the_environment (mutation-checked)"
+      },
+      {
+        "n": 5,
+        "verdict": "external",
+        "note": "MANUAL TC-10-05"
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "external",
+        "note": "BLOCKED TC-10-07 step 4 (Enter opens the event, US-10-02); steps 1-3 met"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "## US-10-01 spec-compliance review, round 2 (fixes 94a466b..2a3b65b)\n\nRound 1's blocker B1 is fixed and proven by a test. I found no new blocking finding.\n\n### What I checked\n- **The fix.** `crates/core/src/ollama.rs:94-100` now builds the client with `.proxy(None)` and `.max_redirects(0)`. In ureq 3.5.0, `Proxy::try_from_env` reads `ALL_PROXY`, `HTTPS_PROXY` and `HTTP_PROXY` (upper and lower case) and has no built-in bypass for localhost. So before this fix, the localhost check really did go through any proxy the environment named.\n- **The new test is real.** In a temporary worktree at 2a3b65b I removed `.proxy(None)` and re-ran `the_check_ignores_a_proxy_set_in_the_environment`. It fails: the child process waits for its 3 s timeout, gets `NotRunning`, and the parent's assertion fails. With the fix in place it passes. I restored the worktree and removed it afterwards.\n- **Gates at 2a3b65b.** `cargo fmt --all --check` passes; `cargo clippy --workspace --all-targets -- -D warnings` is clean; `cargo test --workspace` passes 193, 447 and 91 tests, 0 failed, 1 ignored.\n- **Test run 2026-10-27_183141.** TC-10-01, 02, 03, 06 and 07 all passed.\n- **Scope.** The fix diff touches only `crates/core/src/ollama.rs` and a test rename in `crates/app/src/description.rs`. Nothing is outside the story's scope, there are no new dependencies, and the constitution is not affected.\n\n### Findings (all non-blocking)\n- **N1 — a redirect is reported as the wrong reason** (`crates/core/src/ollama.rs:101-104`). With `max_redirects(0)`, ureq hands back a 3xx answer as a success, and `get()` returns its body without looking at the status. Say something at the address redirects (for example a reverse proxy sending http to https): `/api/version` counts as \"Ollama answers\", the redirect body has no model list, and the box says \"The model gemma4:e4b is not installed\" instead of \"Ollama is not available at <address>\". MOD-10-F21 requires the box to say which of the two it is. Fix: in `get`, return `None` unless `response.status().is_success()`, and add a test where the fake answers 301.\n- **N2 — the \"no redirects\" promise has no test** (`crates/core/src/ollama.rs:89-92`). The doc comment says nothing goes \"to where a redirect points\", but no test shows a redirect is not followed. If someone removes `.max_redirects(0)`, every test still passes. Fix: a fake that answers `/api/version` with a 301 to a second listener, and an assertion that the second listener gets nothing. This can share a test with N1.\n- **N3 — a test that passes without checking anything** (`crates/core/src/ollama.rs:358-366`). `checked_with_a_proxy_in_the_environment` does nothing unless `CALENDAR_BUDDY_OLLAMA_UNDER_TEST` is set, so it shows up as a passing test in every normal run. That is how the child-process approach works, and the doc comment says so. It would be cleaner to mark it `#[ignore]` and have the parent run it with `--ignored --exact`, so it no longer inflates the pass count.\n- **N4 — round-1 non-blocking items still open, carried over for the record.**\n  - No UI test of the invalid-address label.\n  - The `CalendarApp::new` start-up check.\n  - The NFR-14 interface and DEC-216 wording.\n  - `scripts/cargo_report.py` is outside the story.\n  - The interim behaviour of Enter.\n  - Drift from the constitution.\n\n  The implementer gave reasons for refusing several of these; I have not reopened them.\n\n### Criteria\n1. **Met.** TC-10-01 (`tc_10_01_…`) passes.\n2. **Met.** TC-10-02 passes.\n3. **Met.** TC-10-03 passes.\n4. **External, BLOCKED TC-10-04.** Its steps send a description, which is US-10-02's work (DEC-215). This story's own traffic is now proven: `ollama_is_asked_only_for_its_version_and_models_at_the_address_set` plus the proxy test, which I mutation-checked.\n5. **External, MANUAL TC-10-05** (reading the README tutorial).\n6. **Met** (\"Ollama is not running\"). TC-10-06 case A passes.\n7. **Met** (\"the model is missing\"). TC-10-06 case B passes.\n8. **External, BLOCKED TC-10-07 step 4** (Enter opens the event, which is US-10-02). Steps 1–3 pass.\n9. **Edge cases.** \"Ollama stops while the box is open\" is covered by TC-10-07 steps 2–3. \"An address that is not a valid URL\" is covered by the core test `an_address_that_is_not_one_is_refused_and_the_previous_one_kept`.\n\nOne thing about the repo itself: the main checkout at /home/sulo/workspace/private/calendar-buddy is now on `main`, not `feature/US-10-01`, and there is another worktree at /tmp/rv2 (2a3b65b, detached). I didn't create or touch either.\n\n```\nREVIEW: findings\nSTORY: US-10-01\nIMPACT: Only ollama::check changed (its HTTP client config); its callers are the app's checks at start, on settings change and on box focus/Enter in crates/app/src/description.rs and main.rs. The Google adapter has its own ureq agent in crates/google/src/lib.rs:476 and is untouched; the only behaviour change is that a 3xx at the Ollama address is no longer followed (see N1).\nFINDINGS:\n  N1 crates/core/src/ollama.rs:101 — with max_redirects(0) ureq returns a 3xx as Ok and get() ignores the status, so a redirecting server at the address reads as \"Ollama answers\" and the box says \"The model … is not installed\" instead of \"Ollama is not available at …\" (MOD-10-F21) → treat non-2xx as None in get() and test with a fake answering 301\n  N2 crates/core/src/ollama.rs:89 — \"never to where a redirect points\" has no test; removing .max_redirects(0) keeps every test green → fake answers 301 to a second listener that must receive nothing\n  N3 crates/core/src/ollama.rs:358 — checked_with_a_proxy_in_the_environment passes without checking anything in every normal run (child-only half) → mark #[ignore] and have the parent run it with --ignored --exact\n  N4 crates/app/src/description.rs — round-1 non-blocking items still open (UI test of the invalid-address label, CalendarApp::new start-up check, NFR-14/DEC-216 wording, scripts/cargo_report.py outside the story, interim Enter behaviour, constitution drift); several refused with reasons, carried over for the record\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 external — BLOCKED TC-10-04 (description traffic is US-10-02, DEC-215); this story's own traffic proven by ollama_is_asked_only_for_its_version_and_models_at_the_address_set and the_check_ignores_a_proxy_set_in_the_environment (mutation-checked)\n  #5 external — MANUAL TC-10-05\n  #6 met\n  #7 met\n  #8 external — BLOCKED TC-10-07 step 4 (Enter opens the event, US-10-02); steps 1-3 met\n```\n"
+}

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "status": "active",
+  "language": "en",
+  "input": "optimal",
+  "base": "main",
+  "target": "local",
+  "report_on_base": true,
+  "merge_queue": false,
+  "merge_method": "squash",
+  "order": [
+    "US-10-01",
+    "US-10-02",
+    "US-10-03",
+    "US-10-04",
+    "US-10-05"
+  ],
+  "readiness": "strict",
+  "foundation": null,
+  "exclude_note": "",
+  "pilot": false,
+  "stop": {
+    "after_stories": null,
+    "deadline": null,
+    "max_failed": 3
+  },
+  "on_failure": "skip",
+  "dependents_on_unmerged": "wait",
+  "owner": {
+    "name": "Maciej Sułek",
+    "slack": "Maciej Sułek",
+    "github": ""
+  },
+  "loop_identity": {
+    "github": ""
+  },
+  "autonomy": {
+    "decisions": "semi",
+    "merge": "semi",
+    "approvals": "chat",
+    "questions": "session",
+    "critical_extra": [],
+    "protected_paths": [],
+    "ignore_paths": [],
+    "max_changed_lines": null
+  },
+  "review": {
+    "level": "standard",
+    "max_rounds": 3
+  },
+  "tests": {
+    "unit": "constitution",
+    "e2e": "story",
+    "regression": "end",
+    "evidence": "local",
+    "ci": {
+      "workflow": null,
+      "artifact": "og-test-results"
+    }
+  },
+  "models": {
+    "orchestrator": "claude-opus-5-5",
+    "implementer": "claude-opus-5-5",
+    "implementer_retry": "claude-opus-5-5",
+    "code_review": "claude-sonnet-5-5",
+    "spec_review": "claude-opus-5-5",
+    "commit": "claude-haiku-5-5"
+  },
+  "effort": {
+    "orchestrator": "medium",
+    "implementer": "medium",
+    "implementer_retry": "high",
+    "spec_review": "high",
+    "code_review": "high"
+  },
+  "retry": {
+    "auto": 1
+  },
+  "limits": {
+    "five_hour_pause_at": null,
+    "seven_day_pause_at": 90,
+    "extra_credits": "none",
+    "extra_budget": null,
+    "extra_baseline": null,
+    "on_pause": "wait-reset",
+    "on_unknown": "go",
+    "max_data_age": 900
+  },
+  "env_files": {
+    "allow_default_env": false
+  },
+  "required_env": [],
+  "slack": {
+    "url": "https://ordergroup.slack.com/archives/DNYFHBZDK/p1793119659108229",
+    "channel": "DNYFHBZDK",
+    "thread_ts": "1793119659.108229",
+    "verbosity": "milestones",
+    "commands": "all",
+    "last_read_ts": null
+  },
+  "youtrack": {
+    "sync_state": false
+  },
+  "backup": {
+    "branch": "og-delivery/state",
+    "run": "20261027T164845Z"
+  },
+  "runner": {
+    "where": "host"
+  }
+}

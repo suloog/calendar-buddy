@@ -1,0 +1,65 @@
+{
+  "story": "US-10-01",
+  "attempt": 1,
+  "round": 2,
+  "sha": "2a3b65b897d39018124134e3478ef46217cf8d49",
+  "reviewer": "code",
+  "ts": "2026-10-27T17:37:24Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-01",
+    "impact": "`ollama::check` is used only by the description box and settings (availability at start, on settings change, and when the box is focused or Enter is pressed). Its proxy and redirect behaviour is now stricter. A user with a remote Ollama (allowed by DEC-207) behind a required proxy, or behind an http-to-https redirect, will see \"not available\". The Google adapter keeps its own ureq agents and is unchanged.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:93-96 — `.proxy(None)` and `.max_redirects(0)` apply to every address, including a deliberately remote one (DEC-207). A remote Ollama reachable only through the corporate proxy, or one that answers with a 301 from http to https, shows \"Ollama is not available\". It is a deliberate trade-off for NFR-02. → Accepted as is, but say it in the DEC or a code comment; optionally honour the proxy only when `!is_local(address)`."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:~396 — the redirect half of the fix (`max_redirects(0)`) has no test. Removing it would keep every test green; a localhost Ollama answering 302 to an outside host would then be followed. → Add a fake that answers `/api/version` with `302 Location: http://<second listener>` and assert the second listener receives nothing and `check` returns `NotRunning`."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:~380 — the proxy test's variable list sets `ALL_PROXY` but not lowercase `all_proxy`, which ureq also reads. A regression affecting only that spelling would pass. → Add `\"all_proxy\"` to the list."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "tc_10_01 test covers the defaults and keeping changes after a restart; Settings parse and serialize the three keys."
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "tc_10_02 test: unticked removes the box, its `q` key and its shortcuts entry; ticked again restores them."
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "tc_10_03 test."
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "for this story's scope per DEC-215: B1 is fixed and proven by the proxy-env test (it fails without the fix); default-address requests go only to localhost and only for version and models (asserted in the fake's request log); the description-sending part (TC-10-04, TC-10-07 step 4) is BLOCKED until US-10-02, external evidence and not a finding; the redirect leg is untested (N2)."
+      },
+      {
+        "n": 5,
+        "verdict": "external",
+        "note": "MANUAL TC-10-05 (README tutorial read start to end); the README section is present in the diff. The scenarios (not running, model missing, starts later) and edge cases are covered by tc_10_06, tc_10_07 steps 1-3 and the refused-address core test; the real-Ollama stop/start and the warning's wording are MANUAL."
+      }
+    ],
+    "stray": []
+  },
+  "raw": "```\nREVIEW: findings\nSTORY: US-10-01\nIMPACT: `ollama::check` is used only by the description box and settings (availability at start, on settings change, and when the box is focused or Enter is pressed). Its proxy and redirect behaviour is now stricter. A user with a remote Ollama (allowed by DEC-207) behind a required proxy, or behind an http-to-https redirect, will see \"not available\". The Google adapter keeps its own ureq agents and is unchanged.\nFINDINGS:\n  N1 crates/core/src/ollama.rs:93-96 — `.proxy(None)` and `.max_redirects(0)` apply to every address, including a deliberately remote one (DEC-207). A remote Ollama reachable only through the corporate proxy, or one that answers with a 301 from http to https, shows \"Ollama is not available\". It is a deliberate trade-off for NFR-02. → Accepted as is, but say it in the DEC or a code comment; optionally honour the proxy only when `!is_local(address)`.\n  N2 crates/core/src/ollama.rs:~396 — the redirect half of the fix (`max_redirects(0)`) has no test. Removing it would keep every test green; a localhost Ollama answering 302 to an outside host would then be followed. → Add a fake that answers `/api/version` with `302 Location: http://<second listener>` and assert the second listener receives nothing and `check` returns `NotRunning`.\n  N3 crates/core/src/ollama.rs:~380 — the proxy test's variable list sets `ALL_PROXY` but not lowercase `all_proxy`, which ureq also reads. A regression affecting only that spelling would pass. → Add `\"all_proxy\"` to the list.\nCRITERIA:\n  #1 met — tc_10_01 test covers the defaults and keeping changes after a restart; Settings parse and serialize the three keys.\n  #2 met — tc_10_02 test: unticked removes the box, its `q` key and its shortcuts entry; ticked again restores them.\n  #3 met — tc_10_03 test.\n  #4 met — for this story's scope per DEC-215: B1 is fixed and proven by the proxy-env test (it fails without the fix); default-address requests go only to localhost and only for version and models (asserted in the fake's request log); the description-sending part (TC-10-04, TC-10-07 step 4) is BLOCKED until US-10-02, external evidence and not a finding; the redirect leg is untested (N2).\n  #5 external — MANUAL TC-10-05 (README tutorial read start to end); the README section is present in the diff. The scenarios (not running, model missing, starts later) and edge cases are covered by tc_10_06, tc_10_07 steps 1-3 and the refused-address core test; the real-Ollama stop/start and the warning's wording are MANUAL.\n```\n"
+}
