@@ -157,3 +157,26 @@ desktop, so they can be drawn anywhere, also to check a change to the look.
 
 The specification lives in [`docs/specs/`](docs/specs/README.md): the requirements by module, the
 user stories, the test cases and every decision taken along the way.
+
+## How it is built
+
+Calendar Buddy is built at [Order Group](https://ordergroup.pl) by one person working with AI
+coding agents (Claude Code). The specification comes first, and the
+code is written against it one user story at a time. All of it is in this repository:
+
+| Step | Where |
+| --- | --- |
+| What was asked for: the product brief and the analyst's notes from each working session | [`docs/specs/sources/`](docs/specs/sources/) |
+| What was understood: discovery findings, topic by topic | [`docs/specs/discovery/`](docs/specs/discovery/) |
+| The scope: the project, non-functional requirements, the engineering rules | [`PROJECT.md`](docs/specs/PROJECT.md), [`NFR.md`](docs/specs/NFR.md), [`constitution.md`](docs/specs/constitution.md) |
+| Requirements by module, each traced back to what was asked for | `docs/specs/modules/NN-*/REQUIREMENTS.md` |
+| User stories with acceptance criteria, and their test cases | `docs/specs/modules/NN-*/stories/`, `…/tests/` |
+| Every decision: who took it, when, why and what it affects | [`DECISIONS.md`](docs/specs/DECISIONS.md) |
+| The order of work and where each story stands | [`BACKLOG.md`](docs/specs/BACKLOG.md) |
+
+The git history is a record of the same process: most commits name the story or decision they belong
+to (`US-05-03`, `DEC-191`). Formatting, lints and every test pass before each commit is made.
+
+The commands named in these files (`/og:start-story`, `/og:deliver`, …) belong to Order Group's
+internal tooling for Claude Code, which is not public. The files themselves are plain Markdown and
+can be read without it.
