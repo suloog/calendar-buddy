@@ -17,6 +17,8 @@ pub const DEFAULT_MODEL: &str = "gemma4:e4b";
 
 /// How long a check waits for Ollama; it runs on this computer by default.
 const TIMEOUT: Duration = Duration::from_secs(3);
+/// How long Ollama keeps the model after it was last used (`MOD-10-F22`, `DEC-198`).
+pub const KEEP_ALIVE: &str = "5m";
 
 /// The settings of events from a description.
 #[derive(Clone, Debug, PartialEq)]
@@ -91,12 +93,7 @@ impl Availability {
 /// to where a redirect points (`MOD-10-NFR-02`). Blocks for as long as Ollama takes: never on the
 /// UI thread.
 pub fn check(ollama: &Ollama) -> Availability {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .proxy(None)
-        .max_redirects(0)
-        .timeout_global(Some(TIMEOUT))
-        .build()
-        .into();
+    let agent = agent(Some(TIMEOUT));
     let get = |path: &str| -> Option<String> {
         let mut response = agent.get(format!("{}{path}", ollama.address)).call().ok()?;
         response.body_mut().read_to_string().ok()
@@ -112,6 +109,47 @@ pub fn check(ollama: &Ollama) -> Availability {
     } else {
         Availability::ModelMissing
     }
+}
+
+/// Asks only the address set: never through a proxy the environment names, nor where a redirect
+/// points (`MOD-10-NFR-02`); waits for an answer at most `timeout`, connecting at most `TIMEOUT`.
+fn agent(timeout: Option<Duration>) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .proxy(None)
+        .max_redirects(0)
+        .timeout_connect(Some(TIMEOUT))
+        .timeout_global(timeout)
+        .build()
+        .into()
+}
+
+/// Asks Ollama to load the model and keep it for `KEEP_ALIVE`: a chat with no message
+/// (`MOD-10-F22`). Blocks until it is loaded: never on the UI thread.
+pub fn load(ollama: &Ollama) {
+    let body = serde_json::json!({
+        "model": ollama.model,
+        "messages": [],
+        "keep_alive": KEEP_ALIVE,
+    });
+    let _ = post(ollama, &body);
+}
+
+/// Posts `body` to Ollama's `/api/chat`; gives the answer's text.
+fn post(ollama: &Ollama, body: &serde_json::Value) -> Option<String> {
+    let mut response = agent(None)
+        .post(format!("{}/api/chat", ollama.address))
+        .header("Content-Type", "application/json")
+        .send(body.to_string())
+        .ok()?;
+    response.body_mut().read_to_string().ok()
+}
+
+/// Sends `request` to Ollama's `/api/chat` and gives the content of the model's message; `None`
+/// when Ollama did not answer with one. No time limit: how long the model reads depends on the
+/// computer (`MOD-10-NFR-03`). Blocks: never on the UI thread.
+pub fn chat(ollama: &Ollama, request: &serde_json::Value) -> Option<String> {
+    let answer: serde_json::Value = serde_json::from_str(&post(ollama, request)?).ok()?;
+    answer["message"]["content"].as_str().map(str::to_string)
 }
 
 /// Whether Ollama's list of models holds the model; a name without a tag is Ollama's `latest`.
@@ -188,11 +226,14 @@ impl Form {
 }
 
 /// The side panel's description box: what is typed, kept while Ollama goes away and comes back
-/// (`MOD-10` *Constraints and edge cases*), and whether it can be used.
+/// (`MOD-10` *Constraints and edge cases*), whether it can be used, whether the model is reading
+/// what was sent (`MOD-10-U02`) and whether the last description gave no event (`MOD-10-F23`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DescriptionBox {
     pub field: String,
     pub availability: Availability,
+    pub reading: bool,
+    pub no_event: bool,
 }
 
 impl DescriptionBox {
@@ -203,18 +244,29 @@ impl DescriptionBox {
 }
 
 /// A fake Ollama for the tests: on `127.0.0.1`, with the models it is given, recording every
-/// request it receives; stopped, it closes every connection unanswered.
+/// request it receives and answering each description with the answer given for it; stopped, it
+/// closes every connection unanswered; held, it keeps the answers to descriptions until released.
 #[cfg(any(test, feature = "fake"))]
 pub mod fake {
+    use std::collections::HashMap;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use serde_json::Value;
 
     #[derive(Default)]
     struct State {
         models: Vec<String>,
         stopped: bool,
+        held: bool,
+        failing: bool,
         requests: Vec<String>,
+        chats: Vec<Value>,
+        /// The model's message for a description; `answer` for any other.
+        answers: HashMap<String, String>,
+        answer: String,
     }
 
     pub struct FakeOllama {
@@ -235,7 +287,8 @@ pub mod fake {
             let server = state.clone();
             std::thread::spawn(move || {
                 for stream in listener.incoming().flatten() {
-                    serve(stream, &server);
+                    let server = server.clone();
+                    std::thread::spawn(move || serve(stream, &server));
                 }
             });
             FakeOllama {
@@ -254,9 +307,54 @@ pub mod fake {
             self.state.lock().unwrap().stopped = false;
         }
 
+        /// The model's message for any description not given its own.
+        pub fn answer_all(&self, message: &str) {
+            self.state.lock().unwrap().answer = message.to_string();
+        }
+
+        /// The model's message for `description`.
+        pub fn answer(&self, description: &str, message: &str) {
+            let mut state = self.state.lock().unwrap();
+            (state.answers).insert(description.to_string(), message.to_string());
+        }
+
+        /// The answers to descriptions wait until `release`.
+        pub fn hold(&self) {
+            self.state.lock().unwrap().held = true;
+        }
+
+        pub fn release(&self) {
+            self.state.lock().unwrap().held = false;
+        }
+
+        /// Reading a description fails, as when the model runs out of memory: a 500.
+        pub fn fail(&self) {
+            self.state.lock().unwrap().failing = true;
+        }
+
         /// Every request answered, as method and path.
         pub fn requests(&self) -> Vec<String> {
             self.state.lock().unwrap().requests.clone()
+        }
+
+        /// The bodies of the requests to `/api/chat`, in the order received.
+        pub fn chats(&self) -> Vec<Value> {
+            self.state.lock().unwrap().chats.clone()
+        }
+
+        /// The descriptions received: the user's messages with their first paragraph, the day
+        /// and time, left out.
+        pub fn descriptions(&self) -> Vec<String> {
+            (self.chats().iter())
+                .filter_map(|chat| {
+                    chat["messages"].as_array()?.last()?["content"]
+                        .as_str()
+                        .map(str::to_string)
+                })
+                .filter_map(|message| {
+                    crate::described::description_in(&message).map(str::to_string)
+                })
+                .collect()
         }
     }
 
@@ -269,29 +367,96 @@ pub mod fake {
     fn serve(mut stream: TcpStream, state: &Mutex<State>) {
         let mut request = Vec::new();
         let mut buffer = [0; 4096];
-        while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+        let end = loop {
+            if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                break end + 4;
+            }
+            match stream.read(&mut buffer) {
+                Ok(0) | Err(_) => return,
+                Ok(read) => request.extend_from_slice(&buffer[..read]),
+            }
+        };
+        let head = String::from_utf8_lossy(&request[..end]).to_string();
+        let length = (head.lines())
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        while request.len() < end + length {
             match stream.read(&mut buffer) {
                 Ok(0) | Err(_) => return,
                 Ok(read) => request.extend_from_slice(&buffer[..read]),
             }
         }
-        let head = String::from_utf8_lossy(&request).to_string();
-        let mut state = state.lock().unwrap();
+        let body: Value = serde_json::from_slice(&request[end..end + length]).unwrap_or_default();
+        let line: Vec<String> = head
+            .split_whitespace()
+            .take(2)
+            .map(str::to_string)
+            .collect();
+        let reads = line.get(1).is_some_and(|path| path == "/api/chat")
+            && body["messages"].as_array().is_some_and(|m| !m.is_empty());
+        {
+            let mut state = state.lock().unwrap();
+            if state.stopped {
+                return;
+            }
+            state.requests.push(line.join(" "));
+            if line.get(1).is_some_and(|path| path == "/api/chat") {
+                state.chats.push(body.clone());
+            }
+        }
+        // A held answer waits, without keeping the other requests waiting.
+        while reads && state.lock().unwrap().held {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let state = state.lock().unwrap();
         if state.stopped {
             return;
         }
-        let line: Vec<&str> = head.split_whitespace().take(2).collect();
-        state.requests.push(line.join(" "));
-        let (status, body) = match line.get(1).copied() {
+        let has_model = |body: &Value| {
+            (state.models.iter()).any(|m| Some(m.as_str()) == body["model"].as_str())
+        };
+        let (status, body) = match line.get(1).map(String::as_str) {
             Some("/api/version") => ("200 OK", r#"{"version":"0.12.6"}"#.to_string()),
             Some("/api/tags") => {
-                let models: Vec<serde_json::Value> = (state.models.iter())
+                let models: Vec<Value> = (state.models.iter())
                     .map(|name| serde_json::json!({"name": name, "model": name}))
                     .collect();
                 (
                     "200 OK",
                     serde_json::json!({ "models": models }).to_string(),
                 )
+            }
+            Some("/api/chat") if !has_model(&body) => (
+                "404 Not Found",
+                serde_json::json!({"error": "model not found"}).to_string(),
+            ),
+            Some("/api/chat") if reads && state.failing => (
+                "500 Internal Server Error",
+                serde_json::json!({"error": "model requires more system memory"}).to_string(),
+            ),
+            Some("/api/chat") if reads => {
+                let message = (body["messages"].as_array())
+                    .and_then(|m| m.last()?["content"].as_str())
+                    .and_then(crate::described::description_in)
+                    .unwrap_or_default();
+                let content = (state.answers.get(message)).unwrap_or(&state.answer);
+                let answer = serde_json::json!({
+                    "model": body["model"],
+                    "message": {"role": "assistant", "content": content},
+                    "done": true,
+                });
+                ("200 OK", answer.to_string())
+            }
+            Some("/api/chat") => {
+                let loaded = serde_json::json!({
+                    "model": body["model"],
+                    "message": {"role": "assistant", "content": ""},
+                    "done_reason": "load",
+                    "done": true,
+                });
+                ("200 OK", loaded.to_string())
             }
             _ => ("404 Not Found", "404 page not found".to_string()),
         };

@@ -1,13 +1,17 @@
-//! Events from a description in the app (`US-10-01`): the side panel's box, greyed out with why
-//! when Ollama cannot be used and a link to the settings (`MOD-10-U04`); the settings' section
-//! (`MOD-10-U05`); and asking Ollama off the UI thread whether it can be used — at start, when
-//! the settings change and when the user goes to the box, never on a timer (`MOD-10` technical
-//! notes). Reading a description is `US-10-02`.
+//! Events from a description in the app (`US-10-01`, `US-10-02`): the side panel's box, greyed
+//! out with why when Ollama cannot be used and a link to the settings (`MOD-10-U04`); the
+//! settings' section (`MOD-10-U05`); asking Ollama off the UI thread whether it can be used — at
+//! start, when the settings change and when the user goes to the box, never on a timer (`MOD-10`
+//! technical notes); and, off the UI thread too, having it load the model and read a description
+//! (`MOD-10-F22`, `MOD-10-U02`).
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
+use calendar_core::described;
 use calendar_core::ollama::{self, Availability, DescriptionBox, Form, Ollama};
 use calendar_core::texts;
+use chrono::DateTime;
+use chrono_tz::Tz;
 use eframe::egui;
 
 use crate::widgets::{self, text_field};
@@ -71,19 +75,103 @@ impl Checker {
     }
 }
 
+/// Has Ollama load the model and read descriptions, off the UI thread (`NFR-01`); only the
+/// answer to the description sent last counts, and none after it was cancelled (`MOD-10` edge
+/// cases). Neither the description nor the answer is kept once read (`MOD-10-NFR-01`).
+pub struct Reader {
+    ctx: Option<egui::Context>,
+    sent: u64,
+    reading: Option<u64>,
+    answer: Sender<(u64, Option<String>)>,
+    answers: Receiver<(u64, Option<String>)>,
+}
+
+impl Reader {
+    pub fn start(ctx: &egui::Context) -> Self {
+        let (answer, answers) = mpsc::channel();
+        Reader {
+            ctx: Some(ctx.clone()),
+            sent: 0,
+            reading: None,
+            answer,
+            answers,
+        }
+    }
+
+    /// Never asks anything, for the pictures of the interface.
+    #[cfg(test)]
+    pub fn none() -> Self {
+        let (answer, answers) = mpsc::channel();
+        Reader {
+            ctx: None,
+            sent: 0,
+            reading: None,
+            answer,
+            answers,
+        }
+    }
+
+    /// Asks Ollama to load the model and keep it for 5 minutes (`MOD-10-F22`).
+    pub fn load(&self, settings: &Ollama) {
+        if self.ctx.is_some() {
+            let settings = settings.clone();
+            std::thread::spawn(move || ollama::load(&settings));
+        }
+    }
+
+    /// Sends the description, as at `now`, to be read in place of any being read.
+    pub fn read(&mut self, settings: &Ollama, description: &str, now: DateTime<Tz>) {
+        self.sent += 1;
+        self.reading = Some(self.sent);
+        let Some(ctx) = self.ctx.clone() else {
+            return;
+        };
+        let request = described::request(settings, description, now);
+        let (settings, answer, sent) = (settings.clone(), self.answer.clone(), self.sent);
+        std::thread::spawn(move || {
+            let content = ollama::chat(&settings, &request);
+            if answer.send((sent, content)).is_ok() {
+                ctx.request_repaint();
+            }
+        });
+    }
+
+    /// Esc while reading: the answer, when it comes, is dropped.
+    pub fn cancel(&mut self) {
+        self.reading = None;
+    }
+
+    /// The answer to the description being read, once it came: the model's message, or `None`
+    /// when Ollama gave none.
+    pub fn answer(&mut self) -> Option<Option<String>> {
+        let reading = self.reading?;
+        let content = (self.answers.try_iter())
+            .filter(|(sent, _)| *sent == reading)
+            .last()
+            .map(|(_, content)| content)?;
+        self.reading = None;
+        Some(content)
+    }
+}
+
 /// What the user did with the box.
 #[derive(Debug, PartialEq)]
 pub enum Action {
     /// Went to the box: put the cursor in it, or clicked it while it is greyed out.
     GoneTo,
-    /// Enter in the box.
-    Enter,
+    /// Enter in the box: the description to be read.
+    Send,
+    /// Esc while the description is read.
+    Cancel,
     /// The link to the settings under an unavailable box.
     OpenSettings,
 }
 
-/// Draws the box above "Meet with…"; unavailable, it is greyed out, keeps what was typed and says
-/// `why` with a link to the settings.
+/// Draws the box above "Meet with…", growing to more lines as the user types; Enter sends,
+/// Shift+Enter starts a new line, Esc leaves it (`MOD-10-U01`). While the model reads, it shows
+/// "Reading…" and cannot be changed (`MOD-10-U02`); after a description with no event it says so
+/// (`MOD-10-F23`). Unavailable, it is greyed out, keeps what was typed and says `why` with a link
+/// to the settings.
 pub fn show_box(
     ui: &mut egui::Ui,
     described: &mut DescriptionBox,
@@ -91,23 +179,45 @@ pub fn show_box(
 ) -> Option<Action> {
     let mut action = None;
     let available = why.is_none();
+    let reading = described.reading;
     let field = ui
         .add_enabled_ui(available, |ui| {
-            text_field(
-                ui,
-                egui::TextEdit::singleline(&mut described.field)
+            let edit = |text| {
+                egui::TextEdit::multiline(text)
                     .id(box_id())
                     .hint_text(texts::DESCRIBE_EVENT)
-                    .desired_width(f32::INFINITY),
-            )
+                    .desired_rows(1)
+                    .desired_width(f32::INFINITY)
+                    .return_key(egui::KeyboardShortcut::new(
+                        egui::Modifiers::SHIFT,
+                        egui::Key::Enter,
+                    ))
+            };
+            if reading {
+                // Kept as sent, and still the place for Esc.
+                text_field(ui, edit(&mut described.field.as_str()))
+            } else {
+                text_field(ui, edit(&mut described.field))
+            }
         })
         .inner;
+    if field.changed() {
+        described.no_event = false;
+    }
     if field.gained_focus() {
         action = Some(Action::GoneTo);
     }
-    if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-        action = Some(Action::Enter);
-        field.request_focus();
+    let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
+    if field.has_focus() && enter && !reading && !described.field.trim().is_empty() {
+        action = Some(Action::Send);
+    }
+    if field.lost_focus() && reading && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        action = Some(Action::Cancel);
+    }
+    if reading {
+        ui.weak(texts::READING);
+    } else if described.no_event && available {
+        ui.colored_label(ui.visuals().warn_fg_color, texts::NO_EVENT_FOUND);
     }
     if let Some(why) = why {
         // Greyed out, the field takes no clicks of its own; a click asks Ollama again.
@@ -162,6 +272,10 @@ pub fn settings_section(
 }
 
 #[cfg(test)]
+#[path = "description_reading_tests.rs"]
+mod reading_tests;
+
+#[cfg(test)]
 mod tests {
     //! The test cases of `US-10-01` (`TC-10-01`…`TC-10-07`), driving the whole app: the side
     //! panel, the keys, the settings and a fake Ollama. Each step of a test case is announced
@@ -184,7 +298,7 @@ mod tests {
     use egui_kittest::kittest::{NodeT, Queryable};
 
     /// Announces a step of a test case: `og-step <ID> <n> — <what it does>`.
-    fn step(id: &str, n: u32, what: &str) {
+    pub(super) fn step(id: &str, n: u32, what: &str) {
         println!("og-step {id} {n} — {what}");
     }
 
@@ -215,6 +329,7 @@ mod tests {
                 sender
             });
             app.checker = Checker::start(ctx);
+            app.reader = Reader::start(ctx);
             if app.settings.ollama.on {
                 app.checker.ask(&app.settings.ollama);
             }
@@ -229,7 +344,10 @@ mod tests {
     }
 
     /// Steps the app until `done` says so, for at most 10 seconds.
-    fn until(harness: &mut Harness<'static, CalendarApp>, done: impl Fn(&CalendarApp) -> bool) {
+    pub(super) fn until(
+        harness: &mut Harness<'static, CalendarApp>,
+        done: impl Fn(&CalendarApp) -> bool,
+    ) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !done(harness.state()) {
             assert!(Instant::now() < deadline, "the app never got there");
@@ -240,13 +358,13 @@ mod tests {
     }
 
     /// Whether the window shows `text`, as a label or a field's value.
-    fn shows(harness: &Harness<'static, CalendarApp>, text: &str) -> bool {
+    pub(super) fn shows(harness: &Harness<'static, CalendarApp>, text: &str) -> bool {
         harness.query_all_by_value(text).next().is_some()
             || harness.query_all_by_label(text).next().is_some()
     }
 
     /// The text field holding `value`.
-    fn field<'h>(
+    pub(super) fn field<'h>(
         harness: &'h Harness<'static, CalendarApp>,
         value: &str,
     ) -> egui_kittest::Node<'h> {
@@ -258,24 +376,26 @@ mod tests {
     }
 
     /// The description box, if the side panel shows it.
-    fn description_box<'h>(
+    pub(super) fn description_box<'h>(
         harness: &'h Harness<'static, CalendarApp>,
     ) -> Option<egui_kittest::Node<'h>> {
         harness.query_by(|node| node.locate().0 == box_id().accesskit_id())
     }
 
-    fn meet_with<'h>(harness: &'h Harness<'static, CalendarApp>) -> egui_kittest::Node<'h> {
+    pub(super) fn meet_with<'h>(
+        harness: &'h Harness<'static, CalendarApp>,
+    ) -> egui_kittest::Node<'h> {
         harness.get_by(|node| node.placeholder() == Some(texts::MEET_WITH))
     }
 
     /// Presses a key that types `key`, as on the keyboard.
-    fn press(harness: &mut Harness<'static, CalendarApp>, key: char) {
+    pub(super) fn press(harness: &mut Harness<'static, CalendarApp>, key: char) {
         harness.event(egui::Event::Text(key.to_string()));
         harness.run_steps(2);
     }
 
     /// Replaces the text of the field showing `value` with `text`, then presses Enter.
-    fn enter(harness: &mut Harness<'static, CalendarApp>, value: &str, text: &str) {
+    pub(super) fn enter(harness: &mut Harness<'static, CalendarApp>, value: &str, text: &str) {
         field(harness, value).focus();
         harness.run_steps(2);
         harness.key_combination_modifiers(egui::Modifiers::COMMAND, &[egui::Key::A]);
@@ -286,7 +406,7 @@ mod tests {
     }
 
     /// Whether the shortcuts' list shows `q`.
-    fn q_listed(harness: &mut Harness<'static, CalendarApp>) -> bool {
+    pub(super) fn q_listed(harness: &mut Harness<'static, CalendarApp>) -> bool {
         harness.state_mut().dialog = Some(Dialog::Shortcuts);
         harness.run_steps(3);
         let listed = shows(harness, texts::DESCRIBE_EVENT_SHORTCUT);
@@ -295,7 +415,7 @@ mod tests {
         listed
     }
 
-    fn on(ollama: &FakeOllama) -> Settings {
+    pub(super) fn on(ollama: &FakeOllama) -> Settings {
         let mut settings = Settings::default();
         settings.ollama.address = ollama.address.clone();
         settings
@@ -570,37 +690,30 @@ mod tests {
         assert!(!field.accesskit_node().is_disabled());
         assert!(field.is_focused());
         assert_eq!(field.value().as_deref(), Some("Kino jutro o 20"));
-        // Step 4, Enter opening "New event" for "Kino", is reading a description: `US-10-02`
-        // (`DEC-215`).
-    }
 
-    #[test]
-    fn ollama_is_asked_only_for_its_version_and_models_at_the_address_set() {
-        // `US-10-01#4` as far as this story goes (`DEC-215`): what the app asks Ollama at start,
-        // at the box and on Enter goes to the address set, and only for its version and models;
-        // that no proxy is used on the way is `ollama::tests::the_check_ignores_a_proxy_…`.
-        let ollama = FakeOllama::start(&[DEFAULT_MODEL]);
-        let mut harness = app(on(&ollama), None);
-        until(&mut harness, |app| {
-            app.description.availability == Availability::Available
-        });
-        press(&mut harness, 'q');
-        description_box(&harness)
-            .unwrap()
-            .type_text("Kawa jutro o 10");
-        harness.key_press(egui::Key::Enter);
-        harness.run_steps(3);
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while ollama.requests().len() < 4 {
-            assert!(Instant::now() < deadline, "{:?}", ollama.requests());
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(
-            (ollama.requests().iter())
-                .all(|request| request == "GET /api/version" || request == "GET /api/tags"),
-            "{:?}",
-            ollama.requests()
+        // Reading a description came with `US-10-02` (`DEC-215`).
+        step(ID, 4, "Press Enter.");
+        harness.state_mut().clock = || {
+            use chrono::TimeZone;
+            (chrono_tz::Europe::Warsaw.with_ymd_and_hms(2026, 10, 26, 9, 0, 0))
+                .unwrap()
+                .to_utc()
+        };
+        ollama.answer_all(
+            r#"{"action":"add","title":"Kino","kind":"tomorrow","day":"","time":"20:00","duration_min":null,"guests":[],"meet":false}"#,
         );
-        assert!(ollama::is_local(&harness.state().settings.ollama.address));
+        harness.key_press(egui::Key::Enter);
+        until(&mut harness, |app| {
+            matches!(app.dialog, Some(Dialog::QuickEntry(..)))
+        });
+        let Some(Dialog::QuickEntry(entry, _)) = &harness.state().dialog else {
+            unreachable!()
+        };
+        assert_eq!(entry.title, "Kino");
+        let start = entry.start.with_timezone(&chrono_tz::Europe::Warsaw);
+        assert_eq!(
+            start.format("%a %d %b %H:%M").to_string(),
+            "Tue 27 Oct 20:00"
+        );
     }
 }

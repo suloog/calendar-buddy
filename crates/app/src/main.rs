@@ -28,6 +28,7 @@ use calendar_core::availability;
 use calendar_core::background::{self, Signal};
 use calendar_core::colors::{self, LocalColors};
 use calendar_core::create::{self, QuickEntry, Saving};
+use calendar_core::described;
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
@@ -338,6 +339,10 @@ struct CalendarApp {
     description: DescriptionBox,
     /// Asks Ollama whether the box can be used.
     checker: description::Checker,
+    /// Has Ollama load the model and read what the box sends.
+    reader: description::Reader,
+    /// The time now, as a description is read against it; the system's clock but in tests.
+    clock: fn() -> DateTime<Utc>,
     /// The box was gone to while unavailable: it takes the keyboard if Ollama says it can be used.
     box_wanted: bool,
     /// The settings' section of events from a description while the settings are open.
@@ -495,6 +500,8 @@ impl CalendarApp {
             places,
             description: DescriptionBox::default(),
             checker,
+            reader: description::Reader::start(&ctx),
+            clock: Utc::now,
             box_wanted: false,
             ollama_form: None,
             settings_at_descriptions: false,
@@ -1958,14 +1965,16 @@ impl CalendarApp {
         }
     }
 
-    /// The side panel's description box (`US-10-01`): usable or greyed out with why, as Ollama
-    /// last answered; going to it or pressing Enter in it asks Ollama again (`DEC-215`,
-    /// `DEC-217`), and the link under it opens the settings at their section.
+    /// The side panel's description box (`US-10-01`, `US-10-02`): usable or greyed out with why,
+    /// as Ollama last answered; going to it asks Ollama again (`DEC-217`) and has it load the
+    /// model (`MOD-10-F22`); Enter sends the description to be read, and the link under it opens
+    /// the settings at their section.
     fn description_panel(&mut self, ui: &mut egui::Ui) {
         if let Some(availability) = self.checker.answer(&self.settings.ollama) {
             self.description.availability = availability;
             if availability != Availability::Available {
                 self.box_wanted = false;
+                self.description.no_event = false;
             }
         }
         let why = self.description.unavailable(&self.settings.ollama);
@@ -1976,9 +1985,24 @@ impl CalendarApp {
             Some(description::Action::GoneTo) => {
                 self.box_wanted = why.is_some();
                 self.checker.ask(&self.settings.ollama);
+                if why.is_none() {
+                    self.reader.load(&self.settings.ollama);
+                }
             }
-            // Reading the description is `US-10-02`; until then Enter only asks Ollama again.
-            Some(description::Action::Enter) => self.checker.ask(&self.settings.ollama),
+            Some(description::Action::Send) => {
+                // The keyboard goes back to the views while the model reads (`MOD-10-NFR-03`,
+                // `DEC-220`).
+                ui.memory_mut(|m| m.surrender_focus(description::box_id()));
+                let now = (self.clock)().with_timezone(&self.zone);
+                let (settings, field) = (&self.settings.ollama, &self.description.field);
+                self.reader.read(settings, field, now);
+                self.description.reading = true;
+                self.description.no_event = false;
+            }
+            Some(description::Action::Cancel) => {
+                self.reader.cancel();
+                self.description.reading = false;
+            }
             Some(description::Action::OpenSettings) => {
                 self.dialog = Some(Dialog::Settings);
                 self.settings_at_descriptions = true;
@@ -1987,19 +2011,60 @@ impl CalendarApp {
         }
     }
 
-    /// `q`: the cursor in the description box, or, while it is unavailable, Ollama asked again
-    /// and the cursor put there once it can be used (`MOD-10-U03`).
+    /// What the model made of the description sent (`US-10-02`): an event opens the "New event"
+    /// window filled in, as when adding by hand, for the user to save (`MOD-10-F06`); no event
+    /// leaves the description in the box with the cursor, saying so (`MOD-10-F23`); no answer
+    /// says the same and asks Ollama again, so the box turns unavailable when it has gone
+    /// (`MOD-10` edge cases).
+    fn read(&mut self, ctx: &egui::Context, answer: Option<String>) {
+        self.description.reading = false;
+        // Turned off in the meantime: the answer is dropped.
+        if !self.settings.ollama.on {
+            return;
+        }
+        let Some(answer) = answer else {
+            // Gone, the box turns unavailable and the line is hidden; still there, the model's
+            // answer could not be used (`MOD-10-F23`).
+            self.description.no_event = true;
+            self.checker.ask(&self.settings.ollama);
+            return;
+        };
+        let now = (self.clock)();
+        let today = now.with_timezone(&self.zone).date_naive();
+        match described::read(&answer, today) {
+            described::Reading::Event(event) => {
+                let zone = self.zone;
+                let mut entry = self.new_entry(|length| event.times(length, now, zone));
+                entry.title = event.title;
+                self.dialog = Some(Dialog::QuickEntry(entry, false));
+                self.description.field.clear();
+            }
+            described::Reading::NoEvent => {
+                self.description.no_event = true;
+                // The cursor goes back to the box unless the user is typing somewhere else.
+                if ctx.memory(|m| m.focused()).is_none() {
+                    ctx.memory_mut(|m| m.request_focus(description::box_id()));
+                }
+            }
+        }
+    }
+
+    /// `q`: the cursor in the description box, opening a collapsed side panel first, or, while
+    /// the box is unavailable, Ollama asked again and the cursor put there once it can be used
+    /// (`MOD-10-U01`, `MOD-10-U03`).
     fn go_to_box(&mut self, ctx: &egui::Context) {
         // The key is not typed into the box it puts the cursor in.
         ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Text(_))));
+        if !self.panel.expanded() {
+            self.settings.side_panel_collapsed = self.panel.toggle();
+            self.save_settings();
+        }
+        self.box_wanted = true;
         if self
             .description
             .unavailable(&self.settings.ollama)
-            .is_none()
+            .is_some()
         {
-            ctx.memory_mut(|m| m.request_focus(description::box_id()));
-        } else {
-            self.box_wanted = true;
             self.checker.ask(&self.settings.ollama);
         }
     }
@@ -2339,6 +2404,13 @@ impl eframe::App for CalendarApp {
             .request_repaint_after(std::time::Duration::from_secs(30));
         let before = self.navigation;
         self.shortcuts(ui.ctx());
+        // Taken in whether the side panel shows the box or not, but only with no window open: it
+        // waits, "Reading…" still shown, rather than take the place of what the user is doing.
+        if self.dialog.is_none()
+            && let Some(answer) = self.reader.answer()
+        {
+            self.read(ui.ctx(), answer);
+        }
         if let Some(event) = self.notified.take() {
             self.open_notified(ui.ctx(), &event);
         }

@@ -381,6 +381,8 @@ impl CalendarApp {
             places,
             description: Default::default(),
             checker: crate::description::Checker::none(),
+            reader: crate::description::Reader::none(),
+            clock: Utc::now,
             box_wanted: false,
             ollama_form: None,
             settings_at_descriptions: false,

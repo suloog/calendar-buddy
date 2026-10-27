@@ -566,6 +566,10 @@ pub const LEAVES_COMPUTER: &str =
 pub const NOT_AN_OLLAMA_ADDRESS: &str =
     "Not a valid address, such as http://localhost:11434; the previous one is kept.";
 pub const OPEN_SETTINGS: &str = "Open the settings";
+/// While the model reads a description (`MOD-10-U02`), and when it found no event in it
+/// (`MOD-10-F23`).
+pub const READING: &str = "Reading…";
+pub const NO_EVENT_FOUND: &str = "No event found in this description; correct it and press Enter.";
 pub fn ollama_not_available(address: &str) -> String {
     format!("Ollama is not available at {address}")
 }

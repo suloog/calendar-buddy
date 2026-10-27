@@ -8,6 +8,7 @@ pub mod cache;
 pub mod colors;
 pub mod contrast;
 pub mod create;
+pub mod described;
 pub mod details;
 pub mod drag;
 pub mod editor;

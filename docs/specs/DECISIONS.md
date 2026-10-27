@@ -2629,3 +2629,63 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-218] The model's answer says whether it is an event, and leaves the length empty when none is given
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-02`
+- **Affects:** `MOD-10-F05`, `MOD-10-F23`, `MOD-10` technical notes, `TC-10-18`
+- **Decision:** The fixed form of the answer is variant D of the test of 2026-10-27 with two changes: an `action` field, `add` for an event and `none` for anything else, so that "not an event" is the model's own answer (`MOD-10-F23`); and `duration_min` empty (null) when the description gives no length, so that the app uses the default length of a new event (`MOD-10-F05`) instead of the model's 60 minutes. The kinds of day are those of the technical notes plus `yesterday` (`DEC-212`). An answer not in this form is "no event". The test set's recorded answers of `gemma4:e4b`, which the fake model gives back, carry `"action":"add"` in front and are otherwise as recorded. Run by hand on 2026-10-27 against `gemma4:e4b` with these rules, the set scored dates 100 % and every field 93 %.
+- **Why:** Without a way to say "not an event" the model has to invent one; a length of 60 sent when none was given would override the account's default (`TC-10-12`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-219] Until US-10-03 and US-10-05, guests, Meet and a missing time are read but not acted on
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-02`
+- **Affects:** `MOD-10-F06`, `MOD-10-F07`, `MOD-10-F14`, `US-10-03`, `US-10-05`
+- **Decision:** The model's answer already names guests and Meet (they are scored in the test set), but `US-10-02` always opens the "New event" window and fills in only the title, the day, the time and the length; the full editor with guests and Meet is `US-10-03`. A description with a day but no time opens the window on that day at the next full hour, as the `c` key would, until `US-10-05` asks for the time.
+- **Why:** Both are out of this story's scope; the window still opens on the right day rather than refusing the description.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-220] While the model reads, the keyboard goes back to the views; q returns to the box, Esc there cancels
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-02`
+- **Affects:** `MOD-10-U01`, `MOD-10-U02`, `MOD-10-NFR-03`, `TC-10-10`
+- **Decision:** Enter sends the description and gives the keyboard back to the views, so their keys work while the model reads; the box keeps the text it sent, read-only, with "Reading…" under it. `q` puts the cursor back in it, and Esc there cancels the reading; a late answer is dropped. When the window opens, the box is emptied for the next description; when no event was found, the text stays with the cursor in it and the message "No event found in this description; correct it and press Enter." under it, until the text is changed.
+- **Why:** `TC-10-10` moves the views while reading and goes back to the box with `q` before Esc; a box that kept the keyboard would type the views' keys into itself.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-221] The test set holds the 30 adding sentences; the changing ones come with US-10-04
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-02`
+- **Affects:** `TC-10-18`, `TC-10-19`, `US-10-02#8`, `US-10-04#4`, `MOD-10-NFR-04`
+- **Decision:** The test set moves into the repo (`crates/core/src/described_cases.json`) with the 30 adding sentences of the test of 2026-10-27, 16 Polish and 14 English. `TC-10-18` asks for at least 10 changing sentences too; changing an event is `US-10-04`, which adds them with the reading of changes. Until then `TC-10-18` checks the adding part of its size and runs the thresholds on it. Neither test case is edited.
+- **Why:** Changing sentences cannot be read before the app can change events; writing them now would test nothing.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-222] TC-10-15: the saved event is also in the cache the views read; the description and the answer are nowhere
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-02`
+- **Affects:** `TC-10-15`, `MOD-10-NFR-01`
+- **Decision:** After Save, the event's title is found in the local calendar's file and in the cache, where the app keeps a copy of every event, local ones included, for the views to read (constitution, `MOD-09`). `TC-10-15` step 3 expects it in the local calendar's file only; the test checks instead that the title is found only in those two files, as the saved event, and that the description and the model's answer are found in no file and no output. `MOD-10-NFR-01` — only the event the user saves is kept — holds. The test case is not edited; whether its step 3 should name the cache is for the analyst.
+- **Why:** Leaving local events out of the cache would change how every view reads them, far beyond this story; the cached copy is the saved event, not a trace of the description.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
