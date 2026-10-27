@@ -307,7 +307,7 @@ fn cache(today: NaiveDate) -> Cache {
 
 impl CalendarApp {
     /// The app on the made-up data, in `view` and `theme`.
-    fn preview(ctx: &egui::Context, view: View, theme: Theme) -> Self {
+    pub(crate) fn preview(ctx: &egui::Context, view: View, theme: Theme) -> Self {
         crate::appearance::install(ctx);
         let zone: Tz = Warsaw;
         let regional = Regional::from_env(|key| match key {
@@ -379,6 +379,11 @@ impl CalendarApp {
             agenda_days: AGENDA_DAYS,
             built,
             places,
+            description: Default::default(),
+            checker: crate::description::Checker::none(),
+            box_wanted: false,
+            ollama_form: None,
+            settings_at_descriptions: false,
             meet_with: MeetWith::default(),
             overlay,
             invitations: Vec::new(),

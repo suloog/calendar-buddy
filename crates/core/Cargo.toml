@@ -12,3 +12,10 @@ pure-rust-locales = "0.8.2"
 rrule = "0.14"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde_json = "1.0.154"
+# Asking Ollama whether it runs and has the model (`MOD-10`, `DEC-216`).
+ureq = "3.5.0"
+url = "2.5.8"
+
+[features]
+# The fake Ollama, for the tests of the crates that use this one.
+fake = []

@@ -574,6 +574,8 @@ dependencies = [
  "rrule",
  "rusqlite",
  "serde_json",
+ "ureq",
+ "url",
 ]
 
 [[package]]

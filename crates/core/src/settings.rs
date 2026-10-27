@@ -9,6 +9,7 @@ use crate::cache::{color_text, parse_color};
 use crate::colors::LocalColors;
 use crate::local;
 use crate::navigation::View;
+use crate::ollama::Ollama;
 use crate::side_panel::Hidden;
 use crate::theme::Theme;
 use crate::zoom::HourZoom;
@@ -46,6 +47,9 @@ pub struct Settings {
     /// The order of the side panel's groups, by account ID, `local` for the local calendars,
     /// once the user chose one (`MOD-03-F30`).
     pub order: Vec<String>,
+    /// Events from a description: on or off, Ollama's address and the model (`MOD-10-F19`,
+    /// `MOD-10-F20`).
+    pub ollama: Ollama,
 }
 
 impl Settings {
@@ -80,6 +84,9 @@ impl Settings {
                 "hour_height" => settings.hour_zoom = HourZoom::from_key(value.trim()),
                 "local" => settings.local_hidden = value.trim() == "hidden",
                 "order" => settings.order.push(value.trim().to_string()),
+                "descriptions" => settings.ollama.on = value.trim() != "off",
+                "ollama_address" => settings.ollama.address = value.trim().to_string(),
+                "ollama_model" => settings.ollama.model = value.trim().to_string(),
                 "color" => {
                     let value = value.trim();
                     let local = value.split_once(' ').and_then(|(account, rest)| {
@@ -139,6 +146,16 @@ impl Settings {
         }
         for group in &self.order {
             text.push_str(&format!("order = {group}\n"));
+        }
+        let ollama = Ollama::default();
+        if !self.ollama.on {
+            text.push_str("descriptions = off\n");
+        }
+        if self.ollama.address != ollama.address {
+            text.push_str(&format!("ollama_address = {}\n", self.ollama.address));
+        }
+        if self.ollama.model != ollama.model {
+            text.push_str(&format!("ollama_model = {}\n", self.ollama.model));
         }
         text
     }

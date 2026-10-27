@@ -19,6 +19,7 @@ secret-service = { version = "5.2.0", features = ["rt-async-io-crypto-rust"] }
 zbus = "5.19.0"
 
 [dev-dependencies]
+calendar-core = { version = "0.1.0", path = "../core", features = ["fake"] }
 calendar-google = { version = "0.1.0", path = "../google", features = ["fake"] }
 egui_kittest = { version = "0.37.0", features = ["wgpu", "snapshot", "eframe"] }
 serde_json = "1.0.154"

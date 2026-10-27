@@ -551,6 +551,27 @@ pub const MEET_WITH_OFFLINE: &str = "Meet with… needs a connection to Google."
 pub const MEET_WITH_NEEDS_ACCOUNT: &str = "Meet with… needs a Google account.";
 pub const CALENDAR_CANNOT_BE_SEEN: &str = "Calendar can't be seen";
 pub const CREATE_EVENT: &str = "Create event";
+/// Events from a description (`MOD-10`): the side panel's box, its shortcut, why it is
+/// unavailable with the link to the settings (`MOD-10-U04`), and the settings' section with its
+/// warning for an address off this computer (`MOD-10-U05`).
+pub const DESCRIBE_EVENT: &str = "Describe an event…";
+pub const DESCRIBE_EVENT_SHORTCUT: &str = "Describe an event";
+pub const EVENTS_FROM_DESCRIPTION: &str = "Events from a description";
+pub const DESCRIBE_EVENTS: &str = "Add events by describing them in a sentence";
+pub const DESCRIBE_EVENTS_HINT: &str = "A box in the side panel, read by a model running in Ollama; off, the box and its key are gone.";
+pub const OLLAMA_ADDRESS: &str = "Ollama address";
+pub const OLLAMA_MODEL: &str = "Model";
+pub const LEAVES_COMPUTER: &str =
+    "This address is not on this computer: descriptions will leave it.";
+pub const NOT_AN_OLLAMA_ADDRESS: &str =
+    "Not a valid address, such as http://localhost:11434; the previous one is kept.";
+pub const OPEN_SETTINGS: &str = "Open the settings";
+pub fn ollama_not_available(address: &str) -> String {
+    format!("Ollama is not available at {address}")
+}
+pub fn model_not_installed(model: &str) -> String {
+    format!("The model {model} is not installed")
+}
 /// What a strip says of a guest who does not share their availability.
 pub const NO_DATA: &str = "No data";
 /// What a strip says of a guest busy at the chosen time.

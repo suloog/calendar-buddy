@@ -23,6 +23,7 @@ pub mod navigation;
 pub mod notice;
 pub mod notify;
 pub mod offline;
+pub mod ollama;
 pub mod platform;
 pub mod recurrence;
 pub mod regional;

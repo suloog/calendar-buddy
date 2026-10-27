@@ -16,12 +16,14 @@ pub enum Command {
     /// Asks for a date to go to.
     GoToDate,
     NewEvent,
+    /// Puts the cursor in the side panel's description box (`MOD-10-U03`).
+    DescribeEvent,
     ShowShortcuts,
 }
 
 /// Every shortcut with what it does, in the order the list shows them. `/` (search) is not bound:
-/// there is no search (`DEC-30`).
-pub const SHORTCUTS: [(char, Command, &str); 13] = [
+/// there is no search (`DEC-30`). `q` only while events from a description are on (`MOD-10-F19`).
+pub const SHORTCUTS: [(char, Command, &str); 14] = [
     (
         'd',
         Command::Switch(View::Grid(GridView::Day)),
@@ -46,6 +48,7 @@ pub const SHORTCUTS: [(char, Command, &str); 13] = [
     ('t', Command::Today, texts::TODAY),
     ('g', Command::GoToDate, texts::GO_TO_DATE),
     ('c', Command::NewEvent, texts::NEW_EVENT),
+    ('q', Command::DescribeEvent, texts::DESCRIBE_EVENT_SHORTCUT),
     ('?', Command::ShowShortcuts, texts::KEYBOARD_SHORTCUTS),
 ];
 
@@ -53,17 +56,23 @@ pub const SHORTCUTS: [(char, Command, &str); 13] = [
 pub type Row = (Vec<char>, &'static str);
 
 /// The list "?" shows: the shortcuts in groups (views, getting around, the rest), each group's
-/// title with its rows, keys doing the same thing on one row, in the order of `SHORTCUTS`.
-pub fn listed() -> Vec<(&'static str, Vec<Row>)> {
+/// title with its rows, keys doing the same thing on one row, in the order of `SHORTCUTS`; `q`
+/// only when `descriptions` are on.
+pub fn listed(descriptions: bool) -> Vec<(&'static str, Vec<Row>)> {
     let group = |command: Command| match command {
         Command::Switch(_) => texts::SHORTCUTS_VIEWS,
         Command::Next | Command::Previous | Command::Today | Command::GoToDate => {
             texts::SHORTCUTS_NAVIGATION
         }
-        Command::NewEvent | Command::ShowShortcuts => texts::SHORTCUTS_ACTIONS,
+        Command::NewEvent | Command::DescribeEvent | Command::ShowShortcuts => {
+            texts::SHORTCUTS_ACTIONS
+        }
     };
     let mut groups: Vec<(&str, Vec<Row>)> = Vec::new();
     for (key, command, description) in SHORTCUTS {
+        if command == Command::DescribeEvent && !descriptions {
+            continue;
+        }
         let title = group(command);
         if groups.last().is_none_or(|(last, _)| *last != title) {
             groups.push((title, Vec::new()));
@@ -77,12 +86,13 @@ pub fn listed() -> Vec<(&'static str, Vec<Row>)> {
     groups
 }
 
-/// The command of a typed character, if it is a shortcut.
-pub fn command(key: char) -> Option<Command> {
+/// The command of a typed character, if it is a shortcut; `q` only when `descriptions` are on.
+pub fn command(key: char, descriptions: bool) -> Option<Command> {
     SHORTCUTS
         .iter()
         .find(|(shortcut, _, _)| *shortcut == key)
         .map(|(_, command, _)| *command)
+        .filter(|command| descriptions || *command != Command::DescribeEvent)
 }
 
 impl Navigation {
@@ -94,7 +104,10 @@ impl Navigation {
             Command::Next => self.next(),
             Command::Previous => self.previous(),
             Command::Today => self.today(today),
-            Command::GoToDate | Command::NewEvent | Command::ShowShortcuts => {}
+            Command::GoToDate
+            | Command::NewEvent
+            | Command::DescribeEvent
+            | Command::ShowShortcuts => {}
         }
     }
 }
@@ -114,14 +127,14 @@ mod tests {
     }
 
     fn press(nav: &mut Navigation, key: char) -> Command {
-        let command = command(key).expect("a shortcut");
+        let command = command(key, true).expect("a shortcut");
         nav.run(command, d(2026, 11, 11));
         command
     }
 
     #[test]
     fn the_list_groups_the_shortcuts_and_puts_keys_doing_the_same_on_one_row() {
-        let listed = listed();
+        let listed = listed(true);
         let titles: Vec<&str> = listed.iter().map(|(title, _)| *title).collect();
         assert_eq!(
             titles,
@@ -145,9 +158,23 @@ mod tests {
             listed[2].1,
             [
                 (vec!['c'], texts::NEW_EVENT),
+                (vec!['q'], texts::DESCRIBE_EVENT_SHORTCUT),
                 (vec!['?'], texts::KEYBOARD_SHORTCUTS),
             ]
         );
+    }
+
+    #[test]
+    fn with_events_from_a_description_off_q_is_neither_listed_nor_a_shortcut() {
+        let off = listed(false);
+        assert!(
+            off.iter()
+                .all(|(_, rows)| rows.iter().all(|(keys, _)| keys != &['q']))
+        );
+        assert_eq!(off.iter().map(|(_, rows)| rows.len()).sum::<usize>(), 11);
+        assert_eq!(command('q', false), None);
+        assert_eq!(command('q', true), Some(Command::DescribeEvent));
+        assert_eq!(command('c', false), Some(Command::NewEvent));
     }
 
     #[test]
@@ -187,15 +214,15 @@ mod tests {
         assert_eq!(press(&mut nav, '?'), Command::ShowShortcuts);
         assert_eq!(nav, tc_03_11_start());
         let listed: Vec<char> = SHORTCUTS.iter().map(|(key, _, _)| *key).collect();
-        assert_eq!(listed, "dxwmajnkptgc?".chars().collect::<Vec<_>>());
+        assert_eq!(listed, "dxwmajnkptgcq?".chars().collect::<Vec<_>>());
     }
 
     #[test]
     fn n_and_p_are_next_and_previous_like_j_and_k() {
-        assert_eq!(command('n'), command('j'));
-        assert_eq!(command('p'), command('k'));
-        assert_eq!(command('j'), Some(Command::Next));
-        assert_eq!(command('k'), Some(Command::Previous));
+        assert_eq!(command('n', true), command('j', true));
+        assert_eq!(command('p', true), command('k', true));
+        assert_eq!(command('j', true), Some(Command::Next));
+        assert_eq!(command('k', true), Some(Command::Previous));
     }
 
     #[test]
@@ -208,8 +235,8 @@ mod tests {
 
     #[test]
     fn search_and_other_keys_are_not_shortcuts() {
-        for key in ['/', 'D', 'q', ' ', '1'] {
-            assert_eq!(command(key), None, "{key:?}");
+        for key in ['/', 'D', ' ', '1'] {
+            assert_eq!(command(key, true), None, "{key:?}");
         }
     }
 }

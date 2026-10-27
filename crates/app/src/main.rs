@@ -3,6 +3,7 @@ mod appearance;
 mod calendar_list;
 mod checks;
 mod connect;
+mod description;
 mod editor;
 mod grid_view;
 mod icons;
@@ -40,6 +41,7 @@ use calendar_core::navigation::{Navigation, View, mini_calendar};
 use calendar_core::notice;
 use calendar_core::notify::Pending;
 use calendar_core::offline;
+use calendar_core::ollama::{Availability, DescriptionBox, Form};
 use calendar_core::platform::{Autostart, Browser, Instance, LinkHandler, Tray};
 use calendar_core::regional::Regional;
 use calendar_core::reminders::{Action, ReminderId, SNOOZES, Silenced};
@@ -331,6 +333,17 @@ struct CalendarApp {
     built: Built,
     /// The places in `events` of the events the built view's indices point to.
     places: Vec<usize>,
+    /// The side panel's description box (`US-10-01`), shown while events from a description are
+    /// on.
+    description: DescriptionBox,
+    /// Asks Ollama whether the box can be used.
+    checker: description::Checker,
+    /// The box was gone to while unavailable: it takes the keyboard if Ollama says it can be used.
+    box_wanted: bool,
+    /// The settings' section of events from a description while the settings are open.
+    ollama_form: Option<Form>,
+    /// The settings open scrolled to that section, from the link under an unavailable box.
+    settings_at_descriptions: bool,
     /// The side panel's "Meet with…", never kept across restarts (`MOD-06-F27`).
     meet_with: MeetWith,
     /// The calendars of the people chosen in it, as the built view shows them.
@@ -445,6 +458,10 @@ impl CalendarApp {
                 let _ = autostart.set(on);
             }
         });
+        let checker = description::Checker::start(&ctx);
+        if settings.ollama.on {
+            checker.ask(&settings.ollama);
+        }
         CalendarApp {
             accounts,
             accounts_writer,
@@ -476,6 +493,11 @@ impl CalendarApp {
             agenda_days: AGENDA_DAYS,
             built,
             places,
+            description: DescriptionBox::default(),
+            checker,
+            box_wanted: false,
+            ollama_form: None,
+            settings_at_descriptions: false,
             meet_with: MeetWith::default(),
             overlay,
             invitations: Vec::new(),
@@ -937,9 +959,12 @@ impl CalendarApp {
                 .flatten()
                 .collect()
         });
-        for command in typed.into_iter().filter_map(shortcuts::command) {
+        let descriptions = self.settings.ollama.on;
+        let typed = typed.into_iter();
+        for command in typed.filter_map(|key| shortcuts::command(key, descriptions)) {
             match command {
                 Command::GoToDate => self.go_to_date(),
+                Command::DescribeEvent => self.go_to_box(ctx),
                 Command::NewEvent => {
                     let (date, zone) = (self.navigation.selected, self.zone);
                     self.start_event(|length| create::keyed(date, Utc::now(), length, zone));
@@ -1004,6 +1029,7 @@ impl CalendarApp {
         let mut start_at_login = None;
         let mut theme = None;
         let mut hour_zoom = None;
+        let mut ollama_changed = false;
         let mut scope = None;
         let mut notify = None;
         let mut cancelled = false;
@@ -1061,8 +1087,9 @@ impl CalendarApp {
                                 // one row, each key drawn as a key; the rows close together.
                                 ui.spacing_mut().interact_size.y = 24.0;
                                 ui.spacing_mut().item_spacing.y = 4.0;
-                                for (n, (title, rows)) in
-                                    shortcuts::listed().into_iter().enumerate()
+                                for (n, (title, rows)) in shortcuts::listed(self.settings.ollama.on)
+                                    .into_iter()
+                                    .enumerate()
                                 {
                                     if n > 0 {
                                         widgets::section(ui);
@@ -1767,6 +1794,14 @@ impl CalendarApp {
                                     &self.settings,
                                 );
                                 toggled = calendar_list::in_settings(ui, &calendars);
+                                widgets::section(ui);
+                                // Where Ollama runs and which model reads descriptions
+                                // (`MOD-10-U05`).
+                                let ollama = &mut self.settings.ollama;
+                                let form = self.ollama_form.get_or_insert_with(|| Form::of(ollama));
+                                let scroll = std::mem::take(&mut self.settings_at_descriptions);
+                                ollama_changed =
+                                    description::settings_section(ui, form, ollama, scroll);
                             }
                         }
                     })
@@ -1819,6 +1854,9 @@ impl CalendarApp {
         if let Some(on) = start_at_login {
             self.start_at_login = on;
             let _ = self.autostart_writer.send(on);
+        }
+        if ollama_changed {
+            self.ollama_changed();
         }
         if let Some(theme) = theme {
             self.settings.theme = theme;
@@ -1917,6 +1955,61 @@ impl CalendarApp {
         }
         if !open {
             self.close_dialog(ctx);
+        }
+    }
+
+    /// The side panel's description box (`US-10-01`): usable or greyed out with why, as Ollama
+    /// last answered; going to it or pressing Enter in it asks Ollama again (`DEC-215`,
+    /// `DEC-217`), and the link under it opens the settings at their section.
+    fn description_panel(&mut self, ui: &mut egui::Ui) {
+        if let Some(availability) = self.checker.answer(&self.settings.ollama) {
+            self.description.availability = availability;
+            if availability != Availability::Available {
+                self.box_wanted = false;
+            }
+        }
+        let why = self.description.unavailable(&self.settings.ollama);
+        if why.is_none() && std::mem::take(&mut self.box_wanted) {
+            ui.memory_mut(|m| m.request_focus(description::box_id()));
+        }
+        match description::show_box(ui, &mut self.description, why.as_deref()) {
+            Some(description::Action::GoneTo) => {
+                self.box_wanted = why.is_some();
+                self.checker.ask(&self.settings.ollama);
+            }
+            // Reading the description is `US-10-02`; until then Enter only asks Ollama again.
+            Some(description::Action::Enter) => self.checker.ask(&self.settings.ollama),
+            Some(description::Action::OpenSettings) => {
+                self.dialog = Some(Dialog::Settings);
+                self.settings_at_descriptions = true;
+            }
+            None => {}
+        }
+    }
+
+    /// `q`: the cursor in the description box, or, while it is unavailable, Ollama asked again
+    /// and the cursor put there once it can be used (`MOD-10-U03`).
+    fn go_to_box(&mut self, ctx: &egui::Context) {
+        // The key is not typed into the box it puts the cursor in.
+        ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Text(_))));
+        if self
+            .description
+            .unavailable(&self.settings.ollama)
+            .is_none()
+        {
+            ctx.memory_mut(|m| m.request_focus(description::box_id()));
+        } else {
+            self.box_wanted = true;
+            self.checker.ask(&self.settings.ollama);
+        }
+    }
+
+    /// The section of events from a description changed: saved, and Ollama asked anew.
+    fn ollama_changed(&mut self) {
+        self.save_settings();
+        self.description.availability = Availability::Unknown;
+        if self.settings.ollama.on {
+            self.checker.ask(&self.settings.ollama);
         }
     }
 
@@ -2491,6 +2584,11 @@ impl eframe::App for CalendarApp {
                     None => {}
                 }
                 ui.separator();
+                // Above "Meet with…", while events from a description are on (`MOD-10-F19`).
+                if self.settings.ollama.on {
+                    self.description_panel(ui);
+                    ui.add_space(4.0);
+                }
                 self.meet_with_panel(ui, online);
                 ui.separator();
                 // How many invitations await an answer; the counter opens their list
@@ -2532,6 +2630,12 @@ impl eframe::App for CalendarApp {
             });
         self.dialog(ui.ctx());
         if !matches!(self.dialog, Some(Dialog::Settings)) {
+            // What was typed in the section counts as entered when the settings close.
+            if let Some(mut form) = self.ollama_form.take()
+                && form.enter(&mut self.settings.ollama)
+            {
+                self.ollama_changed();
+            }
             self.connect.close();
             self.removal.close();
             self.local_calendars.close();
@@ -2876,6 +2980,7 @@ mod tests {
             ("appearance.rs", include_str!("appearance.rs")),
             ("calendar_list.rs", include_str!("calendar_list.rs")),
             ("connect.rs", include_str!("connect.rs")),
+            ("description.rs", include_str!("description.rs")),
             ("editor.rs", include_str!("editor.rs")),
             ("grid_view.rs", include_str!("grid_view.rs")),
             ("local_calendars.rs", include_str!("local_calendars.rs")),

@@ -2593,3 +2593,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-215] Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-01`
+- **Affects:** `US-10-01#4`, `US-10-01#8`, `MOD-10-NFR-02`, `TC-10-04`, `TC-10-07`
+- **Decision:** `US-10-01` builds the box, its availability and `q`, but not reading a description, which its *Out of scope* leaves to `US-10-02`. Until then Enter in the box only asks Ollama again whether it can be used, so the box turns unavailable when Ollama has stopped (`TC-10-07` steps 1–3 run). The steps that need a description sent and the "New event" window — all of `TC-10-04` and step 4 of `TC-10-07` — cannot run in this story; they are reported as blocked, and `US-10-02` runs them. For `US-10-01#4` this story proves what it adds: the app asks Ollama only at the address set, only for its version and its models.
+- **Why:** The test cases describe the finished function; pulling the reading of descriptions into this story would cross its out-of-scope fence. Neither test case is edited.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-216] The Ollama client in calendar-core uses ureq and url, already in the workspace
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-01`
+- **Affects:** `crates/core/Cargo.toml`, `MOD-10` technical notes
+- **Decision:** As the technical notes ask, the Ollama client lives in `calendar-core` (`ollama.rs`), with a fake Ollama for the tests behind its `fake` feature, as the fake Google. It asks over HTTP with `ureq` and reads the address with `url` — the same versions `calendar-google` already uses, so the build gains no new crate.
+- **Why:** The simplest client that follows the notes; no new library enters the lock file.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-217] When Ollama is checked, and the fake Ollama on a free local port
+
+- **Date:** 2026-10-27
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-01`
+- **Affects:** `MOD-10-F21`, `MOD-10-U04`, `TC-10-01`…`TC-10-07`
+- **Decision:** Ollama is asked for its version and its models off the UI thread: at start, when the section of the settings changes, and when the user goes to the box — the cursor put in it, `q`, a click on the greyed-out box — or presses Enter in it; never on a timer. Until the first answer the box is shown usable. Clicking or `q` on an unavailable box puts the cursor in it once Ollama answers. In the tests the fake Ollama listens on a free port of `localhost` rather than 11434, where a real Ollama may run; "nothing answers" is a port just freed, and a stopped fake closes every connection unanswered.
+- **Why:** The technical notes' "no polling loop"; a test must not depend on what runs on the developer's computer.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

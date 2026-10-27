@@ -3,7 +3,7 @@ id: US-10-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-10
 covers: [MOD-10-F19, MOD-10-F20, MOD-10-F21, MOD-10-F26, MOD-10-U04, MOD-10-U05, MOD-10-NFR-02] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: done # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 mode: A # A | B | C — agent autonomy · PE code review · PE pairs with the agent
 depends_on: [] # story IDs that must be done first
@@ -17,7 +17,7 @@ depends_on: [] # story IDs that must be done first
 | **Covers** | `MOD-10-F19`, `F20`, `F21`, `F26`, `U04`, `U05`, `NFR-02` |
 | **Priority** | must |
 | **Mode** | A |
-| **Status** | ready |
+| **Status** | done |
 | **Depends on** | — |
 | **YouTrack** | — |
 | **Open questions** | — |

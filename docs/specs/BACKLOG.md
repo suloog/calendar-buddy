@@ -162,7 +162,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
-| `US-10-01` | As a User, I can turn on events from a description and point the app at my Ollama and model, so that the description box works on my computer | F19, F20, F21, F26, U04, U05, NFR-02 | must | ready | — | — |
+| `US-10-01` | As a User, I can turn on events from a description and point the app at my Ollama and model, so that the description box works on my computer | F19, F20, F21, F26, U04, U05, NFR-02 | must | done | — | — |
 | `US-10-02` | As a User, I can add an event by describing it in a sentence in Polish or English, so that it is in my calendar in seconds | F01, F02, F03, F04, F05, F06, F08, F22, F23, F24, F27, U01, U02, U03, NFR-01, NFR-03, NFR-04 | must | ready | `US-10-01` | — |
 | `US-10-03` | As a User, I can name guests and ask for Meet in the description, so that a meeting with people is set up in one sentence | F03, F06, F07, F11, F12, F25 | must | ready | `US-10-02` | — |
 | `US-10-04` | As a User, I can change an event by describing the change, so that moving a meeting is as quick as adding one | F15, F16, F17, F18, U08, NFR-04 | must | ready | `US-10-02` | — |

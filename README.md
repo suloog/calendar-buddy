@@ -107,6 +107,39 @@ client from your own Google Cloud project. You set it up once, in the
    client's secret: keep it out of the repository. Without it, **Connect Google account** tells
    you which file to put where.
 
+### Events from a description (optional)
+
+The box **Describe an event…** in the side panel turns a sentence such as "Kawa jutro o 10" into an
+event. The sentence is read by a language model running on your computer in
+[Ollama](https://ollama.com), never by a service on the internet. Calendar Buddy works without
+Ollama and the model: only this box is then unavailable, and says why.
+
+1. **Install Ollama** as [ollama.com/download](https://ollama.com/download) describes for Linux:
+
+   ```sh
+   curl -fsSL https://ollama.com/install.sh | sh
+   ```
+
+   The installer sets Ollama up as a service that starts with the computer and listens on
+   `http://localhost:11434`. Check that it runs with `ollama --version`.
+
+2. **Pull the model** the app uses by default,
+   [`gemma4:e4b`](https://ollama.com/library/gemma4) (a download of a few gigabytes):
+
+   ```sh
+   ollama pull gemma4:e4b
+   ollama list        # gemma4:e4b is listed
+   ```
+
+3. **Start Calendar Buddy.** The box sits above **Meet with…** in the side panel; `q` puts the
+   cursor in it. If Ollama was not running, or the model was missing, the box says so; once it is
+   fixed, click the box and it is available, without restarting the app.
+
+In the settings, **Events from a description** turns the box off (the box and its `q` key are then
+gone) and sets the Ollama address and the model's name. An address that is not this computer,
+such as Ollama on another machine of your network, is allowed, but your descriptions then leave
+this computer; the section warns about it.
+
 ## Development
 
 ### Running a development build
