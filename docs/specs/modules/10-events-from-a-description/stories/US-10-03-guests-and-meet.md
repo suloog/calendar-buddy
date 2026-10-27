@@ -62,4 +62,4 @@ People and Google Meet named in a description: the guests are looked up as when 
 - The guest lookup reuses the editor's suggestion source (`MOD-06-F02`…`F04`); exactly one match is added, anything else is left as typed text with the suggestions open.
 - Meet follows `MOD-06-F17` when the description is silent (`DEC-194`).
 - Manual check (left for the owner, as for the local loop's stories): real Google contacts and the directory of a Workspace account; the editor's look with an unresolved name.
-- Decisions: `DEC-178`, `DEC-194`, `DEC-196`, `DEC-205`.
+- Decisions: `DEC-178`, `DEC-194`, `DEC-196`, `DEC-205`, `DEC-211`, `DEC-213`.

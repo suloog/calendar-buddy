@@ -51,7 +51,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 36 | 27 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
-| **Total** | **249** | **166** | **76 / 15** | 8 / 8 modules written |
+| `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
+| **Total** | **288** | **205** | **109 / 17** | 9 / 9 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -210,3 +211,45 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-09-15` | With an account and no local calendar, "My calendar" is added once | `US-09-02#8` | desktop | edge | auto | ready |
 | `TC-09-16` | Hiding the local calendars takes "Local" out of sight and showing them brings it back | `US-09-05#1`, `US-09-05#2`, `US-09-05#3`, `US-09-05#4` | desktop | happy-path | auto | ready |
 | `TC-09-17` | Without a Google account the local calendars cannot be hidden | `US-09-05#5` | desktop | edge | auto | ready |
+
+## [MOD-10] Events from a description
+
+`docs/specs/modules/10-events-from-a-description/REQUIREMENTS.md` · `docs/specs/modules/10-events-from-a-description/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-10-01` | The settings' "Events from a description" section starts on, at `http://localhost:11434` with `gemma4:e4b`, and keeps changes after a restart | `US-10-01#1` | desktop | happy-path | auto | ready |
+| `TC-10-02` | Turned off, the description box, its `q` key and its shortcut entry are gone, and turned on they are back | `US-10-01#2` | desktop | happy-path | auto | ready |
+| `TC-10-03` | An Ollama address off this computer shows a warning that descriptions will leave it; `localhost`, `127.0.0.1` and `::1` show none | `US-10-01#3` | desktop | happy-path | auto | ready |
+| `TC-10-04` | With the default address, a description reaches only this computer's Ollama, and Google receives nothing of it | `US-10-01#4`, `MOD-10-NFR-02` | desktop | nfr | auto | ready |
+| `TC-10-05` | The README tutorial installs Ollama and pulls `gemma4:e4b`, links ollama.com and says the app works without them | `US-10-01#5` | desktop | happy-path | manual-only | ready |
+| `TC-10-06` | The box is greyed out naming the reason — Ollama not answering, or the model not installed — with a link to the settings | `US-10-01#6`, `US-10-01#7` | desktop | negative | auto | ready |
+| `TC-10-07` | Ollama stopping while the box is open makes it unavailable keeping the text, and Ollama starting again makes it available without a restart | `US-10-01#8` | desktop | edge | auto | ready |
+| `TC-10-08` | The box sits above "Meet with…", `q` focuses it opening a collapsed side panel, Shift+Enter breaks the line, Enter sends, Esc leaves, and `q` is in the shortcut list | `US-10-02#1` | desktop | happy-path | auto | ready |
+| `TC-10-09` | Focusing the box asks Ollama to load the model for 5 minutes, and nothing is loaded at start | `US-10-02#2` | desktop | happy-path | auto | ready |
+| `TC-10-10` | While the model reads, the box shows "Reading…" and the views stay usable; Esc cancels and the late answer is dropped | `US-10-02#3`, `MOD-10-NFR-03` | desktop | edge | auto | ready |
+| `TC-10-11` | "Trening wieczorem" opens the "New event" window today at 18:00 with the default length in "My calendar", as a new event, and nothing is saved before Save | `US-10-02#9`, `US-10-02#5` | desktop | happy-path | auto | ready |
+| `TC-10-12` | A length in the description is used, and without one the event gets the default length of a new event | `US-10-02#4` | desktop | happy-path | auto | ready |
+| `TC-10-13` | Days and times in Polish and English descriptions are worked out by the app — weekday, next week, in a week, the day after tomorrow, a date, a part of the day, yesterday | `US-10-02#10` | desktop | happy-path | auto | ready |
+| `TC-10-14` | A description that is not an event, or an answer that cannot be used, opens no window, says no event was found and keeps the text | `US-10-02#11` | desktop | negative | auto | ready |
+| `TC-10-15` | Descriptions and the model's answers appear in no log and no file of the app | `US-10-02#6`, `MOD-10-NFR-01` | desktop | nfr | auto | ready |
+| `TC-10-16` | A description of 600 characters is taken whole by the box and only its first 500 reach the model | `US-10-02#6` | desktop | edge | auto | ready |
+| `TC-10-17` | Offline only a local calendar can take a described event, as when adding by hand, and with no Google account the default local calendar takes it | `US-10-02#7` | desktop | edge | auto | ready |
+| `TC-10-18` | The fixed test set of adding and changing sentences passes its thresholds against the fake model | `US-10-02#8`, `US-10-04#4` | desktop | nfr | auto | ready |
+| `TC-10-19` | The fixed test set passes with the date right in at least 95 % and every field in at least 80 % against a real Ollama with `gemma4:e4b` | `US-10-02#8`, `US-10-04#4`, `MOD-10-NFR-04` | desktop | nfr | manual-only | ready |
+| `TC-10-20` | "wrzuć mi spotkanie z Anią i Tomkiem jutro o 10 z Meetem" opens the full editor tomorrow at 10:00 with both guests and Meet on, and nobody is invited before Save | `US-10-03#6`, `US-10-03#2` | desktop | happy-path | auto | ready |
+| `TC-10-21` | Guests named in a description are found in the contacts, the Workspace directory and recent addresses, as when typing a guest | `US-10-03#1` | desktop | happy-path | auto | ready |
+| `TC-10-22` | "Kasia" fitting two contacts and "Zenek" fitting nobody stay in the guest field with suggestions, and neither is a guest until picked | `US-10-03#7` | desktop | negative | auto | ready |
+| `TC-10-23` | Meet is on for "z Meetem", off for "bez Meeta", and turns on by itself with a guest when the description says nothing | `US-10-03#3` | desktop | happy-path | auto | ready |
+| `TC-10-24` | For a local calendar the guests and Meet of a description are left out and the editor opens as for a local event | `US-10-03#4` | desktop | edge | auto | ready |
+| `TC-10-25` | Offline, or with no Google account, guests are not looked up because no Google calendar can take the event | `US-10-03#5` | desktop | negative | auto | ready |
+| `TC-10-26` | With "Sprint planning" (Monday 10:00–11:00) open, "przesuń na 15" opens its editing at 15:00–16:00, and nothing is saved before Save | `US-10-04#5` | desktop | happy-path | auto | ready |
+| `TC-10-27` | "przesuń spotkanie z Anią na piątek" opens that event's editing on Friday at the same time, and Save changes it without adding an event | `US-10-04#6`, `US-10-04#1` | desktop | happy-path | auto | ready |
+| `TC-10-28` | A past event is not matched by name — "no such event", the text kept — but is changed when its details are open | `US-10-04#2`, `US-10-04#8` | desktop | negative | auto | ready |
+| `TC-10-29` | Three matching standups are listed with title, day, time and calendar; arrows and Enter open the chosen one, and Esc returns to the description | `US-10-04#7` | desktop | happy-path | auto | ready |
+| `TC-10-30` | Saving a described change of a series occurrence with a guest asks for the scope and whether to notify the guest | `US-10-04#3` | desktop | edge | auto | ready |
+| `TC-10-31` | A described change of an event where the user is a guest without rights, or of a read-only calendar, opens its editing locked as today | `US-10-04#3` | desktop | negative | auto | ready |
+| `TC-10-32` | "Spotkanie z Michałem w sobotę" opens on Saturday 31 October with the time empty and the cursor in it, and Save waits for a time or all-day | `US-10-05#3`, `US-10-05#1` | desktop | edge | auto | ready |
+| `TC-10-33` | "Lunch o 13" opens at 13:00 with the day empty and the cursor in it, and Save waits for a day | `US-10-05#4`, `US-10-05#1` | desktop | edge | auto | ready |
+| `TC-10-34` | A calendar named in the description is chosen, matched by its name ignoring letter case | `US-10-05#5`, `US-10-05#2` | desktop | happy-path | auto | ready |
+| `TC-10-35` | A named calendar that does not exist or cannot take the event gives the default calendar with a note saying it was not found | `US-10-05#5` | desktop | negative | auto | ready |

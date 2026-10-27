@@ -14,7 +14,7 @@ sources: [SRC-08, SRC-09, SRC-10, SRC-11] # SRC-NN documents this module draws o
 
 ## Context
 
-Adding and changing events by writing a sentence in Polish or English: a local model that Ollama runs on the user's computer reads it, and the app opens the "New event" window or the event's editing filled in, for the user to approve by hand; nothing leaves the computer. Answers for the scope area "Events from a description" of PROJECT.md; comes from `DSC-10` (`discovery/10-events-from-a-description.md`), drawing on `SRC-08`, `SRC-09` and `SRC-10`, settled by `DEC-192`…`DEC-210`. It goes beyond Google Calendar (`DEC-62`) at the product owner's word. The event windows are `MOD-05`'s, guest suggestions `MOD-06`'s, local calendars `MOD-09`'s — this module names only what a description adds.
+Adding and changing events by writing a sentence in Polish or English: a local model that Ollama runs on the user's computer reads it, and the app opens the "New event" window or the event's editing filled in, for the user to approve by hand; nothing leaves the computer. Answers for the scope area "Events from a description" of PROJECT.md; comes from `DSC-10` (`discovery/10-events-from-a-description.md`), drawing on `SRC-08`, `SRC-09` and `SRC-10`, settled by `DEC-192`…`DEC-213`. It goes beyond Google Calendar (`DEC-62`) at the product owner's word. The event windows are `MOD-05`'s, guest suggestions `MOD-06`'s, local calendars `MOD-09`'s — this module names only what a description adds.
 
 ## Scope coverage
 
@@ -76,7 +76,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-10-F01] The user can open the description box, type a sentence in Polish or English that describes an event, and send it; the app fills an event in from it.
 - [MOD-10-F02] The description is read by the local model through Ollama, at the address and with the model set in the settings; no other service receives it.
 - [MOD-10-F03] From a description that adds an event, the app fills in the title, the day, the start time, the length, the guests and Google Meet.
-- [MOD-10-F04] The app works the day out itself from what the description says (today, tomorrow, the day after tomorrow, a weekday, a weekday of next week, in N days or weeks, a date), in the user's time zone; the model only says which of these it is.
+- [MOD-10-F04] The app works the day out itself from what the description says (yesterday, today, tomorrow, the day after tomorrow, a weekday, a weekday of next week, in N days or weeks, a date), in the user's time zone; the model only says which of these it is. — *source: `DEC-212`*
 - [MOD-10-F05] A length the description does not give is the default length of a new event, as when adding by hand (`MOD-05-F09`). — *source: `DEC-194`*
 - [MOD-10-F06] A description without guests and without Meet opens the "New event" window filled in; one with guests or Meet opens the full editor filled in. Nothing is saved until the user saves it. — *source: `DEC-194`, `DEC-205`*
 - [MOD-10-F07] The Meet switch follows the description: on when it asks for Meet, off when it refuses it, and as for any new event when it says nothing (`MOD-06-F17`). — *source: `DEC-194`*
@@ -106,7 +106,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-10-F21] When the function is on but Ollama does not answer at that address, or does not have the model, the box is unavailable and says which of the two it is.
 - [MOD-10-F22] Focusing the box has Ollama load the model; the model is freed 5 minutes after it was last used. — *source: `DEC-198`*
 - [MOD-10-F23] When the description is not an event, or the model's answer cannot be used, no window opens; the box says so and keeps the description to be corrected. — *source: `DEC-200`*
-- [MOD-10-F24] It works with every calendar, with or without a Google account; offline, only local calendars take the event, as when adding by hand (`DEC-103`).
+- [MOD-10-F24] It works with every calendar, with or without a Google account; offline, only local calendars take the event, as when adding by hand (`DEC-103`). — *source: `DEC-213`*
 - [MOD-10-F25] For a local calendar, guests and Meet from the description are left out, as local events have none (`MOD-09-F10`). — *source: `DEC-178`*
 - [MOD-10-F26] The README has a tutorial on installing Ollama and pulling the recommended model, with links to Ollama, and says the app works without them. — *source: `DEC-193`*
 
@@ -124,7 +124,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Non-functional requirements
 
 - [MOD-10-NFR-01] Descriptions and the model's answers are not stored anywhere and never appear in the logs; only the event the user saves is kept. — *source: `DEC-199`*
-- [MOD-10-NFR-02] With the default, local address, nothing about a description leaves the computer. The only network traffic the function adds goes to the Ollama address set in the settings (the exception in `NFR-06`). — *source: `DEC-207`*
+- [MOD-10-NFR-02] With the default, local address, nothing about a description leaves the computer. The only network traffic the function adds goes to the Ollama address set in the settings (the exception in `NFR-06`). Guests named in it are looked up as when typed, which sends Google only what adding the event by hand would. — *source: `DEC-207`, `DEC-211`*
 - [MOD-10-NFR-03] There is no response-time target, because it depends on the user's computer; the interface stays responsive while the model works (`NFR-01`).
 - [MOD-10-NFR-04] With the default model, a fixed set of test sentences in Polish and English, adding and changing, passes with the date right in at least 95 % of them and every field in at least 80 %. — *source: `DEC-204`*
 
@@ -138,6 +138,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Ollama stops while the box is open → the request fails and the box turns unavailable (`MOD-10-F21`) with the description kept.
 - No account connected → no guests or Meet are looked up; local calendars only (`MOD-10-F24`, `MOD-10-F25`).
 - Every calendar disabled, or none can take events → the message of `MOD-09` ("no calendar to create it in").
+- Offline with a Google calendar as the default → the window still opens with it; saving to it does not succeed, as when adding by hand, and the user can choose a local calendar (`DEC-213`).
 - A description longer than 500 characters → the box takes it, only the first 500 are sent (`DEC-210`).
 
 ## Integrations
@@ -147,7 +148,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Technical notes
 
 - An Ollama client in `calendar-core`, behind an interface like the calendar provider (`NFR-14`), with a fake for tests, as the fake Google.
-- Requests use `/api/chat` with a JSON schema (structured output), `temperature 0` and `think: false`. The answer gives the day as a kind from a closed list (`today`, `tomorrow`, `day_after_tomorrow`, `weekday`, `next_weekday`, `in_days`, `date`) plus a short value. The app computes the date in the system's time zone. This is variant D of the test of 2026-10-27, which scored 100 % on dates and 87 % on all fields at about 2.5 s on an RTX A2000 (`SRC-08-22`).
+- Requests use `/api/chat` with a JSON schema (structured output), `temperature 0` and `think: false`. The answer gives the day as a kind from a closed list (`yesterday`, `today`, `tomorrow`, `day_after_tomorrow`, `weekday`, `next_weekday`, `in_days`, `date`) plus a short value. The app computes the date in the system's time zone. This is variant D of the test of 2026-10-27, which scored 100 % on dates and 87 % on all fields at about 2.5 s on an RTX A2000 (`SRC-08-22`).
 - The prompt carries the current date and time in the user's message, not the system prompt, so that Ollama can reuse the system prompt between descriptions.
 - Loading the model sends an empty request with a `keep_alive` of 5 minutes; nothing is loaded at the app's start.
 - The test set and its runner come from `~/llm-bench`, moved into the repo as an `#[ignore]` test against a live Ollama, run by hand; sentences that change events are added to it.

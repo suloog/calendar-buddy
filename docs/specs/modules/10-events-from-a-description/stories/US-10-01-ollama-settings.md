@@ -69,4 +69,4 @@ The groundwork for describing events: a section in the settings to turn the func
 - `NFR-06` gains the exception for the Ollama address (`DEC-207`).
 - Settings keep the three values in the app's settings file, as the other settings.
 - Manual check (left for the owner, as for the local loop's stories): with a real Ollama, stopping and starting it while the app runs; the warning's wording; the README tutorial read once from start to end.
-- Decisions: `DEC-193`, `DEC-197`, `DEC-207`.
+- Decisions: `DEC-193`, `DEC-197`, `DEC-207`, `DEC-211`.

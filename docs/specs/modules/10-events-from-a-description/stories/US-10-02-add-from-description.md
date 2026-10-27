@@ -76,4 +76,4 @@ The description box in the side panel and the path from a sentence to a filled "
 - The test set moves from `~/llm-bench/cases.json` into the repo; a fake model answers it in unit tests, and an `#[ignore]` test runs it against a live Ollama.
 - `NFR-07` (no event contents in logs) covers descriptions too.
 - Manual check (left for the owner, as for the local loop's stories): the `#[ignore]` test set against a real Ollama with `gemma4:e4b`; the box and "Reading…" in the light and dark themes; the wait on a computer without a GPU.
-- Decisions: `DEC-192`, `DEC-194`, `DEC-198`…`DEC-200`, `DEC-204`, `DEC-206`, `DEC-209`, `DEC-210`.
+- Decisions: `DEC-192`, `DEC-194`, `DEC-198`…`DEC-200`, `DEC-204`, `DEC-206`, `DEC-209`, `DEC-210`, `DEC-212`, `DEC-213`.

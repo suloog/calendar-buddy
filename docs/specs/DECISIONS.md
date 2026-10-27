@@ -2545,3 +2545,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-211] Guest lookup does not break "nothing leaves the computer"
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** test case review of `MOD-10`, 2026-10-27
+- **Affects:** `MOD-10-NFR-02`, `MOD-10-F11`
+- **Decision:** `MOD-10-NFR-02` is about the description itself. Looking up guests named in it sends Google only what adding the same event by hand sends — the names typed in the guest field and, on Save, the event. The description and the model's answer never reach Google.
+- **Why:** The guest lookup is the editor's own (`MOD-06-F02`…`F04`); a description adds nothing to what Google would see anyway.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-212] "Yesterday" is a kind of day of its own
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** test case review of `MOD-10`, 2026-10-27
+- **Affects:** `MOD-10-F04`, `MOD-10` technical notes
+- **Decision:** The closed list of kinds of day the model answers with gains `yesterday`, next to `today`, `tomorrow` and `day_after_tomorrow`; the app computes the date from it as from the others.
+- **Why:** A past day is allowed ("wczoraj", `MOD-10` constraints) and the list had no way to say it; a kind of its own is the simplest for the model and the app.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-213] Offline, the window still opens with the default calendar
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** test case review of `MOD-10`, 2026-10-27
+- **Affects:** `MOD-10-F09`, `MOD-10-F24`
+- **Decision:** A described event always opens with the default calendar (or the one the description names, `MOD-10-F09`), offline too. When that is a Google calendar and the app is offline, saving to it does not succeed, as when adding by hand (`DEC-103`); the user can choose a local calendar instead.
+- **Why:** One rule for the calendar, the same as adding by hand; no special choosing offline.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
