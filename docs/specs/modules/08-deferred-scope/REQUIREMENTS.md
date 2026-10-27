@@ -25,8 +25,8 @@ What came up and is deliberately not planned for delivery: the items parked duri
 | `SRC-01-110` Microsoft 365 / Outlook integration. | informal | not delivered — Microsoft 365 / Outlook, a later provider (PRD §13) |
 | `SRC-01-111` Full offline editing with conflict resolution and queued writes. | informal | not delivered — offline editing with a change queue (`DEC-25`) |
 | `SRC-01-113` Advanced calendar search. | informal | not delivered — event search (`DEC-30`) |
-| `SRC-01-115` Natural-language event creation. | informal | not delivered — natural-language creation (PRD §13) |
-| `SRC-01-116` Task management or AI scheduling assistant. | informal | not delivered — tasks, AI scheduling assistant (PRD §13) |
+| `SRC-01-115` Natural-language event creation. | informal | moved to delivery — `MOD-10`, `DEC-192` |
+| `SRC-01-116` Task management or AI scheduling assistant. | informal | not delivered — tasks, AI scheduling assistant (PRD §13); filling events from a description moved to delivery, `DEC-192` |
 | `SRC-01-117` Advanced theming and layout customization. | informal | not delivered — advanced theming and layout (PRD §13, `DEC-57`) |
 | `SRC-01-118` Calendar sharing and administrative management. | informal | not delivered — calendar management and sharing (`DEC-21`) |
 | `SRC-01-119` Production-quality macOS and Windows releases if Linux is prioritized first. | informal | not delivered — macOS and Windows releases (`DEC-02`) |

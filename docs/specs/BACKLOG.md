@@ -39,7 +39,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 9 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 6 | sliced |
 | `MOD-09` Local calendars | 21 / 6 | 5 | 5 | sliced |
-| **Total** | **172 / 41** | **56** | **56** | 8 / 8 modules sliced |
+| `MOD-10` Events from a description | 27 / 8 | 5 | 0 | sliced |
+| **Total** | **199 / 49** | **61** | **56** | 9 / 9 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -154,3 +155,15 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-09-03` | As a User, I can change, move, repeat and delete local events the same way as my Google events, so that a local calendar is as handy as a Google one | F09, F10, F12, F16 | must | done | `US-09-01`, `US-05-03`, `US-05-04`, `US-05-07`, `US-05-09`, `US-05-11` | — |
 | `US-09-04` | As a User, I get notifications for my local events, with defaults I set for each local calendar, so that local events remind me as Google events do | F13, F14, F15, U01 | must | done | `US-09-02`, `US-07-01`, `US-07-02`, `US-07-04` | — |
 | `US-09-05` | As a User who uses only Google, I can hide the local calendars, so that "Local" does not clutter my calendar | F22, U06 | must | done | `US-09-02` | — |
+
+## [MOD-10] Events from a description
+
+`docs/specs/modules/10-events-from-a-description/REQUIREMENTS.md` · `docs/specs/modules/10-events-from-a-description/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-10-01` | As a User, I can turn on events from a description and point the app at my Ollama and model, so that the description box works on my computer | F19, F20, F21, F26, U04, U05, NFR-02 | must | ready | — | — |
+| `US-10-02` | As a User, I can add an event by describing it in a sentence in Polish or English, so that it is in my calendar in seconds | F01, F02, F03, F04, F05, F06, F08, F22, F23, F24, F27, U01, U02, U03, NFR-01, NFR-03, NFR-04 | must | ready | `US-10-01` | — |
+| `US-10-03` | As a User, I can name guests and ask for Meet in the description, so that a meeting with people is set up in one sentence | F03, F06, F07, F11, F12, F25 | must | ready | `US-10-02` | — |
+| `US-10-04` | As a User, I can change an event by describing the change, so that moving a meeting is as quick as adding one | F15, F16, F17, F18, U08, NFR-04 | must | ready | `US-10-02` | — |
+| `US-10-05` | As a User, I am asked for what my description left out and can name the calendar in it, so that a short sentence still gives the right event | F09, F10, F13, F14, U06, U07 | must | ready | `US-10-02` | — |

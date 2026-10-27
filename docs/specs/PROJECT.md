@@ -21,7 +21,7 @@ calendar-buddy is a lightweight, fast calendar application for Linux, connected 
 The scope comes from the register in `SOURCES.md`.
 
 - Binding: none — the project is internal; the product owner's rulings in `DECISIONS.md` settle the scope
-- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items); `SRC-06` analyst notes, product owner's request 2026-10-26 (local calendars)
+- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items); `SRC-06` analyst notes, product owner's request 2026-10-26 (local calendars); `SRC-08` analyst notes, product owner's request 2026-10-27 (events from a description with a local model); `SRC-09` analyst notes, product owner's rulings 2026-10-27 (events from a description); `SRC-10` analyst notes, discovery session 2026-10-27 (events from a description); `SRC-11` analyst notes, requirements session 2026-10-27 (events from a description)
 
 ## Goals
 
@@ -61,6 +61,8 @@ The scope comes from the register in `SOURCES.md`.
 | Offline | No network; only what is in the cache can be browsed. (`DEC-25`) |
 | Free/busy preview | Guests' busy blocks for the chosen day, shown in the event editor. (`DEC-42`) |
 | Join | Opening the Google Meet meeting of an event from the event, the agenda or a notification. (`DEC-38`) |
+| Description | A sentence in Polish or English from which the app fills an event to add or change, e.g. "wrzuć mi spotkanie z Anią jutro o 10". (`SRC-08-01`, `DEC-192`) |
+| Local model | The language model Ollama runs on the user's own computer to read a description; nothing is sent elsewhere. (`SRC-08-02`, `DEC-193`) |
 
 ## Scope
 
@@ -74,6 +76,7 @@ The scope comes from the register in `SOURCES.md`.
 - Guests, invitations, RSVP and Google Meet — guest suggestions (contacts, Workspace directory, recent), responses, asking before notifying guests, free/busy preview, Meet with Join (`discovery/08-guests-rsvp-meet.md` · `SRC-01-60`, `SRC-01-67`…`SRC-01-79`, `SRC-01-102`…`SRC-01-104`, `SRC-01-112`, `SRC-01-122`, `SRC-01-123`, `SRC-01-126`; `SRC-03-01`…`SRC-03-06`)
 - Reminders and notifications — notifications from Google reminders, editing reminders, snooze, muting calendars, tray and autostart, single instance, `webcal:` links (`discovery/09-notifications.md` · `SRC-01-80`…`SRC-01-85`, `SRC-01-105`, `SRC-01-127`; `SRC-03-07`…`SRC-03-11`)
 - Local calendars — calendars and events kept only on the device, managed in the settings, grouped under "Local"; using the app without a Google account, with the welcome screen inviting to connect one (`SRC-06-01`…`SRC-06-16`, `DEC-178`, `DEC-179`)
+- Events from a description — a local model through Ollama, installed by the user, fills the new-event or edit window from a description in Polish or English; the user approves it by hand; nothing leaves the computer (`SRC-08`, `SRC-09`, `DEC-192`…`DEC-200`)
 
 ### Out of scope (non-goals)
 
@@ -84,7 +87,7 @@ The scope comes from the register in `SOURCES.md`.
 - Event search, basic or advanced. (`SRC-01-113`, `DEC-30`)
 - A workweek view; a second time zone or choosing the display time zone by hand. (`DEC-27`, `DEC-29`)
 - Advanced theming and layout customization, interface translations, mock-ups. (`SRC-01-117`, `DEC-31`, `DEC-32`)
-- Natural-language event creation, task management, an AI scheduling assistant. (`SRC-01-115`, `SRC-01-116`)
+- Task management, an AI scheduling assistant beyond filling events from a description. (`SRC-01-115`, `SRC-01-116`, `DEC-192`)
 - Adding Google Drive attachments; ICS import and export. (`SRC-01-114`, `DEC-37`)
 - A full recurrence-rule editor; creating working-location events. (`DEC-36`, `DEC-34`)
 - Advanced scheduling with guests (multi-day grid, free-slot suggestions); responding with a comment or proposing another time. (`SRC-01-112`, `DEC-42`, `SRC-03-01`)

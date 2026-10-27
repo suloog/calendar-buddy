@@ -22,6 +22,10 @@
 | `SRC-05` | Analyst notes — product owner's request 2026-10-25 (6 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-25 | — | `sources/05-analyst-notes-2026-10-25.md` |
 | `SRC-06` | Analyst notes — product owner's request 2026-10-26 (17 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-26 | — | `sources/06-analyst-notes-2026-10-26.md` |
 | `SRC-07` | Analyst notes — product owner's requests after reviewing local calendars, 2026-10-26 (4 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-26 | — | `sources/07-analyst-notes-2026-10-26-review.md` |
+| `SRC-08` | Analyst notes — product owner's request 2026-10-27, events from a description with a local model (23 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-27 | — | `sources/08-analyst-notes-2026-10-27-describe-event.md` |
+| `SRC-09` | Analyst notes — product owner's rulings on events from a description, 2026-10-27 (9 items) | informal | analyst — Maciej (product owner), conversation | 2026-10-27 | — | `sources/09-analyst-notes-2026-10-27-rulings.md` |
+| `SRC-10` | Analyst notes — discovery session on events from a description, 2026-10-27 (6 items) | informal | analyst — Maciej (product owner), interview | 2026-10-27 | — | `sources/10-analyst-notes-2026-10-27-discovery.md` |
+| `SRC-11` | Analyst notes — requirements session on events from a description, 2026-10-27 (8 items) | informal | analyst — Maciej (product owner), interview | 2026-10-27 | — | `sources/11-analyst-notes-2026-10-27-requirements.md` |
 
 ## Originals
 
@@ -32,3 +36,7 @@
 - `SRC-05` — written directly in this repo from the conversation; no separate original
 - `SRC-06` — written directly in this repo from the conversation; no separate original
 - `SRC-07` — written directly in this repo from the conversation; no separate original
+- `SRC-08` — written directly in this repo from the conversation; the test it cites is outside the repo (`~/llm-bench`)
+- `SRC-09` — written directly in this repo from the conversation; no separate original
+- `SRC-10` — written directly in this repo during `/og:discovery`; no separate original
+- `SRC-11` — written directly in this repo during `/og:requirements MOD-10`; no separate original

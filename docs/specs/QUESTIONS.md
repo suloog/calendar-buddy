@@ -18,6 +18,7 @@
 ## General
 
 
+
 ## Resolved
 
 - **Q03** Is Linux definitely prioritised first, so that production macOS/Windows releases are out of the MVP? Should the MVP still build and run on macOS/Windows (e.g. in CI), or only keep the architecture open? — Linux only for the MVP; architecture kept open for macOS/Windows, 2026-10-22 (`DEC-02`)
@@ -64,3 +65,10 @@
 - **Q42** How do the event-editing details behave? — confirmed as proposed, 2026-10-23 (`DEC-60`)
 - **Q43** How do the guest and invitation details look and behave? — confirmed as proposed; the suggestion-speed target withdrawn, 2026-10-23 (`DEC-63`, `DEC-62`)
 - **Q44** How do the notification details behave? — confirmed as proposed, 2026-10-23 (`DEC-64`)
+
+- **Q45** Is the new-event form filled from a description the quick-entry box or the full editor? — the "New event" window filled in as if added by hand, approved by hand, 2026-10-27 (`DEC-194`)
+- **Q46** When a guest's name in a description fits several people, or nobody, what does the filled form show? — the name stays in the guest field with suggestions open; nobody is added until picked, 2026-10-27 (`DEC-196`)
+- **Q47** Is the local model chosen in the settings, or fixed to the one tested? — chosen in the settings next to the Ollama address, `gemma4:e4b` by default, 2026-10-27 (`DEC-197`)
+- **Q48** When is the model loaded in advance, and for how long is it kept? — loaded when the description box opens, freed after 5 minutes unused; the analyst's choice, 2026-10-27 (`DEC-198`)
+- **Q49** Are descriptions or their results kept anywhere? — no, no history and no logs of their content, 2026-10-27 (`DEC-199`)
+- **Q50** What happens when a description is not an event, or the model's answer cannot be used? — a message, and the description stays in the box, 2026-10-27 (`DEC-200`)

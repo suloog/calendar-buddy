@@ -19,7 +19,7 @@
 
 - [NFR-04] Tokens are kept only in the platform's secret store, never in plaintext files; when no secret store is running, sign-in stops with an explanation of what to install or start. (`SRC-01-21`) — *source: `DEC-47`*
 - [NFR-05] The app asks Google only for the minimum permissions its features need. (`SRC-01-19`, `SRC-01-92`)
-- [NFR-06] The app's only network traffic is HTTPS to Google's APIs. — *source: `DEC-16`*
+- [NFR-06] The app's only network traffic is HTTPS to Google's APIs. — *source: `DEC-16`* Exception: the requests of events from a description go to the Ollama address the user set, on this computer by default (`MOD-10`). — *source: `DEC-207`*
 - [NFR-07] Logs are local, with a level the user sets, and never contain tokens or event contents; there is no telemetry and no remote crash reporting. (`SRC-01-93`) — *source: `DEC-13`*
 - [NFR-08] The local cache is not encrypted by the app (the user's disk encryption covers it); removing an account deletes its tokens, cached data and local settings. — *source: `DEC-15`, `DEC-20`*
 

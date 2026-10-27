@@ -2317,3 +2317,231 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-192] Events from a description, with a local model, enter the scope
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's request and rulings of 2026-10-27 (`SRC-08-01`…`SRC-08-06`, `SRC-08-19`, `SRC-09-01`)
+- **Affects:** PROJECT.md (scope, glossary, non-goals), `MOD-05` (out of scope), `MOD-08` (`SRC-01-115`, `SRC-01-116`), a new module for events from a description
+- **Decision:** With the MVP closed, the app gets events from a description: the user writes, in Polish or English, what to add, and a local model run through Ollama on the user's computer fills in the event window, which the user approves by hand. Nothing is sent to an API or the cloud. Natural-language event creation (`SRC-01-115`) moves out of `MOD-08` into delivery; an AI scheduling assistant beyond this, task management, Microsoft 365 and CalDAV stay out.
+- **Why:** The product owner wants to add meetings by writing a sentence. Google Calendar has no such function, so this goes beyond following Google (`DEC-62`) at the product owner's word, as local calendars did (`DEC-178`). The test of 2026-10-27 showed a small local model is good enough (`SRC-08-21`, `SRC-08-22`).
+- **Scope effect:** extension
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-193] Ollama is installed by the user, outside the .deb
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-06`, `SRC-08-13`, `SRC-09-02`)
+- **Affects:** PROJECT.md (G4), README, the new module for events from a description
+- **Decision:** The .deb does not ship Ollama or a model. The user installs Ollama and the model by hand; the README has a short note on how. The app works without them; only events from a description are missing.
+- **Why:** Bundling a model runtime and a model of several gigabytes is out of proportion for one function; the app must not depend on it (G4 holds for the app).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-194] A description opens the "New event" window filled in, approved by hand
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-04`, `SRC-08-11`, `SRC-09-03`)
+- **Affects:** the new module for events from a description, `MOD-05-F02`, `MOD-05-F03`
+- **Decision:** A description that adds an event opens the same window as adding an event by hand ("New event", `DEC-103`), with what the description gave filled in; from there "More options" opens the full editor as usual. Nothing is saved until the user saves it.
+- **Why:** The user sees the familiar window and checks the model's work before anything reaches Google.
+- **Scope effect:** within scope
+- **Resolves:** `Q45`
+- **Status:** accepted
+
+## [DEC-195] A description can change an existing event
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-09-04`)
+- **Affects:** the new module for events from a description, `MOD-05` (editing)
+- **Decision:** Besides adding, a description can change an existing event ("przesuń spotkanie z Anią na 15"): the event's editing opens with the changes made, and the user approves them by hand. The event is the selected one, or the one the description names; when several fit, the app asks which.
+- **Why:** The product owner wants changing as easy as adding.
+- **Scope effect:** extension — beyond `SRC-08`, which spoke of creating only
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-196] A name that fits several people or nobody stays in the guest field with suggestions
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-09`, `SRC-09-05`)
+- **Affects:** the new module for events from a description, `MOD-06-F01`…`F03`
+- **Decision:** Guests named in a description are looked up in the contacts, the organization's directory and recent addresses, as when typing a guest. When a name fits exactly one person, that person is added; when it fits several or nobody, the guest field keeps the name with the suggestions open, and no guest is added until the user picks one.
+- **Why:** An invitation must never go to a guessed address.
+- **Scope effect:** within scope
+- **Resolves:** `Q46`
+- **Status:** accepted
+
+## [DEC-197] The model is chosen in the settings, gemma4:e4b by default
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-14`, `SRC-08-21`, `SRC-09-06`)
+- **Affects:** the new module for events from a description, settings
+- **Decision:** The settings have the Ollama address (the local one by default) and the model's name next to it, `gemma4:e4b` by default; the user can change both.
+- **Why:** `gemma4:e4b` did best in the test; a user with another computer or a newer model can choose.
+- **Scope effect:** within scope
+- **Resolves:** `Q47`
+- **Status:** accepted
+
+## [DEC-198] The model is loaded when the description box opens and freed after 5 minutes unused
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst (left to the analyst by the product owner, `SRC-09-07`)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-23`, `SRC-09-07`)
+- **Affects:** the new module for events from a description
+- **Decision:** Opening the description box asks Ollama to load the model; it is kept for 5 minutes after the last use and then freed. The app does not load it at start.
+- **Why:** Loading takes about 5.6 s (`SRC-08-23`) and writing a description usually longer, so the wait is mostly hidden; the model, 2–4 GB, is not held for the whole session; 5 minutes is Ollama's own default.
+- **Scope effect:** within scope
+- **Resolves:** `Q48`
+- **Status:** accepted
+
+## [DEC-199] Descriptions and their results are not kept
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-08-05`, `SRC-09-08`)
+- **Affects:** the new module for events from a description
+- **Decision:** Descriptions and the model's answers are not stored anywhere: no history, no logs of their content. What is kept is only the event the user saves.
+- **Why:** A description may hold private details; nothing should leave a trace beyond the event itself.
+- **Scope effect:** within scope
+- **Resolves:** `Q49`
+- **Status:** accepted
+
+## [DEC-200] A description that gives no usable event shows a message and stays in the box
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** product owner's rulings of 2026-10-27 (`SRC-09-09`)
+- **Affects:** the new module for events from a description
+- **Decision:** When a description is not an event, or the model's answer cannot be used, no window opens; the box shows a message saying so, and the description stays in it to be corrected.
+- **Why:** The user fixes the sentence instead of writing it again.
+- **Scope effect:** within scope
+- **Resolves:** `Q50`
+- **Status:** accepted
+
+## [DEC-201] A description with no time asks for the time
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** discovery session on `DSC-10`, 2026-10-27 (`SRC-08-08`, `SRC-10-03`)
+- **Affects:** `DSC-10-17`, the new module for events from a description
+- **Decision:** When a description gives a day but no time, the "New event" window opens with the time empty and asks for it; the user types the time or chooses all-day. No time is guessed.
+- **Why:** The same rule as for a missing date (`SRC-08-08`); a guessed hour is a meeting at the wrong time.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-202] A description changes events from today on
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** discovery session on `DSC-10`, 2026-10-27 (`SRC-09-04`, `SRC-10-04`)
+- **Affects:** `DSC-10-18`, `DEC-195`, the new module for events from a description
+- **Decision:** A description that changes an event without one being selected is matched against events from today up to the end of the cache (`DEC-23`); past events are not matched. A selected event can be changed whatever its date.
+- **Why:** Moving a meeting means a meeting still ahead; leaving the past out makes a wrong match much less likely.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-203] An unknown calendar in a description falls back to the default, with a note
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** discovery session on `DSC-10`, 2026-10-27 (`SRC-08-10`, `SRC-10-05`)
+- **Affects:** `DSC-10-19`, the new module for events from a description
+- **Decision:** When the description names a calendar that does not exist or cannot take the event, the window opens with the default calendar and says that the named calendar was not found; the user can pick another.
+- **Why:** The rest of the description is still useful; the user sees the problem before saving.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-204] The test set passes at dates 95 % and all fields 80 %
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** discovery session on `DSC-10`, 2026-10-27 (`SRC-08-20`, `SRC-08-22`, `SRC-10-06`)
+- **Affects:** `DSC-10-16`, `DSC-10-20`, the new module's tests
+- **Decision:** The fixed set of test sentences, in Polish and English, passes when the date is right in at least 95 % of them and every field in at least 80 %.
+- **Why:** `gemma4:e4b` reached 100 % and 87 % in the test; the margin leaves room for other models and computers while still catching a regression.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-205] Guests or Meet in a description open the full editor
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-11-01`)
+- **Affects:** `DEC-194`, `MOD-10-F06`
+- **Decision:** A description that names guests or asks for Meet opens the full editor filled in, since the "New event" window (`DEC-103`) has no guests or Meet; a description without them opens the "New event" window.
+- **Why:** The user must see the guests and Meet before saving; the small window cannot show them.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-206] The description box is in the side panel and opens with `q`
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-08-07`, `SRC-11-02`, `SRC-11-05`)
+- **Affects:** `MOD-10-U01`, `MOD-10-U03`, `MOD-03-U04`, `MOD-03-U07`
+- **Decision:** The description box is a field in the side panel, above "Meet with…", in the same style. The `q` key focuses it, opening the side panel first when it is collapsed.
+- **Why:** The side panel has room for a sentence and already holds a field of this kind; the top bar is full. `q` was Google Calendar's Quick Add key (`DEC-55`) and is free in the app.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-207] An Ollama address off the computer is allowed, with a warning
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-08-05`, `SRC-08-14`, `SRC-11-03`)
+- **Affects:** `NFR-06`, `MOD-10-NFR-02`, `MOD-10-U05`
+- **Decision:** Any Ollama address is accepted. When it is not on this computer, the settings warn that descriptions will leave it. `NFR-06` (the only network traffic is HTTPS to Google) gains one exception: the requests of events from a description to the Ollama address the user set.
+- **Why:** A user may run Ollama on another machine of their own; the warning keeps `SRC-08-05` ("no cloud") a conscious choice.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-208] The selected event is the one whose details are open
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-09-04`, `SRC-11-04`)
+- **Affects:** `DEC-195`, `MOD-10-F16`
+- **Decision:** A description changes the event whose details are open when the box is opened; with no details open, it changes the event it names (`DEC-202`).
+- **Why:** The app has no other notion of a selected event; open details are unmistakable.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-209] A part of the day means 9:00, 14:00 or 18:00
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-11-07`)
+- **Affects:** `MOD-10-F27`
+- **Decision:** A description that gives only a part of the day starts the event at 9:00 for the morning ("rano"), 14:00 for the afternoon ("po południu") and 18:00 for the evening ("wieczorem").
+- **Why:** The hours used in the test of 2026-10-27; a fixed rule the user can learn.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-210] A description is cut at 500 characters
+
+- **Date:** 2026-10-27
+- **Decided by:** analyst
+- **Source:** requirements session on `MOD-10`, 2026-10-27 (`SRC-11-08`)
+- **Affects:** `MOD-10` (constraints)
+- **Decision:** Only the first 500 characters of a description are sent to the model.
+- **Why:** A description of one event is a sentence or two; a cap keeps the model's time bounded.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

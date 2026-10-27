@@ -32,6 +32,7 @@
 | 2026-10-23 | analyst + agent | `DSC-09` | 14 findings, 3 questions resolved, 4 decisions (`DEC-43`…`DEC-46`) |
 | 2026-10-23 | analyst + agent | close | actor, glossary, scope, goals, risks, stack settled; `PROJECT.md` and draft `constitution.md` written; 2 decisions (`DEC-47`, `DEC-48`) |
 | 2026-10-23 | analyst + agent | `DSC-04` (revisit, during `/og:requirements MOD-02`) | `DSC-04-14` withdrawn, `DSC-04-15` added; `DEC-53` supersedes `DEC-26` (adaptive sync) |
+| 2026-10-27 | analyst + agent | `DSC-10` (new topic, after closing), `DSC-07` (parked lines) | 20 findings, new source `SRC-10`, 4 decisions (`DEC-201`…`DEC-204`); `Q45`…`Q50` already resolved by `DEC-194`…`DEC-200` |
 
 ## Topics
 
@@ -46,6 +47,7 @@
 | `DSC-07` | Creating and editing events | business | `SRC-01`, `SRC-02` | 14 | 0 [W] / 0 [A] | settled | `MOD-05` |
 | `DSC-08` | Guests, invitations, RSVP and Google Meet | business | `SRC-01`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | `MOD-06` |
 | `DSC-09` | Reminders and notifications | business | `SRC-01`, `SRC-02`, `SRC-03` | 14 | 0 [W] / 0 [A] | settled | `MOD-07` |
+| `DSC-10` | Events from a description | business | `SRC-08`, `SRC-09`, `SRC-10`, `SRC-11` | 20 | 0 [W] / 0 [A] | settled | `MOD-10` |
 
 ## Source items with no topic
 

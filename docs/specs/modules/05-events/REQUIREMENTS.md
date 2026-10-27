@@ -151,7 +151,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Editing an event's reminders — `MOD-07`.
 - Recurrence rules beyond Google's custom recurrence dialog, and creating working-location events — `DEC-165`, `DEC-34`.
 - Adding attachments, ICS import and export — `DEC-37`, `MOD-08`.
-- Natural-language event creation, tasks, AI assistant — `MOD-08`.
+- Tasks, an AI assistant — `MOD-08`; events from a description — `DEC-192`, a module of their own.
 - Moving events between accounts.
 - Editing offline — `DEC-25`, `MOD-08`.
 - A full undo history — `DEC-59`.

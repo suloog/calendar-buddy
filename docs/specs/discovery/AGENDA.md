@@ -4,7 +4,7 @@
 
 # Workshop agenda — questions for the client
 
-> As of 2026-10-23. Every open question from QUESTIONS.md, grouped by discovery topic, in a form
+> As of 2026-10-27. Every open question from QUESTIONS.md, grouped by discovery topic, in a form
 > ready to send to the client before a workshop or to walk through point by point in the meeting.
 > "We assume that … — please confirm" are our proposed defaults; the client corrects them in a
 > minute. Questions with no proposal need the client's decision — without it the parts of the

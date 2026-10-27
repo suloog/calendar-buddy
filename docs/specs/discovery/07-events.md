@@ -97,8 +97,8 @@ None open — `Q07`, `Q15`, `Q16`, `Q25` resolved on 2026-10-22.
 
 - ICS import and export — not in the MVP, `DEC-37`.
 - Adding Google Drive attachments (`SRC-01-114`) — outside the MVP per the PRD; existing ones are shown as links.
-- Natural-language event creation (`SRC-01-115`) — outside the MVP per the PRD.
-- Task management or an AI scheduling assistant (`SRC-01-116`) — outside the MVP per the PRD.
+- Natural-language event creation (`SRC-01-115`) — outside the MVP per the PRD; brought into scope after the MVP as events from a description, `DEC-192`, `DSC-10`.
+- Task management or an AI scheduling assistant (`SRC-01-116`) — outside the MVP per the PRD; still out, beyond filling events from a description (`DEC-192`).
 - Event search (`SRC-01-113`) — `DEC-30`.
 - Creating working-location events — display only, `DEC-34`.
 - A full recurrence-rule editor (every N weeks, second Tuesday…) — such rules are changed in the browser, `DEC-36`.
