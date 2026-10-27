@@ -34,7 +34,8 @@
       "Bash(gh pr create:*)",
       "Bash(gh pr review:*)",
       "Bash(gh pr comment:*)",
-      "Bash(gh pr checks:*)"
+      "Bash(gh pr checks:*)",
+      "Bash(cargo:*)"
     ]
   }
 }
