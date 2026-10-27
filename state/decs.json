@@ -22,5 +22,45 @@
     "title": "When Ollama is checked, and the fake Ollama on a free local port",
     "file": "docs/specs/DECISIONS.md",
     "ts": "2026-10-27T17:11:58Z"
+  },
+  {
+    "dec": "DEC-218",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "The model's answer says whether it is an event, and leaves the length empty when none is given",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-219",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "Until US-10-03 and US-10-05, guests, Meet and a missing time are read but not acted on",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-220",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "While the model reads, the keyboard goes back to the views; q returns to the box, Esc there cancels",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-221",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "The test set holds the 30 adding sentences; the changing ones come with US-10-04",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-222",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "TC-10-15: the saved event is also in the cache the views read; the description and the answer are nowhere",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
   }
 ]

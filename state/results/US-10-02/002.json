@@ -1,0 +1,77 @@
+{
+  "n": 2,
+  "attempt": 1,
+  "ts": "2026-10-27T19:58:59Z",
+  "story": "US-10-02",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-02",
+    "branch": "feature/US-10-02",
+    "commits": [
+      "91762a8 fix(descriptions): an answer with a blank title is no event [US-10-02]",
+      "df3d5db fix(descriptions): a part of the day is read whatever its case [US-10-02]",
+      "3fcfb5d fix(descriptions): an answer waits while a window is open [US-10-02]",
+      "35bd871 fix(descriptions): a failed reading says no event was found [US-10-02]",
+      "ab5ef1c fix(descriptions): drop an answer once the feature is turned off [US-10-02]",
+      "12eb518 fix(descriptions): no event leaves the cursor where the user types [US-10-02]"
+    ],
+    "decisions": [],
+    "evidence": [
+      "#1 Box above \"Meet with…\", q, Enter / Shift+Enter / Esc, q in the shortcuts — TC-10-08 pass",
+      "#2 Focusing loads the model, freed after 5 minutes — TC-10-09 pass",
+      "#3 \"Reading…\", app stays usable, Esc drops a late answer — TC-10-10 pass",
+      "#4 Length given is used, otherwise the default length — TC-10-12 pass",
+      "#5 Location, notes, repeating, reminders, colour as for any new event — TC-10-11 pass",
+      "#6 Nothing in logs or files; cut at 500 characters — TC-10-15, TC-10-16 pass",
+      "#7 Offline only local calendars; no account means My calendar — TC-10-17 pass",
+      "#8 Test set thresholds, fake model and real Ollama — TC-10-18 pass (fake); MANUAL: TC-10-19 is manual-only (real Ollama with gemma4:e4b)",
+      "#9 Scenario \"Trening wieczorem\" — TC-10-11 pass",
+      "#10 Scenario: days and times worked out by the app — TC-10-13 pass",
+      "#11 Scenario: not an event, or an answer that cannot be used — TC-10-14 pass; failed reading (500) also covered by a_failed_reading_says_no_event_was_found"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_205814",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-19"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "none (fix round on the story's own branch)",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 3fcfb5d",
+      "B2 fixed 35bd871",
+      "N4 fixed 91762a8",
+      "N9 fixed df3d5db",
+      "N10 fixed ab5ef1c",
+      "N5 fixed 12eb518",
+      "N3 refused: the description path builds its entry through the same new_entry/default_calendar as the c key, which already shows NO_CALENDAR, and a world with no writable calendar would need a new harness setup for no new code path",
+      "N2, N6, TC-10-17 picker, TC-10-16 Event::Text, TC-10-04 step 2, Ollama client interface: noted only, no action as the brief allows"
+    ],
+    "notes": "An answer that comes while any dialog is open (including event details or Settings) now waits until that dialog closes. A no-event answer moves the cursor back into the box only when no other field has it.\nThe fake Ollama gained fail(): reading a description answers 500 (crates/core/src/ollama.rs).\nThe run was made on the clean head 12eb518 with a snapshot (snapshot: true, changed_during_run: false).",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#8 Test set thresholds, fake model and real Ollama — TC-10-18 pass (fake); MANUAL: TC-10-19 is manual-only (real Ollama with gemma4:e4b)"
+      ],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I fixed both blocking findings and three of the five non-blocking ones, each in its own commit. Each fix comes with a test. The story's whole acceptance suite then passed on the clean committed head 12eb518: 17 pass, 1 manual (TC-10-19), 0 fail. No TC file was edited.\n\n- B1: a model answer is now taken in only when no dialog is open. Otherwise it waits in the channel and \"Reading…\" stays. New test `an_answer_waits_while_a_window_is_open` opens `c`, types \"Dentist\" and releases the held answer. The dialog keeps \"Dentist\" and \"Reading…\" stays; after Esc the \"New event\" window opens with \"Kino\".\n- B2: when reading fails, the box now says it found no event. The fake Ollama can now answer `/api/chat` with a 500 (`FakeOllama::fail()`), and test `a_failed_reading_says_no_event_was_found` covers it. When the re-check finds Ollama gone, the line is cleared, so it does not come back later when Ollama returns.\n\nThe three new tests fail on the old code and pass now. They are named after the findings, not TC ids, so they run in the commit-hook gates but are not counted in the run below.\n\nRESULT: ready\nSTORY: US-10-02\nBRANCH: feature/US-10-02\nCOMMITS: 91762a8 fix(descriptions): an answer with a blank title is no event [US-10-02]; df3d5db fix(descriptions): a part of the day is read whatever its case [US-10-02]; 3fcfb5d fix(descriptions): an answer waits while a window is open [US-10-02]; 35bd871 fix(descriptions): a failed reading says no event was found [US-10-02]; ab5ef1c fix(descriptions): drop an answer once the feature is turned off [US-10-02]; 12eb518 fix(descriptions): no event leaves the cursor where the user types [US-10-02]\nDECISIONS: none\nEVIDENCE:\n  #1 Box above \"Meet with…\", q, Enter / Shift+Enter / Esc, q in the shortcuts — TC-10-08 pass\n  #2 Focusing loads the model, freed after 5 minutes — TC-10-09 pass\n  #3 \"Reading…\", app stays usable, Esc drops a late answer — TC-10-10 pass\n  #4 Length given is used, otherwise the default length — TC-10-12 pass\n  #5 Location, notes, repeating, reminders, colour as for any new event — TC-10-11 pass\n  #6 Nothing in logs or files; cut at 500 characters — TC-10-15, TC-10-16 pass\n  #7 Offline only local calendars; no account means My calendar — TC-10-17 pass\n  #8 Test set thresholds, fake model and real Ollama — TC-10-18 pass (fake); MANUAL: TC-10-19 is manual-only (real Ollama with gemma4:e4b)\n  #9 Scenario \"Trening wieczorem\" — TC-10-11 pass\n  #10 Scenario: days and times worked out by the app — TC-10-13 pass\n  #11 Scenario: not an event, or an answer that cannot be used — TC-10-14 pass; failed reading (500) also covered by a_failed_reading_says_no_event_was_found\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_205814 pass=17 fail=0 blocked=0 manual=1 manual_tests=TC-10-19\nDERIVED_TESTS: none\nPREEXISTING: none (fix round on the story's own branch)\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 3fcfb5d; B2 fixed 35bd871; N4 fixed 91762a8; N9 fixed df3d5db; N10 fixed ab5ef1c; N5 fixed 12eb518; N3 refused: the description path builds its entry through the same new_entry/default_calendar as the c key, which already shows NO_CALENDAR, and a world with no writable calendar would need a new harness setup for no new code path; N2, N6, TC-10-17 picker, TC-10-16 Event::Text, TC-10-04 step 2, Ollama client interface: noted only, no action as the brief allows\nNOTES: An answer that comes while any dialog is open (including event details or Settings) now waits until that dialog closes. A no-event answer moves the cursor back into the box only when no other field has it.\nThe fake Ollama gained fail(): reading a description answers 500 (crates/core/src/ollama.rs).\nThe run was made on the clean head 12eb518 with a snapshot (snapshot: true, changed_during_run: false).\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

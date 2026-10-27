@@ -37,6 +37,8 @@
   "autonomy": {
     "decisions": "semi",
     "merge": "semi",
+    "a_waits": false,
+    "b_c_merge": "owner",
     "approvals": "chat",
     "questions": "session",
     "critical_extra": [],
