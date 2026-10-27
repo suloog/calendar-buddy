@@ -3,7 +3,7 @@ id: US-04-01 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-04
 covers: [MOD-04-F01, MOD-04-F02, MOD-04-F03] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: review # draft | ready | in-progress | review | done | blocked
+status: done # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [] # story IDs that must be done first
 | **Module** | `[MOD-04]` Appearance and themes — `docs/specs/modules/04-appearance-themes/REQUIREMENTS.md` |
 | **Covers** | `MOD-04-F01`, `F02`, `F03` |
 | **Priority** | must |
-| **Status** | review |
+| **Status** | done |
 | **Depends on** | — |
 | **YouTrack** | — |
 | **Open questions** | — |

@@ -3,7 +3,7 @@ id: US-02-04 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-02
 covers: [MOD-02-F05, MOD-02-F06, MOD-02-F21] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: review # draft | ready | in-progress | review | done | blocked
+status: done # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-02-03] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-02-03] # story IDs that must be done first
 | **Module** | `[MOD-02]` Calendars, synchronisation and offline cache — `docs/specs/modules/02-calendars-sync/REQUIREMENTS.md` |
 | **Covers** | `MOD-02-F05`, `F06`, `F21` |
 | **Priority** | must |
-| **Status** | review |
+| **Status** | done |
 | **Depends on** | blocked by `US-02-03` |
 | **YouTrack** | — |
 | **Open questions** | — |

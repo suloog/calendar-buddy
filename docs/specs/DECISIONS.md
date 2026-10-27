@@ -2305,3 +2305,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-191] Stories delivered by the local loop accepted without the manual checks
+
+- **Date:** 2026-10-27
+- **Decided by:** owner (Maciej Sułek)
+- **Source:** owner, retiring the local delivery loop (`scripts/loop/`) before testing the og plugin's own loop
+- **Affects:** the 42 stories in `review`, `docs/delivery/MANUAL-CHECKS.md`
+- **Decision:** The 42 stories the local loop left in `review` are `done`. The manual checks it listed (real Google sign-in, KDE notifications, the look) are not gone through one by one; the owner uses the app daily and accepts it as it works. The local loop and its records — `scripts/loop/`, `docs/delivery/` (the log, usage and manual checks) — are removed; the decisions it took stay in this register.
+- **Why:** A clean start for the og plugin's delivery loop (`target: local`, story modes), which will be tested on new features of this app.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
