@@ -39,7 +39,7 @@ depends_on: [] # test case IDs that must pass first
 
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
-| 1 | Case A: send the description; read the fake Google's record. | The editor opens with the default calendar "Work", which cannot be saved to offline (`DEC-213`); no guest is added, and the fake Google received no contacts or directory search. | app state + fake Google record |
+| 1 | Case A: send the description; read the fake Google's record. | The editor opens with the default calendar "Work", which cannot be saved to offline (`DEC-213`); the guest names are left out (`DEC-214`), and the fake Google received no contacts or directory search. | app state + fake Google record |
 | 2 | Case B: send the description. | The editor of a local event opens in "My calendar" with no guests and no Meet. | app state |
 
 ## Pass criterion

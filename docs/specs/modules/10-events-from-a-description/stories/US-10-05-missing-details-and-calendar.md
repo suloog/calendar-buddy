@@ -54,7 +54,8 @@ Two refinements of adding from a description: when the sentence gives no day or 
 ## Edge cases
 
 - Two calendars with the same name (local calendars may repeat names) → the first in the side panel's order is chosen.
-- The named calendar is disabled, hidden, read-only or, offline, a Google one → treated as not found.
+- The named calendar is disabled, hidden or read-only → treated as not found.
+- Offline, a named Google calendar → chosen as online; saving to it does not succeed, as for the default calendar (`DEC-213`, `DEC-214`).
 
 ## Out of scope / what not to worry about
 
@@ -65,4 +66,4 @@ Two refinements of adding from a description: when the sentence gives no day or 
 
 - The "New event" window gains an empty day or time state with Save disabled; the rest of `MOD-05`'s window is unchanged.
 - Manual check (left for the owner, as for the local loop's stories): the asked-for fields and the calendar note in the light and dark themes.
-- Decisions: `DEC-201`, `DEC-203`.
+- Decisions: `DEC-201`, `DEC-203`, `DEC-214`.

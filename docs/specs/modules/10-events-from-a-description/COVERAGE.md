@@ -109,7 +109,7 @@
 | `US-10-03#2` | A description with guests or Meet opens the full editor filled in; one… | `TC-10-20`, `TC-10-11` | auto | — |
 | `US-10-03#3` | Meet is on for "z Meetem", off for "bez Meeta", and as for any new eve… | `TC-10-23` | auto | — |
 | `US-10-03#4` | For a local calendar, guests and Meet are left out and the editor open… | `TC-10-24` | auto | — |
-| `US-10-03#5` | Offline, or with no Google account, a Google calendar cannot take the… | `TC-10-25` | auto | — |
+| `US-10-03#5` | Offline, or with no Google account, guests are not looked up and the… | `TC-10-25` | auto | — |
 | `US-10-03#6` | Scenario: two guests and Meet | `TC-10-20` | auto | — |
 | `US-10-03#7` | Scenario: a name that is not certain | `TC-10-22` | auto | — |
 | `US-10-04#1` | Adding and changing are told apart by the description; a sentence tha… | `TC-10-27` | auto | — |

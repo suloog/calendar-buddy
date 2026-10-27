@@ -32,7 +32,7 @@ People and Google Meet named in a description: the guests are looked up as when 
 - [ ] A description with guests or Meet opens the full editor filled in; one with neither opens the "New event" window (`US-10-02`).
 - [ ] Meet is on for "z Meetem" / "with Meet", off for "bez Meeta" / "no Meet", and when the description says nothing it behaves as for any new event — turning on by itself once a guest is added.
 - [ ] For a local calendar, guests and Meet are left out and the editor opens as for a local event.
-- [ ] Offline, or with no Google account, a Google calendar cannot take the event (`US-10-02`), so guests are not looked up.
+- [ ] Offline, or with no Google account, guests are not looked up and the names are left out, as for a local calendar (`DEC-214`).
 
 ### Scenario: two guests and Meet
 
@@ -62,4 +62,4 @@ People and Google Meet named in a description: the guests are looked up as when 
 - The guest lookup reuses the editor's suggestion source (`MOD-06-F02`…`F04`); exactly one match is added, anything else is left as typed text with the suggestions open.
 - Meet follows `MOD-06-F17` when the description is silent (`DEC-194`).
 - Manual check (left for the owner, as for the local loop's stories): real Google contacts and the directory of a Workspace account; the editor's look with an unresolved name.
-- Decisions: `DEC-178`, `DEC-194`, `DEC-196`, `DEC-205`, `DEC-211`, `DEC-213`.
+- Decisions: `DEC-178`, `DEC-194`, `DEC-196`, `DEC-205`, `DEC-211`, `DEC-213`, `DEC-214`.

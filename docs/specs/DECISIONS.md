@@ -2581,3 +2581,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-214] Offline, a named Google calendar is chosen and guests are left out
+
+- **Date:** 2026-10-27
+- **Decided by:** client (product owner — Maciej)
+- **Source:** `/og:clarify MOD-10`, 2026-10-27
+- **Affects:** `MOD-10-F10`, `MOD-10-F24`, `US-10-03`, `US-10-05`
+- **Decision:** Offline, a Google calendar named in the description is chosen as online; saving to it does not succeed, as for the default calendar (`DEC-213`). It is not treated as not found. Guests named in a description are left out offline, as for a local calendar, and nothing is looked up.
+- **Why:** One rule for the calendar, the same as `DEC-213` and adding by hand; a "not found" note for a calendar that exists would mislead. Guests cannot be looked up or invited offline anyway.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

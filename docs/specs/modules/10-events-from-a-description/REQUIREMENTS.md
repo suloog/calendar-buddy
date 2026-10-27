@@ -14,7 +14,7 @@ sources: [SRC-08, SRC-09, SRC-10, SRC-11] # SRC-NN documents this module draws o
 
 ## Context
 
-Adding and changing events by writing a sentence in Polish or English: a local model that Ollama runs on the user's computer reads it, and the app opens the "New event" window or the event's editing filled in, for the user to approve by hand; nothing leaves the computer. Answers for the scope area "Events from a description" of PROJECT.md; comes from `DSC-10` (`discovery/10-events-from-a-description.md`), drawing on `SRC-08`, `SRC-09` and `SRC-10`, settled by `DEC-192`…`DEC-213`. It goes beyond Google Calendar (`DEC-62`) at the product owner's word. The event windows are `MOD-05`'s, guest suggestions `MOD-06`'s, local calendars `MOD-09`'s — this module names only what a description adds.
+Adding and changing events by writing a sentence in Polish or English: a local model that Ollama runs on the user's computer reads it, and the app opens the "New event" window or the event's editing filled in, for the user to approve by hand; nothing leaves the computer. Answers for the scope area "Events from a description" of PROJECT.md; comes from `DSC-10` (`discovery/10-events-from-a-description.md`), drawing on `SRC-08`, `SRC-09` and `SRC-10`, settled by `DEC-192`…`DEC-214`. It goes beyond Google Calendar (`DEC-62`) at the product owner's word. The event windows are `MOD-05`'s, guest suggestions `MOD-06`'s, local calendars `MOD-09`'s — this module names only what a description adds.
 
 ## Scope coverage
 
@@ -138,7 +138,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Ollama stops while the box is open → the request fails and the box turns unavailable (`MOD-10-F21`) with the description kept.
 - No account connected → no guests or Meet are looked up; local calendars only (`MOD-10-F24`, `MOD-10-F25`).
 - Every calendar disabled, or none can take events → the message of `MOD-09` ("no calendar to create it in").
-- Offline with a Google calendar as the default → the window still opens with it; saving to it does not succeed, as when adding by hand, and the user can choose a local calendar (`DEC-213`).
+- Offline with a Google calendar as the default → the window still opens with it; saving to it does not succeed, as when adding by hand, and the user can choose a local calendar (`DEC-213`). A Google calendar named in the description is chosen the same way, not treated as not found; guests named in it are left out (`DEC-214`).
 - A description longer than 500 characters → the box takes it, only the first 500 are sent (`DEC-210`).
 
 ## Integrations
