@@ -8,7 +8,7 @@
     }
   },
   "enabledPlugins": {
-    "og@order-group": true
+    "og@order-group": false
   },
   "permissions": {
     "defaultMode": "plan",
