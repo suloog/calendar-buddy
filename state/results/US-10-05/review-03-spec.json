@@ -1,0 +1,72 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 3,
+  "sha": "116f8f62798293ee88e4c3ded52cc0a24117db72",
+  "reviewer": "spec",
+  "ts": "2026-10-28T04:14:37Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "Editor::follow_start is called by the app editor (start fields and All-day checkbox, crates/app/src/editor.rs:730,744), by described::Change::apply (US-10-04, only on Editor::of editors whose start time is always readable, so unaffected) and by sync.rs tests. The behaviour change is limited to editors with All day ticked and an unreadable start time: the end and repeat rule now follow day changes, including in the hand-made MOD-05 editor after a garbled time (matches Google). Full workspace suite green.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:523 — comment says \"hidden and left empty\" but the fallback applies to any unreadable start time while all day; reword"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:535 — time asked, All day ticked then unticked: start time empty but end time shows the midnight-based value (e.g. 00:30) until a time is typed; Save correctly blocked, cosmetic; clear end_time or keep length when unticking with the time still empty"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_asked_tests.rs:1 — round-2 regressions (day changed after All day) are covered only by the core unit test; add an \"all day, then change the day, end follows\" step to TC-10-32 and its harness test"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "test-runs/2026-10-28_051112/run.json:1 — steps record duration 0 and no observed/evidence; only cargo-test.txt backs them; record the cargo test names per TC"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "Described::missing asks only for the absent field, from_quick clears only it; TC-10-32/33 pass"
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "calendar_named matches side-panel name lower-cased; described_tests.rs:180 and TC-10-34 pass"
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "TC-10-32 passes; all-day followed by a day change now moves the end (editor.rs:1099-1131)"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "TC-10-33 passes: day empty with cursor, Save waits, saves 28 Oct 13:00-13:30"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "TC-10-34 chooses Praca; TC-10-35 default Work with the exact not-found note under the picker"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "US-10-05 spec-compliance review, round 3 (head 116f8f6) — Verdict: COMPLIANT. The fix closes S1 and S2, every acceptance criterion holds on 116f8f6, nothing blocking; four non-blocking points. Gates green (227 + 475 + 91), run.json on 116f8f6 not dirty shows TC-10-32…35 passing. (Full prose in the reviewer's hand-back; block below.)\n\nREVIEW: findings\nSTORY: US-10-05\nIMPACT: Editor::follow_start is called by the app editor (start fields and All-day checkbox, crates/app/src/editor.rs:730,744), by described::Change::apply (US-10-04, only on Editor::of editors whose start time is always readable, so unaffected) and by sync.rs tests. The behaviour change is limited to editors with All day ticked and an unreadable start time: the end and repeat rule now follow day changes, including in the hand-made MOD-05 editor after a garbled time (matches Google). Full workspace suite green.\nFINDINGS:\n  N1 crates/core/src/editor.rs:523 — comment says \"hidden and left empty\" but the fallback applies to any unreadable start time while all day; reword\n  N2 crates/core/src/editor.rs:535 — time asked, All day ticked then unticked: start time empty but end time shows the midnight-based value (e.g. 00:30) until a time is typed; Save correctly blocked, cosmetic; clear end_time or keep length when unticking with the time still empty\n  N3 crates/app/src/description_asked_tests.rs:1 — round-2 regressions (day changed after All day) are covered only by the core unit test; add an \"all day, then change the day, end follows\" step to TC-10-32 and its harness test\n  N4 test-runs/2026-10-28_051112/run.json:1 — steps record duration 0 and no observed/evidence; only cargo-test.txt backs them; record the cargo test names per TC\nCRITERIA:\n  #1 met — Described::missing asks only for the absent field, from_quick clears only it; TC-10-32/33 pass\n  #2 met — calendar_named matches side-panel name lower-cased; described_tests.rs:180 and TC-10-34 pass\n  #3 met — TC-10-32 passes; all-day followed by a day change now moves the end (editor.rs:1099-1131)\n  #4 met — TC-10-33 passes: day empty with cursor, Save waits, saves 28 Oct 13:00-13:30\n  #5 met — TC-10-34 chooses Praca; TC-10-35 default Work with the exact not-found note under the picker\n"
+}

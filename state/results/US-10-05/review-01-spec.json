@@ -1,0 +1,93 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 1,
+  "sha": "98f0db88dded8880bafc3c17c53b6bfe0da38fe2",
+  "reviewer": "spec",
+  "ts": "2026-10-28T04:02:27Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "QuickEntry (every \"New event\" window: click, drag, `c` key), Editor::from_quick (\"More options\") and Editor::timing (every event edit) gained the asked/not-found state and new empty-start messages; existing quick-entry and editor tests stay green.\n  described::parse/schema/prompt changed for all descriptions (adds and changes: new `none` kind, `calendar` field, no-day-means-today rule dropped) and Described::times lost the next-full-hour fallback; TC-10-11/13/18 and live TC-10-19 (96 %/92 %) still pass.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:1242 — in the \"New event\" window with a day/time asked, the cursor sits in the asked field, but `entered` only watches the title field: typing \"28.10.2026\" + Enter does nothing even once filled, while DEC-234 implies Enter saves once each field is filled → have asked_times report lost_focus+Enter of its fields and OR it into `entered` (new_event() already refuses while not ready)"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:783, crates/app/src/editor.rs:711-725 — the \"Day\"/\"Time\" hints and the \"Type the start date.\" / \"Type the start time or choose all day.\" messages now apply to every event in the full editor (clearing the start of any existing event), not only to described ones; the story's technical note keeps the rest of MOD-05's window unchanged → limit to editors opened with an asked field, or record in DEC-234 that it applies to all events"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2117-2128 — story edge case \"offline, a named Google calendar → chosen as online, saving does not succeed\" is handled only implicitly (no online filter in calendar_named) and no test covers it → add a test: offline, \"w kalendarzu Praca\" chooses Praca, no not-found note, Save refused with the offline reason"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:587 — the quick-window path for a missing time (no guests, e.g. \"Siłownia w sobotę\"): asked_times' Time field, its focus and its All-day checkbox are not tested at app level (TC-10-32 goes through the full editor because a guest is named; only core QuickEntry::fill is unit-tested) → add an app test for the quick window with the time asked, filled and all day"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:365 — DEC-232 lets a part of the day alone (\"Trening wieczorem\") mean today instead of asking for the day; this matches the module AC and TC-10-11 but is the delivery loop's own reading of a must requirement (F13), with \"Decided by: developer\" → have the product owner confirm DEC-232"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/create.rs:208 — the asked day accepts only the full regional numeric date (\"28.10\" is refused, see the create.rs unit test); TC-10-33 says \"choose\" a day; consistent with MOD-05's date fields but harsh for the one field the user must fill → optionally accept a day without the year, or offer the mini-calendar"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/modules/10-events-from-a-description/stories/US-10-05-missing-details-and-calendar.md:6 — story status and BACKLOG row are left at in-progress; DoD asks for them to be updated (likely done later by the loop) → set to review/done when the loop closes"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "US-10-05 meets its spec. All 5 acceptance criteria and all 6 covered requirements are met, each with a passing automated test. I found nothing blocking; there are 7 non-blocking findings below.\n\n**What I ran on 98f0db8:**\n- `cargo test -p calendar-core`: 474 passed.\n- `cargo test -p calendar-buddy`: 227 passed. That includes TC-10-32…35 in `crates/app/src/description_asked_tests.rs` and the earlier TC-10-11 (\"Trening wieczorem\") and TC-10-13.\n- `cargo fmt --check` and `cargo clippy -D warnings`: clean.\n- TC-10-18 against the fake model: date right 100 %, every field right 92 %.\n- Ollama with `gemma4:e4b` is running on this machine, so I also ran the live test set by hand (`the_test_set_against_a_live_ollama`, TC-10-19). It passed with dates 96 % and every field 92 %, which backs up the hand run claimed in DEC-232. \"Kawa z Bartkiem o 15\", \"Lunch o 13\", \"Lunch at 1pm\" and both sentences that name a calendar were all scored right.\n\n**Spec ↔ implementation**\n\n| Item | Verdict | Evidence |\n|---|---|---|\n| #1 A given day or time is filled in; only a missing one is asked for | MET | `Described::missing` / `times` (`crates/core/src/described.rs`). TC-10-32 checks the day 31.10 is filled with the time empty; TC-10-33 checks 13:00–13:30 is shown with the day empty. |\n| #2 A calendar is matched by its side-panel name, ignoring case | MET | `calendar_named` (`described.rs:295`) compares `trim().to_lowercase()` of `Calendar.name`, which is the name the side panel and picker show. TC-10-34 (\"praca\" finds Praca, \"MY CALENDAR\" finds My calendar) and a core unit test. |\n| #3 Scenario: no time | MET | TC-10-32 steps 1–3: full editor on 31 Oct, time empty, cursor in the \"Time\" field, Save disabled; typing 11:00 gives 11:00–11:30 and enables Save; all day gives an all-day event on 31.10. |\n| #4 Scenario: no date | MET | TC-10-33: day empty with the cursor in it, Save disabled; typing 28.10 enables Save; the fake Google receives Wed 28 Oct 13:00–13:30 in \"Work\". |\n| #5 Scenario: a named calendar | MET | TC-10-34 (chosen, no note); TC-10-35 (\"Prywatny\" doesn't exist, \"Święta w Polsce\" is read-only) gives \"Work\" and the note `Calendar \"<x>\" not found — using Work`. |\n| F09 | MET | `main.rs` `read()` picks the found calendar through `entry_in`; TC-10-34. |\n| F10 / U06 | MET | `entry.not_found` is set only when a calendar exists. The note is drawn under the picker in the quick window (`main.rs:1229`) and in the full editor's Calendar row. TC-10-35. |\n| F13 | MET | New kind `none`; `parse` returns `date: None`; TC-10-33. A part of the day alone still means today (DEC-232, see N5). |\n| F14 | MET | TC-10-32; core tests for `QuickEntry::fill` and `Editor::from_quick`. |\n| U07 | MET | Empty field with a hint, cursor placed in it (`ask` / `asking`), Save disabled via `entry.ready()` / `START_*_EMPTY`; TC-10-32 and TC-10-33. |\n\n**Edge cases**\n- Two calendars with the same name, first in side-panel order: tested in a core unit test (Google \"Praca\" is chosen before local \"Praca\").\n- Disabled, hidden or read-only counts as not found: tested in a core unit test, and read-only also in TC-10-35.\n- Offline with a named Google calendar: the code handles it (no online filter in `calendar_named`; the quick window's existing offline refusal then applies), but no test covers it (N3).\n\n**Out of scope:** no violations. The prompt and schema changes (a `calendar` field and the `none` kind) are needed to deliver F09 and F13. Dropping the next-full-hour stand-in was anticipated by DEC-219. The small spill-over into the general MOD-05 editor is N2.\n\n**The changed test-set sentence (\"Kawa z Bartkiem o 15\")**\n- The change is consistent with the spec. The sentence gives an hour and no day, the same shape as the story's own \"Lunch o 13\" scenario. MOD-10-F13 and SRC-08-08 say the app then asks for the day, so the old expectation (\"today\", from the 2026-10-27 prompt's \"today also when no day is given\") contradicts a must requirement.\n- The recorded answer changed from `same` to `none`. Under the new parsing the old answer would give no day too, so the expectation does not depend on the new recording.\n- The live model scores the sentence right under the new rules.\n\n**Constitution:** nothing violated. The matching, filling and timing logic is in `calendar-core`; the app only draws it. Gates are green.\n\nIMPACT spells out what else uses the changed code.\n\n```\nREVIEW: findings\nSTORY: US-10-05\nIMPACT: QuickEntry (every \"New event\" window: click, drag, `c` key), Editor::from_quick (\"More options\") and Editor::timing (every event edit) gained the asked/not-found state and new empty-start messages; existing quick-entry and editor tests stay green.\n  described::parse/schema/prompt changed for all descriptions (adds and changes: new `none` kind, `calendar` field, no-day-means-today rule dropped) and Described::times lost the next-full-hour fallback; TC-10-11/13/18 and live TC-10-19 (96 %/92 %) still pass.\nFINDINGS:\n  N1 crates/app/src/main.rs:1242 — in the \"New event\" window with a day/time asked, the cursor sits in the asked field, but `entered` only watches the title field: typing \"28.10.2026\" + Enter does nothing even once filled, while DEC-234 implies Enter saves once each field is filled → have asked_times report lost_focus+Enter of its fields and OR it into `entered` (new_event() already refuses while not ready)\n  N2 crates/core/src/editor.rs:783, crates/app/src/editor.rs:711-725 — the \"Day\"/\"Time\" hints and the \"Type the start date.\" / \"Type the start time or choose all day.\" messages now apply to every event in the full editor (clearing the start of any existing event), not only to described ones; the story's technical note keeps the rest of MOD-05's window unchanged → limit to editors opened with an asked field, or record in DEC-234 that it applies to all events\n  N3 crates/app/src/main.rs:2117-2128 — story edge case \"offline, a named Google calendar → chosen as online, saving does not succeed\" is handled only implicitly (no online filter in calendar_named) and no test covers it → add a test: offline, \"w kalendarzu Praca\" chooses Praca, no not-found note, Save refused with the offline reason\n  N4 crates/app/src/editor.rs:587 — the quick-window path for a missing time (no guests, e.g. \"Siłownia w sobotę\"): asked_times' Time field, its focus and its All-day checkbox are not tested at app level (TC-10-32 goes through the full editor because a guest is named; only core QuickEntry::fill is unit-tested) → add an app test for the quick window with the time asked, filled and all day\n  N5 crates/core/src/described.rs:365 — DEC-232 lets a part of the day alone (\"Trening wieczorem\") mean today instead of asking for the day; this matches the module AC and TC-10-11 but is the delivery loop's own reading of a must requirement (F13), with \"Decided by: developer\" → have the product owner confirm DEC-232\n  N6 crates/core/src/create.rs:208 — the asked day accepts only the full regional numeric date (\"28.10\" is refused, see the create.rs unit test); TC-10-33 says \"choose\" a day; consistent with MOD-05's date fields but harsh for the one field the user must fill → optionally accept a day without the year, or offer the mini-calendar\n  N7 docs/specs/modules/10-events-from-a-description/stories/US-10-05-missing-details-and-calendar.md:6 — story status and BACKLOG row are left at in-progress; DoD asks for them to be updated (likely done later by the loop) → set to review/done when the loop closes\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n```\n"
+}

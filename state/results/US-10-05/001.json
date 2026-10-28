@@ -1,0 +1,55 @@
+{
+  "n": 1,
+  "attempt": 1,
+  "ts": "2026-10-28T03:54:33Z",
+  "story": "US-10-05",
+  "mode": "implement",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-05",
+    "branch": "feature/US-10-05",
+    "commits": [
+      "98f0db8 feat(descriptions): missing day or time and a named calendar [US-10-05]"
+    ],
+    "decisions": [
+      "DEC-232 routine A day is asked for only when the description names neither a day nor a part of the day",
+      "DEC-233 routine A named calendar is read by the model and matched among the calendars that can take the event",
+      "DEC-234 routine The \"New event\" window asks for a missing day or time in fields of its own"
+    ],
+    "evidence": [
+      "#1 a given day/time is filled in, only a missing one asked — TC-10-32 step 1 (Sat 31 Oct filled, time empty), TC-10-33 step 1 (13:00–13:30 filled, day empty); unit tests a_day_or_a_time_not_given_is_asked_for_and_the_event_waits_on_today_or_at_midnight, a_day_or_a_time_asked_for_holds_the_event_back_until_filled_in_or_all_day_chosen",
+      "#2 calendar matched by its side-panel name, ignoring letter case — TC-10-34 steps 1-2 (\"praca\" -> Praca, \"MY CALENDAR\" -> My calendar); unit test a_calendar_is_named_by_its_name_in_any_letter_case_among_those_that_can_take_the_event (duplicates, disabled, hidden, read-only)",
+      "#3 no time: opens Sat 31 Oct, time empty with cursor, Save waits for a time or all-day — TC-10-32 steps 1-3",
+      "#4 no date: day empty with cursor, Save waits for a day — TC-10-33 steps 1-3 (saved to fake Google Wed 28 Oct 13:00–13:30 in Work)",
+      "#5 named calendar chosen, else default with the not-found note — TC-10-34 steps 1-2, TC-10-35 steps 1-2 (\"Prywatny\", read-only \"Święta w Polsce\" -> Work + note)"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_045358",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 0
+    },
+    "derived_tests": [],
+    "preexisting": "US-10-02 already opened the window from a description, filling in the day and the time; with no time it stood in the next full hour (DEC-219), and with no day it stood on today. The model already left the time empty when none was given. Neither the missing-day/time asking nor calendar naming existed.",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "notes": "The model's answer gains a \"calendar\" field and a \"none\" kind of day; test set: \"Kawa z Bartkiem o 15\" now expects no day, 4 sentences added, live gemma4:e4b scored dates 96 % / all fields 90 %.\nManual check left for the owner: the empty day/time fields and the calendar note in light and dark themes.\nUS-10-02's story file still says status: review on main, though the loop counts it done.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "US-10-05 is ready. It is one commit, 98f0db8, on `feature/US-10-05`, branched off the local `main`, with a clean tree. The story's four test cases (TC-10-32 to TC-10-35) pass on that exact head. fmt, clippy and the whole `cargo test --workspace` pass. Nothing was pushed.\n\n**What changed:**\n- **No time given** (\"Spotkanie z Michałem w sobotę\"): the window opens on Saturday 31 October with the time empty and the cursor in it. Save stays unavailable until a time is typed or All day is ticked. The end then follows at the event's length.\n- **No day given** (\"Lunch o 13\"): the window opens at 13:00–13:30 with the day empty and the cursor in it. Save waits for a day.\n- **Where:** the \"New event\" window shows these empty fields only when the description left something out; otherwise its time row is unchanged. The full editor leaves the same start fields empty. When a start field is empty it now says \"Type the start date.\" or \"Type the start time or choose all day.\" instead of \"can't be read\".\n- **A named calendar** (\"w kalendarzu Praca\"): the model now returns the calendar's name. The app picks the first calendar in side-panel order with that name, ignoring letter case, among those a new event can go to. Disabled, read-only and hidden calendars count as not found. If none fits, the default calendar is used and a note under the picker says `Calendar \"Praca\" not found — using Work`.\n- **The model's rules** gain a \"no day\" answer.\n  - A part of the day alone, such as \"Trening wieczorem\", still means today. This keeps TC-10-11 and the module's acceptance criterion; the app enforces it itself because `gemma4:e4b` answers that sentence with no day.\n  - I checked the new rules against the real `gemma4:e4b` on this machine. The test set scored dates 96 % and all fields 90 %, above the thresholds.\n\n**Test set change.** \"Kawa z Bartkiem o 15\" in the test set used to expect today; it now expects no day, with the model's new recorded answer. Four sentences were added. The test set file is `crates/core/src/described_cases.json` and the test set run is TC-10-18.\n\n**Before you push:** check by eye the empty day/time fields and the calendar note in the light and dark themes, as the story's technical notes ask.\n\n```\nRESULT: ready\nSTORY: US-10-05\nBRANCH: feature/US-10-05\nCOMMITS: 98f0db8 feat(descriptions): missing day or time and a named calendar [US-10-05]\nDECISIONS: DEC-232 routine A day is asked for only when the description names neither a day nor a part of the day; DEC-233 routine A named calendar is read by the model and matched among the calendars that can take the event; DEC-234 routine The \"New event\" window asks for a missing day or time in fields of its own\nEVIDENCE:\n  #1 a given day/time is filled in, only a missing one asked — TC-10-32 step 1 (Sat 31 Oct filled, time empty), TC-10-33 step 1 (13:00–13:30 filled, day empty); unit tests a_day_or_a_time_not_given_is_asked_for_and_the_event_waits_on_today_or_at_midnight, a_day_or_a_time_asked_for_holds_the_event_back_until_filled_in_or_all_day_chosen\n  #2 calendar matched by its side-panel name, ignoring letter case — TC-10-34 steps 1-2 (\"praca\" -> Praca, \"MY CALENDAR\" -> My calendar); unit test a_calendar_is_named_by_its_name_in_any_letter_case_among_those_that_can_take_the_event (duplicates, disabled, hidden, read-only)\n  #3 no time: opens Sat 31 Oct, time empty with cursor, Save waits for a time or all-day — TC-10-32 steps 1-3\n  #4 no date: day empty with cursor, Save waits for a day — TC-10-33 steps 1-3 (saved to fake Google Wed 28 Oct 13:00–13:30 in Work)\n  #5 named calendar chosen, else default with the not-found note — TC-10-34 steps 1-2, TC-10-35 steps 1-2 (\"Prywatny\", read-only \"Święta w Polsce\" -> Work + note)\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_045358 pass=4 fail=0 blocked=0 manual=0 manual_tests=\nDERIVED_TESTS: none\nPREEXISTING: US-10-02 already opened the window from a description, filling in the day and the time; with no time it stood in the next full hour (DEC-219), and with no day it stood on today. The model already left the time empty when none was given. Neither the missing-day/time asking nor calendar naming existed.\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nNOTES: The model's answer gains a \"calendar\" field and a \"none\" kind of day; test set: \"Kawa z Bartkiem o 15\" now expects no day, 4 sentences added, live gemma4:e4b scored dates 96 % / all fields 90 %.\nManual check left for the owner: the empty day/time fields and the calendar note in light and dark themes.\nUS-10-02's story file still says status: review on main, though the loop counts it done.\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

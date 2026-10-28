@@ -134,5 +134,29 @@
     "title": "The model's answer is taken in while an event's details are open",
     "file": "docs/specs/DECISIONS.md",
     "ts": "2026-10-28T02:51:11Z"
+  },
+  {
+    "dec": "DEC-232",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "A day is asked for only when the description names neither a day nor a part of the day",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
+  },
+  {
+    "dec": "DEC-233",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "A named calendar is read by the model and matched among the calendars that can take the event",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
+  },
+  {
+    "dec": "DEC-234",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "The \"New event\" window asks for a missing day or time in fields of its own",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
   }
 ]
