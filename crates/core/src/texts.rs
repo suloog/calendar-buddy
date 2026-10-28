@@ -32,6 +32,11 @@ pub const WAITING: &str = "Finish signing in in your browser. On a Workspace acc
 /// What the browser shows once the sign-in is back in the app.
 pub const SIGNED_IN_PAGE: &str = "You can close this tab and go back to Calendar Buddy.";
 
+/// The hint of the button that drops a name from a description without inviting anyone.
+pub fn drop_name(name: &str) -> String {
+    format!("Remove \"{name}\"")
+}
+
 pub fn signing_in_again(email: &str) -> String {
     format!("Signing in again to {email}.")
 }
@@ -423,6 +428,9 @@ pub const ADD_LOCATION: &str = "Add location";
 pub const GUESTS: &str = "Guests";
 pub const ADD_GUESTS: &str = "Add guests";
 pub const ADD_GOOGLE_MEET: &str = "Add Google Meet";
+/// Beside a name from a description that fits several people or nobody (`MOD-10-F12`).
+pub const PICK_WHO: &str = "not invited — pick who you mean";
+pub const NOBODY_FITS: &str = "No one found";
 pub const NOTIFICATIONS: &str = "Notifications";
 pub const DESCRIPTION: &str = "Description";
 pub const ADD_DESCRIPTION: &str = "Add description";

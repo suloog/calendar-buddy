@@ -9,6 +9,8 @@ use chrono_tz::Tz;
 use serde_json::{Value, json};
 
 use crate::create;
+use crate::editor::{Editor, Unresolved};
+use crate::guests::{self, Person};
 use crate::ollama::{KEEP_ALIVE, Ollama};
 
 /// The most characters of a description sent to the model (`DEC-210`).
@@ -30,7 +32,7 @@ Rules:
 - action: "add" when the request describes an event; "none" when it is not an event, such as a question or a greeting.
 - title: a short event title in the language of the request, without the date or time. Do not translate it. "Coffee with Ben tomorrow" -> "Coffee with Ben"; "Kawa z Bartkiem jutro" -> "Kawa z Bartkiem".
 - guests: first names of the people taking part, as written in the request's language, in their basic (nominative) form. Do not translate names. "with Tom" -> "Tom"; "z Tomkiem" -> "Tomek"; "z Anią" -> "Ania"; "with Anna" -> "Anna". Words for roles or groups are not guests: mom, mama, team, zespół, client, klient, board, zarząd. Empty list if no person is named.
-- meet: true only when Google Meet or a video call is asked for; false when it is refused ("no Meet", "bez Meeta") or not mentioned.
+- meet: true when Google Meet or a video call is asked for; false only when it is refused ("no Meet", "bez Meeta"); null when it is not mentioned.
 - duration_min: the length in minutes when the request gives one ("45 minut" -> 45, "two hours" -> 120, "godzina i kwadrans" -> 75); null when it gives none.
 - kind and day describe the day; do not compute the date:
   kind "yesterday" (wczoraj), "today" (also when no day is given), "tomorrow" (jutro), "day_after_tomorrow" (pojutrze): day "";
@@ -54,7 +56,7 @@ const KINDS: [&str; 8] = [
 const WEEKDAYS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /// The fixed form of the answer (structured output): variant D, with whether it is an event and a
-/// length left empty when none is given (`DEC-218`).
+/// length left empty when none is given (`DEC-218`); Meet empty when not mentioned (`DEC-223`).
 fn schema() -> Value {
     json!({
         "type": "object",
@@ -66,7 +68,7 @@ fn schema() -> Value {
             "time": {"type": ["string", "null"]},
             "duration_min": {"type": ["integer", "null"]},
             "guests": {"type": "array", "items": {"type": "string"}},
-            "meet": {"type": "boolean"},
+            "meet": {"type": ["boolean", "null"]},
         },
         "required": ["action", "title", "kind", "day", "time", "duration_min", "guests", "meet"],
     })
@@ -125,10 +127,17 @@ pub struct Described {
     /// In minutes; `None` when the description gives no length.
     pub length: Option<u32>,
     pub guests: Vec<String>,
-    pub meet: bool,
+    /// Google Meet asked for (`true`), refused (`false`), or not mentioned (`None`, `DEC-223`).
+    pub meet: Option<bool>,
 }
 
 impl Described {
+    /// Whether it opens the full editor: it names guests or asks for Meet, which the "New
+    /// event" window has not (`MOD-10-F06`, `DEC-205`).
+    pub fn full(&self) -> bool {
+        !self.guests.is_empty() || self.meet == Some(true)
+    }
+
     /// The times of the event: from its time on its day in `zone`, its length long, or the
     /// default length of a new event when it gives none (`MOD-10-F05`). With no time it starts as
     /// one started with the `c` key would, at the next full hour, until `US-10-05` asks for it
@@ -148,6 +157,39 @@ impl Described {
             }
             None => create::keyed(self.date, now, length, zone),
         }
+    }
+}
+
+/// Fills the guests and Meet of a description into the editor of its new event (`US-10-03`).
+/// `found` holds, for each name, the people found for it as when it is typed in the guest field
+/// — Google's search, then the recent guests (`MOD-10-F11`); `None` when nothing was looked up,
+/// offline, and then the names are left out (`DEC-214`). A name the guest field would suggest
+/// exactly one person for invites them; any other waits with its suggestions (`MOD-10-F12`). Meet
+/// is as the description says, or as the guests added left it (`MOD-10-F07`, `MOD-06-F17`). A
+/// local calendar takes neither (`MOD-10-F25`).
+pub fn fill(
+    editor: &mut Editor,
+    described: &Described,
+    found: Option<&[(String, Vec<Person>)]>,
+    own: &[String],
+) {
+    if !editor.google() {
+        return;
+    }
+    for (name, people) in found.into_iter().flatten() {
+        let mut suggested = guests::suggestions(name, people, &editor.guests, own);
+        if suggested.len() == 1 {
+            editor.add_guest(&suggested.remove(0), own);
+        } else {
+            editor.unresolved.push(Unresolved {
+                name: name.clone(),
+                suggested,
+            });
+        }
+    }
+    if let Some(meet) = described.meet {
+        editor.meet = meet;
+        editor.meet_described = true;
     }
 }
 
@@ -188,7 +230,7 @@ fn parse(answer: &str, today: NaiveDate) -> Option<Reading> {
         time,
         length,
         guests,
-        meet: answer["meet"].as_bool().unwrap_or(false),
+        meet: answer["meet"].as_bool(),
     }))
 }
 

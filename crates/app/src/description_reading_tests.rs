@@ -88,8 +88,8 @@ struct Google {
 }
 
 impl Google {
-    fn start(dir: &Path) -> Self {
-        let fake = FakeGoogle::start(None, &[]);
+    fn start(dir: &Path, workspace: bool) -> Self {
+        let fake = FakeGoogle::start(workspace.then_some("firma.example"), &[]);
         let store = Arc::new(FakeStore::default());
         let token = fake.signed_in(ACCOUNT_ID);
         (store.saved.lock().unwrap()).push((ACCOUNT_ID.to_string(), token));
@@ -130,9 +130,23 @@ impl Drop for World {
 /// Empty config, cache and data directories under `dir`; events from a description on, with a
 /// fake Ollama that has the model; with a Google account or "Use without an account".
 fn world_in(dir: PathBuf, google: bool) -> World {
+    world_with(dir, google, false, |_| {})
+}
+
+/// As `world_in`, the Google account a Workspace one when `workspace`, which may search its
+/// organization's directory, and `prepare` given the fake Google before the app starts.
+fn world_with(
+    dir: PathBuf,
+    google: bool,
+    workspace: bool,
+    prepare: impl FnOnce(&FakeGoogle),
+) -> World {
     std::fs::create_dir_all(&dir).unwrap();
     let ollama = FakeOllama::start(&[DEFAULT_MODEL]);
-    let google = google.then(|| Google::start(&dir));
+    let google = google.then(|| Google::start(&dir, workspace));
+    if let Some(google) = &google {
+        prepare(&google.fake);
+    }
     let network = Switch::default();
     let mut settings = Settings::default();
     settings.ollama.address = ollama.address.clone();
@@ -142,9 +156,9 @@ fn world_in(dir: PathBuf, google: bool) -> World {
             accounts.add(Account {
                 id: ACCOUNT_ID.to_string(),
                 email: EMAIL.to_string(),
-                workspace: false,
+                workspace,
                 contacts: true,
-                directory: false,
+                directory: workspace,
             });
             let (client_file, endpoints, store) = (
                 google.client_file.clone(),
@@ -1033,3 +1047,6 @@ fn an_answer_after_turning_the_feature_off_is_dropped() {
     idle(harness, 200);
     assert!(harness.state().dialog.is_none());
 }
+
+#[path = "description_guests_tests.rs"]
+mod guests_tests;

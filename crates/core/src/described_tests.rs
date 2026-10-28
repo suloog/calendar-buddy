@@ -197,7 +197,8 @@ fn score(case: &Case, reading: &Reading) -> [(&'static str, bool); 6] {
             event.length.unwrap_or(create::DEFAULT_LENGTH) == case.length,
         ),
         ("guests", folded(&event.guests) == folded(&case.guests)),
-        ("meet", event.meet == case.meet),
+        // Meet on: asked for; refused and not mentioned both leave it off here (`DEC-223`).
+        ("meet", (event.meet == Some(true)) == case.meet),
         ("title", case.title.iter().any(|word| title.contains(word))),
     ]
 }
@@ -261,4 +262,242 @@ fn the_test_set_against_a_live_ollama() {
     let (dates, all) = run(&Ollama::default());
     assert!(dates >= 95.0, "date right in {dates:.0} %");
     assert!(all >= 80.0, "every field right in {all:.0} %");
+}
+
+/// `US-10-03`: what the editor gets from a description with guests and Meet.
+mod guests_and_meet {
+    use super::*;
+    use crate::create::QuickEntry;
+    use crate::editor::{Editor, Unresolved};
+    use crate::guests::Person;
+    use crate::local;
+    use crate::model::{Access, Calendar, Rgb};
+    use crate::regional::Regional;
+    use pure_rust_locales::Locale;
+
+    fn person(name: &str, email: &str) -> Person {
+        Person {
+            name: name.to_string(),
+            email: email.to_string(),
+        }
+    }
+
+    fn described(guests: &[&str], meet: Option<bool>) -> Described {
+        Described {
+            title: "Spotkanie".to_string(),
+            date: d(2026, 10, 27),
+            time: NaiveTime::from_hms_opt(10, 0, 0),
+            length: None,
+            guests: guests.iter().map(|g| g.to_string()).collect(),
+            meet,
+        }
+    }
+
+    fn calendar(account_id: &str) -> Calendar {
+        Calendar {
+            id: "owner@example.com".to_string(),
+            account_id: account_id.to_string(),
+            name: "Work".to_string(),
+            color: Rgb(0x9f, 0xe1, 0xe7),
+            access: Access::Owner,
+            zone: Warsaw,
+            default_reminders: Vec::new(),
+        }
+    }
+
+    fn editor(account_id: &str) -> Editor {
+        let start = Warsaw
+            .with_ymd_and_hms(2026, 10, 27, 10, 0, 0)
+            .unwrap()
+            .to_utc();
+        let entry = QuickEntry::new(
+            (start, start + Duration::minutes(30)),
+            Warsaw,
+            Some(calendar(account_id)),
+        );
+        Editor::from_quick(&entry, &Regional::new(Locale::pl_PL))
+    }
+
+    fn people() -> Vec<Person> {
+        vec![
+            person("Ania Nowak", "ania.nowak@example.com"),
+            person("Tomek Wiśniewski", "tomek.w@example.com"),
+            person("Kasia Nowak", "kasia.nowak@example.com"),
+            person("Kasia Lis", "kasia.lis@example.com"),
+            person("", "owner@example.com"),
+        ]
+    }
+
+    /// Each name with everyone found, as Google and the recent guests give them.
+    fn found(names: &[&str]) -> Vec<(String, Vec<Person>)> {
+        names.iter().map(|n| (n.to_string(), people())).collect()
+    }
+
+    #[test]
+    fn meet_is_asked_for_refused_or_not_mentioned() {
+        let with = |meet: Value| {
+            let answer = answer("tomorrow", "", json!("10:00"), Value::Null)
+                .replace(r#""meet":false"#, &format!(r#""meet":{meet}"#));
+            event(&answer).meet
+        };
+        assert_eq!(with(json!(true)), Some(true));
+        assert_eq!(with(json!(false)), Some(false));
+        assert_eq!(with(Value::Null), None);
+        let schema = &request(&Ollama::default(), "Kino", now())["format"];
+        assert_eq!(
+            schema["properties"]["meet"]["type"],
+            json!(["boolean", "null"])
+        );
+    }
+
+    #[test]
+    fn guests_or_meet_asked_for_open_the_full_editor_and_neither_the_new_event_window() {
+        assert!(described(&["Ania"], None).full());
+        assert!(described(&[], Some(true)).full());
+        assert!(described(&["Ania"], Some(false)).full());
+        assert!(!described(&[], None).full());
+        // Refusing Meet asks for nothing the "New event" window lacks.
+        assert!(!described(&[], Some(false)).full());
+    }
+
+    #[test]
+    fn a_name_that_fits_one_person_invites_them_and_the_first_guest_turns_meet_on() {
+        let mut editor = editor("1");
+        let event = described(&["Ania", "Tomek"], None);
+        fill(&mut editor, &event, Some(&found(&["Ania", "Tomek"])), &[]);
+        let invited: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
+        assert_eq!(invited, ["ania.nowak@example.com", "tomek.w@example.com"]);
+        assert!(editor.unresolved.is_empty());
+        assert!(editor.meet);
+    }
+
+    #[test]
+    fn a_name_that_fits_several_or_nobody_waits_with_its_suggestions_and_invites_nobody() {
+        let mut editor = editor("1");
+        let event = described(&["Kasia", "Zenek", "mama"], None);
+        fill(
+            &mut editor,
+            &event,
+            Some(&found(&["Kasia", "Zenek", "mama"])),
+            &[],
+        );
+        assert!(editor.guests.is_empty());
+        assert!(!editor.meet);
+        assert_eq!(
+            editor.unresolved,
+            [
+                Unresolved {
+                    name: "Kasia".to_string(),
+                    suggested: vec![
+                        person("Kasia Nowak", "kasia.nowak@example.com"),
+                        person("Kasia Lis", "kasia.lis@example.com"),
+                    ],
+                },
+                Unresolved {
+                    name: "Zenek".to_string(),
+                    suggested: Vec::new(),
+                },
+                Unresolved {
+                    name: "mama".to_string(),
+                    suggested: Vec::new(),
+                },
+            ]
+        );
+        // Picking one invites them; dropping the other invites nobody.
+        let lis = editor.unresolved[0].suggested[1].clone();
+        editor.pick(0, &lis, &[]);
+        let invited: Vec<&str> = editor.guests.iter().map(|g| g.email.as_str()).collect();
+        assert_eq!(invited, ["kasia.lis@example.com"]);
+        assert!(
+            editor.meet,
+            "the first guest turns Meet on, as in the editor"
+        );
+        assert_eq!(editor.unresolved.len(), 2);
+        editor.drop_unresolved(0);
+        assert_eq!(editor.unresolved[0].name, "mama");
+    }
+
+    #[test]
+    fn guests_added_later_leave_meet_as_the_description_said() {
+        // "Lunch z Kasią i Zenkiem jutro o 13 bez Meeta": two people named Kasia, nobody Zenek.
+        for (said, on) in [(Some(false), false), (Some(true), true), (None, true)] {
+            // Kasia Lis picked for "Kasia".
+            let mut picked = editor("1");
+            fill(
+                &mut picked,
+                &described(&["Kasia", "Zenek"], said),
+                Some(&found(&["Kasia", "Zenek"])),
+                &[],
+            );
+            let lis = picked.unresolved[0].suggested[1].clone();
+            picked.pick(0, &lis, &[]);
+            assert_eq!(picked.guests[0].email, "kasia.lis@example.com");
+            assert_eq!(picked.meet, on, "picked, {said:?}");
+
+            // Zenek's address typed in the guest field and Enter.
+            let mut typed = editor("1");
+            fill(
+                &mut typed,
+                &described(&["Kasia", "Zenek"], said),
+                Some(&found(&["Kasia", "Zenek"])),
+                &[],
+            );
+            typed.guest_field = "zenek@example.com".to_string();
+            typed.enter_guest(&[], &[]);
+            assert_eq!(typed.guests[0].email, "zenek@example.com");
+            assert_eq!(typed.meet, on, "typed, {said:?}");
+        }
+    }
+
+    #[test]
+    fn the_users_own_address_is_never_a_guest() {
+        let mut editor = editor("1");
+        let own = ["owner@example.com".to_string()];
+        fill(
+            &mut editor,
+            &described(&["owner"], None),
+            Some(&found(&["owner"])),
+            &own,
+        );
+        assert!(editor.guests.is_empty());
+        assert_eq!(editor.unresolved[0].suggested, Vec::new());
+    }
+
+    #[test]
+    fn meet_follows_the_description_and_the_editors_rule_when_it_says_nothing() {
+        let meet = |guests: &[&str], meet| {
+            let mut editor = editor("1");
+            fill(
+                &mut editor,
+                &described(guests, meet),
+                Some(&found(guests)),
+                &[],
+            );
+            editor.meet
+        };
+        assert!(meet(&[], Some(true)));
+        assert!(meet(&["Ania"], Some(true)));
+        assert!(!meet(&["Ania"], Some(false)));
+        assert!(meet(&["Ania"], None));
+        assert!(!meet(&[], None));
+    }
+
+    #[test]
+    fn a_local_calendar_takes_neither_guests_nor_meet() {
+        let mut editor = editor(local::ACCOUNT_ID);
+        let event = described(&["Ania"], Some(true));
+        fill(&mut editor, &event, Some(&found(&["Ania"])), &[]);
+        assert!(editor.guests.is_empty());
+        assert!(editor.unresolved.is_empty());
+        assert!(!editor.meet);
+    }
+
+    #[test]
+    fn with_nothing_looked_up_the_names_are_left_out_and_meet_still_follows() {
+        let mut editor = editor("1");
+        fill(&mut editor, &described(&["Ania"], Some(true)), None, &[]);
+        assert!(editor.guests.is_empty());
+        assert!(editor.unresolved.is_empty());
+        assert!(editor.meet);
+    }
 }

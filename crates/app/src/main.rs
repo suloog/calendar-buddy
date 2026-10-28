@@ -345,6 +345,9 @@ struct CalendarApp {
     clock: fn() -> DateTime<Utc>,
     /// The box was gone to while unavailable: it takes the keyboard if Ollama says it can be used.
     box_wanted: bool,
+    /// A described event with guests, and its new event, while Google looks the names up
+    /// (`MOD-10-F11`).
+    named: Option<(described::Described, QuickEntry)>,
     /// The settings' section of events from a description while the settings are open.
     ollama_form: Option<Form>,
     /// The settings open scrolled to that section, from the link under an unavailable box.
@@ -503,6 +506,7 @@ impl CalendarApp {
             reader: description::Reader::start(&ctx),
             clock: Utc::now,
             box_wanted: false,
+            named: None,
             ollama_form: None,
             settings_at_descriptions: false,
             meet_with: MeetWith::default(),
@@ -2001,6 +2005,7 @@ impl CalendarApp {
             }
             Some(description::Action::Cancel) => {
                 self.reader.cancel();
+                self.named = None;
                 self.description.reading = false;
             }
             Some(description::Action::OpenSettings) => {
@@ -2011,8 +2016,10 @@ impl CalendarApp {
         }
     }
 
-    /// What the model made of the description sent (`US-10-02`): an event opens the "New event"
-    /// window filled in, as when adding by hand, for the user to save (`MOD-10-F06`); no event
+    /// What the model made of the description sent (`US-10-02`, `US-10-03`): an event opens the
+    /// "New event" window filled in, as when adding by hand, for the user to save, or the full
+    /// editor when it names guests or asks for Meet, once Google found the guests (`MOD-10-F06`,
+    /// `DEC-224`); no event
     /// leaves the description in the box with the cursor, saying so (`MOD-10-F23`); no answer
     /// says the same and asks Ollama again, so the box turns unavailable when it has gone
     /// (`MOD-10` edge cases).
@@ -2035,9 +2042,29 @@ impl CalendarApp {
             described::Reading::Event(event) => {
                 let zone = self.zone;
                 let mut entry = self.new_entry(|length| event.times(length, now, zone));
-                entry.title = event.title;
-                self.dialog = Some(Dialog::QuickEntry(entry, false));
-                self.description.field.clear();
+                entry.title = event.title.clone();
+                if !event.full() {
+                    self.dialog = Some(Dialog::QuickEntry(entry, false));
+                    self.description.field.clear();
+                    return;
+                }
+                // Guests are looked up only for a Google calendar, online (`MOD-10-F25`,
+                // `DEC-214`); "Reading…" stays until Google answered (`DEC-224`).
+                let account = (entry.calendar.as_ref())
+                    .filter(|calendar| calendar.account_id != local::ACCOUNT_ID)
+                    .and_then(|calendar| {
+                        (self.accounts.list().iter())
+                            .find(|entry| entry.account.id == calendar.account_id)
+                    });
+                match account {
+                    Some(account) if !event.guests.is_empty() && self.online.get() => {
+                        let reach = Reach::of(&account.account);
+                        self.sync.look_up(&account.account.id, &event.guests, reach);
+                        self.description.reading = true;
+                        self.named = Some((event, entry));
+                    }
+                    _ => self.open_described(&event, &entry, None),
+                }
             }
             described::Reading::NoEvent => {
                 self.description.no_event = true;
@@ -2047,6 +2074,29 @@ impl CalendarApp {
                 }
             }
         }
+    }
+
+    /// The full editor of a described event with guests or Meet (`MOD-10-F06`), filled in with
+    /// what Google found for each name, `found`, and the account's recent guests after it, as
+    /// the guest field is offered them (`MOD-10-F11`).
+    fn open_described(
+        &mut self,
+        event: &described::Described,
+        entry: &QuickEntry,
+        found: Option<Vec<(String, Vec<Person>)>>,
+    ) {
+        let mut editor = Editor::from_quick(entry, &self.regional);
+        let own = editor.own_addresses(self.accounts.list());
+        let account = (entry.calendar.as_ref()).map(|c| c.account_id.clone());
+        let found: Option<Vec<(String, Vec<Person>)>> = found.map(|found| {
+            let recent = guests::recent(&self.cached, &account.unwrap_or_default());
+            (found.into_iter())
+                .map(|(name, people)| (name, people.into_iter().chain(recent.clone()).collect()))
+                .collect()
+        });
+        described::fill(&mut editor, event, found.as_deref(), &own);
+        self.dialog = Some(Dialog::Editor(Box::new(editor)));
+        self.description.field.clear();
     }
 
     /// `q`: the cursor in the description box, opening a collapsed side panel first, or, while
@@ -2410,6 +2460,21 @@ impl eframe::App for CalendarApp {
             && let Some(answer) = self.reader.answer()
         {
             self.read(ui.ctx(), answer);
+        }
+        // The names of a description, once Google found who they fit; dropped after Esc.
+        if self.dialog.is_none()
+            && let Some((account, found)) = self.sync.take_named()
+            && let Some((event, entry)) = self.named.take()
+        {
+            let asked: Vec<&String> = found.iter().map(|(name, _)| name).collect();
+            let for_this = entry.calendar.as_ref().map(|c| &c.account_id) == Some(&account)
+                && asked.iter().copied().eq(event.guests.iter());
+            if for_this {
+                self.description.reading = false;
+                self.open_described(&event, &entry, Some(found));
+            } else {
+                self.named = Some((event, entry));
+            }
         }
         if let Some(event) = self.notified.take() {
             self.open_notified(ui.ctx(), &event);

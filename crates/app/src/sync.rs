@@ -95,6 +95,9 @@ enum Job {
     /// What is typed in the guest field, to search the account's people for where it may look
     /// (`MOD-06-F02`, `F04`).
     Suggest(String, String, Reach),
+    /// The names of guests in a description, each to search the account's people for as when
+    /// typed in the guest field (`MOD-10-F11`).
+    Named(String, Vec<String>, Reach),
     /// The guests' busy times the editor's preview asks for (`MOD-06-F19`).
     Busy(Asked),
     /// The calendars of the people chosen in "Meet with…" the views ask for, `None` while they
@@ -173,6 +176,8 @@ enum Update {
     DefaultLength(String, u32),
     /// The people of the account found for what was last typed in the guest field.
     People(String, Vec<Person>),
+    /// The people of the account found for each name of a description, in its order.
+    Named(String, Found),
     /// The guests' busy times Google gave for what was asked; `None` when it gave none.
     Busy(Asked, Option<Vec<Availability>>),
     /// The people's calendars as Google gave them for what was asked.
@@ -193,6 +198,9 @@ pub enum LocalDeletion {
     /// It is gone with its events.
     Deleted(Calendar),
 }
+
+/// The people found for each name of a description, in its order.
+pub type Found = Vec<(String, Vec<Person>)>;
 
 /// Calendars disabled in the settings, by account ID and calendar ID (`MOD-02-F06`).
 type Disabled = BTreeSet<(String, String)>;
@@ -223,6 +231,8 @@ pub struct Synchronization {
     saved: Vec<Saved>,
     /// The people Google last found to invite, and the account they were found for.
     people: Option<(String, Vec<Person>)>,
+    /// The people Google found for each name of a description, and the account, not yet taken.
+    named: Option<(String, Found)>,
     /// The guests' busy times last asked for, if the editor still asks for them.
     asked: Option<Asked>,
     /// The guests' busy times Google last gave, and what they were asked for.
@@ -376,6 +386,7 @@ impl Synchronization {
             lengths: HashMap::new(),
             saved: Vec::new(),
             people: None,
+            named: None,
             asked: None,
             busy: None,
             meeting: None,
@@ -620,6 +631,21 @@ impl Synchronization {
         let _ = self.jobs.send(job);
     }
 
+    /// Searches the account's people at Google for each name of a description, as `suggest`
+    /// does for one typed; `take_named` gives them once found. What an earlier look-up found and
+    /// nobody took is dropped.
+    pub fn look_up(&mut self, account_id: &str, names: &[String], reach: Reach) {
+        self.named = None;
+        let job = Job::Named(account_id.to_string(), names.to_vec(), reach);
+        let _ = self.jobs.send(job);
+    }
+
+    /// The people found for each name last looked up, and the account, once; `None` until Google
+    /// answers.
+    pub fn take_named(&mut self) -> Option<(String, Found)> {
+        self.named.take()
+    }
+
     /// The people Google last found to invite for the account; none until it answers.
     pub fn people(&self, account_id: &str) -> &[Person] {
         match &self.people {
@@ -732,6 +758,7 @@ impl Synchronization {
                     self.lengths.insert(account, minutes);
                 }
                 Update::People(account, people) => self.people = Some((account, people)),
+                Update::Named(account, found) => self.named = Some((account, found)),
                 Update::Busy(asked, busy) => self.busy = Some((asked, busy)),
                 Update::Their(asked, answer) => self.their = Some((asked, answer)),
                 Update::Local(read) => self.local = Some(read),
@@ -945,6 +972,16 @@ impl Engine {
                     .map(|session| session.people(&query, reach))
                     .unwrap_or_default();
                 return vec![Update::People(account, people)];
+            }
+            Some(Job::Named(account, names, reach)) => {
+                let session = self.sessions.get(&account);
+                let found = (names.into_iter())
+                    .map(|name| {
+                        let people = (session.map(|s| s.people(&name, reach))).unwrap_or_default();
+                        (name, people)
+                    })
+                    .collect();
+                return vec![Update::Named(account, found)];
             }
             Some(Job::Busy(asked)) => {
                 let busy = (self.sessions.get(&asked.account_id))
@@ -1676,6 +1713,7 @@ fn synchronizes(job: &Option<Job>) -> bool {
                 | Job::Shown(_)
                 | Job::Window(_)
                 | Job::Suggest(..)
+                | Job::Named(..)
                 | Job::Busy(_)
                 | Job::Their(_)
                 | Job::Remind(..)
@@ -1877,6 +1915,32 @@ mod tests {
         let reason = offline::refused(online.get()).unwrap();
         assert!(reason.contains("Creating, editing and deleting events and answering invitations"));
         assert!(reason.contains("not available offline"));
+    }
+
+    #[test]
+    fn a_new_look_up_drops_what_an_earlier_one_found_and_nobody_took() {
+        let ctx = egui::Context::default();
+        let mut sync = Synchronization::with(
+            &ctx,
+            cache_of(&["1"]),
+            unreachable_google(),
+            vec!["1".to_string()],
+            window(),
+            Disabled::new(),
+        );
+        let ania = Person {
+            name: "Ania Nowak".to_string(),
+            email: "ania@example.com".to_string(),
+        };
+        sync.named = Some(("1".to_string(), vec![("Ania".to_string(), vec![ania])]));
+
+        let reach = Reach {
+            contacts: true,
+            directory: false,
+        };
+        sync.look_up("1", &["Ania".to_string()], reach);
+
+        assert_eq!(sync.take_named(), None);
     }
 
     #[test]

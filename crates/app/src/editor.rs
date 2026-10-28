@@ -264,6 +264,36 @@ fn guests(ui: &mut egui::Ui, editor: &mut Editor, suggested: &[Person], own: &[S
                 editor.add_guest(person, own);
             }
         }
+        // Names from a description that fit several people or nobody, each with its own
+        // suggestions; nobody is invited until picked (`MOD-10-F12`).
+        let (mut picked, mut dropped) = (None, None);
+        for (index, name) in editor.unresolved.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.colored_label(ui.visuals().warn_fg_color, &name.name);
+                ui.weak(texts::PICK_WHO);
+                let hint = texts::drop_name(&name.name);
+                let remove = close_button(ui, &hint);
+                remove.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &hint));
+                if remove.clicked() {
+                    dropped = Some(index);
+                }
+            });
+            ui.indent(("unresolved", index), |ui| {
+                if name.suggested.is_empty() {
+                    ui.weak(texts::NOBODY_FITS);
+                }
+                for person in &name.suggested {
+                    if ui.button(person.label()).clicked() {
+                        picked = Some((index, person.clone()));
+                    }
+                }
+            });
+        }
+        if let Some((index, person)) = picked {
+            editor.pick(index, &person, own);
+        } else if let Some(index) = dropped {
+            editor.drop_unresolved(index);
+        }
         let mut removed = None;
         // A guest a line, their switches lined up in columns.
         ui.spacing_mut().interact_size.y = 24.0;

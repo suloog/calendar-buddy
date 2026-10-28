@@ -2689,3 +2689,63 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-223] The model's answer says Meet asked for, refused or not mentioned
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-03`
+- **Affects:** `MOD-10-F07`, `US-10-03#3`, `TC-10-23`, `MOD-10` technical notes, `DEC-218`
+- **Decision:** The answer's `meet` field may now be empty (null): `true` when the description asks for Google Meet, `false` only when it refuses it, null when it does not mention it. The rules the model reads say so. A refusal turns the switch off even after a guest was added; when Meet is not mentioned, the switch is left to the editor's own rule — on with the first guest (`MOD-06-F17`). The test set's recorded answers, given back by the fake model, are kept as recorded; its score counts Meet right when "on" matches, so refused and not mentioned both mean "off" there. A description that only refuses Meet, without guests, still opens the "New event" window: it asks for nothing that window lacks.
+- **Why:** With one true/false the app cannot tell "bez Meeta" from a description that says nothing, and `MOD-10-F07` needs the two to differ (`TC-10-23`, rows 3 and 4).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-224] Guests named in a description are looked up before the full editor opens
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-03`
+- **Affects:** `MOD-10-F06`, `MOD-10-F11`, `MOD-10-F25`, `MOD-10-U02`, `DEC-214`
+- **Decision:** When the event's calendar is a Google calendar and the app is online, each name is searched for in the account's people as the guest field searches what is typed (contacts and other contacts, the directory on Workspace accounts), and the account's recent guests are added after Google's results; the box keeps showing "Reading…" until Google answered, and Esc there drops the answer. Then the full editor opens with every name settled (`DEC-225`). For a local calendar, offline, or without an account, nothing is looked up and the names are left out; a local calendar takes no Meet either. A description with guests or Meet opens the full editor in every case — for a local calendar, the editor of a local event, which shows neither — so the same description always opens the same window.
+- **Why:** Adding guests one by one after the editor opens would turn Meet on or off under the user's eyes and race the description's own word on Meet; looking up first gives the editor complete, as the story's scenarios expect.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-225] A name not certain waits under the guest field with its suggestions
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-03`
+- **Affects:** `MOD-10-F12`, `US-10-03#7`, `TC-10-22`
+- **Decision:** The guest field holds one line of text, so the names that fit several people or nobody are listed under it, each with what the field would suggest for it: the name, "not invited — pick who you mean", a button that removes the name, and the people suggested ("No one found" when nobody fits). Picking a person invites them as a pick in the guest field does (the first guest turns Meet on, `MOD-06-F17`) and takes the name off the list. A name still listed when the user saves invites nobody and is not kept.
+- **Why:** `TC-10-22` keeps two names waiting at once, each with its own suggestions; one text field can show only one. Saving never invites a guessed address (`DEC-196`).
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-226] A calendar that cannot add Meet behaves as in the editor today
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-03`
+- **Affects:** `US-10-03` *Edge cases*, `MOD-10-F07`, `MOD-06-F17`
+- **Decision:** The story's edge case says the Meet switch "stays off and unavailable, as in the editor today" for an account that cannot add Meet. The editor today knows nothing about it before saving: it offers the switch for every Google calendar, and when Google makes no call for the event, the event is saved without one and the user is told (MOD-06 *Constraints and edge cases*, `Saved::WithoutMeet`). A description follows the editor as it is: the switch is set as the description says, and saving such an event goes the same way. Nothing new is built to find out beforehand whether a calendar can add Meet. Whether the editor should grey the switch out is for the analyst, in `MOD-06`.
+- **Why:** The edge case asks for the editor's behaviour, not new behaviour. Greying out the switch would need a new piece of calendar information from Google and a change to the editor beyond this story.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-227] The description's Meet wins over the first-guest rule
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-03`, review of its branch
+- **Affects:** `MOD-10-F07`, `MOD-06-F17`, `US-10-03#3`, `DEC-223`, `DEC-225`
+- **Decision:** When the description says whether to add Meet ("z Meetem" or "bez Meeta"), the switch stays as it says while the event is being made: the first guest added afterwards (picked for a name that waits, picked from the guest field's suggestions, or typed in it) does not turn Meet on, unlike `MOD-06-F17`. The user can still turn the switch on or off by hand. When the description says nothing about Meet, the first guest turns it on as for any new event. This narrows what `DEC-225` says of a pick.
+- **Why:** "bez Meeta" refuses the call; adding the guest the description named, and the description itself asked for, must not bring it back on Save.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

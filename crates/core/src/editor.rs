@@ -85,14 +85,28 @@ pub struct Editor {
     pub guest_field: String,
     /// Why what was typed in the guest field was not added.
     pub guest_problem: Option<String>,
+    /// Names from a description that fit several people or nobody, each with the people
+    /// suggested for it; none is a guest until the user picks someone (`MOD-10-F12`, `DEC-225`).
+    pub unresolved: Vec<Unresolved>,
     /// The "Add Google Meet" switch: on for an event with a Meet call, and turned on by the
-    /// first guest added (`MOD-06-F17`).
+    /// first guest added (`MOD-06-F17`) unless a description said otherwise.
     pub meet: bool,
+    /// Whether the description the event was made from said whether to add Meet; a guest added
+    /// later then leaves the switch as the description set it (`MOD-10-F07`, `DEC-227`).
+    pub meet_described: bool,
     /// The event's own reminders; `None` while it uses its calendar's defaults (`MOD-07-F03`,
     /// `F05`).
     pub reminders: Option<Vec<ReminderField>>,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
+}
+
+/// A name from a description that fits several people or nobody (`MOD-10-F12`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unresolved {
+    pub name: String,
+    /// The people the guest field would suggest for the name; empty when nobody fits.
+    pub suggested: Vec<Person>,
 }
 
 /// A reminder as the editor shows it: how it reaches the user and how long before the event, in
@@ -311,7 +325,9 @@ impl Editor {
             guests: Vec::new(),
             guest_field: String::new(),
             guest_problem: None,
+            unresolved: Vec::new(),
             meet: false,
+            meet_described: false,
             reminders: None,
             start: Some(start),
         }
@@ -582,13 +598,14 @@ impl Editor {
 
     /// Invites the person, unless they are invited already or the address is one of the user's
     /// own (`own`); the guest field is emptied either way. The first guest turns Google Meet on
-    /// (`MOD-06-F17`).
+    /// (`MOD-06-F17`), unless the description the event was made from said whether to add it
+    /// (`MOD-10-F07`).
     pub fn add_guest(&mut self, person: &Person, own: &[String]) {
         let taken = (self.guests.iter().map(|guest| &guest.email))
             .chain(own)
             .any(|email| guests::same(email, &person.email));
         if !taken {
-            self.meet |= self.guests.iter().all(|guest| guest.own);
+            self.meet |= !self.meet_described && self.guests.iter().all(|guest| guest.own);
             self.guests.push(Guest::invited(person));
         }
         self.guest_field.clear();
@@ -618,6 +635,22 @@ impl Editor {
                 self.add_guest(person, own)
             }
             _ => self.add_typed_guest(own),
+        }
+    }
+
+    /// The person picked for the name from a description at `index`: invited as when picked in
+    /// the guest field, and the name no longer waits (`MOD-10-F12`).
+    pub fn pick(&mut self, index: usize, person: &Person, own: &[String]) {
+        if index < self.unresolved.len() {
+            self.unresolved.remove(index);
+            self.add_guest(person, own);
+        }
+    }
+
+    /// The name from a description at `index` dropped, nobody invited for it.
+    pub fn drop_unresolved(&mut self, index: usize) {
+        if index < self.unresolved.len() {
+            self.unresolved.remove(index);
         }
     }
 

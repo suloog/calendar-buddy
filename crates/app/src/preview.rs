@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use calendar_core::accounts::{Account, Accounts};
 use calendar_core::availability::Availability;
 use calendar_core::cache::Cache;
-use calendar_core::guests::{Guest, Response};
+use calendar_core::guests::{Guest, Person, Response};
 use calendar_core::meet_with::{MeetWith, Overlay, Shared};
 use calendar_core::model::{About, Access, Attachment, Calendar, Kind, Rgb, Timing};
 use calendar_core::navigation::{Navigation, View};
@@ -384,6 +384,7 @@ impl CalendarApp {
             reader: crate::description::Reader::none(),
             clock: Utc::now,
             box_wanted: false,
+            named: None,
             ollama_form: None,
             settings_at_descriptions: false,
             meet_with: MeetWith::default(),
@@ -585,6 +586,31 @@ fn preview() {
             app.sync.answered_busy(asked, busy);
         },
     );
+    // Names from a description not certain: one fitting two people, one fitting nobody
+    // (`MOD-10-F12`).
+    picture("editor-unresolved-light", week, Theme::Light, |app, ctx| {
+        editing(app, ctx);
+        let Some(Dialog::Editor(editor)) = &mut app.dialog else {
+            unreachable!("the editor was just opened")
+        };
+        let person = |name: &str, email: &str| Person {
+            name: name.into(),
+            email: email.into(),
+        };
+        editor.unresolved = vec![
+            calendar_core::editor::Unresolved {
+                name: "Kasia".into(),
+                suggested: vec![
+                    person("Kasia Nowak", "kasia.nowak@example.com"),
+                    person("Kasia Lis", "kasia.lis@example.com"),
+                ],
+            },
+            calendar_core::editor::Unresolved {
+                name: "Zenek".into(),
+                suggested: Vec::new(),
+            },
+        ];
+    });
     // Google's custom recurrence dialog over a new event's editor, on months (`MOD-05-F33`).
     picture("custom-recurrence-light", week, Theme::Light, |app, _| {
         let Timing::Timed { start, end, zone } = app.events[titled(app, "Sprint demo")].timing
