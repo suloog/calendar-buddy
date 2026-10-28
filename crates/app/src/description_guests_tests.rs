@@ -32,7 +32,7 @@ fn with_guests(
 }
 
 /// The full editor, when it is open.
-fn editor(harness: &Harness<'static, CalendarApp>) -> Editor {
+pub(super) fn editor(harness: &Harness<'static, CalendarApp>) -> Editor {
     match &harness.state().dialog {
         Some(Dialog::Editor(editor)) => (**editor).clone(),
         other => panic!("the full editor is not open: {:?}", other.is_some()),
@@ -40,7 +40,7 @@ fn editor(harness: &Harness<'static, CalendarApp>) -> Editor {
 }
 
 /// The editor's start and end on the wall clock in Warsaw.
-fn editor_times(harness: &Harness<'static, CalendarApp>) -> (String, String) {
+pub(super) fn editor_times(harness: &Harness<'static, CalendarApp>) -> (String, String) {
     let editor = editor(harness);
     let Ok(Timing::Timed { start, end, .. }) = editor.timing(&harness.state().regional) else {
         panic!("a timed event");
@@ -67,7 +67,7 @@ fn calendar_name(editor: &Editor) -> String {
 
 /// What the app asked Google to create, change or delete among events since `before`; and, below,
 /// its searches for people.
-fn written(google: &FakeGoogle, before: usize) -> Vec<String> {
+pub(super) fn written(google: &FakeGoogle, before: usize) -> Vec<String> {
     (google.requests().into_iter().skip(before))
         .filter(|r| !r.starts_with("GET ") && r.contains("/events"))
         .collect()
@@ -100,7 +100,7 @@ fn created(world: &mut World, title: &str) -> Value {
 
 /// Waits until the guests' day Google gives is in the editor, which grows with it, so that a
 /// click lands on the editor as it then is.
-fn with_guests_day(harness: &mut Harness<'static, CalendarApp>) {
+pub(super) fn with_guests_day(harness: &mut Harness<'static, CalendarApp>) {
     until(harness, |app| {
         matches!(&app.dialog, Some(Dialog::Editor(editor))
             if availability::asked(editor, &app.regional, true)

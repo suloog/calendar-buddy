@@ -136,6 +136,11 @@ enum Dialog {
     Invitations,
 }
 
+/// Whether two copies are of the same event (an occurrence of a series is an event of its own).
+fn same_event(one: &Event, other: &Event) -> bool {
+    one.id == other.id && one.calendar_id == other.calendar_id && one.account_id == other.account_id
+}
+
 /// Ctrl+Z: undoes the last change to an event (`MOD-05-F28`); not Ctrl+Shift+Z, there is no redo.
 fn undo_pressed(input: &mut egui::InputState) -> bool {
     !input.modifiers.shift && input.consume_key(egui::Modifiers::COMMAND, egui::Key::Z)
@@ -348,6 +353,11 @@ struct CalendarApp {
     /// A described event with guests, and its new event, while Google looks the names up
     /// (`MOD-10-F11`).
     named: Option<(described::Described, QuickEntry)>,
+    /// The event whose details were open when the user went to the description box: the one a
+    /// described change changes (`MOD-10-F16`, `DEC-208`).
+    selected: Option<Event>,
+    /// The events a described change fits, listed under the box to pick from (`MOD-10-U08`).
+    matches: Option<description::Matches>,
     /// The settings' section of events from a description while the settings are open.
     ollama_form: Option<Form>,
     /// The settings open scrolled to that section, from the link under an unavailable box.
@@ -507,6 +517,8 @@ impl CalendarApp {
             clock: Utc::now,
             box_wanted: false,
             named: None,
+            selected: None,
+            matches: None,
             ollama_form: None,
             settings_at_descriptions: false,
             meet_with: MeetWith::default(),
@@ -1988,6 +2000,11 @@ impl CalendarApp {
         match description::show_box(ui, &mut self.description, why.as_deref()) {
             Some(description::Action::GoneTo) => {
                 self.box_wanted = why.is_some();
+                self.matches = None;
+                self.selected = match &self.dialog {
+                    Some(Dialog::Event(event, ..)) => Some((**event).clone()),
+                    _ => None,
+                };
                 self.checker.ask(&self.settings.ollama);
                 if why.is_none() {
                     self.reader.load(&self.settings.ollama);
@@ -1997,11 +2014,21 @@ impl CalendarApp {
                 // The keyboard goes back to the views while the model reads (`MOD-10-NFR-03`,
                 // `DEC-220`).
                 ui.memory_mut(|m| m.surrender_focus(description::box_id()));
+                // The details open when the user went to the box may have closed since.
+                let still_open = match (&self.dialog, &self.selected) {
+                    (Some(Dialog::Event(open, ..)), Some(selected)) => same_event(open, selected),
+                    _ => false,
+                };
+                if !still_open {
+                    self.selected = None;
+                }
                 let now = (self.clock)().with_timezone(&self.zone);
                 let (settings, field) = (&self.settings.ollama, &self.description.field);
                 self.reader.read(settings, field, now);
                 self.description.reading = true;
                 self.description.no_event = false;
+                self.description.no_such_event = false;
+                self.matches = None;
             }
             Some(description::Action::Cancel) => {
                 self.reader.cancel();
@@ -2013,6 +2040,28 @@ impl CalendarApp {
                 self.settings_at_descriptions = true;
             }
             None => {}
+        }
+        if why.is_none()
+            && self.dialog.is_none()
+            && let Some(matches) = &mut self.matches
+        {
+            let calendars = self.sync.calendars();
+            match description::show_matches(ui, matches, calendars, &self.regional, self.zone) {
+                Some(description::Pick::Chosen(i)) => {
+                    let matches = self.matches.take().unwrap();
+                    // As last synchronized: it may have changed or gone since it was listed.
+                    let now = (self.events.iter()).find(|e| same_event(e, &matches.events[i]));
+                    match now.cloned() {
+                        Some(event) => self.change_event(event, &matches.change),
+                        None => self.description.no_such_event = true,
+                    }
+                }
+                Some(description::Pick::Back) => {
+                    self.matches = None;
+                    ui.memory_mut(|m| m.request_focus(description::box_id()));
+                }
+                None => {}
+            }
         }
     }
 
@@ -2066,11 +2115,85 @@ impl CalendarApp {
                     _ => self.open_described(&event, &entry, None),
                 }
             }
+            described::Reading::Change(change) => self.described_change(ctx, change),
             described::Reading::NoEvent => {
                 self.description.no_event = true;
                 // The cursor goes back to the box unless the user is typing somewhere else.
                 if ctx.memory(|m| m.focused()).is_none() {
                     ctx.memory_mut(|m| m.request_focus(description::box_id()));
+                }
+            }
+        }
+    }
+
+    /// A described change (`US-10-04`): of the event whose details were open when the user went
+    /// to the box, whatever its date, or else of the one the description names from today on
+    /// (`MOD-10-F16`, `DEC-202`); several are listed under the box to pick from, and none leaves
+    /// the description in the box with the cursor, saying so (`MOD-10-F17`).
+    fn described_change(&mut self, ctx: &egui::Context, change: described::Change) {
+        let fitting: Vec<Event> = match self.selected.take() {
+            // As last synchronized, which may have come since its details opened.
+            Some(selected) => vec![
+                self.events
+                    .iter()
+                    .find(|e| same_event(e, &selected))
+                    .cloned()
+                    .unwrap_or(selected),
+            ],
+            None => {
+                let today = (self.clock)().with_timezone(&self.zone).date_naive();
+                // Only the events the views show: not those of hidden calendars (`MOD-03-F25`).
+                let shown: Vec<Event> = (side_panel::shown(&self.events, &self.settings))
+                    .into_iter()
+                    .map(|i| self.events[i].clone())
+                    .collect();
+                let found = described::matching(&shown, &change.event, today, self.zone);
+                found.into_iter().map(|i| shown[i].clone()).collect()
+            }
+        };
+        match <[Event; 1]>::try_from(fitting) {
+            Ok([event]) => self.change_event(event, &change),
+            Err(fitting) if fitting.is_empty() => {
+                self.description.no_such_event = true;
+                if ctx.memory(|m| m.focused()).is_none() {
+                    ctx.memory_mut(|m| m.request_focus(description::box_id()));
+                }
+            }
+            Err(fitting) => {
+                self.matches = Some(description::Matches {
+                    change,
+                    events: fitting,
+                    picked: 0,
+                })
+            }
+        }
+    }
+
+    /// The editing of `event` with the described change made, to be saved as any change made in
+    /// the editor — the scope of a series, whether to notify the guests (`MOD-10-F18`). An event
+    /// the editor is not offered for opens as it does today: its details, which say why
+    /// (`MOD-05-F17`, `DEC-230`).
+    fn change_event(&mut self, event: Event, change: &described::Change) {
+        let calendar = (self.sync.calendars().iter())
+            .find(|c| c.account_id == event.account_id && c.id == event.calendar_id)
+            .cloned();
+        let editable = event.protected().is_none()
+            && offline::refused_for(self.online.get(), &event).is_none()
+            && !self.saving.holds(&event);
+        match calendar.filter(|_| editable) {
+            Some(calendar) => {
+                // Brought up to date first, as when the editor opens from its details.
+                self.sync.opening(&event.calendar_id);
+                let mut editor = Editor::of(&event, calendar, &self.regional);
+                change.apply(&mut editor, &self.regional, self.zone);
+                self.dialog = Some(Dialog::Editor(Box::new(editor)));
+                self.description.field.clear();
+            }
+            None => {
+                let open = matches!(&self.dialog, Some(Dialog::Event(open, ..)) if same_event(open, &event));
+                let found = self.events.iter().position(|e| same_event(e, &event));
+                if let (false, Some(i)) = (open, found) {
+                    self.open(i, None);
                 }
             }
         }
@@ -2456,13 +2579,14 @@ impl eframe::App for CalendarApp {
         self.shortcuts(ui.ctx());
         // Taken in whether the side panel shows the box or not, but only with no window open: it
         // waits, "Reading…" still shown, rather than take the place of what the user is doing.
-        if self.dialog.is_none()
-            && let Some(answer) = self.reader.answer()
-        {
+        // An event's details are no such window: a change describes the event they show
+        // (`MOD-10-F16`, `DEC-231`).
+        let welcome = matches!(self.dialog, None | Some(Dialog::Event(..)));
+        if welcome && let Some(answer) = self.reader.answer() {
             self.read(ui.ctx(), answer);
         }
         // The names of a description, once Google found who they fit; dropped after Esc.
-        if self.dialog.is_none()
+        if welcome
             && let Some((account, found)) = self.sync.take_named()
             && let Some((event, entry)) = self.named.take()
         {

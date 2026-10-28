@@ -578,6 +578,10 @@ pub const OPEN_SETTINGS: &str = "Open the settings";
 /// (`MOD-10-F23`).
 pub const READING: &str = "Reading…";
 pub const NO_EVENT_FOUND: &str = "No event found in this description; correct it and press Enter.";
+pub const WHICH_EVENT: &str =
+    "Which event? Up and Down to choose, Enter to change it, Esc to go back.";
+pub const NO_SUCH_EVENT: &str =
+    "No such event found from today on; correct the description and press Enter.";
 pub fn ollama_not_available(address: &str) -> String {
     format!("Ollama is not available at {address}")
 }

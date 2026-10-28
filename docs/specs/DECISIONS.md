@@ -2749,3 +2749,51 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-228] A described change: the words naming the event, and only what changes
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-04`
+- **Affects:** `MOD-10-F15`, `MOD-10-F18`, `MOD-10-NFR-04`, `US-10-04#1`, `US-10-04#4`, `TC-10-18`, `TC-10-19`, `DEC-218`, `DEC-221`, `MOD-10` technical notes
+- **Decision:** The fixed form of the answer gains the action `change` and a field `event`: the words naming the event, as written, empty when the description names none (then the event whose details are open is meant). In a change, the kind of day, the day, the time and the length give only what changes: the new kind `same` with an empty day when the day stays (a `same` whose day still names one, as "tomorrow" or "fri", is read as that day), no time when the hour stays, no length when the length stays. The day is worked out from today as when adding. A new day or hour moves the start and the end follows it, the length kept; a new length sets the end. The title, guests and Meet of a change are not applied, and an all-day event moves to the new day and stays all day, its hour and length not applied — the editor has no such fields for it (`US-10-04` *Edge cases*). The test set gains 13 changing sentences, 7 Polish and 6 English, each with the answer `gemma4:e4b` gave with these rules on 2026-10-28, which the fake model answers with. Run by hand against `gemma4:e4b`, "przesuń na 15" was first read as 15 November; the rules now say that a number alone is an hour.
+- **Why:** The technical notes ask the model for the change and the words naming the event, and leave the matching to the app; "przesuń na 15" must keep the day, which the kinds of day for adding cannot say. Changing the title, guests or Meet by a description is beyond the story's scenarios.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-229] An event fits the words naming it word by word, Polish endings aside
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-04`
+- **Affects:** `MOD-10-F16`, `MOD-10-F17`, `US-10-04#2`
+- **Decision:** An event from today to the end of the cache fits the words naming it when each of those words of three letters or more matches a word of its title, or each such word of its title a word of the name; two words match when they differ at most in their last two letters, as Polish names an event in a sentence ("dentystę" for "Dentysta", "kawę" for "Kawa", "Anią" for "Ania"), letter case aside. An event fits from the day it starts on in the user's time zone. Several fitting events are listed in the order they start; every occurrence of a series is an event of its own.
+- **Why:** The model writes the name as it appears in the sentence, inflected; an exact comparison would miss most Polish names. Matching either way round lets "spotkanie z Anią" find "Spotkanie z Anią Nowak" and "dentist appointment" find "Dentist".
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-230] A change of an event the editor is not offered for opens its details, as today
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-04`
+- **Affects:** `US-10-04#3`, `TC-10-31`, `MOD-05-F17`, `MOD-06-F15`
+- **Decision:** The app today offers no editing for an event the user may not change — one in a read-only calendar, a guest's copy whose organizer lets no guest change it, a working location or a birthday — nor, offline, for a Google event, nor while it is being saved. A described change of such an event opens nothing new: its details stay open, or open when it was named, unchanged, and they say why it cannot be changed; the description stays in the box. A guest who may change the event gets its editing, as from its details.
+- **Why:** `TC-10-31` asks for the event to open "as it does for that event without a description": for these events that is their details with the reason, never an editor with fields a description could fill.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-231] The model's answer is taken in while an event's details are open
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-04`
+- **Affects:** `MOD-10-F16`, `DEC-220`, `US-10-04#5`
+- **Decision:** The answer to a description waited while any window was open (`US-10-02`). An event's details no longer hold it back: a change then opens the editing of the event they show, and a new event described while they are open opens its window in their place. Any other window still holds the answer until it closes.
+- **Why:** Changing the event whose details are open is the story's first scenario; the details are what the user describes the change from, not work an answer would interrupt.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

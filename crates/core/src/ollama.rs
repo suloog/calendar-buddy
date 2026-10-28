@@ -227,13 +227,15 @@ impl Form {
 
 /// The side panel's description box: what is typed, kept while Ollama goes away and comes back
 /// (`MOD-10` *Constraints and edge cases*), whether it can be used, whether the model is reading
-/// what was sent (`MOD-10-U02`) and whether the last description gave no event (`MOD-10-F23`).
+/// what was sent (`MOD-10-U02`), whether the last description gave no event (`MOD-10-F23`) and
+/// whether the event a change named was not found (`MOD-10-F17`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DescriptionBox {
     pub field: String,
     pub availability: Availability,
     pub reading: bool,
     pub no_event: bool,
+    pub no_such_event: bool,
 }
 
 impl DescriptionBox {

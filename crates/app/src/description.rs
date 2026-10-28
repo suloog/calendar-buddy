@@ -1,4 +1,5 @@
-//! Events from a description in the app (`US-10-01`, `US-10-02`): the side panel's box, greyed
+//! Events from a description in the app (`US-10-01`, `US-10-02`, `US-10-04`): the side panel's
+//! box, and under it the events a change fits when there are several (`MOD-10-U08`); greyed
 //! out with why when Ollama cannot be used and a link to the settings (`MOD-10-U04`); the
 //! settings' section (`MOD-10-U05`); asking Ollama off the UI thread whether it can be used — at
 //! start, when the settings change and when the user goes to the box, never on a timer (`MOD-10`
@@ -8,7 +9,9 @@
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use calendar_core::described;
+use calendar_core::model::{Calendar, Event, Timing};
 use calendar_core::ollama::{self, Availability, DescriptionBox, Form, Ollama};
+use calendar_core::regional::Regional;
 use calendar_core::texts;
 use chrono::DateTime;
 use chrono_tz::Tz;
@@ -203,6 +206,7 @@ pub fn show_box(
         .inner;
     if field.changed() {
         described.no_event = false;
+        described.no_such_event = false;
     }
     if field.gained_focus() {
         action = Some(Action::GoneTo);
@@ -218,6 +222,8 @@ pub fn show_box(
         ui.weak(texts::READING);
     } else if described.no_event && available {
         ui.colored_label(ui.visuals().warn_fg_color, texts::NO_EVENT_FOUND);
+    } else if described.no_such_event && available {
+        ui.colored_label(ui.visuals().warn_fg_color, texts::NO_SUCH_EVENT);
     }
     if let Some(why) = why {
         // Greyed out, the field takes no clicks of its own; a click asks Ollama again.
@@ -231,6 +237,85 @@ pub fn show_box(
         }
     }
     action
+}
+
+/// The events a described change fits when there are several (`MOD-10-F17`), in the order they
+/// start, and the one picked so far; listed under the box until one is chosen or Esc goes back to
+/// the description (`MOD-10-U08`).
+pub struct Matches {
+    pub change: described::Change,
+    pub events: Vec<Event>,
+    pub picked: usize,
+}
+
+/// What the user did with the list of matches.
+#[derive(Debug, PartialEq)]
+pub enum Pick {
+    /// Enter, or a click on a row: the event to change.
+    Chosen(usize),
+    /// Esc: back to the description.
+    Back,
+}
+
+/// A row of the list: the event's title, day, time and calendar.
+pub fn row(event: &Event, calendars: &[Calendar], regional: &Regional, zone: Tz) -> String {
+    let (day, time) = match event.timing {
+        Timing::Timed { start, .. } => {
+            let start = start.with_timezone(&zone);
+            (start.date_naive(), regional.time(start.time()))
+        }
+        Timing::AllDay { start, .. } => (start, texts::ALL_DAY.to_string()),
+    };
+    let calendar = (calendars.iter())
+        .find(|c| c.account_id == event.account_id && c.id == event.calendar_id)
+        .map_or("", |c| c.name.as_str());
+    let title = if event.title.is_empty() {
+        texts::BUSY
+    } else {
+        &event.title
+    };
+    format!(
+        "{title} · {} · {time} · {calendar}",
+        regional.weekday_day_month(day)
+    )
+}
+
+/// Draws the list under the box, the event picked so far marked; arrows move the mark, Enter or
+/// a click chooses, Esc goes back to the description, while nothing else has the keyboard.
+pub fn show_matches(
+    ui: &mut egui::Ui,
+    matches: &mut Matches,
+    calendars: &[Calendar],
+    regional: &Regional,
+    zone: Tz,
+) -> Option<Pick> {
+    let mut pick = None;
+    if !ui.ctx().text_edit_focused() {
+        let none = egui::Modifiers::NONE;
+        let last = matches.events.len().saturating_sub(1);
+        ui.input_mut(|i| {
+            if i.consume_key(none, egui::Key::ArrowDown) {
+                matches.picked = (matches.picked + 1).min(last);
+            }
+            if i.consume_key(none, egui::Key::ArrowUp) {
+                matches.picked = matches.picked.saturating_sub(1);
+            }
+            if i.consume_key(none, egui::Key::Enter) {
+                pick = Some(Pick::Chosen(matches.picked));
+            }
+            if i.key_pressed(egui::Key::Escape) {
+                pick = Some(Pick::Back);
+            }
+        });
+    }
+    ui.weak(texts::WHICH_EVENT);
+    for (i, event) in matches.events.iter().enumerate() {
+        let label = row(event, calendars, regional, zone);
+        if ui.selectable_label(i == matches.picked, label).clicked() {
+            pick = Some(Pick::Chosen(i));
+        }
+    }
+    pick
 }
 
 /// Draws the settings' section, scrolled to when `scroll`; says whether `settings` changed.

@@ -551,7 +551,8 @@ fn tc_10_10_reading_shows_and_does_not_block_and_esc_drops_the_late_answer() {
 fn tc_10_11_trening_wieczorem_opens_new_event_today_at_18_as_a_new_event() {
     const ID: &str = "TC-10-11";
     let mut world = world("tc-10-11", false);
-    let trening = add("Trening", "today", "", Some("evening"), None);
+    // As gemma4:e4b answers it: "same", though an adding answer is told not to say it.
+    let trening = add("Trening", "same", "", Some("evening"), None);
     world.ollama.answer_all(&trening);
     let harness = &mut world.harness;
 
@@ -1050,3 +1051,6 @@ fn an_answer_after_turning_the_feature_off_is_dropped() {
 
 #[path = "description_guests_tests.rs"]
 mod guests_tests;
+
+#[path = "description_change_tests.rs"]
+mod change_tests;

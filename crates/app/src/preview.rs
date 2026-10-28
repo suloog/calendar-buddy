@@ -385,6 +385,8 @@ impl CalendarApp {
             clock: Utc::now,
             box_wanted: false,
             named: None,
+            selected: None,
+            matches: None,
             ollama_form: None,
             settings_at_descriptions: false,
             meet_with: MeetWith::default(),
