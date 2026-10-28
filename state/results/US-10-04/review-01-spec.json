@@ -1,0 +1,129 @@
+{
+  "story": "US-10-04",
+  "attempt": 1,
+  "round": 1,
+  "sha": "646e3925cdae4bb02d6d5baacd3f5a6290d2f604",
+  "reviewer": "spec",
+  "ts": "2026-10-28T03:10:21Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-04",
+    "impact": "described.rs's RULES, schema (new \"same\" kind, new \"event\" field) and parse are shared with adding (US-10-02/US-10-03): every add request now carries them, and live gemma4:e4b uses \"same\" on adds that give no day, which then read as \"no event\". The answer gate in main.rs (DEC-231) now lets adds and guest lookups replace an open event's details. The editor's save path is reused unchanged; DescriptionBox gained a field.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:61 — the \"same\" kind is offered on adds; live gemma4:e4b answered \"Trening wieczorem\" (2 of 4 calls) and \"Kawa z Bartkiem o 15\" with action add, kind \"same\", which parse (:314) turns into NoEvent (\"No event found\"), breaking MOD-10's \"Trening wieczorem\" acceptance example → read an add's \"same\" as today (or keep \"same\" out of adds) and add the recorded \"same\" add answer to described_cases.json"
+      },
+      {
+        "id": "B2",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:161 — Change::apply sets the hour and day in the editor's (the event's own) zone, not the user's: an event stored in America/New_York shown at 16:00 Warsaw, \"przesuń na 15\" opens at 15:00 New York = 21:00 Warsaw → build the new start in the user's zone (self.zone) and convert it to editor.zone; test an event in another zone"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2566 — DEC-231 lets adds and guest lookups (named) replace an open event's details too; this changes US-10-02 behaviour and has no test → let only Reading::Change through, or add a test"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2132 — matching runs over self.events, which includes calendars hidden by the side-panel toggle (MOD-03-F12) and declined events hidden by the switch (MOD-06-F22); they get listed or opened → match only over side_panel::shown places"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:312 — every occurrence of a series to the end of the cache is listed, no cap or scroll; a daily standup floods the side panel"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2128 — unwrap_or(selected) opens the editor of an event deleted since its details opened (saving fails); change_event :2178 does nothing visible when a locked event is not in events"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:336 — a \"same\" answer with a date value (\"11-14\") silently drops the date"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described_tests.rs:233 — the substring check with expected word \"ani\" (described_cases.json:32) also matches \"spotkanie\", so the event field scores right even without \"z Anią\" → use a whole word / \"anią\""
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:306 — Esc is read with key_pressed, not consumed, so the global close_dialog handler also sees it (harmless today)"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:2 — module doc comment line not re-wrapped, longer than the others"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "## US-10-04 spec-compliance review, round 1 (`main...646e3925`)\n\nAll 8 acceptance criteria are evidenced by passing tests, and the story's out-of-scope items are respected. But the new answer form breaks adding in a way I saw happen against the real model. Two items are blocking. cargo test --workspace green on a copy of 646e3925 (221 + 468 + 91). TC-10-19 hand run against gemma4:e4b: date 95 %, every field 91 % (the implementer reported 98 % / 95 %).\n\n```\nREVIEW: findings\nSTORY: US-10-04\nIMPACT: described.rs's RULES, schema (new \"same\" kind, new \"event\" field) and parse are shared with adding (US-10-02/US-10-03): every add request now carries them, and live gemma4:e4b uses \"same\" on adds that give no day, which then read as \"no event\". The answer gate in main.rs (DEC-231) now lets adds and guest lookups replace an open event's details. The editor's save path is reused unchanged; DescriptionBox gained a field.\nFINDINGS:\n  B1 crates/core/src/described.rs:61 — the \"same\" kind is offered on adds; live gemma4:e4b answered \"Trening wieczorem\" (2 of 4 calls) and \"Kawa z Bartkiem o 15\" with action add, kind \"same\", which parse (:314) turns into NoEvent (\"No event found\"), breaking MOD-10's \"Trening wieczorem\" acceptance example → read an add's \"same\" as today (or keep \"same\" out of adds) and add the recorded \"same\" add answer to described_cases.json\n  B2 crates/core/src/described.rs:161 — Change::apply sets the hour and day in the editor's (the event's own) zone, not the user's: an event stored in America/New_York shown at 16:00 Warsaw, \"przesuń na 15\" opens at 15:00 New York = 21:00 Warsaw → build the new start in the user's zone (self.zone) and convert it to editor.zone; test an event in another zone\n  N1 crates/app/src/main.rs:2566 — DEC-231 lets adds and guest lookups (named) replace an open event's details too; this changes US-10-02 behaviour and has no test → let only Reading::Change through, or add a test\n  N2 crates/app/src/main.rs:2132 — matching runs over self.events, which includes calendars hidden by the side-panel toggle (MOD-03-F12) and declined events hidden by the switch (MOD-06-F22); they get listed or opened → match only over side_panel::shown places\n  N3 crates/app/src/description.rs:312 — every occurrence of a series to the end of the cache is listed, no cap or scroll; a daily standup floods the side panel\n  N4 crates/app/src/main.rs:2128 — unwrap_or(selected) opens the editor of an event deleted since its details opened (saving fails); change_event :2178 does nothing visible when a locked event is not in events\n  N5 crates/core/src/described.rs:336 — a \"same\" answer with a date value (\"11-14\") silently drops the date\n  N6 crates/core/src/described_tests.rs:233 — the substring check with expected word \"ani\" (described_cases.json:32) also matches \"spotkanie\", so the event field scores right even without \"z Anią\" → use a whole word / \"anią\"\n  N7 crates/app/src/description.rs:306 — Esc is read with key_pressed, not consumed, so the global close_dialog handler also sees it (harmless today)\n  N8 crates/core/src/described.rs:2 — module doc comment line not re-wrapped, longer than the others\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 external — MANUAL TC-10-19\n  #5 met\n  #6 met\n  #7 met\n  #8 met\n```\n"
+}

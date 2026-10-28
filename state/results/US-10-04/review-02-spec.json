@@ -1,0 +1,80 @@
+{
+  "story": "US-10-04",
+  "attempt": 1,
+  "round": 2,
+  "sha": "b58f11f35bfbcec17f31bafee9fdd028733da590",
+  "reviewer": "spec",
+  "ts": "2026-10-28T03:35:00Z",
+  "parsed": {
+    "review": "clean",
+    "story": "US-10-04",
+    "impact": "Both round-1 blockers are fixed: an adding answer of \"same\" now means today, so \"Trening wieczorem\" and \"Kawa z Bartkiem o 15\" pass live, and a described change moves the event in the user's zone, not the event's.\nGates are green and the live TC-10-19 on gemma4:e4b gives date 98 %, every field 93 %; matching by name now also leaves out hidden and declined events and details closed before sending.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:554 — TC-10-11 test now feeds kind \"same\" while TC-10-11-trening-wieczorem.md Test data still says \"today\" → update the TC's Test data, or restore \"today\" and leave \"same\" to the core test"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2017 — the still-open check runs only at Send; details closed or event deleted during reading still change the remembered event (stale copy kept via unwrap_or at :2139) → repeat the check in described_change; update its doc comment"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2145 — declined events are left out only through side_panel::shown, untested → add a test with a declined \"standup\" and hide_declined on"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Spec-compliance review of US-10-04, round 2 (diff 646e392..b58f11f): clean. Both blocking items from round 1 are fixed and nothing regressed. cargo test --workspace passes (223 + 469 + 91); fmt and clippy clean. Live TC-10-19 on gemma4:e4b: date 98 %, every field 93 %, all 13 change sentences right. Three minor non-blocking items.\n\n```\nREVIEW: clean\nSTORY: US-10-04\nIMPACT: Both round-1 blockers are fixed: an adding answer of \"same\" now means today, so \"Trening wieczorem\" and \"Kawa z Bartkiem o 15\" pass live, and a described change moves the event in the user's zone, not the event's.\nGates are green and the live TC-10-19 on gemma4:e4b gives date 98 %, every field 93 %; matching by name now also leaves out hidden and declined events and details closed before sending.\nFINDINGS:\n  N1 crates/app/src/description_reading_tests.rs:554 — TC-10-11 test now feeds kind \"same\" while TC-10-11-trening-wieczorem.md Test data still says \"today\" → update the TC's Test data, or restore \"today\" and leave \"same\" to the core test\n  N2 crates/app/src/main.rs:2017 — the still-open check runs only at Send; details closed or event deleted during reading still change the remembered event (stale copy kept via unwrap_or at :2139) → repeat the check in described_change; update its doc comment\n  N3 crates/app/src/main.rs:2145 — declined events are left out only through side_panel::shown, untested → add a test with a declined \"standup\" and hide_declined on\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n  #8 met\n```\n"
+}

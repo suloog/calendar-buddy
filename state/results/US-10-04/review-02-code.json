@@ -1,0 +1,94 @@
+{
+  "story": "US-10-04",
+  "attempt": 1,
+  "round": 2,
+  "sha": "b58f11f35bfbcec17f31bafee9fdd028733da590",
+  "reviewer": "code",
+  "ts": "2026-10-28T03:35:00Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-04",
+    "impact": "Both round-1 blockers (an adding \"same\", the user's zone in Change::apply) are fixed with tests that fail on revert. The live gemma4:e4b run I did passes the thresholds (date 98 %, fields 93 %). Only non-blocking items remain, around a silent wrong day, one missing test and a few silent no-ops.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2049 — The re-read of the picked event (found: change_event on the fresh copy; gone: \"no such event\") has no test. If it is reverted, nothing fails. → Add an app test: list 2 standups, remove or move one in the cache, press Enter, and assert the editor shows the new time, or `no_such_event` for a removed one."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:330 — An adding answer of kind \"same\" with an unparsable day value (\"piątek\", \"Friday\") silently becomes today. Before the fix this was NoEvent. Failing scenario: the model answers {add, kind \"same\", day \"piątek\"} and \"Kawa w piątek\" opens a New event today. → For an add, accept \"same\" only when the value is empty or parses (`same(value, today)` Some, or empty), otherwise NoEvent. Or accept this as the price of the fix and say so in a DEC (the \"same\" rule is also undocumented in DECISIONS)."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2135 — The selected-event path falls back to the stale copy: `.unwrap_or(selected)`. If the event was removed from `self.events` while the model was reading, the editor opens on a deleted event and saving fails. → If it is not found, set `no_such_event` as the matches path now does."
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2195 — When the event is not editable and its details are already open, or it is no longer in `self.events`, change_event does nothing: no message, the text stays and the selection is consumed. The user sees no reaction to \"przesuń na 15\" on a read-only event. → Optional: show a notice, or at least leave the box focused."
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:157 — The `wall(...).earliest()` round-trip is stable in naive local terms, so there is no bug. The new code has no test for a DST gap or overlap, or for a length-only change in another zone. → Optional: one extra core test."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19 (I ran it live: date 98 %, fields 93 %; 13 change sentences in the set)"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Round 2 of US-10-04, read at b58f11f. Both round-1 blockers are fixed correctly, the non-blocking fixes hold, and I found no blocking problems. fmt and clippy clean; calendar-core described 22 passed (1 ignored), calendar-buddy description 36 passed; live TC-10-19 against gemma4:e4b: date 98 %, every field 93 %.\n\n```\nREVIEW: findings\nSTORY: US-10-04\nIMPACT: Both round-1 blockers (an adding \"same\", the user's zone in Change::apply) are fixed with tests that fail on revert. The live gemma4:e4b run I did passes the thresholds (date 98 %, fields 93 %). Only non-blocking items remain, around a silent wrong day, one missing test and a few silent no-ops.\nFINDINGS:\n  N1 crates/app/src/main.rs:2049 — The re-read of the picked event (found: change_event on the fresh copy; gone: \"no such event\") has no test. If it is reverted, nothing fails. → Add an app test: list 2 standups, remove or move one in the cache, press Enter, and assert the editor shows the new time, or `no_such_event` for a removed one.\n  N2 crates/core/src/described.rs:330 — An adding answer of kind \"same\" with an unparsable day value (\"piątek\", \"Friday\") silently becomes today. Before the fix this was NoEvent. Failing scenario: the model answers {add, kind \"same\", day \"piątek\"} and \"Kawa w piątek\" opens a New event today. → For an add, accept \"same\" only when the value is empty or parses (`same(value, today)` Some, or empty), otherwise NoEvent. Or accept this as the price of the fix and say so in a DEC (the \"same\" rule is also undocumented in DECISIONS).\n  N3 crates/app/src/main.rs:2135 — The selected-event path falls back to the stale copy: `.unwrap_or(selected)`. If the event was removed from `self.events` while the model was reading, the editor opens on a deleted event and saving fails. → If it is not found, set `no_such_event` as the matches path now does.\n  N4 crates/app/src/main.rs:2195 — When the event is not editable and its details are already open, or it is no longer in `self.events`, change_event does nothing: no message, the text stays and the selection is consumed. The user sees no reaction to \"przesuń na 15\" on a read-only event. → Optional: show a notice, or at least leave the box focused.\n  N5 crates/core/src/described.rs:157 — The `wall(...).earliest()` round-trip is stable in naive local terms, so there is no bug. The new code has no test for a DST gap or overlap, or for a length-only change in another zone. → Optional: one extra core test.\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 external — MANUAL TC-10-19 (I ran it live: date 98 %, fields 93 %; 13 change sentences in the set)\n  #5 met\n  #6 met\n  #7 met\n  #8 met\n```\n"
+}

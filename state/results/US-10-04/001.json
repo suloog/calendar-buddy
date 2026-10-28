@@ -1,0 +1,64 @@
+{
+  "n": 1,
+  "attempt": 1,
+  "ts": "2026-10-28T02:59:58Z",
+  "story": "US-10-04",
+  "mode": "implement",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-04",
+    "branch": "feature/US-10-04",
+    "commits": [
+      "646e392 feat(descriptions): change an event from a description [US-10-04]"
+    ],
+    "decisions": [
+      "DEC-228 routine A described change: the words naming the event, and only what changes",
+      "DEC-229 routine An event fits the words naming it word by word, Polish endings aside",
+      "DEC-230 routine A change of an event the editor is not offered for opens its details, as today",
+      "DEC-231 routine The model's answer is taken in while an event's details are open"
+    ],
+    "evidence": [
+      "#1 adding and changing told apart; a change never creates an event — TC-10-27 tc_10_27_the_named_event_moves_to_friday_at_the_same_time_and_no_event_is_added, steps 1-2 pass (one PATCH, no POST, one event shown); TC-10-18 scores a change read as an add (or the reverse) as all wrong, pass",
+      "#2 names match only events from today on; an open event changes whatever its date — TC-10-28 tc_10_28_a_past_event_is_not_found_by_name_but_is_changed_when_its_details_are_open, steps 1-2 pass; core names_fit_events_from_today_on_in_any_grammatical_case_in_the_order_they_start pass",
+      "#3 saving follows the usual rules; a read-only or guest-locked event opens locked — TC-10-30 tc_10_30_saving_a_described_change_of_an_occurrence_asks_the_scope_and_about_the_guests, steps 1-4 pass (scope, then notify, one PATCH of the occurrence with sendUpdates=none); TC-10-31 tc_10_31_a_described_change_of_an_event_the_user_may_not_change_opens_it_locked, steps 1-3 pass",
+      "#4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (13 changing, 7 pl and 6 en; 43 in all; date 100 %, every field 91 %); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on the final rules: date 98 %, every field 95 %)",
+      "#5 scenario: the open \"Sprint planning\", \"przesuń na 15\" gives 15:00-16:00 and nothing is saved before Save — TC-10-26 tc_10_26_the_open_event_moves_to_15_its_length_kept_and_only_save_changes_it, steps 1-3 pass",
+      "#6 scenario: a named event moves to Friday at the same time — TC-10-27, steps 1-2 pass",
+      "#7 scenario: three standups listed with title, day, time and calendar; arrows and Enter pick, Esc goes back — TC-10-29 tc_10_29_several_standups_are_listed_and_picked_from_the_keyboard, steps 1-3 pass",
+      "#8 scenario: nothing matches, so the box says so and keeps the text — TC-10-28 step 1 pass"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_035847",
+      "pass": 7,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-19"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "the test set, its runner and the fake model came from US-10-02 (DEC-221 left the changing sentences to this story); the editor's save path (series scope, guest notification, permissions) is reused unchanged; no criterion was met before this run",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok (221+468+91 passed)"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "notes": "Ollama with gemma4:e4b was available locally: the 13 recorded change answers are real gemma4:e4b answers on the final rules, and the full set scored date 98 %, every field 95 % by hand (TC-10-19 stays manual-only for the owner).\nDEC-231: an add described while an event's details are open now opens the New event window in place of the details (before, the answer waited for the window to close).\nManual check left for the owner: a real Google event with guests, one occurrence of a real series, and the list of matches in both themes.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (13 changing, 7 pl and 6 en; 43 in all; date 100 %, every field 91 %); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on the final rules: date 98 %, every field 95 %)"
+      ],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I've built US-10-04 and committed it on `feature/US-10-04` as 646e392. Nothing was pushed (local run). The story's seven automated tests pass, run once more on that exact commit with a clean tree. The one gap is criterion #4: its real-model test, TC-10-19, is manual-only, so the merge is a human's call.\n\n**What a user gets:**\n- **Change sentences:** the model can now answer `change`, with the words naming the event and only what changes. \"przesuń na 15\" keeps the day and the length; a new day keeps the hour. A sentence read as a change never creates an event.\n- **Which event changes:** if an event's details were open when the user went to the box, that event changes, whatever its date. Otherwise the app looks among events from today on, tolerating Polish word endings (\"dentystę\" finds \"Dentysta\").\n- **Results:**\n  - One event fits: its editor opens with the change made, and saving goes the usual way (series scope, asking about guests).\n  - Several fit: they are listed under the box. Arrows and Enter pick one, Esc goes back to the text.\n  - None fits: the box says \"No such event found from today on\" and keeps the text.\n- **Events the user may not change** (read-only calendar, a guest without rights): their details stay open, unchanged, and say why. No editor opens and nothing is sent.\n\n**The test set** gains 13 change sentences (7 Polish, 6 English), 43 in all. The fake-model test (TC-10-18) gives date 100 % and every field 91 %.\n\n**Checked against the real model.** Ollama with `gemma4:e4b` was running on this machine, so I used it:\n- The 13 recorded answers are what `gemma4:e4b` actually returned with the final rules.\n- My first wording of the rules read \"przesuń na 15\" as 15 November, and it also broke 8 of the adding sentences. I reworded the rules and made the reading tolerate two quirks; a full re-run gave date 98 % and every field 95 %.\n\n**Behaviour changes worth reviewing:**\n- **DEC-231:** the model's answer is now taken in while an event's details are open (before, it waited for any window to close). So a new event described with details open opens its window in place of the details.\n- **DEC-228:** a change applies only the day, the hour and the length. A title, guests or Meet in it are ignored, and an all-day event moves to the new day and stays all day.\n\n**Manual checks left for the owner** (as the story's notes say): changing a real Google event with guests, one occurrence of a real series, and the list of matches in both themes.\n\nOne test fix to mention: TC-10-30 failed once under load because Save was clicked before the guests' free/busy answer resized the editor. It now waits for that answer, as the US-10-03 tests already do.\n\n```\nRESULT: ready\nSTORY: US-10-04\nBRANCH: feature/US-10-04\nCOMMITS: 646e392 feat(descriptions): change an event from a description [US-10-04]\nDECISIONS: DEC-228 routine A described change: the words naming the event, and only what changes; DEC-229 routine An event fits the words naming it word by word, Polish endings aside; DEC-230 routine A change of an event the editor is not offered for opens its details, as today; DEC-231 routine The model's answer is taken in while an event's details are open\nEVIDENCE:\n  #1 adding and changing told apart; a change never creates an event — TC-10-27 tc_10_27_the_named_event_moves_to_friday_at_the_same_time_and_no_event_is_added, steps 1-2 pass (one PATCH, no POST, one event shown); TC-10-18 scores a change read as an add (or the reverse) as all wrong, pass\n  #2 names match only events from today on; an open event changes whatever its date — TC-10-28 tc_10_28_a_past_event_is_not_found_by_name_but_is_changed_when_its_details_are_open, steps 1-2 pass; core names_fit_events_from_today_on_in_any_grammatical_case_in_the_order_they_start pass\n  #3 saving follows the usual rules; a read-only or guest-locked event opens locked — TC-10-30 tc_10_30_saving_a_described_change_of_an_occurrence_asks_the_scope_and_about_the_guests, steps 1-4 pass (scope, then notify, one PATCH of the occurrence with sendUpdates=none); TC-10-31 tc_10_31_a_described_change_of_an_event_the_user_may_not_change_opens_it_locked, steps 1-3 pass\n  #4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (13 changing, 7 pl and 6 en; 43 in all; date 100 %, every field 91 %); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on the final rules: date 98 %, every field 95 %)\n  #5 scenario: the open \"Sprint planning\", \"przesuń na 15\" gives 15:00-16:00 and nothing is saved before Save — TC-10-26 tc_10_26_the_open_event_moves_to_15_its_length_kept_and_only_save_changes_it, steps 1-3 pass\n  #6 scenario: a named event moves to Friday at the same time — TC-10-27, steps 1-2 pass\n  #7 scenario: three standups listed with title, day, time and calendar; arrows and Enter pick, Esc goes back — TC-10-29 tc_10_29_several_standups_are_listed_and_picked_from_the_keyboard, steps 1-3 pass\n  #8 scenario: nothing matches, so the box says so and keeps the text — TC-10-28 step 1 pass\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_035847 pass=7 fail=0 blocked=0 manual=1 manual_tests=TC-10-19\nDERIVED_TESTS: none\nPREEXISTING: the test set, its runner and the fake model came from US-10-02 (DEC-221 left the changing sentences to this story); the editor's save path (series scope, guest notification, permissions) is reused unchanged; no criterion was met before this run\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok (221+468+91 passed)\nENV_KEYS: none\nMIGRATION: no\nNOTES: Ollama with gemma4:e4b was available locally: the 13 recorded change answers are real gemma4:e4b answers on the final rules, and the full set scored date 98 %, every field 95 % by hand (TC-10-19 stays manual-only for the owner).\nDEC-231: an add described while an event's details are open now opens the New event window in place of the details (before, the answer waited for the window to close).\nManual check left for the owner: a real Google event with guests, one occurrence of a real series, and the list of matches in both themes.\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

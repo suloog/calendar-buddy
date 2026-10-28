@@ -102,5 +102,37 @@
     "title": "The description's Meet wins over the first-guest rule",
     "file": "docs/specs/DECISIONS.md",
     "ts": "2026-10-28T02:20:59Z"
+  },
+  {
+    "dec": "DEC-228",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "A described change: the words naming the event, and only what changes",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:10Z"
+  },
+  {
+    "dec": "DEC-229",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "An event fits the words naming it word by word, Polish endings aside",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:10Z"
+  },
+  {
+    "dec": "DEC-230",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "A change of an event the editor is not offered for opens its details, as today",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:11Z"
+  },
+  {
+    "dec": "DEC-231",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "The model's answer is taken in while an event's details are open",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:11Z"
   }
 ]

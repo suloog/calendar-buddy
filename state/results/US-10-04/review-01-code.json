@@ -1,0 +1,115 @@
+{
+  "story": "US-10-04",
+  "attempt": 1,
+  "round": 1,
+  "sha": "646e3925cdae4bb02d6d5baacd3f5a6290d2f604",
+  "reviewer": "code",
+  "ts": "2026-10-28T03:10:21Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-04",
+    "impact": "described.rs `parse`, the `RULES` prompt, the response schema and `KINDS` are shared with the add path (US-10-02/03); the add cases were left in the set, the schema now requires \"event\", and the new \"change\" prompt rules could make a real model misread an add as a change (TC-10-19 is the only guard). main.rs now takes the model's answer and the looked-up names while an event's details are open (DEC-231), which changes when a described add opens its window; `Editor::follow_start` and `Regional` formatting are reused by `Change::apply`. `pub(super)` test helpers were widened in description_guests_tests.rs.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2003 — `selected` is captured only when the box gains focus. Scenario: details of A are open, the user clicks the box, then presses Esc (the Esc handling in `shortcuts` closes the details even while a text field has focus, main.rs:964), types \"przesuń standup na 10\" and sends. `selected` is still A, so the editor opens A instead of matching \"standup\", and the name is ignored. The same happens after an add or a \"no event\" answer, because `selected` is cleared only in `described_change`. → At Send, also check that `self.dialog` is still that event's details (`same_event`), otherwise drop `selected`. Or take `selected` from the dialog at Send time."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2036 — `self.matches` is cleared only on GoneTo, Send or a pick. If the user opens another dialog or the cache changes, the list reappears when the dialog closes, holding stale `Event` copies (`matches.events[i].clone()` is passed straight to `change_event`, not re-read from `self.events`). → Re-resolve the picked event via `same_event` against `self.events` as the `selected` branch does, and clear `matches` when a dialog opens."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:293 — While the list is showing and no text field has focus, Enter and arrows are consumed app-wide (`consume_key`) and Esc closes the list too, e.g. Enter on a focused grid event. → Gate on the list or box having focus, or clear `matches` when focus goes elsewhere."
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:176 — `matching` runs over all of `self.events`, including events of calendars the user has hidden in the side panel. `side_panel::shown` filters those out of the views, so the user can be offered an event they cannot see. → Filter on `side_panel::shown` or the calendar's visibility, or confirm that is intended."
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:176 — Matching in both directions (DEC-229, `within(&title,&name)`) is broad. A lone event titled \"Spotkanie\" fits \"spotkanie z Anią\" and, if it is the only match, opens straight away although a more specific \"Spotkanie z Anią\" may be a different event. → Consider ranking or preferring the longer overlap, or accept it and say so in the DEC."
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2170 — When the target cannot be edited and its details are already open (DEC-230), nothing visibly happens, because the description stays and no message is shown. → Optionally flash a message, or note it in the manual check."
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:1 — The module doc line is 149 characters, so it was not reflowed after the edit. The doc comment on `Change::apply` should also mention that title, guests and Meet are not applied."
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described_cases.json:1 — The change cases' answers are labelled as gemma4:e4b output, but the \"event\" values for \"Kawa z Bartkiem\" and \"meeting with Anna\" differ in style from the others and cannot be verified. The fake model only tests the app's parsing, not the prompt, so the 95 % / 80 % result against the real model rests on the manual TC-10-19."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Review of US-10-04, round 1, commit 646e3925. I found no blocking issues, only non-blocking ones.\n\nI extracted the commit to /tmp/rev and ran `cargo test -p calendar-core described` (21 passed, 1 ignored: TC-10-19, live Ollama) and `cargo test -p calendar-buddy description` (34 passed). That includes TC-10-26 to TC-10-31 and the TC-10-18 threshold test with 13 change sentences. I did not run fmt, clippy or the full workspace tests.\n\n```\nREVIEW: findings\nSTORY: US-10-04\nIMPACT: described.rs `parse`, the `RULES` prompt, the response schema and `KINDS` are shared with the add path (US-10-02/03); the add cases were left in the set, the schema now requires \"event\", and the new \"change\" prompt rules could make a real model misread an add as a change (TC-10-19 is the only guard). main.rs now takes the model's answer and the looked-up names while an event's details are open (DEC-231), which changes when a described add opens its window; `Editor::follow_start` and `Regional` formatting are reused by `Change::apply`. `pub(super)` test helpers were widened in description_guests_tests.rs.\nFINDINGS:\n  N1 crates/app/src/main.rs:2003 — `selected` is captured only when the box gains focus. Scenario: details of A are open, the user clicks the box, then presses Esc (the Esc handling in `shortcuts` closes the details even while a text field has focus, main.rs:964), types \"przesuń standup na 10\" and sends. `selected` is still A, so the editor opens A instead of matching \"standup\", and the name is ignored. The same happens after an add or a \"no event\" answer, because `selected` is cleared only in `described_change`. → At Send, also check that `self.dialog` is still that event's details (`same_event`), otherwise drop `selected`. Or take `selected` from the dialog at Send time.\n  N2 crates/app/src/main.rs:2036 — `self.matches` is cleared only on GoneTo, Send or a pick. If the user opens another dialog or the cache changes, the list reappears when the dialog closes, holding stale `Event` copies (`matches.events[i].clone()` is passed straight to `change_event`, not re-read from `self.events`). → Re-resolve the picked event via `same_event` against `self.events` as the `selected` branch does, and clear `matches` when a dialog opens.\n  N3 crates/app/src/description.rs:293 — While the list is showing and no text field has focus, Enter and arrows are consumed app-wide (`consume_key`) and Esc closes the list too, e.g. Enter on a focused grid event. → Gate on the list or box having focus, or clear `matches` when focus goes elsewhere.\n  N4 crates/core/src/described.rs:176 — `matching` runs over all of `self.events`, including events of calendars the user has hidden in the side panel. `side_panel::shown` filters those out of the views, so the user can be offered an event they cannot see. → Filter on `side_panel::shown` or the calendar's visibility, or confirm that is intended.\n  N5 crates/core/src/described.rs:176 — Matching in both directions (DEC-229, `within(&title,&name)`) is broad. A lone event titled \"Spotkanie\" fits \"spotkanie z Anią\" and, if it is the only match, opens straight away although a more specific \"Spotkanie z Anią\" may be a different event. → Consider ranking or preferring the longer overlap, or accept it and say so in the DEC.\n  N6 crates/app/src/main.rs:2170 — When the target cannot be edited and its details are already open (DEC-230), nothing visibly happens, because the description stays and no message is shown. → Optionally flash a message, or note it in the manual check.\n  N7 crates/core/src/described.rs:1 — The module doc line is 149 characters, so it was not reflowed after the edit. The doc comment on `Change::apply` should also mention that title, guests and Meet are not applied.\n  N8 crates/core/src/described_cases.json:1 — The change cases' answers are labelled as gemma4:e4b output, but the \"event\" values for \"Kawa z Bartkiem\" and \"meeting with Anna\" differ in style from the others and cannot be verified. The fake model only tests the app's parsing, not the prompt, so the 95 % / 80 % result against the real model rests on the manual TC-10-19.\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 external — MANUAL TC-10-19\n  #5 met\n  #6 met\n  #7 met\n  #8 met\n```\n"
+}
