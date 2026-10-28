@@ -62,5 +62,45 @@
     "title": "TC-10-15: the saved event is also in the cache the views read; the description and the answer are nowhere",
     "file": "docs/specs/DECISIONS.md",
     "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-223",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "The model's answer says Meet asked for, refused or not mentioned",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-224",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "Guests named in a description are looked up before the full editor opens",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-225",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "A name not certain waits under the guest field with its suggestions",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-226",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "A calendar that cannot add Meet behaves as in the editor today",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T01:59:52Z"
+  },
+  {
+    "dec": "DEC-227",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "The description's Meet wins over the first-guest rule",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:20:59Z"
   }
 ]

@@ -1,0 +1,65 @@
+{
+  "n": 2,
+  "attempt": 1,
+  "ts": "2026-10-28T02:15:12Z",
+  "story": "US-10-03",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-03",
+    "branch": "feature/US-10-03",
+    "commits": [
+      "1bd9463 fix(descriptions): keep a refused Meet off when a name is picked [US-10-03]",
+      "76ee40b fix(descriptions): drop an untaken guest look-up on a new one [US-10-03]"
+    ],
+    "decisions": [],
+    "evidence": [
+      "#1 names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass",
+      "#2 guests or Meet open the full editor; neither opens \"New event\" — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass",
+      "#3 Meet on for \"z Meetem\", off for \"bez Meeta\", otherwise on with the first guest — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 pass; also a_refused_meet_stays_off_when_a_name_is_picked_and_a_waiting_name_invites_nobody (app) and a_name_picked_later_leaves_meet_as_the_description_said (core)",
+      "#4 local calendar: no guests, no Meet — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass",
+      "#5 offline or no Google account: no look-up, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass",
+      "#6 scenario: two guests and Meet, nothing sent before Save — TC-10-20, steps 1-3 pass",
+      "#7 scenario: uncertain names wait with suggestions, nobody invited until picked — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_031431",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 0
+    },
+    "derived_tests": [],
+    "preexisting": "all criteria implemented in 9e70672/5508bce (round 1); this round fixes only the pick path of #3",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok (214+464+91 passed)"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 1bd9463",
+      "N3 fixed 1bd9463 (app test saves with \"Zenek\" still unresolved, only Kasia Lis sent, no conferenceData)",
+      "N7 fixed 76ee40b",
+      "N1 refused: 90% guest accuracy on live gemma4:e4b needs prompt tuning against a live Ollama, which is not in scope for a fix round",
+      "N2 refused: changing the test-set score is a test-set design change, left for a later story",
+      "N4 refused: DEC-226 is a decision log entry, and a QUESTIONS.md entry is spec work for the owner, not code",
+      "N5 refused: order-dependent resolution only matters when two names fit the same person, and changing it is not clearly right without a spec ruling",
+      "N6 and code reviewer N4 refused: waiting for open dialogs to close is deliberate (as for the reading answer), and dropping the answer when the feature was turned off meanwhile changes main.rs flow beyond this finding",
+      "N8 left to the loop as instructed"
+    ],
+    "notes": "New field Editor::meet_described: a Meet yes or no from the description now holds against picks made later; when the description says nothing, the editor's first-guest rule still applies.\nN7 clears an untaken look-up only when a new one is asked for. A reply already in flight can still land later; main.rs keeps it only if the account and names match.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I fixed B1. With \"bez Meeta\" in the description, Meet now stays off when the user later picks a contact for an unresolved name, and Save sends the event without a Meet call. I also fixed N3 and N7. The story's six acceptance tests and all three gates pass on the new head.\n\nWhat changed for B1:\n- crates/core/src/editor.rs has a new flag, `Editor::meet_described`. `described::fill` (crates/core/src/described.rs) sets it whenever the description said yes or no to Meet.\n- `Editor::pick` keeps Meet as it was when that flag is set. When the description said nothing, the first guest picked still turns Meet on (MOD-06-F17).\n- New unit test `a_name_picked_later_leaves_meet_as_the_description_said` in crates/core/src/described_tests.rs covers the refused, asked-for and not-mentioned cases.\n- New app test `a_refused_meet_stays_off_when_a_name_is_picked_and_a_waiting_name_invites_nobody` in crates/app/src/description_guests_tests.rs drives the whole app. With the fix stashed it fails at \"Meet was refused\", so it catches the bug. The same test covers N3: \"Zenek\" is still unresolved at Save, and the attendees sent are only kasia.lis@example.com.\n\nN7: `Sync::look_up` in crates/app/src/sync.rs now drops what an earlier look-up found if nobody took it.\n\nThe run that counts is /home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_031431. It was made on head 76ee40b with a clean tree (snapshot true, changed_during_run false); every step of every test case ran and passed. I deleted one earlier run of my own, 2026-10-28_031406. It ran the whole workspace, so the TCs of other modules showed as blocked.\n\nRESULT: ready\nSTORY: US-10-03\nBRANCH: feature/US-10-03\nCOMMITS: 1bd9463 fix(descriptions): keep a refused Meet off when a name is picked [US-10-03]; 76ee40b fix(descriptions): drop an untaken guest look-up on a new one [US-10-03]\nDECISIONS: none\nEVIDENCE:\n  #1 names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass\n  #2 guests or Meet open the full editor; neither opens \"New event\" — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass\n  #3 Meet on for \"z Meetem\", off for \"bez Meeta\", otherwise on with the first guest — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 pass; also a_refused_meet_stays_off_when_a_name_is_picked_and_a_waiting_name_invites_nobody (app) and a_name_picked_later_leaves_meet_as_the_description_said (core)\n  #4 local calendar: no guests, no Meet — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass\n  #5 offline or no Google account: no look-up, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass\n  #6 scenario: two guests and Meet, nothing sent before Save — TC-10-20, steps 1-3 pass\n  #7 scenario: uncertain names wait with suggestions, nobody invited until picked — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_031431 pass=6 fail=0 blocked=0 manual=0 manual_tests=\nDERIVED_TESTS: none\nPREEXISTING: all criteria implemented in 9e70672/5508bce (round 1); this round fixes only the pick path of #3\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok (214+464+91 passed)\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 1bd9463; N3 fixed 1bd9463 (app test saves with \"Zenek\" still unresolved, only Kasia Lis sent, no conferenceData); N7 fixed 76ee40b; N1 refused: 90% guest accuracy on live gemma4:e4b needs prompt tuning against a live Ollama, which is not in scope for a fix round; N2 refused: changing the test-set score is a test-set design change, left for a later story; N4 refused: DEC-226 is a decision log entry, and a QUESTIONS.md entry is spec work for the owner, not code; N5 refused: order-dependent resolution only matters when two names fit the same person, and changing it is not clearly right without a spec ruling; N6 and code reviewer N4 refused: waiting for open dialogs to close is deliberate (as for the reading answer), and dropping the answer when the feature was turned off meanwhile changes main.rs flow beyond this finding; N8 left to the loop as instructed\nNOTES: New field Editor::meet_described: a Meet yes or no from the description now holds against picks made later; when the description says nothing, the editor's first-guest rule still applies.\nN7 clears an untaken look-up only when a new one is asked for. A reply already in flight can still land later; main.rs keeps it only if the account and names match.\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

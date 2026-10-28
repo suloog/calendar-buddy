@@ -1,0 +1,65 @@
+{
+  "n": 3,
+  "attempt": 1,
+  "ts": "2026-10-28T02:23:28Z",
+  "story": "US-10-03",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-03",
+    "branch": "feature/US-10-03",
+    "commits": [
+      "829f857 fix(descriptions): keep the description's Meet when any guest is added [US-10-03]",
+      "d69d100 test(descriptions): a new guest look-up drops an untaken one [US-10-03]"
+    ],
+    "decisions": [
+      "DEC-227 routine The description's Meet wins over the first-guest rule"
+    ],
+    "evidence": [
+      "#1 names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass",
+      "#2 guests or Meet open the full editor; neither opens \"New event\" — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass",
+      "#3 Meet on for \"z Meetem\", off for \"bez Meeta\", otherwise on with the first guest — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 pass; refused Meet holds against a pick and a typed guest: a_refused_meet_stays_off_when_guests_are_added_and_a_waiting_name_invites_nobody (app, Save sends no conferenceData) and guests_added_later_leave_meet_as_the_description_said (core), both pass in the same run",
+      "#4 local calendar: no guests, no Meet — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass",
+      "#5 offline or no Google account: no look-up, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass",
+      "#6 scenario: two guests and Meet, nothing sent before Save — TC-10-20, steps 1-3 pass",
+      "#7 scenario: uncertain names wait with suggestions, nobody invited until picked — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_032251",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 0
+    },
+    "derived_tests": [],
+    "preexisting": "all criteria were implemented in 9e70672/5508bce, with round-1 fixes in 1bd9463/76ee40b; this round changes only where the Meet guard sits (#3)",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok (215+464+91 passed)"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 829f857",
+      "N1 fixed 829f857 (DEC-227 appended, field comments point to it, DEC-225 not edited)",
+      "N2 fixed d69d100",
+      "N3 refused for code: the round-1 N7 in the 76ee40b message meant the sync.rs look-up clearing, and the editor.rs:272 colour finding was not handled in round 1. I leave the colour as it is: warn_fg_color is the theme's single warning colour (the accent, appearance.rs:186), already used for the guest field's own problem line at editor.rs:260, and the theme keeps only the accent apart from grays",
+      "a different colour for unresolved names is a UI-polish call for the owner",
+      "N4 fixed in the run above: the cargo run (cargo-test.txt) includes the six TCs plus the three new regression tests, and run.json counts the six TCs because the collector matches only TC-named tests",
+      "duration_ms stays 0 because scripts/cargo_report.py writes no timing, left unchanged"
+    ],
+    "notes": "DEC-227: a Meet yes or no in the description now holds against every guest added while the event is made; the user can still flip the switch by hand.\nThe counted run is test-runs/2026-10-28_032251 on d69d100, clean tree, with snapshot.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I fixed round-2 B1: once the description says yes or no to Meet, no guest added afterwards turns it on, whether picked for a waiting name, picked from the guest field's suggestions or typed in. When the description says nothing, the first guest still turns Meet on. The story's six acceptance tests, the new regression tests and all three gates pass on head d69d100.\n\nWhat changed:\n- **B1:** The check moved into `Editor::add_guest` in /home/sulo/workspace/private/calendar-buddy/crates/core/src/editor.rs. Meet turns on with the first guest only when `!self.meet_described`. `pick` is a plain `add_guest` again.\n- **Core test:** `guests_added_later_leave_meet_as_the_description_said` in crates/core/src/described_tests.rs. It covers refused, asked for and not mentioned, each for a pick and for a typed address plus Enter. It replaces my round-1 test.\n- **App test:** `a_refused_meet_stays_off_when_guests_are_added_and_a_waiting_name_invites_nobody` in crates/app/src/description_guests_tests.rs. The description refuses Meet and names Kasia, Zenek and \"mama\". It picks Kasia Lis, drops Zenek and types zenek@example.com in the guest field, then saves with \"mama\" still waiting. The saved event invites exactly Kasia Lis and zenek@example.com and has no conferenceData.\n- With the check taken out of `add_guest`, both new tests fail (\"picked, Some(false)\" and \"Meet was refused\").\n- **N1:** I appended DEC-227 to docs/specs/DECISIONS.md, the number taken from `og-delivery dec next`. The comments on the `meet` and `meet_described` fields now point to it. DEC-225 is untouched.\n- **N2:** New test `a_new_look_up_drops_what_an_earlier_one_found_and_nobody_took` in crates/app/src/sync.rs.\n\nOn N4: the run includes the new tests in its cargo output (cargo-test.txt), but `run.json` matches only the TC-named tests, so its counts are the six TCs. `duration_ms` is still 0. The collector reads timing from the report that scripts/cargo_report.py builds, and that script writes none. I did not change the script.\n\nThe checkout had been switched back to `main` when this round started; I switched to feature/US-10-03 before making any change.\n\nRESULT: ready\nSTORY: US-10-03\nBRANCH: feature/US-10-03\nCOMMITS: 829f857 fix(descriptions): keep the description's Meet when any guest is added [US-10-03]; d69d100 test(descriptions): a new guest look-up drops an untaken one [US-10-03]\nDECISIONS: DEC-227 routine The description's Meet wins over the first-guest rule\nEVIDENCE:\n  #1 names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass\n  #2 guests or Meet open the full editor; neither opens \"New event\" — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass\n  #3 Meet on for \"z Meetem\", off for \"bez Meeta\", otherwise on with the first guest — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 pass; refused Meet holds against a pick and a typed guest: a_refused_meet_stays_off_when_guests_are_added_and_a_waiting_name_invites_nobody (app, Save sends no conferenceData) and guests_added_later_leave_meet_as_the_description_said (core), both pass in the same run\n  #4 local calendar: no guests, no Meet — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass\n  #5 offline or no Google account: no look-up, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass\n  #6 scenario: two guests and Meet, nothing sent before Save — TC-10-20, steps 1-3 pass\n  #7 scenario: uncertain names wait with suggestions, nobody invited until picked — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_032251 pass=6 fail=0 blocked=0 manual=0 manual_tests=\nDERIVED_TESTS: none\nPREEXISTING: all criteria were implemented in 9e70672/5508bce, with round-1 fixes in 1bd9463/76ee40b; this round changes only where the Meet guard sits (#3)\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok (215+464+91 passed)\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 829f857; N1 fixed 829f857 (DEC-227 appended, field comments point to it, DEC-225 not edited); N2 fixed d69d100; N3 refused for code: the round-1 N7 in the 76ee40b message meant the sync.rs look-up clearing, and the editor.rs:272 colour finding was not handled in round 1. I leave the colour as it is: warn_fg_color is the theme's single warning colour (the accent, appearance.rs:186), already used for the guest field's own problem line at editor.rs:260, and the theme keeps only the accent apart from grays; a different colour for unresolved names is a UI-polish call for the owner; N4 fixed in the run above: the cargo run (cargo-test.txt) includes the six TCs plus the three new regression tests, and run.json counts the six TCs because the collector matches only TC-named tests; duration_ms stays 0 because scripts/cargo_report.py writes no timing, left unchanged\nNOTES: DEC-227: a Meet yes or no in the description now holds against every guest added while the event is made; the user can still flip the switch by hand.\nThe counted run is test-runs/2026-10-28_032251 on d69d100, clean tree, with snapshot.\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

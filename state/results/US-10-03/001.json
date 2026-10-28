@@ -1,0 +1,62 @@
+{
+  "n": 1,
+  "attempt": 1,
+  "ts": "2026-10-28T02:01:19Z",
+  "story": "US-10-03",
+  "mode": "implement",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-03",
+    "branch": "feature/US-10-03",
+    "commits": [
+      "9e70672 feat(descriptions): guests and Meet from a description [US-10-03]",
+      "5508bce docs(specs): record the Meet edge case of US-10-03 [US-10-03]"
+    ],
+    "decisions": [
+      "DEC-223 routine The model's answer says Meet asked for, refused or not mentioned",
+      "DEC-224 routine Guests named in a description are looked up before the full editor opens",
+      "DEC-225 routine A name not certain waits under the guest field with its suggestions",
+      "DEC-226 routine A calendar that cannot add Meet behaves as in the editor today"
+    ],
+    "evidence": [
+      "#1 Names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass",
+      "#2 Guests or Meet open the full editor, neither the New event window — TC-10-20 step 1 pass; unit test guests_or_meet_asked_for_open_the_full_editor_and_neither_the_new_event_window; New event window path TC-10-08…TC-10-17 still pass",
+      "#3 Meet on / off / editor's rule when silent — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 (all four rows) pass",
+      "#4 Local calendar: guests and Meet left out, local editor — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass",
+      "#5 Offline or no account: no lookup, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass",
+      "#6 Scenario two guests and Meet, nothing sent until Save — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass",
+      "#7 Scenario a name not certain — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_030016",
+      "pass": 6,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 0,
+      "manual_tests": [
+        "none"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "The model's answer already carried guests and Meet, read but not used (US-10-02, DEC-219); the editor's guest suggestions (MOD-06) and Meet-on-first-guest rule were reused, not rebuilt",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "notes": "The run's whole cargo test --workspace passed on 5508bce (app 213, core 463, google 91); run.json counts only this story's TC-10-20…25, after a cargo-to-report conversion.\nThe story's Meet edge case (\"switch unavailable as in the editor today\") does not match today's editor, which saves without the call and tells the user; DEC-226 keeps that, and greying the switch out is for the analyst (MOD-06).\nManual checks left for the owner per the story: real Google contacts and Workspace directory; the editor with unresolved names (preview picture editor-unresolved-light).",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "US-10-03 is implemented and committed on `feature/US-10-03`, which branches off local `main`. All six of the story's test cases (TC-10-20…TC-10-25) pass in the run on the head commit (5508bce). The gates are green.\n\nHow it works:\n- **Meet:** the model's answer can now say Meet was asked for, refused or not mentioned (DEC-223). The description's word on Meet wins. When it says nothing, Meet turns on with the first guest, as in the editor.\n- **Which window:** a description with guests or Meet opens the full editor. One with neither, or one that only refuses Meet, opens the \"New event\" window.\n- **Guest lookup:** for a Google calendar while online, each name is searched the way the guest field searches, followed by the recent guests. The box shows \"Reading…\" until Google answers, and Esc drops the answer (DEC-224). For a local calendar, offline, or without an account, nothing is looked up and the names are left out. A local calendar gets no Meet either.\n- **Unresolved names:** a name that fits exactly one person invites that person. Any other name waits under the guest field with its own suggestions (\"No one found\" when nobody fits) and a remove button. It invites nobody until the user picks someone (DEC-225).\n\n**Review finding:** the spec-compliance reviewer said every criterion is met, with one blocking finding: the edge case \"an account that cannot add Meet → the switch stays off and unavailable, as in the editor today\" is neither built nor tested. The editor today never greys the switch out. It offers Meet on every Google calendar, and when Google makes no call the event is saved without one and the user is told. I kept that behaviour, built nothing new, and recorded it as DEC-226. Whether the editor should grey the switch out is a question for the analyst. Code review may raise it again.\n\nPaths are relative to `/home/sulo/workspace/private/calendar-buddy`. The new tests are in `crates/app/src/description_guests_tests.rs`, and DEC-223…226 are at the end of `docs/specs/DECISIONS.md`. A new preview picture, `editor-unresolved-light`, shows the editor with unresolved names (rendered to `target/preview/editor-unresolved-light.png`), for the owner's manual check.\n\n```\nRESULT: ready\nSTORY: US-10-03\nBRANCH: feature/US-10-03\nCOMMITS: 9e70672 feat(descriptions): guests and Meet from a description [US-10-03]; 5508bce docs(specs): record the Meet edge case of US-10-03 [US-10-03]\nDECISIONS: DEC-223 routine The model's answer says Meet asked for, refused or not mentioned; DEC-224 routine Guests named in a description are looked up before the full editor opens; DEC-225 routine A name not certain waits under the guest field with its suggestions; DEC-226 routine A calendar that cannot add Meet behaves as in the editor today\nEVIDENCE:\n  #1 Names looked up as when typing a guest (contacts, directory, recent) — TC-10-21 tc_10_21_guests_are_found_in_contacts_directory_and_recent_addresses_as_when_typed, steps 1-2 pass\n  #2 Guests or Meet open the full editor, neither the New event window — TC-10-20 step 1 pass; unit test guests_or_meet_asked_for_open_the_full_editor_and_neither_the_new_event_window; New event window path TC-10-08…TC-10-17 still pass\n  #3 Meet on / off / editor's rule when silent — TC-10-23 tc_10_23_meet_follows_the_description_and_turns_on_with_a_guest_when_it_says_nothing, step 1 (all four rows) pass\n  #4 Local calendar: guests and Meet left out, local editor — TC-10-24 tc_10_24_a_local_calendar_takes_the_event_without_guests_or_meet, steps 1-2 pass\n  #5 Offline or no account: no lookup, names left out — TC-10-25 tc_10_25_offline_or_without_an_account_no_guest_is_looked_up, steps 1-2 pass\n  #6 Scenario two guests and Meet, nothing sent until Save — TC-10-20 tc_10_20_two_guests_and_meet_open_the_full_editor_and_nobody_is_invited_before_save, steps 1-3 pass\n  #7 Scenario a name not certain — TC-10-22 tc_10_22_names_not_certain_stay_with_suggestions_and_nobody_is_a_guest_until_picked, steps 1-3 pass\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_030016 pass=6 fail=0 blocked=0 manual=0 manual_tests=none\nDERIVED_TESTS: none\nPREEXISTING: The model's answer already carried guests and Meet, read but not used (US-10-02, DEC-219); the editor's guest suggestions (MOD-06) and Meet-on-first-guest rule were reused, not rebuilt\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nNOTES: The run's whole cargo test --workspace passed on 5508bce (app 213, core 463, google 91); run.json counts only this story's TC-10-20…25, after a cargo-to-report conversion.\nThe story's Meet edge case (\"switch unavailable as in the editor today\") does not match today's editor, which saves without the call and tells the user; DEC-226 keeps that, and greying the switch out is for the analyst (MOD-06).\nManual checks left for the owner per the story: real Google contacts and Workspace directory; the editor with unresolved names (preview picture editor-unresolved-light).\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

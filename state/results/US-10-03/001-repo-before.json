@@ -1,0 +1,13 @@
+{
+  "branch": "feature/US-10-03",
+  "commit": "5508bce3464ce32f6a1e39cb3894dd32a76069b6",
+  "dirty": false,
+  "tree": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+  "taken": "2026-10-28T02:00:16+00:00",
+  "build": {
+    "environment": "local",
+    "source": "checkout",
+    "commit": "5508bce3464ce32f6a1e39cb3894dd32a76069b6"
+  },
+  "targets": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+}

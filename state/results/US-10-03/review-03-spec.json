@@ -1,0 +1,75 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 3,
+  "sha": "d69d1007f19b83b2d11b1ea8fed41dc0b9d96ab5",
+  "reviewer": "spec",
+  "ts": "2026-10-28T02:37:53Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-03",
+    "impact": "Round 3: the description's Meet (\"z Meetem\"/\"bez Meeta\") now survives every guest added in the described editor (guard in Editor::add_guest); B1 resolved, gates green.\n        Remaining items are non-blocking: an app test step that does not exercise the guard, a More-options path DEC-223 leaves open, and report tooling.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_guests_tests.rs:408 — typed-address step runs after Kasia is already a guest, so it never hits the first-guest rule (passes on the round-2 code); suggestion click (app editor.rs:264) untested → type Zenek before picking Kasia (or a Zenek-only description) and add a suggestion-click case"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2046 — \"bez Meeta\" with no guests opens the New event window; More options → Editor::from_quick (meet_described false) → first guest turns Meet on → Save makes a Meet call → record in a new DEC or carry the described Meet through QuickEntry"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "test-runs/2026-10-28_032251/run.json — lists TC-named tests only, duration_ms 0 (cargo_report.py writes no timing); regression tests only in cargo-test.txt — tooling, carried over"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "## US-10-03, round 3: review of 76ee40b..d69d100 (fix commits 829f857 and d69d100)\n\nCriterion #3 now holds on every path inside the editor a description opens. Nothing regressed, and nothing blocks. fmt, clippy and cargo test --workspace pass on d69d100 (app 215, core 464, google 91). Mutation checks: removing the add_guest guard fails both new tests; the round-2 editor.rs fails the core test on the typed path.\n\n```\nREVIEW: findings\nSTORY: US-10-03\nIMPACT: Round 3: the description's Meet (\"z Meetem\"/\"bez Meeta\") now survives every guest added in the described editor (guard in Editor::add_guest); B1 resolved, gates green.\n        Remaining items are non-blocking: an app test step that does not exercise the guard, a More-options path DEC-223 leaves open, and report tooling.\nFINDINGS:\n  N1 crates/app/src/description_guests_tests.rs:408 — typed-address step runs after Kasia is already a guest, so it never hits the first-guest rule (passes on the round-2 code); suggestion click (app editor.rs:264) untested → type Zenek before picking Kasia (or a Zenek-only description) and add a suggestion-click case\n  N2 crates/app/src/main.rs:2046 — \"bez Meeta\" with no guests opens the New event window; More options → Editor::from_quick (meet_described false) → first guest turns Meet on → Save makes a Meet call → record in a new DEC or carry the described Meet through QuickEntry\n  N3 test-runs/2026-10-28_032251/run.json — lists TC-named tests only, duration_ms 0 (cargo_report.py writes no timing); regression tests only in cargo-test.txt — tooling, carried over\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n```\n"
+}
