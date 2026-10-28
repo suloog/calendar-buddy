@@ -8,12 +8,14 @@ use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, Timelike, Utc};
 use chrono_tz::Tz;
 use serde_json::{Value, json};
 
-use crate::create;
+use crate::accounts::Entry;
+use crate::create::{self, Asked};
 use crate::editor::{Editor, Unresolved};
 use crate::guests::{self, Person};
-use crate::model::{Event, Timing};
+use crate::model::{Calendar, Event, Timing};
 use crate::ollama::{KEEP_ALIVE, Ollama};
 use crate::regional::Regional;
+use crate::settings::Settings;
 
 /// The most characters of a description sent to the model (`DEC-210`).
 pub const LIMIT: usize = 500;
@@ -37,18 +39,20 @@ Rules:
 - guests: first names of the people taking part, as written in the request's language, in their basic (nominative) form. Do not translate names. "with Tom" -> "Tom"; "z Tomkiem" -> "Tomek"; "z Anią" -> "Ania"; "with Anna" -> "Anna". Words for roles or groups are not guests: mom, mama, team, zespół, client, klient, board, zarząd. Empty list if no person is named.
 - meet: true when Google Meet or a video call is asked for; false only when it is refused ("no Meet", "bez Meeta"); null when it is not mentioned.
 - duration_min: the length in minutes when the request gives one ("45 minut" -> 45, "two hours" -> 120, "godzina i kwadrans" -> 75); null when it gives none.
+- calendar: the calendar's name when the request names one ("w kalendarzu Praca" -> "Praca", "in the Home calendar" -> "Home"), as written; "" when it names none. The title never holds it.
 - kind and day describe the day; do not compute the date:
-  kind "yesterday" (wczoraj), "today" (also when no day is given), "tomorrow" (jutro), "day_after_tomorrow" (pojutrze): day "";
+  kind "yesterday" (wczoraj), "today" (dziś, dzisiaj, today, tonight), "tomorrow" (jutro), "day_after_tomorrow" (pojutrze): day "";
+  kind "none" when the request gives no day ("Lunch o 13", "Trening wieczorem", "Call at 3pm"): day "";
   kind "weekday" for a weekday alone ("w piątek", "on Friday"): day "fri" (mon tue wed thu fri sat sun);
   kind "next_weekday" ONLY when the request says next: "next Thursday", "w przyszły czwartek", "next week on Tuesday", "w przyszłym tygodniu we wtorek": day "thu" / "tue";
   kind "in_days" for "in N days" / "za N dni", "in a week" / "za tydzień": day "7";
   kind "date" for a date: day "MM-DD" ("14 listopada" -> "11-14", "3 Nov" -> "11-03");
   kind "same" never when adding.
 - time: HH:MM 24-hour when an hour is given; "morning", "afternoon" or "evening" when only a part of the day is given (rano, po południu, wieczorem); null when no time is given.
-- Only in a "change": title "", guests [] and meet null; kind, day, time and duration_min give only what changes. kind "same" and day "" when no new day is given; a new day takes the kinds above, as when adding ("na jutro" -> kind "tomorrow", day ""; "to Friday" -> kind "weekday", day "fri"). time null when no new hour is given; duration_min null when no new length is given. A number alone is an hour: "przesuń na 15" -> kind "same", time "15:00".
+- Only in a "change": title "", calendar "", guests [] and meet null; kind, day, time and duration_min give only what changes. kind "same" and day "" when no new day is given; a new day takes the kinds above, as when adding ("na jutro" -> kind "tomorrow", day ""; "to Friday" -> kind "weekday", day "fri"). time null when no new hour is given; duration_min null when no new length is given. A number alone is an hour: "przesuń na 15" -> kind "same", time "15:00".
 Answer with compact JSON on one line, no spaces."#;
 
-const KINDS: [&str; 9] = [
+const KINDS: [&str; 10] = [
     "yesterday",
     "today",
     "tomorrow",
@@ -59,12 +63,15 @@ const KINDS: [&str; 9] = [
     "date",
     // In a change, the day stays.
     "same",
+    // No day given: the window asks for it (`DEC-232`).
+    "none",
 ];
 const WEEKDAYS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /// The fixed form of the answer (structured output): variant D, with whether it is an event and a
 /// length left empty when none is given (`DEC-218`); Meet empty when not mentioned (`DEC-223`);
-/// a change with the words naming its event and the day that stays (`DEC-228`).
+/// a change with the words naming its event and the day that stays (`DEC-228`); the calendar
+/// named, and no day given (`DEC-232`, `DEC-233`).
 fn schema() -> Value {
     json!({
         "type": "object",
@@ -72,6 +79,7 @@ fn schema() -> Value {
             "action": {"type": "string", "enum": ["add", "change", "none"]},
             "event": {"type": "string"},
             "title": {"type": "string"},
+            "calendar": {"type": "string"},
             "kind": {"type": "string", "enum": KINDS},
             "day": {"type": "string"},
             "time": {"type": ["string", "null"]},
@@ -80,7 +88,8 @@ fn schema() -> Value {
             "meet": {"type": ["boolean", "null"]},
         },
         "required": [
-            "action", "event", "title", "kind", "day", "time", "duration_min", "guests", "meet",
+            "action", "event", "title", "calendar", "kind", "day", "time", "duration_min",
+            "guests", "meet",
         ],
     })
 }
@@ -235,14 +244,17 @@ fn fits(word: &str, other: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Described {
     pub title: String,
-    pub date: NaiveDate,
-    /// `None` when the description gives no time.
+    /// `None` when the description gives no day (`MOD-10-F13`).
+    pub date: Option<NaiveDate>,
+    /// `None` when the description gives no time (`MOD-10-F14`).
     pub time: Option<NaiveTime>,
     /// In minutes; `None` when the description gives no length.
     pub length: Option<u32>,
     pub guests: Vec<String>,
     /// Google Meet asked for (`true`), refused (`false`), or not mentioned (`None`, `DEC-223`).
     pub meet: Option<bool>,
+    /// The calendar's name, as the description gives it (`MOD-10-F09`).
+    pub calendar: Option<String>,
 }
 
 impl Described {
@@ -253,25 +265,44 @@ impl Described {
     }
 
     /// The times of the event: from its time on its day in `zone`, its length long, or the
-    /// default length of a new event when it gives none (`MOD-10-F05`). With no time it starts as
-    /// one started with the `c` key would, at the next full hour, until `US-10-05` asks for it
-    /// (`DEC-219`).
+    /// default length of a new event when it gives none (`MOD-10-F05`). A day or a time it does
+    /// not give is not guessed but asked for (`missing`); until then the event stands on `today`
+    /// or at midnight, which the window does not show (`DEC-234`).
     pub fn times(
         &self,
         default_length: u32,
-        now: DateTime<Utc>,
+        today: NaiveDate,
         zone: Tz,
     ) -> (DateTime<Utc>, DateTime<Utc>) {
         let length = self.length.unwrap_or(default_length);
-        match self.time {
-            Some(time) => {
-                let minute = time.signed_duration_since(NaiveTime::MIN).num_minutes();
-                let start = create::wall(self.date, minute as u32, zone);
-                (start, start + Duration::minutes(length.into()))
-            }
-            None => create::keyed(self.date, now, length, zone),
-        }
+        let time = self.time.unwrap_or(NaiveTime::MIN);
+        let minute = time.signed_duration_since(NaiveTime::MIN).num_minutes();
+        let start = create::wall(self.date.unwrap_or(today), minute as u32, zone);
+        (start, start + Duration::minutes(length.into()))
     }
+
+    /// What the window asks for: the day and the time the description does not give
+    /// (`MOD-10-F13`, `MOD-10-F14`, `MOD-10-U07`).
+    pub fn missing(&self) -> Option<Asked> {
+        Asked::new(self.date.is_none(), self.time.is_none())
+    }
+}
+
+/// The calendar a description names by `name` (`MOD-10-F09`): of those a new event can go to,
+/// in the side panel's order, the first whose name is `name`, letter case aside; one whose
+/// events are hidden counts as not found, as one that is disabled or read-only, which a new
+/// event cannot go to (`US-10-05` *Edge cases*, `DEC-233`). `None` when none fits.
+pub fn calendar_named(
+    name: &str,
+    accounts: &[Entry],
+    calendars: &[Calendar],
+    settings: &Settings,
+) -> Option<Calendar> {
+    let name = name.trim().to_lowercase();
+    (create::choices(accounts, calendars, settings).into_iter())
+        .flat_map(|(_, calendars)| calendars)
+        .filter(|c| !(settings.hidden).contains(&(c.account_id.clone(), c.id.clone())))
+        .find(|c| c.name.trim().to_lowercase() == name)
 }
 
 /// Fills the guests and Meet of a description into the editor of its new event (`US-10-03`).
@@ -325,13 +356,15 @@ fn parse(answer: &str, today: NaiveDate) -> Option<Reading> {
         return None;
     }
     let (kind, value) = (answer["kind"].as_str()?, answer["day"].as_str()?);
-    // Told not to, the model still says "same" when adding ("Trening wieczorem"): the day the
-    // description gives, else today, as with no day given.
-    let date = match kind {
-        "same" => same(value, today).unwrap_or(today),
-        kind => day(kind, value, today)?,
-    };
     let (time, length) = time_and_length(&answer)?;
+    // No day is asked for, but a part of the day alone is today's: "Trening wieczorem" is this
+    // evening (`MOD-10-F27`, `DEC-232`). Told not to, the model may say "same" when adding: the
+    // day the description gives, else no day either.
+    let part_of_day = (answer["time"].as_str()).is_some_and(|time| time_of_day(time).is_some());
+    let date = match kind {
+        "same" | "none" => same(value, today).or(part_of_day.then_some(today)),
+        kind => Some(day(kind, value, today)?),
+    };
     let guests = (answer["guests"].as_array().into_iter().flatten())
         .filter_map(Value::as_str)
         .map(|name| name.trim().to_string())
@@ -344,6 +377,11 @@ fn parse(answer: &str, today: NaiveDate) -> Option<Reading> {
         length,
         guests,
         meet: answer["meet"].as_bool(),
+        // An answer without the field, as recorded before it was asked for, names none.
+        calendar: (answer["calendar"].as_str())
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string),
     }))
 }
 
@@ -351,7 +389,7 @@ fn parse(answer: &str, today: NaiveDate) -> Option<Reading> {
 fn change(answer: &Value, today: NaiveDate) -> Option<Reading> {
     let value = answer["day"].as_str()?;
     let date = match answer["kind"].as_str()? {
-        "same" => same(value, today),
+        "same" | "none" => same(value, today),
         kind => Some(day(kind, value, today)?),
     };
     let (time, length) = time_and_length(answer)?;
@@ -425,18 +463,23 @@ fn day(kind: &str, value: &str, today: NaiveDate) -> Option<NaiveDate> {
     }
 }
 
-/// An hour as `HH:MM`, or a part of the day: 9:00 in the morning, 14:00 in the afternoon, 18:00
-/// in the evening (`MOD-10-F27`, `DEC-209`).
+/// An hour as `HH:MM`, or a part of the day (`time_of_day`).
 fn time_of(time: &str) -> Option<NaiveTime> {
+    time_of_day(time).or_else(|| {
+        let (h, m) = time.trim().split_once(':')?;
+        NaiveTime::from_hms_opt(h.parse().ok()?, m.get(..2)?.parse().ok()?, 0)
+    })
+}
+
+/// A part of the day: 9:00 in the morning, 14:00 in the afternoon, 18:00 in the evening
+/// (`MOD-10-F27`, `DEC-209`).
+fn time_of_day(time: &str) -> Option<NaiveTime> {
     let hour = |h| NaiveTime::from_hms_opt(h, 0, 0);
     match time.trim().to_lowercase().as_str() {
         "morning" => hour(9),
         "afternoon" => hour(14),
         "evening" => hour(18),
-        time => {
-            let (h, m) = time.split_once(':')?;
-            NaiveTime::from_hms_opt(h.parse().ok()?, m.get(..2)?.parse().ok()?, 0)
-        }
+        _ => None,
     }
 }
 

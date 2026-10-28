@@ -1054,3 +1054,6 @@ mod guests_tests;
 
 #[path = "description_change_tests.rs"]
 mod change_tests;
+
+#[path = "description_asked_tests.rs"]
+mod asked_tests;

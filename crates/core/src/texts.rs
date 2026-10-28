@@ -253,6 +253,11 @@ pub fn calendar_gone(name: &str) -> String {
     format!("The calendar “{name}” is no longer available.")
 }
 
+/// Under the calendar picker, when the calendar a description named was not found (`MOD-10-U06`).
+pub fn calendar_not_found(named: &str, using: &str) -> String {
+    format!("Calendar \"{named}\" not found — using {using}")
+}
+
 pub fn date_as(example: &str) -> String {
     format!("Date (as {example})")
 }
@@ -459,6 +464,11 @@ pub const START_DATE_UNREADABLE: &str = "The start date can't be read.";
 pub const END_DATE_UNREADABLE: &str = "The end date can't be read.";
 pub const START_TIME_UNREADABLE: &str = "The start time can't be read.";
 pub const END_TIME_UNREADABLE: &str = "The end time can't be read.";
+/// What goes in an empty start field (`MOD-10-U07`).
+pub const DAY_HINT: &str = "Day";
+pub const TIME_HINT: &str = "Time";
+pub const START_DATE_EMPTY: &str = "Type the start date.";
+pub const START_TIME_EMPTY: &str = "Type the start time or choose all day.";
 /// What the app says when an event saved with Google Meet came back without a call
 /// (MOD-06 *Constraints and edge cases*).
 pub const WITHOUT_MEET: &str =

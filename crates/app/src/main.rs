@@ -781,6 +781,16 @@ impl CalendarApp {
     fn new_entry(&self, times: impl FnOnce(u32) -> (DateTime<Utc>, DateTime<Utc>)) -> QuickEntry {
         let calendar =
             create::default_calendar(self.accounts.list(), self.sync.calendars(), &self.settings);
+        self.entry_in(calendar, times)
+    }
+
+    /// A new event in `calendar`, at the times `times` gives for the default length of its
+    /// account.
+    fn entry_in(
+        &self,
+        calendar: Option<Calendar>,
+        times: impl FnOnce(u32) -> (DateTime<Utc>, DateTime<Utc>),
+    ) -> QuickEntry {
         let length = calendar
             .as_ref()
             .map_or(create::DEFAULT_LENGTH, |calendar| {
@@ -1188,14 +1198,20 @@ impl CalendarApp {
                                         .font(appearance::strong(18.0))
                                         .desired_width(f32::INFINITY),
                                 );
-                                // The title takes the keyboard when the box opens.
-                                if !*focused {
+                                // The title takes the keyboard when the box opens, or the day or
+                                // the time a description left out (`MOD-10-U07`).
+                                let asking = !*focused && entry.asked.is_some();
+                                if !*focused && !asking {
                                     field.request_focus();
-                                    *focused = true;
                                 }
+                                *focused = true;
                                 ui.add_space(6.0);
                                 widgets::detail_row(ui, "🕒", |ui| {
-                                    ui.label(entry.when().describe(&self.regional));
+                                    if entry.asked.is_some() {
+                                        editor::asked_times(ui, entry, &self.regional, asking);
+                                    } else {
+                                        ui.label(entry.when().describe(&self.regional));
+                                    }
                                 });
                                 let choices = create::choices(
                                     self.accounts.list(),
@@ -1210,6 +1226,11 @@ impl CalendarApp {
                                         &mut entry.calendar,
                                     );
                                 });
+                                editor::calendar_not_found(
+                                    ui,
+                                    entry.not_found.as_deref(),
+                                    &entry.calendar,
+                                );
                                 // No network, no calendar: creating is unavailable, and the box says why;
                                 // a local calendar needs no network (MOD-09).
                                 let refused = offline::refused_in(online, entry.calendar.as_ref());
@@ -1232,7 +1253,8 @@ impl CalendarApp {
                                     },
                                     |ui| {
                                         let button = widgets::primary(ui, texts::SAVE);
-                                        ui.add_enabled(unavailable.is_none(), button).clicked()
+                                        let ready = unavailable.is_none() && entry.ready();
+                                        ui.add_enabled(ready, button).clicked()
                                     },
                                 );
                                 if (clicked || entered) && unavailable.is_none() {
@@ -2090,8 +2112,24 @@ impl CalendarApp {
         match described::read(&answer, today) {
             described::Reading::Event(event) => {
                 let zone = self.zone;
-                let mut entry = self.new_entry(|length| event.times(length, now, zone));
+                // The calendar named, or the default one with a note when none fits
+                // (`MOD-10-F09`, `MOD-10-F10`).
+                let (accounts, calendars) = (self.accounts.list(), self.sync.calendars());
+                let named = (event.calendar.as_deref()).map(|name| {
+                    let found =
+                        described::calendar_named(name, accounts, calendars, &self.settings);
+                    (name.to_string(), found)
+                });
+                let calendar = match &named {
+                    Some((_, Some(found))) => Some(found.clone()),
+                    _ => create::default_calendar(accounts, calendars, &self.settings),
+                };
+                let mut entry = self.entry_in(calendar, |length| event.times(length, today, zone));
                 entry.title = event.title.clone();
+                entry.asked = event.missing();
+                if let Some((name, None)) = named {
+                    entry.not_found = entry.calendar.is_some().then_some(name);
+                }
                 if !event.full() {
                     self.dialog = Some(Dialog::QuickEntry(entry, false));
                     self.description.field.clear();

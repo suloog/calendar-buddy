@@ -12,7 +12,10 @@
 use calendar_core::accounts::Entry;
 use calendar_core::availability::Preview;
 use calendar_core::colors::EventColor;
-use calendar_core::editor::{Editor, LONGEST_REMINDER, MOST_REMINDERS, ReminderField, Save, Unit};
+use calendar_core::create::QuickEntry;
+use calendar_core::editor::{
+    Editor, LONGEST_REMINDER, MOST_REMINDERS, Missing, ReminderField, Save, Unit,
+};
 use calendar_core::guests::Person;
 use calendar_core::model::{Calendar, Kind, Method, Show, Visibility};
 use calendar_core::regional::Regional;
@@ -563,6 +566,69 @@ fn field(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
     text_field(ui, egui::TextEdit::singleline(text).desired_width(width)).changed()
 }
 
+/// A start field that may be left empty for the user to fill in (`MOD-10-U07`): saying what goes
+/// there while empty, and taking the cursor when `focus`; says whether it changed.
+fn start_field(ui: &mut egui::Ui, text: &mut String, hint: &str, width: f32, focus: bool) -> bool {
+    let field = text_field(
+        ui,
+        egui::TextEdit::singleline(text)
+            .hint_text(hint)
+            .desired_width(width),
+    );
+    if focus {
+        field.request_focus();
+    }
+    field.changed()
+}
+
+/// The "New event" window's time row while a description left out the day or the time
+/// (`MOD-10-U07`): a field for each left out, the cursor in the first when `focus`, with what
+/// the description gave beside it; the time can be all day instead.
+pub fn asked_times(ui: &mut egui::Ui, entry: &mut QuickEntry, regional: &Regional, focus: bool) {
+    let (start, end) = (
+        entry.start.with_timezone(&entry.zone),
+        entry.end.with_timezone(&entry.zone),
+    );
+    let Some(asked) = &mut entry.asked else {
+        return;
+    };
+    let mut changed = false;
+    let mut focus = focus;
+    match &mut asked.day {
+        Some(day) => {
+            changed |= start_field(ui, day, texts::DAY_HINT, DATE_WIDTH, focus);
+            focus = false;
+        }
+        None => {
+            ui.label(regional.long_date(start.date_naive()));
+        }
+    }
+    match &mut asked.time {
+        Some(time) => {
+            if !asked.all_day {
+                changed |= start_field(ui, time, texts::TIME_HINT, TIME_WIDTH, focus);
+            }
+            changed |= ui.checkbox(&mut asked.all_day, texts::ALL_DAY).changed();
+        }
+        None => {
+            let (from, until) = (regional.time(start.time()), regional.time(end.time()));
+            ui.label(format!("{from} – {until}"));
+        }
+    }
+    if changed {
+        entry.fill(regional);
+    }
+}
+
+/// Under a calendar picker: the calendar a description named was not found, and which one the
+/// event goes to instead (`MOD-10-U06`).
+pub fn calendar_not_found(ui: &mut egui::Ui, named: Option<&str>, calendar: &Option<Calendar>) {
+    if let (Some(named), Some(calendar)) = (named, calendar) {
+        let note = texts::calendar_not_found(named, &calendar.name);
+        ui.colored_label(ui.visuals().warn_fg_color, note);
+    }
+}
+
 /// What Google gave the editor: the people suggested as guests, and the guests' availability on
 /// the day chosen, once known.
 pub struct FromGoogle<'a> {
@@ -639,10 +705,25 @@ pub fn show(
 
     // When.
     form_row(ui, texts::STARTS, |ui| {
+        // The cursor goes to the day or the time a description left out (`MOD-10-U07`).
+        let ask = editor.ask.take();
         let start_changed = ui
             .horizontal(|ui| {
-                let date = field(ui, &mut editor.start_date, DATE_WIDTH);
-                let time = !editor.all_day && field(ui, &mut editor.start_time, TIME_WIDTH);
+                let date = start_field(
+                    ui,
+                    &mut editor.start_date,
+                    texts::DAY_HINT,
+                    DATE_WIDTH,
+                    ask == Some(Missing::Day),
+                );
+                let time = !editor.all_day
+                    && start_field(
+                        ui,
+                        &mut editor.start_time,
+                        texts::TIME_HINT,
+                        TIME_WIDTH,
+                        ask == Some(Missing::Time),
+                    );
                 date || time
             })
             .inner;
@@ -659,7 +740,9 @@ pub fn show(
         });
     });
     form_row(ui, "", |ui| {
-        ui.checkbox(&mut editor.all_day, texts::ALL_DAY)
+        if ui.checkbox(&mut editor.all_day, texts::ALL_DAY).changed() {
+            editor.follow_start(regional);
+        }
     });
     if !editor.all_day {
         form_row(ui, texts::TIME_ZONE, |ui| {
@@ -718,7 +801,10 @@ pub fn show(
 
     // How it shows.
     form_row(ui, texts::CALENDAR, |ui| {
-        calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
+        ui.vertical(|ui| {
+            calendar_list::picker(ui, "editor-calendar", choices, &mut editor.calendar);
+            calendar_not_found(ui, editor.not_found.as_deref(), &editor.calendar);
+        });
     });
     form_row(ui, texts::COLOUR, |ui| event_color(ui, &mut editor.color));
     // Out of office and focus time are always busy; a local event has neither busy or free nor

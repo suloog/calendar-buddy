@@ -2797,3 +2797,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-232] A day is asked for only when the description names neither a day nor a part of the day
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-05`
+- **Affects:** `MOD-10-F13`, `MOD-10-F27`, `MOD-10-NFR-04`, `US-10-05#4`, `TC-10-11`, `TC-10-33`, `DEC-218`, `DEC-219`
+- **Decision:** The model's answer gains the kind of day `none`, for a description that gives no day; the rules it reads say so ("Lunch o 13" -> `none`) and no longer that no day means today. The app then opens the window with the day empty and asks for it — except when the description gives a part of the day alone ("Trening wieczorem", "Gym in the evening"), which is today's, as `TC-10-11` and the module's acceptance criteria have it. An adding answer of the kind `same`, which `gemma4:e4b` sometimes gives, is read the same way: the day its value names, else today for a part of the day, else no day. In the test set, "Kawa z Bartkiem o 15" now expects no day (it expected today), with the answer `gemma4:e4b` gives under the new rules; "Lunch o 13" and "Lunch at 1pm" are added. Run by hand against `gemma4:e4b` on 2026-10-28, the set scored dates 96 % and every field 90 %. A description with neither a day nor a time asks for both. This replaces the next-full-hour stand-in of `DEC-219` for a missing time.
+- **Why:** `MOD-10-F13` asks for a missing day, and "Lunch o 13" gives none; but `gemma4:e4b` answers "Trening wieczorem" with no day too, and the module expects that one today. Telling the two apart in the app, by whether only a part of the day is given, keeps both whatever the model says.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-233] A named calendar is read by the model and matched among the calendars that can take the event
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-05`
+- **Affects:** `MOD-10-F09`, `MOD-10-F10`, `MOD-10-U06`, `US-10-05#2`, `US-10-05#5`, `TC-10-34`, `TC-10-35`, `DEC-203`
+- **Decision:** The model's answer gains a field `calendar`: the calendar's name as the description writes it ("w kalendarzu Praca" -> "Praca"), empty when it names none; the title leaves it out. An answer without the field names no calendar. The app takes, among the calendars a new event can go to — enabled, the account allowed to change them — in the side panel's order, the first whose name is the one given, letter case and surrounding spaces aside; one whose events are hidden with the quick toggle counts as not found too. When none fits, the default calendar is chosen and a note under the calendar picker says `Calendar "<name>" not found — using <calendar>`, naming the calendar chosen, in the "New event" window and in the full editor; with no calendar to take the event at all, the window's own message of `MOD-09` stands alone. The default length of the new event is that of the calendar chosen. The test set scores the calendar named, and gains one sentence naming a calendar in each language.
+- **Why:** The story matches by the name shown in the side panel and treats disabled, hidden and read-only calendars as not found; the note naming the calendar chosen stays true if the user picks another.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-234] The "New event" window asks for a missing day or time in fields of its own
+
+- **Date:** 2026-10-28
+- **Decided by:** developer (delivery loop)
+- **Source:** implementation of `US-10-05`
+- **Affects:** `MOD-10-F13`, `MOD-10-F14`, `MOD-10-U07`, `MOD-05-F02`, `US-10-05#1`, `US-10-05#3`, `US-10-05#4`, `TC-10-32`, `TC-10-33`
+- **Decision:** The "New event" window shows its time row as text, as before, unless a description left out the day or the time. Then the row holds an empty field for the day (hinted "Day", typed in the regional date format) and the time given, or the day given, an empty field for the time (hinted "Time") and an "All day" checkbox; the cursor is in the first empty field, and Save, or Enter, does nothing until each is filled in or all day is chosen. The event keeps the length it was given, or the default one: the time typed starts it and the end follows. In the full editor, opened directly when guests or Meet are named or through "More options", the same fields of the start are empty, the cursor in the first, and the end follows the start once it is filled in; an empty start says "Type the start date." or "Type the start time or choose all day." instead of saying it cannot be read.
+- **Why:** The window had no fields for the day or the time; `MOD-10-U07` asks for an empty field with the cursor in it, and the story keeps the rest of the window as it is.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

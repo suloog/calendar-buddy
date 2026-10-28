@@ -67,20 +67,22 @@ fn the_request_has_the_fixed_form_no_thinking_temperature_0_and_keeps_the_model_
 fn the_app_works_out_every_kind_of_day_from_today() {
     let none = Value::Null;
     let on = |kind, day| event(&answer(kind, day, json!("10:00"), none.clone())).date;
-    assert_eq!(on("yesterday", ""), d(2026, 10, 25));
-    assert_eq!(on("today", ""), d(2026, 10, 26));
-    assert_eq!(on("tomorrow", ""), d(2026, 10, 27));
-    assert_eq!(on("day_after_tomorrow", ""), d(2026, 10, 28));
-    assert_eq!(on("weekday", "wed"), d(2026, 10, 28));
+    assert_eq!(on("yesterday", ""), Some(d(2026, 10, 25)));
+    assert_eq!(on("today", ""), Some(d(2026, 10, 26)));
+    assert_eq!(on("tomorrow", ""), Some(d(2026, 10, 27)));
+    assert_eq!(on("day_after_tomorrow", ""), Some(d(2026, 10, 28)));
+    assert_eq!(on("weekday", "wed"), Some(d(2026, 10, 28)));
     // A weekday alone is the next one: on Monday, "on Monday" is next Monday.
-    assert_eq!(on("weekday", "mon"), d(2026, 11, 2));
-    assert_eq!(on("weekday", "fri"), d(2026, 10, 30));
-    assert_eq!(on("next_weekday", "thu"), d(2026, 11, 5));
-    assert_eq!(on("next_weekday", "mon"), d(2026, 11, 2));
-    assert_eq!(on("in_days", "7"), d(2026, 11, 2));
-    assert_eq!(on("date", "11-14"), d(2026, 11, 14));
+    assert_eq!(on("weekday", "mon"), Some(d(2026, 11, 2)));
+    assert_eq!(on("weekday", "fri"), Some(d(2026, 10, 30)));
+    assert_eq!(on("next_weekday", "thu"), Some(d(2026, 11, 5)));
+    assert_eq!(on("next_weekday", "mon"), Some(d(2026, 11, 2)));
+    assert_eq!(on("in_days", "7"), Some(d(2026, 11, 2)));
+    assert_eq!(on("date", "11-14"), Some(d(2026, 11, 14)));
     // A date passed this year is next year's.
-    assert_eq!(on("date", "01-05"), d(2027, 1, 5));
+    assert_eq!(on("date", "01-05"), Some(d(2027, 1, 5)));
+    // No day given: none, to be asked for (`DEC-232`).
+    assert_eq!(on("none", ""), None);
 }
 
 #[test]
@@ -101,7 +103,7 @@ fn a_part_of_the_day_is_9_14_or_18() {
 #[test]
 fn the_times_use_the_length_given_or_the_default_one_across_the_end_of_summer_time() {
     let given = event(&answer("yesterday", "", json!("12:00"), json!(45)));
-    let (start, end) = given.times(30, now().to_utc(), Warsaw);
+    let (start, end) = given.times(30, now().date_naive(), Warsaw);
     // Sunday 25 October is the day summer time ends in Warsaw.
     assert_eq!(
         start,
@@ -109,12 +111,117 @@ fn the_times_use_the_length_given_or_the_default_one_across_the_end_of_summer_ti
     );
     assert_eq!(end - start, Duration::minutes(45));
     let default = event(&answer("tomorrow", "", json!("10:00"), Value::Null));
-    let (start, end) = default.times(30, now().to_utc(), Warsaw);
+    let (start, end) = default.times(30, now().date_naive(), Warsaw);
     assert_eq!(
         start,
         Warsaw.with_ymd_and_hms(2026, 10, 27, 10, 0, 0).unwrap()
     );
     assert_eq!(end - start, Duration::minutes(30));
+}
+
+#[test]
+fn a_day_or_a_time_not_given_is_asked_for_and_the_event_waits_on_today_or_at_midnight() {
+    use crate::create::Asked;
+    let today = now().date_naive();
+    let at =
+        |date: NaiveDate, h, m| Warsaw.from_local_datetime(&date.and_hms_opt(h, m, 0).unwrap());
+    let no_time = event(&answer("weekday", "sat", Value::Null, Value::Null));
+    assert_eq!(no_time.date, Some(d(2026, 10, 31)));
+    assert_eq!(no_time.missing(), Asked::new(false, true));
+    let (start, end) = no_time.times(30, today, Warsaw);
+    assert_eq!(start, at(d(2026, 10, 31), 0, 0).unwrap());
+    assert_eq!(end - start, Duration::minutes(30));
+    let no_day = event(&answer("none", "", json!("13:00"), Value::Null));
+    assert_eq!(no_day.date, None);
+    assert_eq!(no_day.missing(), Asked::new(true, false));
+    let (start, end) = no_day.times(30, today, Warsaw);
+    assert_eq!(start, at(today, 13, 0).unwrap());
+    assert_eq!(end - start, Duration::minutes(30));
+    // A part of the day alone is today's; an hour alone gives no day, also as "same".
+    let evening = event(&answer("none", "", json!("evening"), Value::Null));
+    assert_eq!(evening.date, Some(today));
+    let same = event(&answer("same", "", json!("15:00"), Value::Null));
+    assert_eq!(same.date, None);
+    let neither = event(&answer("none", "", Value::Null, Value::Null));
+    assert_eq!(neither.missing(), Asked::new(true, true));
+    let both = event(&answer("today", "", json!("10:00"), Value::Null));
+    assert_eq!(both.missing(), None);
+    // A change keeps its day on "none", as on "same".
+    let change = r#"{"action":"change","event":"","title":"","kind":"none","day":"","time":"15:00","duration_min":null,"guests":[],"meet":null}"#;
+    let Reading::Change(change) = read(change, today) else {
+        panic!("a change");
+    };
+    assert_eq!(change.date, None);
+}
+
+#[test]
+fn the_calendar_named_is_read_and_an_answer_without_it_names_none() {
+    let named = |calendar: Value| {
+        let mut answer: Value =
+            serde_json::from_str(&answer("today", "", json!("10:00"), Value::Null)).unwrap();
+        answer["calendar"] = calendar;
+        event(&answer.to_string()).calendar
+    };
+    assert_eq!(named(json!(" Praca ")), Some("Praca".to_string()));
+    assert_eq!(named(json!("")), None);
+    assert_eq!(named(Value::Null), None);
+    let request = request(&Ollama::default(), "Kino", now());
+    let required = &request["format"]["required"];
+    assert!(required.as_array().unwrap().contains(&json!("calendar")));
+    assert!(
+        (request["format"]["properties"]["kind"]["enum"]
+            .as_array()
+            .unwrap())
+        .contains(&json!("none"))
+    );
+}
+
+#[test]
+fn a_calendar_is_named_by_its_name_in_any_letter_case_among_those_that_can_take_the_event() {
+    use crate::accounts::{Account, AccountState, Entry};
+    use crate::model::{Access, Rgb};
+    let calendar = |account: &str, id: &str, name: &str, access| Calendar {
+        id: id.to_string(),
+        account_id: account.to_string(),
+        name: name.to_string(),
+        color: Rgb(0x9f, 0xe1, 0xe7),
+        access,
+        zone: Warsaw,
+        default_reminders: Vec::new(),
+    };
+    let accounts = [Entry {
+        account: Account {
+            id: "1".to_string(),
+            email: "a@example.com".to_string(),
+            workspace: false,
+            contacts: true,
+            directory: false,
+        },
+        state: AccountState::Connected,
+    }];
+    let calendars = [
+        calendar("1", "a@example.com", "Work", Access::Owner),
+        calendar("1", "praca", "Praca", Access::Writer),
+        calendar("1", "holidays", "Święta w Polsce", Access::Reader),
+        calendar("1", "old", "Stary", Access::Owner),
+        calendar("1", "gym", "Siłownia", Access::Owner),
+        calendar("local", "my", "My calendar", Access::Owner),
+        calendar("local", "second", "Praca", Access::Owner),
+    ];
+    let mut settings = Settings::default();
+    settings.disabled.insert(("1".into(), "old".into()));
+    settings.hidden.insert(("1".into(), "gym".into()));
+    let named = |name: &str| {
+        calendar_named(name, &accounts, &calendars, &settings).map(|c| (c.account_id, c.id))
+    };
+    let key = |account: &str, id: &str| Some((account.to_string(), id.to_string()));
+    // Two of the same name: the first in the side panel's order.
+    assert_eq!(named("praca"), key("1", "praca"));
+    assert_eq!(named("MY CALENDAR"), key("local", "my"));
+    // Read-only, disabled, hidden or none: not found.
+    for missing in ["Święta w Polsce", "Stary", "Siłownia", "Prywatny"] {
+        assert_eq!(named(missing), None, "{missing}");
+    }
 }
 
 #[test]
@@ -145,13 +252,16 @@ struct Case {
     /// Whether the sentence changes an event rather than adding one.
     change: bool,
     text: String,
-    /// The new date of a change; `None` when the day stays.
+    /// The new date of a change; `None` when the day stays, or for an event added when no day is
+    /// given (`DEC-232`).
     date: Option<String>,
     time: Option<String>,
     /// The length of an event added; the new length of a change, `None` when it stays.
     length: Option<u32>,
     guests: Vec<String>,
     meet: bool,
+    /// The calendar an event added names; empty when none (`DEC-233`).
+    calendar: String,
     /// Words one of which the title holds; for a change, the words naming the event, none when
     /// it names none.
     title: Vec<String>,
@@ -179,6 +289,7 @@ fn cases() -> Vec<Case> {
                 length: case["duration_min"].as_u64().map(|m| m as u32),
                 guests: strings(&case["guests"]),
                 meet: case["meet"].as_bool().unwrap_or(false),
+                calendar: case["calendar"].as_str().unwrap_or_default().to_string(),
                 title: strings(if change {
                     &case["event"]
                 } else {
@@ -190,7 +301,9 @@ fn cases() -> Vec<Case> {
         .collect()
 }
 
-const FIELDS: [&str; 6] = ["date", "time", "length", "guests", "meet", "title"];
+const FIELDS: [&str; 7] = [
+    "date", "time", "length", "guests", "meet", "title", "calendar",
+];
 const CHANGE_FIELDS: [&str; 4] = ["date", "time", "length", "event"];
 
 /// What a sentence's reading got right, field by field, as the test of 2026-10-27 scored it; a
@@ -208,7 +321,7 @@ fn score(case: &Case, reading: &Reading) -> Vec<(&'static str, bool)> {
             };
             let title = event.title.to_lowercase();
             vec![
-                ("date", Some(event.date.to_string()) == case.date),
+                ("date", event.date.map(|d| d.to_string()) == case.date),
                 ("time", hhmm(event.time) == case.time),
                 (
                     "length",
@@ -218,6 +331,11 @@ fn score(case: &Case, reading: &Reading) -> Vec<(&'static str, bool)> {
                 // Meet on: asked for; refused and not mentioned both leave it off here (`DEC-223`).
                 ("meet", (event.meet == Some(true)) == case.meet),
                 ("title", case.title.iter().any(|word| title.contains(word))),
+                (
+                    "calendar",
+                    event.calendar.as_deref().unwrap_or_default().to_lowercase()
+                        == case.calendar.to_lowercase(),
+                ),
             ]
         }
         (true, Reading::Change(change)) => {
@@ -341,11 +459,12 @@ mod guests_and_meet {
     fn described(guests: &[&str], meet: Option<bool>) -> Described {
         Described {
             title: "Spotkanie".to_string(),
-            date: d(2026, 10, 27),
+            date: Some(d(2026, 10, 27)),
             time: NaiveTime::from_hms_opt(10, 0, 0),
             length: None,
             guests: guests.iter().map(|g| g.to_string()).collect(),
             meet,
+            calendar: None,
         }
     }
 
@@ -662,8 +781,8 @@ mod changes {
             );
             event(&answer).date
         };
-        assert_eq!(add(""), d(2026, 10, 26));
-        assert_eq!(add("tomorrow"), d(2026, 10, 27));
+        assert_eq!(add(""), Some(d(2026, 10, 26)));
+        assert_eq!(add("tomorrow"), Some(d(2026, 10, 27)));
         let schema = &request(&Ollama::default(), "przesuń na 15", now())["format"];
         assert_eq!(
             schema["properties"]["action"]["enum"],

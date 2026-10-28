@@ -9,6 +9,7 @@ use chrono_tz::Tz;
 use crate::accounts::Entry;
 use crate::details::When;
 use crate::model::{About, Calendar, Event, Timing};
+use crate::regional::Regional;
 use crate::settings::Settings;
 use crate::side_panel::pickable;
 use crate::texts::NO_TITLE;
@@ -155,6 +156,34 @@ pub struct QuickEntry {
     pub zone: Tz,
     /// `None` when no calendar can take events.
     pub calendar: Option<Calendar>,
+    /// The day or the time a description left out, asked for (`MOD-10-U07`); `None` when
+    /// nothing is.
+    pub asked: Option<Asked>,
+    /// The calendar a description named that no calendar fits (`MOD-10-F10`).
+    pub not_found: Option<String>,
+}
+
+/// The day and the time a description left out, as the user fills them in (`MOD-10-F13`,
+/// `MOD-10-F14`, `DEC-234`): each `Some` with what is typed while it is asked for.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Asked {
+    pub day: Option<String>,
+    pub time: Option<String>,
+    /// All day chosen instead of a time.
+    pub all_day: bool,
+    /// Every field asked for is filled in, and the times hold it.
+    pub filled: bool,
+}
+
+impl Asked {
+    /// The day, the time, both or neither asked for; `None` for neither.
+    pub fn new(day: bool, time: bool) -> Option<Asked> {
+        (day || time).then(|| Asked {
+            day: day.then(String::new),
+            time: time.then(String::new),
+            ..Asked::default()
+        })
+    }
 }
 
 impl QuickEntry {
@@ -169,7 +198,44 @@ impl QuickEntry {
             end,
             zone,
             calendar,
+            asked: None,
+            not_found: None,
         }
+    }
+
+    /// Takes in what was typed for the day and the time asked for: the event moves to them, its
+    /// length kept; the day or the time not asked for stays.
+    pub fn fill(&mut self, regional: &Regional) {
+        let Some(asked) = &mut self.asked else {
+            return;
+        };
+        let local = self.start.with_timezone(&self.zone).naive_local();
+        let day = match &asked.day {
+            Some(typed) => regional.parse_date(typed),
+            None => Some(local.date()),
+        };
+        let time = match &asked.time {
+            Some(_) if asked.all_day => Some(local.time()),
+            Some(typed) => regional.parse_time(typed),
+            None => Some(local.time()),
+        };
+        asked.filled = day.is_some() && time.is_some();
+        if let (Some(day), Some(time)) = (day, time) {
+            let length = self.end - self.start;
+            let minute = time.signed_duration_since(NaiveTime::MIN).num_minutes();
+            self.start = wall(day, minute as u32, self.zone);
+            self.end = self.start + length;
+        }
+    }
+
+    /// Whether every day and time a description left out is filled in (`MOD-10-U07`).
+    pub fn ready(&self) -> bool {
+        self.asked.as_ref().is_none_or(|asked| asked.filled)
+    }
+
+    /// Whether it is an all-day event, chosen instead of the time asked for.
+    pub fn all_day(&self) -> bool {
+        self.asked.as_ref().is_some_and(|asked| asked.all_day)
     }
 
     /// When the event happens, in the system's time zone, for the box to show.
@@ -180,14 +246,26 @@ impl QuickEntry {
         }
     }
 
-    /// The event to create and its calendar; `None` without a calendar.
+    /// The event to create and its calendar; `None` without a calendar, or while a day or a time
+    /// asked for is not filled in.
     pub fn new_event(&self) -> Option<(Calendar, NewEvent)> {
+        if !self.ready() {
+            return None;
+        }
+        let day = self.start.with_timezone(&self.zone).date_naive();
         let event = NewEvent {
             title: self.title.trim().to_string(),
-            timing: Timing::Timed {
-                start: self.start,
-                end: self.end,
-                zone: self.zone,
+            timing: if self.all_day() {
+                Timing::AllDay {
+                    start: day,
+                    end_exclusive: day + Duration::days(1),
+                }
+            } else {
+                Timing::Timed {
+                    start: self.start,
+                    end: self.end,
+                    zone: self.zone,
+                }
             },
             about: About::default(),
             recurrence: Vec::new(),
@@ -645,6 +723,57 @@ mod tests {
         assert_eq!(event.about, About::default());
         let without = QuickEntry::new((start, end), Warsaw, None);
         assert_eq!(without.new_event(), None);
+    }
+
+    #[test]
+    fn a_day_or_a_time_asked_for_holds_the_event_back_until_filled_in_or_all_day_chosen() {
+        let regional = Regional::new(pure_rust_locales::Locale::pl_PL);
+        let asked = |day, time, (start, end)| QuickEntry {
+            title: "Lunch".to_string(),
+            asked: Asked::new(day, time),
+            ..QuickEntry::new(
+                (start, end),
+                Warsaw,
+                Some(calendar("1", "a@example.com", Access::Owner)),
+            )
+        };
+        // No day: 13:00 for 30 minutes, on the day typed.
+        let mut entry = asked(true, false, selected(d(2026, 10, 26), 780, 810, Warsaw));
+        assert!(!entry.ready());
+        assert_eq!(entry.new_event(), None);
+        entry.asked.as_mut().unwrap().day = Some("28.10".to_string());
+        entry.fill(&regional);
+        assert_eq!(entry.new_event(), None);
+        entry.asked.as_mut().unwrap().day = Some(regional.numeric_date(d(2026, 10, 28)));
+        entry.fill(&regional);
+        let (_, event) = entry.new_event().unwrap();
+        let Timing::Timed { start, end, .. } = event.timing else {
+            panic!("a timed event");
+        };
+        assert_eq!(
+            span((start, end)),
+            s("2026-10-28 13:00", "2026-10-28 13:30")
+        );
+        // No time: at the time typed on the day given, or all day.
+        let mut entry = asked(false, true, selected(d(2026, 10, 31), 0, 30, Warsaw));
+        assert_eq!(entry.new_event(), None);
+        entry.asked.as_mut().unwrap().time = Some("11:00".to_string());
+        entry.fill(&regional);
+        assert_eq!(
+            span((entry.start, entry.end)),
+            s("2026-10-31 11:00", "2026-10-31 11:30")
+        );
+        entry.asked.as_mut().unwrap().all_day = true;
+        entry.fill(&regional);
+        let (_, event) = entry.new_event().unwrap();
+        assert_eq!(
+            event.timing,
+            Timing::AllDay {
+                start: d(2026, 10, 31),
+                end_exclusive: d(2026, 11, 1),
+            }
+        );
+        assert_eq!(Asked::new(false, false), None);
     }
 
     fn shown(saving: &Saving) -> Vec<(String, bool)> {

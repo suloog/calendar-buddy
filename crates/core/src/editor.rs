@@ -15,7 +15,7 @@
 //! and removes notification and e-mail reminders and can go back to the defaults (`US-07-04`,
 //! `MOD-07-F03`…`F05`).
 
-use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, Timelike};
+use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use chrono_tz::Tz;
 
 use crate::accounts::Entry;
@@ -99,6 +99,21 @@ pub struct Editor {
     pub reminders: Option<Vec<ReminderField>>,
     /// The start as last read from the fields, which the end follows.
     start: Option<NaiveDateTime>,
+    /// The field the cursor goes to when the editor opens: the first a description left out
+    /// (`MOD-10-U07`); taken by the editor once it put the cursor there.
+    pub ask: Option<Missing>,
+    /// The length of a new event whose day or time is asked for: once the start is filled in,
+    /// the end follows it this long after (`DEC-234`).
+    length: Option<Duration>,
+    /// The calendar a description named that no calendar fits (`MOD-10-F10`).
+    pub not_found: Option<String>,
+}
+
+/// A start field a description left out, for the cursor to go to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Missing {
+    Day,
+    Time,
 }
 
 /// A name from a description that fits several people or nobody (`MOD-10-F12`).
@@ -330,22 +345,44 @@ impl Editor {
             meet_described: false,
             reminders: None,
             start: Some(start),
+            ask: None,
+            length: None,
+            not_found: None,
         }
     }
 
     /// "More options" in the quick-entry box: the new event with what was typed there
     /// (`MOD-05-F03`).
+    /// The day or the time a description left out stays empty, or as typed there, until it is
+    /// filled in (`MOD-10-U07`).
     pub fn from_quick(entry: &QuickEntry, regional: &Regional) -> Self {
         let local = |at: chrono::DateTime<chrono::Utc>| at.with_timezone(&entry.zone).naive_local();
-        Editor {
+        let mut editor = Editor {
             title: entry.title.clone(),
+            all_day: entry.all_day(),
+            not_found: entry.not_found.clone(),
             ..Editor::with(
                 regional,
                 (local(entry.start), local(entry.end)),
                 entry.zone,
                 entry.calendar.clone(),
             )
+        };
+        if let Some(asked) = entry.asked.as_ref().filter(|asked| !asked.filled) {
+            editor.start = None;
+            editor.length = Some(entry.end - entry.start);
+            if let Some(time) = &asked.time {
+                editor.start_time = time.clone();
+                editor.end_time = String::new();
+                editor.ask = Some(Missing::Time);
+            }
+            if let Some(day) = &asked.day {
+                editor.start_date = day.clone();
+                editor.end_date = String::new();
+                editor.ask = Some(Missing::Day);
+            }
         }
+        editor
     }
 
     /// An existing event of `calendar`, in its own time zone.
@@ -479,14 +516,28 @@ impl Editor {
         Some(date.and_time(regional.parse_time(&self.end_time)?))
     }
 
-    /// After the start fields changed: the end moves with the start, so the event keeps its
-    /// length, as in Google Calendar; so do a new series' last day and a weekly one's day when
-    /// it repeats on the start's day alone (MOD-05 *Constraints and edge cases*).
+    /// After the start fields or all day changed: the end moves with the start, so the event
+    /// keeps its length, as in Google Calendar; so do a new series' last day and a weekly one's
+    /// day when it repeats on the start's day alone (MOD-05 *Constraints and edge cases*).
     pub fn follow_start(&mut self, regional: &Regional) {
-        let Some(start) = self.start_at(regional) else {
+        // An all-day event needs no time: one hidden and left empty keeps the previous start's
+        // time of day, or midnight when there was none, so the end still moves with the day.
+        let all_day_start = || {
+            let date = regional.parse_date(&self.start_date)?;
+            let time = self.start.map_or(NaiveTime::MIN, |start| start.time());
+            self.all_day.then(|| date.and_time(time))
+        };
+        let Some(start) = self.start_at(regional).or_else(all_day_start) else {
             return;
         };
         let before = self.start.replace(start);
+        // The day or the time asked for is filled in: the end comes the event's length after.
+        if let (None, Some(length)) = (before, self.length.take()) {
+            let end = start + length;
+            self.end_date = regional.numeric_date(end.date());
+            self.end_time = regional.time(end.time());
+            return;
+        }
         let Some(before) = before.filter(|before| *before != start) else {
             return;
         };
@@ -733,6 +784,14 @@ impl Editor {
             |text: &str, unread: &str| regional.parse_date(text).ok_or_else(|| unread.to_string());
         let time =
             |text: &str, unread: &str| regional.parse_time(text).ok_or_else(|| unread.to_string());
+        // A start left empty, as when a description gives no day or time, is asked for.
+        let empty = |text: &str| text.trim().is_empty();
+        if empty(&self.start_date) {
+            return Err(texts::START_DATE_EMPTY.to_string());
+        }
+        if !self.all_day && empty(&self.start_time) {
+            return Err(texts::START_TIME_EMPTY.to_string());
+        }
         let first = date(&self.start_date, texts::START_DATE_UNREADABLE)?;
         let last = date(&self.end_date, texts::END_DATE_UNREADABLE)?;
         if self.all_day {
@@ -946,6 +1005,154 @@ mod tests {
                 Some(calendar("1", "a@example.com")),
             )
         }
+    }
+
+    #[test]
+    fn a_day_or_a_time_a_description_left_out_is_empty_and_the_end_follows_once_filled_in() {
+        use crate::create::Asked;
+        let regional = regional();
+        let entry = |day, time| QuickEntry {
+            asked: Asked::new(day, time),
+            not_found: Some("Praca".to_string()),
+            ..quick()
+        };
+        // No time: empty, the cursor there, Save unavailable; 11:00 gives 11:00–12:30.
+        let mut editor = Editor::from_quick(&entry(false, true), &regional);
+        assert_eq!(editor.ask, Some(Missing::Time));
+        assert_eq!(editor.not_found.as_deref(), Some("Praca"));
+        assert_eq!(
+            (editor.start_time.as_str(), editor.end_time.as_str()),
+            ("", "")
+        );
+        assert_eq!(editor.start_date, regional.numeric_date(d(2026, 11, 12)));
+        assert_eq!(
+            editor.save(&regional).err().as_deref(),
+            Some(texts::START_TIME_EMPTY)
+        );
+        editor.start_time = "11:00".to_string();
+        editor.follow_start(&regional);
+        assert_eq!(editor.end_time, "12:30");
+        assert_eq!(editor.end_date, regional.numeric_date(d(2026, 11, 12)));
+        assert!(editor.save(&regional).is_ok());
+        // Or all day instead.
+        let mut editor = Editor::from_quick(&entry(false, true), &regional);
+        editor.all_day = true;
+        assert!(editor.save(&regional).is_ok());
+        // No day: empty, the cursor there; the day typed keeps 10:00–11:30.
+        let mut editor = Editor::from_quick(&entry(true, false), &regional);
+        assert_eq!(editor.ask, Some(Missing::Day));
+        assert_eq!(
+            (editor.start_date.as_str(), editor.end_date.as_str()),
+            ("", "")
+        );
+        assert_eq!(editor.start_time, "10:00");
+        assert_eq!(
+            editor.save(&regional).err().as_deref(),
+            Some(texts::START_DATE_EMPTY)
+        );
+        editor.start_date = regional.numeric_date(d(2026, 10, 28));
+        editor.follow_start(&regional);
+        assert_eq!(
+            (editor.end_date.clone(), editor.end_time.as_str()),
+            (regional.numeric_date(d(2026, 10, 28)), "11:30")
+        );
+        // Neither: the cursor goes to the day first.
+        assert_eq!(
+            Editor::from_quick(&entry(true, true), &regional).ask,
+            Some(Missing::Day)
+        );
+    }
+
+    #[test]
+    fn all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day() {
+        use crate::create::Asked;
+        let regional = regional();
+        let entry = |day, time| QuickEntry {
+            asked: Asked::new(day, time),
+            ..quick()
+        };
+        // Neither day nor time: a day typed, then all day, is a one-day event that repeats.
+        let mut editor = Editor::from_quick(&entry(true, true), &regional);
+        editor.start_date = regional.numeric_date(d(2026, 10, 28));
+        editor.follow_start(&regional);
+        editor.all_day = true;
+        editor.follow_start(&regional);
+        assert_eq!(editor.end_date, regional.numeric_date(d(2026, 10, 28)));
+        let Ok(Save::Create(_, event)) = editor.save(&regional) else {
+            panic!("a new event");
+        };
+        assert_eq!(
+            event.timing,
+            Timing::AllDay {
+                start: d(2026, 10, 28),
+                end_exclusive: d(2026, 10, 29),
+            }
+        );
+        assert!(!editor.repeat_choices(&regional).is_empty());
+        // All day first, the day typed after.
+        let mut editor = Editor::from_quick(&entry(true, true), &regional);
+        editor.all_day = true;
+        editor.follow_start(&regional);
+        editor.start_date = regional.numeric_date(d(2026, 10, 28));
+        editor.follow_start(&regional);
+        assert!(editor.save(&regional).is_ok());
+        // The day changed after all day: the end, Save and the repeat menu follow it.
+        editor.start_date = regional.numeric_date(d(2026, 10, 30));
+        editor.follow_start(&regional);
+        assert_eq!(editor.end_date, regional.numeric_date(d(2026, 10, 30)));
+        assert!(editor.save(&regional).is_ok());
+        let presets = repeat::presets(d(2026, 10, 30)).map(Some);
+        let choices = editor.repeat_choices(&regional);
+        assert!(
+            presets
+                .iter()
+                .all(|p| choices.iter().any(|(rule, _)| rule == p))
+        );
+        // All day first, then the day typed key by key, as the app follows every change.
+        let mut editor = Editor::from_quick(&entry(true, true), &regional);
+        editor.all_day = true;
+        editor.follow_start(&regional);
+        for typed in [
+            "2",
+            "28",
+            "28.",
+            "28.1",
+            "28.10",
+            "28.10.",
+            "28.10.2",
+            "28.10.20",
+            "28.10.202",
+            "28.10.2026",
+        ] {
+            editor.start_date = typed.to_string();
+            editor.follow_start(&regional);
+        }
+        assert_eq!(editor.end_date, regional.numeric_date(d(2026, 10, 28)));
+        assert!(editor.save(&regional).is_ok());
+        // Only the time missing: all day gives the repeat menu its day.
+        let mut editor = Editor::from_quick(&entry(false, true), &regional);
+        editor.all_day = true;
+        editor.follow_start(&regional);
+        assert!(!editor.repeat_choices(&regional).is_empty());
+        assert!(editor.save(&regional).is_ok());
+        // The next day chosen after all day: the end moves with it.
+        let day = regional.parse_date(&editor.start_date).unwrap() + Duration::days(1);
+        editor.start_date = regional.numeric_date(day);
+        editor.follow_start(&regional);
+        assert_eq!(editor.end_date, editor.start_date);
+        assert!(editor.save(&regional).is_ok());
+        // All day unticked with the time still empty: Save asks for the time.
+        editor.all_day = false;
+        editor.follow_start(&regional);
+        assert_eq!(
+            editor.save(&regional).err().as_deref(),
+            Some(texts::START_TIME_EMPTY)
+        );
+        // A time typed after all day is unticked moves the end with it.
+        editor.start_time = "11:00".to_string();
+        editor.follow_start(&regional);
+        assert_eq!(editor.end_time, "12:30");
+        assert!(editor.save(&regional).is_ok());
     }
 
     #[test]
