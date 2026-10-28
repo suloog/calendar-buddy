@@ -1,0 +1,109 @@
+{
+  "story": "US-10-02",
+  "attempt": 1,
+  "round": 2,
+  "sha": "12eb518e5e3a73557e07b6c0e2ca42a89ac8195e",
+  "reviewer": "code",
+  "ts": "2026-10-27T20:02:17Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-02",
+    "impact": "`read` and `update` in crates/app/src/main.rs serve only the description box (US-10-01 availability checker, US-10-02 reader). The `dialog.is_none()` guard now also decides how long \"Reading…\" lasts, because an open window defers the answer. `described::parse` and `time_of` in core are used only by `read` and the test-set test (TC-10-18). The fake Ollama's new `fail()` is used only by tests. B1 and B2 are fixed correctly and `cargo test --workspace` is green; I found no blocking problem.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2410 — While a window is open the read cannot be cancelled, because the box's Esc-cancel needs box focus. Closing the window then pops \"New event\" up unasked → accept as design, or make closing a window with a waiting answer call `reader.cancel()` and clear `reading`."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2410 — The answer check runs before `self.dialog(ctx)` in the same frame, so the frame that closes the window never takes the answer in. The next frame comes only from an input event (key release, mouse move) or the 30 s timer, so a rare worst case is a delay of up to 30 s → call `ctx.request_repaint()` in `close_dialog`, or when `reader.answer()` is deferred."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2044 — The N5 focus guard (`focused().is_none()`) has no test for the case where focus is in another field when a no-event answer arrives → add a small test with focus in \"Meet with…\"."
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2027 — On `None` while Ollama is really gone, \"No event found\" shows until the checker answers `Unavailable`. The MOD-10 edge case \"Ollama stops while box open → box turns unavailable and keeps the text\" has no app-level test → add a test with the fake stopped, checking the box is unavailable, the text is kept and no `NO_EVENT_FOUND` is shown."
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:1021 — The N10 test sets `settings.ollama.on = false` directly. In the real flow the Settings dialog is open, so the answer waits and the box shows greyed \"Reading…\" until the dialog closes. Behaviour is fine, but the real path is untested → optional test through the dialog."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19 (live Ollama part); the fake-model part is met by TC-10-18"
+      },
+      {
+        "n": 9,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 10,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 11,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "REVIEW: findings\nSTORY: US-10-02\nIMPACT: `read` and `update` in crates/app/src/main.rs serve only the description box (US-10-01 availability checker, US-10-02 reader). The `dialog.is_none()` guard now also decides how long \"Reading…\" lasts, because an open window defers the answer. `described::parse` and `time_of` in core are used only by `read` and the test-set test (TC-10-18). The fake Ollama's new `fail()` is used only by tests. B1 and B2 are fixed correctly and `cargo test --workspace` is green; I found no blocking problem.\nFINDINGS:\n  N1 crates/app/src/main.rs:2410 — While a window is open the read cannot be cancelled, because the box's Esc-cancel needs box focus. Closing the window then pops \"New event\" up unasked → accept as design, or make closing a window with a waiting answer call `reader.cancel()` and clear `reading`.\n  N2 crates/app/src/main.rs:2410 — The answer check runs before `self.dialog(ctx)` in the same frame, so the frame that closes the window never takes the answer in. The next frame comes only from an input event (key release, mouse move) or the 30 s timer, so a rare worst case is a delay of up to 30 s → call `ctx.request_repaint()` in `close_dialog`, or when `reader.answer()` is deferred.\n  N3 crates/app/src/main.rs:2044 — The N5 focus guard (`focused().is_none()`) has no test for the case where focus is in another field when a no-event answer arrives → add a small test with focus in \"Meet with…\".\n  N4 crates/app/src/main.rs:2027 — On `None` while Ollama is really gone, \"No event found\" shows until the checker answers `Unavailable`. The MOD-10 edge case \"Ollama stops while box open → box turns unavailable and keeps the text\" has no app-level test → add a test with the fake stopped, checking the box is unavailable, the text is kept and no `NO_EVENT_FOUND` is shown.\n  N5 crates/app/src/description_reading_tests.rs:1021 — The N10 test sets `settings.ollama.on = false` directly. In the real flow the Settings dialog is open, so the answer waits and the box shows greyed \"Reading…\" until the dialog closes. Behaviour is fine, but the real path is untested → optional test through the dialog.\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n  #8 external — MANUAL TC-10-19 (live Ollama part); the fake-model part is met by TC-10-18\n  #9 met\n  #10 met\n  #11 met\n"
+}

@@ -1,0 +1,72 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 2,
+  "sha": "4021353249a652a66659b971485c2e2a9a78f7bb",
+  "reviewer": "code",
+  "ts": "2026-10-28T04:09:25Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "Editor::follow_start is called from the start-field handler and now from the All day checkbox (app/editor.rs:731, :744), and in app/sync.rs tests. For existing events and ordinary new events the checkbox call is a no-op (start unchanged), so only new events from a description with a missing day or time behave differently. What can still break is the end, the series rule and the start going stale when the day is edited while All day is on.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:524-528 — Reproduced. For an event whose day and time were asked for, type a day, tick All day (start becomes midnight), then change the day. The start time field is hidden and empty, so start_at() is None. asked_all_day also returns None because self.start is already Some, so follow_start returns early: end_date stays at the old day (28.10 vs start 30.10), Save shows \"The event ends before it starts.\", and the Repeats presets and a weekly day stay on the old day. This is the same flow as round-1 B1, one step later. → When all_day, build the start from the date plus the parseable start_time, else the previous start's time, else NaiveTime::MIN, regardless of self.start.is_none(). For example: let start = if self.all_day { date.and_time(parse_time(start_time).or(self.start.map(|s| s.time())).unwrap_or(NaiveTime::MIN)) } else { start_at? }. Do not use plain midnight when self.start already holds a time, or the end shifts by the hour difference. Add to the new test: after ticking All day, change the day again and assert end_date, save() Ok and repeat_choices follow it."
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:1064-1110 — The new test covers the reported flows but not a day change after All day is ticked, which is where B1 above lives. It also does not cover unticking All day with the time still empty, where Save must say START_TIME_EMPTY. → Add both assertions."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:536 — After All day, then untick, with the time empty, the hidden End time shows a value derived from midnight (e.g. 01:30) while the Start time is empty. Harmless: it self-corrects once a time is typed, because the end moves by the start delta. → Optional, leave as is."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:533-538 — length.take() copies the whole default length to the end on the tick. A length of 24 hours or more (a described multi-day event with day and time missing is not possible, but check) would give a multi-day all-day event. → No change needed unless a description with a day missing can carry a long length. Unverified."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "a day or time given is filled as in US-10-02, only the missing one is asked for (tests earlier in the story; not touched by this diff)"
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "calendar matched by name, case-insensitive (earlier commits; not touched by this diff)"
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "no time: the time is empty with the cursor in it, Save is unavailable until a time is typed or All day is chosen; the flow after choosing All day is affected by B1, and the theme check is external — MANUAL (owner, per technical notes)"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "no date: the day is empty with the cursor in it, Save waits for a day; the flow of typing a day then All day works, but changing the day afterwards is affected by B1"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "named calendar chosen, or the default with the note (earlier commits; not touched by this diff)"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Round 1's B1 is fixed for the exact flows reported. The fix leaves one hole in the same flow, which I reproduced, so the verdict is findings. (Full prose in the reviewer's hand-back; block below.)\n\nREVIEW: findings\nSTORY: US-10-05\nIMPACT: Editor::follow_start is called from the start-field handler and now from the All day checkbox (app/editor.rs:731, :744), and in app/sync.rs tests. For existing events and ordinary new events the checkbox call is a no-op (start unchanged), so only new events from a description with a missing day or time behave differently. What can still break is the end, the series rule and the start going stale when the day is edited while All day is on.\nFINDINGS:\n  B1 crates/core/src/editor.rs:524-528 — Reproduced. For an event whose day and time were asked for, type a day, tick All day (start becomes midnight), then change the day. The start time field is hidden and empty, so start_at() is None. asked_all_day also returns None because self.start is already Some, so follow_start returns early: end_date stays at the old day (28.10 vs start 30.10), Save shows \"The event ends before it starts.\", and the Repeats presets and a weekly day stay on the old day. This is the same flow as round-1 B1, one step later. → When all_day, build the start from the date plus the parseable start_time, else the previous start's time, else NaiveTime::MIN, regardless of self.start.is_none(). For example: let start = if self.all_day { date.and_time(parse_time(start_time).or(self.start.map(|s| s.time())).unwrap_or(NaiveTime::MIN)) } else { start_at? }. Do not use plain midnight when self.start already holds a time, or the end shifts by the hour difference. Add to the new test: after ticking All day, change the day again and assert end_date, save() Ok and repeat_choices follow it.\n  N1 crates/core/src/editor.rs:1064-1110 — The new test covers the reported flows but not a day change after All day is ticked, which is where B1 above lives. It also does not cover unticking All day with the time still empty, where Save must say START_TIME_EMPTY. → Add both assertions.\n  N2 crates/core/src/editor.rs:536 — After All day, then untick, with the time empty, the hidden End time shows a value derived from midnight (e.g. 01:30) while the Start time is empty. Harmless: it self-corrects once a time is typed, because the end moves by the start delta. → Optional, leave as is.\n  N3 crates/core/src/editor.rs:533-538 — length.take() copies the whole default length to the end on the tick. A length of 24 hours or more (a described multi-day event with day and time missing is not possible, but check) would give a multi-day all-day event. → No change needed unless a description with a day missing can carry a long length. Unverified.\nCRITERIA:\n  #1 met — a day or time given is filled as in US-10-02, only the missing one is asked for (tests earlier in the story; not touched by this diff)\n  #2 met — calendar matched by name, case-insensitive (earlier commits; not touched by this diff)\n  #3 met — no time: the time is empty with the cursor in it, Save is unavailable until a time is typed or All day is chosen; the flow after choosing All day is affected by B1, and the theme check is external — MANUAL (owner, per technical notes)\n  #4 met — no date: the day is empty with the cursor in it, Save waits for a day; the flow of typing a day then All day works, but changing the day afterwards is affected by B1\n  #5 met — named calendar chosen, or the default with the note (earlier commits; not touched by this diff)\n"
+}

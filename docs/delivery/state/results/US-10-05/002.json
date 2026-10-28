@@ -1,0 +1,64 @@
+{
+  "n": 2,
+  "attempt": 1,
+  "ts": "2026-10-28T04:05:35Z",
+  "story": "US-10-05",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-05",
+    "branch": "feature/US-10-05",
+    "commits": [
+      "98f0db8 feat(descriptions): missing day or time and a named calendar [US-10-05]",
+      "9dc609e fix(descriptions): all day starts an event whose day or time was asked [US-10-05]",
+      "4021353 refactor(descriptions): keep the unreadable-field messages together [US-10-05]"
+    ],
+    "decisions": [
+      "DEC-232 routine A day is asked for only when the description names neither a day nor a part of the day",
+      "DEC-233 routine A named calendar is read by the model and matched among the calendars that can take the event",
+      "DEC-234 routine The \"New event\" window asks for a missing day or time in fields of its own"
+    ],
+    "evidence": [
+      "#1 a given day/time is filled in, only a missing one asked — TC-10-32 step 1, TC-10-33 step 1; unit tests a_day_or_a_time_a_description_left_out_is_empty_and_the_end_follows_once_filled_in, all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day",
+      "#2 calendar matched by its side-panel name, ignoring letter case — TC-10-34 steps 1-2; unit test a_calendar_is_named_by_its_name_in_any_letter_case_among_those_that_can_take_the_event",
+      "#3 no time: opens Sat 31 Oct, time empty with cursor, Save waits for a time or all-day — TC-10-32 steps 1-3; all-day path with neither day nor time: unit test all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day",
+      "#4 no date: day empty with cursor, Save waits for a day — TC-10-33 steps 1-3",
+      "#5 named calendar chosen, else default with the not-found note — TC-10-34 steps 1-2, TC-10-35 steps 1-2"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_050503",
+      "pass": 4,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 0
+    },
+    "derived_tests": [],
+    "preexisting": "none",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 9dc609e",
+      "code-N2 fixed 4021353",
+      "code-N1 refused optional, leaves the End fields' look unchanged (no hint) and needs a UI check",
+      "spec-N1 refused optional, Enter-to-save in the New event window is a behaviour change beyond the fix round",
+      "spec-N2 refused optional, DEC-234 is append-only so recording the scope needs a new decision, and limiting the hints to described events changes the full editor beyond this fix"
+    ],
+    "notes": "Ticking or unticking All day now runs the end-follows-start logic. An asked start with no time becomes midnight once the event is all day.\nThe run was made on head 4021353 with a clean tree (snapshot then collect, environment local).\nManual check still left for the owner: the empty day/time fields and the calendar note in the light and dark themes.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I fixed B1 on `feature/US-10-05` in two new commits, and the gates are green. The story's four test cases (TC-10-32 to TC-10-35) pass on the new head 4021353, run on a clean tree. Nothing was pushed (local run).\n\n**The fix (B1):** before, with a time still missing, ticking All day never set the start. So a description with neither day nor time couldn't be saved (\"The end date can't be read.\"), and the Repeats menu was empty.\n- **Core** (`crates/core/src/editor.rs`): `follow_start` now sets the start at midnight when the event is all day and its time is still missing. The end then follows at the event's length.\n- **App** (`crates/app/src/editor.rs`): the editor now calls `follow_start` when All day is ticked or unticked, so the box works whether the day is typed before or after it.\n- **New test:** `all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day` covers four cases:\n  - neither day nor time, then a day typed and All day ticked: saves as an all-day event on 28 Oct and the Repeats menu has choices;\n  - All day ticked first, then the day typed: saves;\n  - only the time missing, then All day: the Repeats menu has choices and it saves;\n  - All day unticked again and 11:00 typed: the end becomes 12:30.\n\n**Non-blocking findings:** I fixed code N2 only (the unreadable-field messages are grouped again in `crates/core/src/texts.rs`). Code N1, spec N1 and spec N2 are left as they are. For spec N2, DEC-234 is append-only, so recording the scope there would need a new DEC.\n\n```\nRESULT: ready\nSTORY: US-10-05\nBRANCH: feature/US-10-05\nCOMMITS: 98f0db8 feat(descriptions): missing day or time and a named calendar [US-10-05]; 9dc609e fix(descriptions): all day starts an event whose day or time was asked [US-10-05]; 4021353 refactor(descriptions): keep the unreadable-field messages together [US-10-05]\nDECISIONS: DEC-232 routine A day is asked for only when the description names neither a day nor a part of the day; DEC-233 routine A named calendar is read by the model and matched among the calendars that can take the event; DEC-234 routine The \"New event\" window asks for a missing day or time in fields of its own\nEVIDENCE:\n  #1 a given day/time is filled in, only a missing one asked — TC-10-32 step 1, TC-10-33 step 1; unit tests a_day_or_a_time_a_description_left_out_is_empty_and_the_end_follows_once_filled_in, all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day\n  #2 calendar matched by its side-panel name, ignoring letter case — TC-10-34 steps 1-2; unit test a_calendar_is_named_by_its_name_in_any_letter_case_among_those_that_can_take_the_event\n  #3 no time: opens Sat 31 Oct, time empty with cursor, Save waits for a time or all-day — TC-10-32 steps 1-3; all-day path with neither day nor time: unit test all_day_chosen_for_a_time_a_description_left_out_starts_the_event_on_its_day\n  #4 no date: day empty with cursor, Save waits for a day — TC-10-33 steps 1-3\n  #5 named calendar chosen, else default with the not-found note — TC-10-34 steps 1-2, TC-10-35 steps 1-2\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_050503 pass=4 fail=0 blocked=0 manual=0 manual_tests=\nDERIVED_TESTS: none\nPREEXISTING: none\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 9dc609e; code-N2 fixed 4021353; code-N1 refused optional, leaves the End fields' look unchanged (no hint) and needs a UI check; spec-N1 refused optional, Enter-to-save in the New event window is a behaviour change beyond the fix round; spec-N2 refused optional, DEC-234 is append-only so recording the scope needs a new decision, and limiting the hints to described events changes the full editor beyond this fix\nNOTES: Ticking or unticking All day now runs the end-follows-start logic. An asked start with no time becomes midnight once the event is all day.\nThe run was made on head 4021353 with a clean tree (snapshot then collect, environment local).\nManual check still left for the owner: the empty day/time fields and the calendar note in the light and dark themes.\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

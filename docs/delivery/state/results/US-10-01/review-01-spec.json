@@ -1,0 +1,131 @@
+{
+  "story": "US-10-01",
+  "attempt": 1,
+  "round": 1,
+  "sha": "94a466b891b9ef51bc941481cb7f0ffccfcfb698",
+  "reviewer": "spec",
+  "ts": "2026-10-27T17:29:54Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-01",
+    "impact": "shortcuts::command/listed now take a `descriptions` flag (all callers in main.rs and shortcuts tests updated); `q` became a shortcut while the function is on, so anything relying on `q` being free (the old search_and_other_keys test) changes. Settings gains `ollama` (load/save lines descriptions/ollama_address/ollama_model). CalendarApp gains five fields (preview.rs updated). The side panel puts the box above \"Meet with…\" and the settings dialog gains a section, so preview pictures and layout-dependent Meet-with and settings tests shift. The ureq agent in ollama.rs is the pattern US-10-02's chat client will reuse, so B1/N1 would carry descriptions off the computer there.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": true,
+        "tags": [
+          "security"
+        ],
+        "text": "crates/core/src/ollama.rs:92 — ureq's default config takes HTTP_PROXY/ALL_PROXY from the environment with no loopback exemption; with a proxy set, the check of http://localhost:11434 goes to the proxy host (reproduced: HTTP_PROXY=http://192.0.2.1:3128 makes ollama_is_asked_only_for_its_version_and_its_models fail with NotRunning), breaking #4 and MOD-10-NFR-02 and falsely greying the box → build the agent with .proxy(None) and add a test with a proxy variable set that still reaches the fake Ollama"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:92 — redirects are followed (up to 10), so a redirect at the Ollama address sends the request elsewhere; set .max_redirects(0)"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:578 — test named \"…and_google_nothing\" has no fake Google and records no other host, so it proves neither Google's silence nor that nothing else is asked; rename it or record all outgoing requests"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:152 — the invalid-address message in the settings (edge case 2, \"the settings say so\") has no UI test; only Form logic is unit-tested"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:217 — harness repeats the start-up ask instead of exercising CalendarApp::new (main.rs:461), so \"checked at start\" is untested in the real constructor"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:91 — the technical notes ask for an Ollama client behind an interface (NFR-14); check() is a free function hard-wired to ureq, and DEC-216 says it follows the notes"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "scripts/cargo_report.py:1 — delivery-loop tooling not traced to any requirement of the story; belongs in a separate chore change"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:1981 — Enter in the box asks Ollama again, an interim behaviour no criterion asks for (DEC-215); US-10-02 must replace it, not build on it"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/constitution.md:57 — still says the only traffic is HTTPS to Google; the Ollama exception of NFR-06/DEC-207 (plain HTTP) is not reflected (drift outside the diff)"
+      },
+      {
+        "id": "N9",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/BACKLOG.md:165 — story spec and backlog still say in-progress; DoD asks for the status update"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "unmet",
+        "note": "B1: with a system proxy set, the default-address Ollama check goes to the proxy host, not this computer; TC-10-04's description steps are legitimately US-10-02 (DEC-215), but this story's own traffic already breaks the criterion"
+      },
+      {
+        "n": 5,
+        "verdict": "external",
+        "note": "MANUAL TC-10-05 (README section, ollama.com links and \"works without them\" verified by reading)"
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Spec-compliance review of US-10-01 (diff main...94a466b): NOT COMPLIANT. One blocking finding: the Ollama check honours the system's HTTP proxy, so criterion #4 and `MOD-10-NFR-02` fail on any computer where a proxy is set.\n\nSpec: /home/sulo/workspace/private/calendar-buddy/docs/specs/modules/10-events-from-a-description/stories/US-10-01-ollama-settings.md\n\n**Tests.** I ran them on 94a466b. All of TC-10-01, 02, 03, 06 and 07 passed, plus `ollama::tests`, `shortcuts::tests`, `settings::tests` and `description::tests::ollama_is_asked_only_at_its_address_and_google_nothing`: 9 passed in the app crate, 27 in core. Between my calls the working tree moved from detached 94a466b to main (05db4f0). I changed nothing; both test runs happened while it was still at 94a466b.\n\n## Criteria table\n\n| # | Criterion / requirement | Verdict | Evidence |\n|---|---|---|---|\n| 1 | Settings section, defaults, kept after a restart | MET | `ollama.rs:30-38`, `settings.rs` parse/save, `description.rs:127-162`. Test `tc_10_01_…` passes. |\n| 2 | Unticked: box, `q` and its list entry gone; back when ticked | MET | `main.rs:2587` (box only when on), `shortcuts.rs` `command`/`listed(descriptions)`. Tests `tc_10_02_…` and `with_events_from_a_description_off_q_…` pass. |\n| 3 | Warning for an address off this computer, none for local ones | MET | `ollama.rs:53-63`, `description.rs:155-157`. Test `tc_10_03_…` passes. |\n| 4 | Default address: no request to anything but Google and this computer | NOT MET | See B1: with a proxy set in the environment, the default-address check goes to the proxy host. |\n| 5 | README section | external (MANUAL TC-10-05) | Checked by reading `README.md` (+110-141): ollama.com links, `ollama pull gemma4:e4b`, and \"works without Ollama and the model\" are there. Following it end to end is the owner's manual step. |\n| 6 | Ollama not running: box greyed out, reason, link to settings | MET | `description.rs:87-124`, `ollama.rs:80-86`. `tc_10_06_…` steps 1-2 pass, including the link opening the settings scrolled to the section. |\n| 7 | Model missing: same, naming the model | MET | `tc_10_06_…` step 3 passes. |\n| 8 | Ollama starts later: available without a restart | MET | `main.rs:1964-1990` (going to the box asks Ollama again). `tc_10_07_…` steps 1-3 pass. |\n| Covers | F19, F20, F21, F26, U04, U05 | delivered | As in rows #1-#3 and #5-#8. |\n| Covers | MOD-10-NFR-02 | NOT delivered | \"The only network traffic the function adds goes to the Ollama address set\" fails under B1 (and N1). |\n\n**Edge cases**\n- Ollama stops while the box is open: implemented (Enter asks Ollama again) and tested by TC-10-07 step 2.\n- Invalid URL: kept-previous is unit-tested (`an_address_that_is_not_one_is_refused_and_the_previous_one_kept`). That \"the settings say so\" on screen is not tested (N3).\n\n**Are the BLOCKED markings legitimate?**\n- **TC-10-07 step 4:** legitimate. It needs a description sent and the \"New event\" window, which is US-10-02's out-of-scope item (DEC-215). Criterion #8 is fully proven by steps 1-3, so I count #8 as met, not blocked.\n- **TC-10-04 as written:** legitimately blocked, since it sends \"Kawa jutro o 10\".\n- **Criterion #4 itself:** this one does not rest on US-10-02. Its claim already applies to the traffic this story adds (the version and model-list checks), and that traffic is wrong under B1. So #4 is a genuine NOT MET, not an external block. The partial evidence given doesn't prove the claim either: the \"google nothing\" test never involves Google (N2).\n\n## Findings\n\n**B1 [security] `crates/core/src/ollama.rs:92-95`**\n- **Defect:** `ollama::check` builds its ureq agent from `Config::default()`. In ureq 3.5.0 that reads `ALL_PROXY`/`HTTPS_PROXY`/`HTTP_PROXY` (`config.rs:1073`) and does not exempt loopback addresses. `NO_PROXY` is honoured only if the user lists localhost in it.\n- **Failing scenario:** with `HTTP_PROXY` set on the user's computer, the request to `http://localhost:11434` goes to the proxy host. That breaks #4 and `MOD-10-NFR-02`, and Ollama is wrongly reported as not running (#6). US-10-02 will send descriptions through the same pattern.\n- **Reproduced:** `env -u NO_PROXY HTTP_PROXY=http://192.0.2.1:3128 cargo test -p calendar-core ollama::tests::ollama_is_asked` fails at `ollama.rs:364` (left: NotRunning, right: Available). The request went to 192.0.2.1, off this computer.\n- **Fix:** `.proxy(None)` on the Ollama agent's config builder, plus a test that sets a proxy variable and still reaches the fake Ollama.\n\n**Non-blocking**\n- **N1 `crates/core/src/ollama.rs:92-95`:** ureq follows up to 10 redirects by default. Something answering at the local address with a redirect sends the check (and later the description) to another host, which contradicts \"Nothing else leaves the app\" (REQUIREMENTS, Integrations). Fix: `.max_redirects(0)`.\n- **N2 `crates/app/src/description.rs:577-604`:** the test `ollama_is_asked_only_at_its_address_and_google_nothing` has no fake Google and asserts nothing about Google; it only checks the fake Ollama's own record. It also never records requests to any other host, so it could not catch B1. Fix: rename it, or add a check that no other host was asked (e.g. a proxy variable pointing at a recorder, after B1's fix).\n- **N3 `crates/app/src/description.rs:152-154`:** the second edge case's \"the settings say so\" (the `NOT_AN_OLLAMA_ADDRESS` label) has no UI-level test; only the `Form` logic is unit-tested. Fix: one harness test entering an invalid address and checking the label is shown and `settings.ollama.address` is unchanged.\n- **N4 `crates/app/src/description.rs:217-220`:** the test harness repeats the start-up ask itself instead of exercising `CalendarApp::new` (`main.rs:461-464`), so \"checked at start\" in the real constructor is untested.\n- **N5 `crates/core/src/ollama.rs:91`:** the module's Technical notes ask for the Ollama client \"behind an interface like the calendar provider (NFR-14)\". `check` is a free function hard-wired to ureq. DEC-216 says it follows the notes but does not. It can wait for US-10-02's client, but DEC-216's wording is inaccurate.\n- **N6 `scripts/cargo_report.py` (whole file, commit 96a293e):** delivery-loop tooling (cargo output to a Playwright JSON report) that no requirement of this story asks for. Under the surgical-diff rule it belongs in its own chore change.\n- **N7 `crates/app/src/main.rs:1981`:** Enter in the box asks Ollama again, an interim behaviour no criterion asks for (recorded in DEC-215). US-10-02 must replace it rather than build on it.\n- **N8 `docs/specs/constitution.md:57`:** still says \"The only network traffic is HTTPS to Google's APIs\". Ollama uses plain HTTP under the NFR-06 exception (DEC-207), which the constitution does not reflect. This is drift outside the diff; worth a note for the tech lead.\n- **N9:** the story spec and `docs/specs/BACKLOG.md` still say `in-progress`. The definition of done asks for the status to be updated, presumably later in the loop.\n\nConstitution: apart from B1 against the NFR-06 / \"only network traffic\" rules, nothing in the diff breaks the stack or architecture rules. Checks run off the UI thread (`description.rs:26-48`) and nothing is logged.\n\n```\nREVIEW: findings\nSTORY: US-10-01\nIMPACT: shortcuts::command/listed now take a `descriptions` flag (all callers in main.rs and shortcuts tests updated); `q` became a shortcut while the function is on, so anything relying on `q` being free (the old search_and_other_keys test) changes. Settings gains `ollama` (load/save lines descriptions/ollama_address/ollama_model). CalendarApp gains five fields (preview.rs updated). The side panel puts the box above \"Meet with…\" and the settings dialog gains a section, so preview pictures and layout-dependent Meet-with and settings tests shift. The ureq agent in ollama.rs is the pattern US-10-02's chat client will reuse, so B1/N1 would carry descriptions off the computer there.\nFINDINGS:\n  B1 [security] crates/core/src/ollama.rs:92 — ureq's default config takes HTTP_PROXY/ALL_PROXY from the environment with no loopback exemption; with a proxy set, the check of http://localhost:11434 goes to the proxy host (reproduced: HTTP_PROXY=http://192.0.2.1:3128 makes ollama_is_asked_only_for_its_version_and_its_models fail with NotRunning), breaking #4 and MOD-10-NFR-02 and falsely greying the box → build the agent with .proxy(None) and add a test with a proxy variable set that still reaches the fake Ollama\n  N1 crates/core/src/ollama.rs:92 — redirects are followed (up to 10), so a redirect at the Ollama address sends the request elsewhere; set .max_redirects(0)\n  N2 crates/app/src/description.rs:578 — test named \"…and_google_nothing\" has no fake Google and records no other host, so it proves neither Google's silence nor that nothing else is asked; rename it or record all outgoing requests\n  N3 crates/app/src/description.rs:152 — the invalid-address message in the settings (edge case 2, \"the settings say so\") has no UI test; only Form logic is unit-tested\n  N4 crates/app/src/description.rs:217 — harness repeats the start-up ask instead of exercising CalendarApp::new (main.rs:461), so \"checked at start\" is untested in the real constructor\n  N5 crates/core/src/ollama.rs:91 — the technical notes ask for an Ollama client behind an interface (NFR-14); check() is a free function hard-wired to ureq, and DEC-216 says it follows the notes\n  N6 scripts/cargo_report.py:1 — delivery-loop tooling not traced to any requirement of the story; belongs in a separate chore change\n  N7 crates/app/src/main.rs:1981 — Enter in the box asks Ollama again, an interim behaviour no criterion asks for (DEC-215); US-10-02 must replace it, not build on it\n  N8 docs/specs/constitution.md:57 — still says the only traffic is HTTPS to Google; the Ollama exception of NFR-06/DEC-207 (plain HTTP) is not reflected (drift outside the diff)\n  N9 docs/specs/BACKLOG.md:165 — story spec and backlog still say in-progress; DoD asks for the status update\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 unmet — B1: with a system proxy set, the default-address Ollama check goes to the proxy host, not this computer; TC-10-04's description steps are legitimately US-10-02 (DEC-215), but this story's own traffic already breaks the criterion\n  #5 external — MANUAL TC-10-05 (README section, ollama.com links and \"works without them\" verified by reading)\n  #6 met\n  #7 met\n  #8 met\n```\n"
+}

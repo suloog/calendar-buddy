@@ -1,0 +1,100 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 2,
+  "sha": "4021353249a652a66659b971485c2e2a9a78f7bb",
+  "reviewer": "spec",
+  "ts": "2026-10-28T04:09:25Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "Editor::follow_start now also runs when the All day box is toggled, for every event in the full editor (new, existing, occurrences). With a readable start it is a no-op, so existing events and series are unaffected; the new midnight fallback changes only the asked-for state of new events from a description or from \"More options\".",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:524 — the asked-for all-day start applies only while `self.start.is_none()`, so the end follows the start once. (a) No time given, All day ticked, then the day changed (12.11 -> 13.11): end stays 12.11, Save disabled with \"The event ends before it starts.\" (b) Neither given, All day ticked, then the day typed key by key: \"28.10.2\" parses as year 2 and the end is left at 28.10.0002, Save disabled. Breaks MOD-10-U07 and MOD-10-F14; reproduced with a scratch test. The test at :1090 sets the whole date at once and hides it → whenever all_day is on and the start time cannot be read, take the start from the date alone (keep the previous start's time of day, or midnight when there is none), not only when start is None; add a test that types the day key by key after ticking All day, and one that changes the day after All day"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:1240 — (round 1, open) Enter in the asked day/time fields of the \"New event\" window does not save; only Enter in the title does. Consistent with DEC-234's \"Enter does nothing until filled\" but asymmetric once filled → also accept Enter from the asked fields when entry.ready()"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:709 — (round 1, open) the \"Day\"/\"Time\" hints and the START_DATE_EMPTY/START_TIME_EMPTY messages apply to every event in the full editor, not only one a description left short; harmless, but beyond the story's \"rest of MOD-05's window is unchanged\" → acceptable as is, or gate the hints on a description-asked state"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_asked_tests.rs:250 — (round 1, open) edge case \"offline, a named Google calendar → chosen as online; saving fails as for the default\" has no test → add an offline variant of TC-10-34 checking the named calendar is chosen and Save is refused as for the default"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_asked_tests.rs:70 — (round 1, open) the \"New event\" window's missing-time path (asked_times with All day, no guests) is tested only at core level (create.rs test); TC-10-32 goes through the full editor because a guest is named → add an app-level step with a guest-less \"no time\" description"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/DECISIONS.md:2838 — (round 1, open) DEC-232/233/234 are delivery-loop decisions that change the model contract and NFR-04 test set expectations (\"Kawa z Bartkiem o 15\" now expects no day) → owner to confirm"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:599 — (round 1, open) the asked day field takes the regional numeric date only, with no date picker or format example in the hint → consider the hint \"Date (as …)\" (texts::date_as) as elsewhere"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/modules/10-events-from-a-description/stories/US-10-05-missing-details-and-calendar.md:6 — (round 1, open) story status still in-progress in front matter, table and BACKLOG → move to review when handed over"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "given day/time filled, only the missing one asked; TC-10-32, TC-10-33 pass on 4021353"
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "case-insensitive side-panel name match; TC-10-34 and core calendar_named test"
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "Sat 31 Oct, time empty with the cursor, Save waits for a time or All day; TC-10-32 three steps pass (changing the day after All day is B1)"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "day empty with the cursor, Save waits, 28 Oct saved 13:00–13:30; TC-10-33 (neither-given plus All-day-first is B1)"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "named calendar chosen, or default with note under the picker for missing and read-only; TC-10-34, TC-10-35"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "US-10-05, round 2: spec compliance on 4021353 — Verdict: NOT COMPLIANT. The B1 fix covers the order round 1 reported but leaves the same failure in two neighbouring paths (S1: day changed after All day; S2: day typed key by key after All day — \"28.10.2\" parses as year 2). Breaks MOD-10-U07 and MOD-10-F14. (Full prose in the reviewer's hand-back; block below.)\n\nREVIEW: findings\nSTORY: US-10-05\nIMPACT: Editor::follow_start now also runs when the All day box is toggled, for every event in the full editor (new, existing, occurrences). With a readable start it is a no-op, so existing events and series are unaffected; the new midnight fallback changes only the asked-for state of new events from a description or from \"More options\".\nFINDINGS:\n  B1 crates/core/src/editor.rs:524 — the asked-for all-day start applies only while `self.start.is_none()`, so the end follows the start once. (a) No time given, All day ticked, then the day changed (12.11 -> 13.11): end stays 12.11, Save disabled with \"The event ends before it starts.\" (b) Neither given, All day ticked, then the day typed key by key: \"28.10.2\" parses as year 2 and the end is left at 28.10.0002, Save disabled. Breaks MOD-10-U07 and MOD-10-F14; reproduced with a scratch test. The test at :1090 sets the whole date at once and hides it → whenever all_day is on and the start time cannot be read, take the start from the date alone (keep the previous start's time of day, or midnight when there is none), not only when start is None; add a test that types the day key by key after ticking All day, and one that changes the day after All day\n  N1 crates/app/src/main.rs:1240 — (round 1, open) Enter in the asked day/time fields of the \"New event\" window does not save; only Enter in the title does. Consistent with DEC-234's \"Enter does nothing until filled\" but asymmetric once filled → also accept Enter from the asked fields when entry.ready()\n  N2 crates/app/src/editor.rs:709 — (round 1, open) the \"Day\"/\"Time\" hints and the START_DATE_EMPTY/START_TIME_EMPTY messages apply to every event in the full editor, not only one a description left short; harmless, but beyond the story's \"rest of MOD-05's window is unchanged\" → acceptable as is, or gate the hints on a description-asked state\n  N3 crates/app/src/description_asked_tests.rs:250 — (round 1, open) edge case \"offline, a named Google calendar → chosen as online; saving fails as for the default\" has no test → add an offline variant of TC-10-34 checking the named calendar is chosen and Save is refused as for the default\n  N4 crates/app/src/description_asked_tests.rs:70 — (round 1, open) the \"New event\" window's missing-time path (asked_times with All day, no guests) is tested only at core level (create.rs test); TC-10-32 goes through the full editor because a guest is named → add an app-level step with a guest-less \"no time\" description\n  N5 docs/specs/DECISIONS.md:2838 — (round 1, open) DEC-232/233/234 are delivery-loop decisions that change the model contract and NFR-04 test set expectations (\"Kawa z Bartkiem o 15\" now expects no day) → owner to confirm\n  N6 crates/app/src/editor.rs:599 — (round 1, open) the asked day field takes the regional numeric date only, with no date picker or format example in the hint → consider the hint \"Date (as …)\" (texts::date_as) as elsewhere\n  N7 docs/specs/modules/10-events-from-a-description/stories/US-10-05-missing-details-and-calendar.md:6 — (round 1, open) story status still in-progress in front matter, table and BACKLOG → move to review when handed over\nCRITERIA:\n  #1 met — given day/time filled, only the missing one asked; TC-10-32, TC-10-33 pass on 4021353\n  #2 met — case-insensitive side-panel name match; TC-10-34 and core calendar_named test\n  #3 met — Sat 31 Oct, time empty with the cursor, Save waits for a time or All day; TC-10-32 three steps pass (changing the day after All day is B1)\n  #4 met — day empty with the cursor, Save waits, 28 Oct saved 13:00–13:30; TC-10-33 (neither-given plus All-day-first is B1)\n  #5 met — named calendar chosen, or default with note under the picker for missing and read-only; TC-10-34, TC-10-35\n"
+}

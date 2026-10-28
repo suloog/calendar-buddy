@@ -1,0 +1,158 @@
+{
+  "story": "US-10-02",
+  "attempt": 1,
+  "round": 1,
+  "sha": "bbd62ab4a97c161f7229802d701ad30dd4cf872c",
+  "reviewer": "spec",
+  "ts": "2026-10-27T19:53:31Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-02",
+    "impact": "The diff changes US-10-01's code: the box went from single-line to multi-line, Enter now sends instead of re-checking availability (TC-10-07 now runs through the reading path), q now expands a collapsed side panel and saves settings, ollama::check got the shared agent() with a 3 s connect timeout, DescriptionBox gained new fields (preview updated), and the fake Ollama now handles each connection in its own thread and parses request bodies. Most at risk: any dialog open when an answer arrives (B1), and the q/focus handling in the side panel.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2030 — an answer arriving while a dialog is open (c quick entry being typed, an editor with changes, Settings, Scope/Notify) replaces that dialog and loses the user's unsaved input → take the answer in only when self.dialog is None (it waits in the channel, \"Reading…\" stays), plus a test"
+      },
+      {
+        "id": "B2",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2018 — Ollama running with the model but /api/chat returns 5xx (e.g. out of memory): chat() gives None, the re-check says Available, \"Reading…\" vanishes with no window and no message, against F23/#11 → on None also set description.no_event (show_box already hides it while unavailable) or show a \"could not read\" text; test with the fake returning 500"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:873 — TC-10-15 step 3 says local file only; the test also allows cache.sqlite3 (DEC-222); the analyst should amend the TC"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:941 — TC-10-17 step 2 sets entry.calendar directly instead of choosing in the picker; click the new-event-calendar combo box"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2028 — edge case \"no calendar to create it in\" not tested on the description path"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:214 — Esc right after Enter (keyboard in the views) does not cancel; only q then Esc does (DEC-220); consider Esc with no dialog cancelling"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2035 — no-event answer pulls focus into the box even while the user is typing in another field"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:150 — Ollama client is plain functions, not behind an interface as the MOD-10 technical notes (NFR-14) describe"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:341 — TC-10-04 step 2 checks the address in the settings, not a record of the app's requests; the US-10-01 request-list test was deleted"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:904 — TC-10-16 \"paste\" is done with Event::Text, not Event::Paste"
+      },
+      {
+        "id": "N9",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:235 — time_of is case-sensitive (\"Evening\" gives no event) while day is lowercased"
+      },
+      {
+        "id": "N10",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2396 — an answer arriving after the feature was turned off still opens the window"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19 (automatic half TC-10-18 met: 30 sentences, 16 pl / 14 en, passes against the fake)"
+      },
+      {
+        "n": 9,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 10,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 11,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Spec-compliance review: US-10-02, round 1 (main...bbd62ab). cargo test --workspace green at bbd62ab. Verdict NOT COMPLIANT because of two blocking correctness bugs (B1, B2); every acceptance criterion has passing evidence apart from #8's manual half. Covers: F01, F02, F04, F05, F08, F22, F23 (except B2), F24, F27, U01–U03, NFR-01, NFR-03 delivered; F03/F06 in part by design (DEC-219); NFR-04 in part (DEC-221). Out of scope: no violations. Constitution: no violations.\n\nREVIEW: findings\nSTORY: US-10-02\nIMPACT: The diff changes US-10-01's code: the box went from single-line to multi-line, Enter now sends instead of re-checking availability (TC-10-07 now runs through the reading path), q now expands a collapsed side panel and saves settings, ollama::check got the shared agent() with a 3 s connect timeout, DescriptionBox gained new fields (preview updated), and the fake Ollama now handles each connection in its own thread and parses request bodies. Most at risk: any dialog open when an answer arrives (B1), and the q/focus handling in the side panel.\nFINDINGS:\n  B1 crates/app/src/main.rs:2030 — an answer arriving while a dialog is open (c quick entry being typed, an editor with changes, Settings, Scope/Notify) replaces that dialog and loses the user's unsaved input → take the answer in only when self.dialog is None (it waits in the channel, \"Reading…\" stays), plus a test\n  B2 crates/app/src/main.rs:2018 — Ollama running with the model but /api/chat returns 5xx (e.g. out of memory): chat() gives None, the re-check says Available, \"Reading…\" vanishes with no window and no message, against F23/#11 → on None also set description.no_event (show_box already hides it while unavailable) or show a \"could not read\" text; test with the fake returning 500\n  N1 crates/app/src/description_reading_tests.rs:873 — TC-10-15 step 3 says local file only; the test also allows cache.sqlite3 (DEC-222); the analyst should amend the TC\n  N2 crates/app/src/description_reading_tests.rs:941 — TC-10-17 step 2 sets entry.calendar directly instead of choosing in the picker; click the new-event-calendar combo box\n  N3 crates/app/src/main.rs:2028 — edge case \"no calendar to create it in\" not tested on the description path\n  N4 crates/app/src/description.rs:214 — Esc right after Enter (keyboard in the views) does not cancel; only q then Esc does (DEC-220); consider Esc with no dialog cancelling\n  N5 crates/app/src/main.rs:2035 — no-event answer pulls focus into the box even while the user is typing in another field\n  N6 crates/core/src/ollama.rs:150 — Ollama client is plain functions, not behind an interface as the MOD-10 technical notes (NFR-14) describe\n  N7 crates/app/src/description_reading_tests.rs:341 — TC-10-04 step 2 checks the address in the settings, not a record of the app's requests; the US-10-01 request-list test was deleted\n  N8 crates/app/src/description_reading_tests.rs:904 — TC-10-16 \"paste\" is done with Event::Text, not Event::Paste\n  N9 crates/core/src/described.rs:235 — time_of is case-sensitive (\"Evening\" gives no event) while day is lowercased\n  N10 crates/app/src/main.rs:2396 — an answer arriving after the feature was turned off still opens the window\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n  #8 external — MANUAL TC-10-19 (automatic half TC-10-18 met: 30 sentences, 16 pl / 14 en, passes against the fake)\n  #9 met\n  #10 met\n  #11 met\n"
+}

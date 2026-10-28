@@ -1,0 +1,122 @@
+{
+  "story": "US-10-02",
+  "attempt": 1,
+  "round": 1,
+  "sha": "bbd62ab4a97c161f7229802d701ad30dd4cf872c",
+  "reviewer": "code",
+  "ts": "2026-10-27T19:53:31Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-02",
+    "impact": "Changes the side-panel description box (Action::Enter became Send/Cancel), go_to_box/box_wanted focus logic for `q`, and adds an async Reader that can open Dialog::QuickEntry at any time. It reuses create::keyed/wall, new_entry and the shared ollama::fake. A late model answer can now replace any open dialog (editor included), and a change to create::keyed/wall now also affects descriptions; the US-10-01 box tests still pass.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2030 — user sends a description, then opens the editor (or presses `c`) and types while \"Reading…\" shows; when the answer arrives `self.dialog = Some(QuickEntry)` overwrites the dialog unconditionally and the unsaved edits are lost → apply the answer only when no dialog is open (otherwise hold it until the dialog closes, or drop it and keep the text in the box with a message), and add a test that sends, opens another dialog, releases the answer, and asserts the dialog is untouched"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2018 — Ollama up but chat returns None (HTTP 500, non-JSON body, no content): \"Reading…\" vanishes with no message once the re-check says Available, though the story says an unusable answer shows the no-event message → also set description.no_event = true on None (the greyed box shows its own reason if Ollama is gone) and test it with a fake 500"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described_cases.json:1 — the fake model's recorded answers carry duration_min:60 where the sentence gives no length (the real prompt returns null per DEC-218), so the fake run does not exercise the new length rule; the 100 %/93 % figure in DEC-218 is a hand-run claim that cannot be checked here → record the answers as the new prompt gives them or note the limit; TC-10-19 stays the real evidence"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:118 — Described.guests/meet are parsed but unused until US-10-03 (DEC-219 justifies it); small speculative surface → keep or drop until US-10-03"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:155 — action \"add\" with an empty or blank title opens \"New event\" with an empty title instead of the no-event message → treat a blank title as NoEvent"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:194 — \"29 lutego\" in a non-leap year gives None, so the user gets \"no event\" → acceptable, noted only"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:1 — every focus spawns an HTTP request with no time limit (Reader::load), so repeated focusing piles up concurrent model-load requests → add a \"loading in flight\" flag"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:1991 — after Enter focus is surrendered, so Esc cancels only after `q` returns to the box; there is no cancel if the user clicks elsewhere → consistent with DEC-220 and TC-10-10 step 3, design note only"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:1 — no test of the no-calendar message (NO_CALENDAR) through the description path → add one case with every calendar disabled"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "TC-10-08; \"same style\" in light and dark themes is the owner's manual check"
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "TC-10-09"
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "TC-10-10, but B1 shows a late answer can clobber a dialog opened meanwhile"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "TC-10-12 and unit tests"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": "TC-10-15 and TC-10-16; no logging in the diff"
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": "TC-10-17"
+      },
+      {
+        "n": 8,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19 for the real model; the automated part (30 sentences, fake model, TC-10-18) is met, and DEC-221 defers the changing sentences to US-10-04"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Review of US-10-02, round 1 (bbd62ab, the whole change). cargo test --workspace, cargo fmt --check and cargo clippy -D warnings are all green at that sha. One blocking finding: an answer that arrives late replaces whatever dialog is open, including an editor with unsaved work. Everything else is non-blocking.\n\nREVIEW: findings\nSTORY: US-10-02\nIMPACT: Changes the side-panel description box (Action::Enter became Send/Cancel), go_to_box/box_wanted focus logic for `q`, and adds an async Reader that can open Dialog::QuickEntry at any time. It reuses create::keyed/wall, new_entry and the shared ollama::fake. A late model answer can now replace any open dialog (editor included), and a change to create::keyed/wall now also affects descriptions; the US-10-01 box tests still pass.\nFINDINGS:\n  B1 crates/app/src/main.rs:2030 — user sends a description, then opens the editor (or presses `c`) and types while \"Reading…\" shows; when the answer arrives `self.dialog = Some(QuickEntry)` overwrites the dialog unconditionally and the unsaved edits are lost → apply the answer only when no dialog is open (otherwise hold it until the dialog closes, or drop it and keep the text in the box with a message), and add a test that sends, opens another dialog, releases the answer, and asserts the dialog is untouched\n  N1 crates/app/src/main.rs:2018 — Ollama up but chat returns None (HTTP 500, non-JSON body, no content): \"Reading…\" vanishes with no message once the re-check says Available, though the story says an unusable answer shows the no-event message → also set description.no_event = true on None (the greyed box shows its own reason if Ollama is gone) and test it with a fake 500\n  N2 crates/core/src/described_cases.json:1 — the fake model's recorded answers carry duration_min:60 where the sentence gives no length (the real prompt returns null per DEC-218), so the fake run does not exercise the new length rule; the 100 %/93 % figure in DEC-218 is a hand-run claim that cannot be checked here → record the answers as the new prompt gives them or note the limit; TC-10-19 stays the real evidence\n  N3 crates/core/src/described.rs:118 — Described.guests/meet are parsed but unused until US-10-03 (DEC-219 justifies it); small speculative surface → keep or drop until US-10-03\n  N4 crates/core/src/described.rs:155 — action \"add\" with an empty or blank title opens \"New event\" with an empty title instead of the no-event message → treat a blank title as NoEvent\n  N5 crates/core/src/described.rs:194 — \"29 lutego\" in a non-leap year gives None, so the user gets \"no event\" → acceptable, noted only\n  N6 crates/app/src/description.rs:1 — every focus spawns an HTTP request with no time limit (Reader::load), so repeated focusing piles up concurrent model-load requests → add a \"loading in flight\" flag\n  N7 crates/app/src/main.rs:1991 — after Enter focus is surrendered, so Esc cancels only after `q` returns to the box; there is no cancel if the user clicks elsewhere → consistent with DEC-220 and TC-10-10 step 3, design note only\n  N8 crates/app/src/description_reading_tests.rs:1 — no test of the no-calendar message (NO_CALENDAR) through the description path → add one case with every calendar disabled\nCRITERIA:\n  #1 met — TC-10-08; \"same style\" in light and dark themes is the owner's manual check\n  #2 met — TC-10-09\n  #3 met — TC-10-10, but B1 shows a late answer can clobber a dialog opened meanwhile\n  #4 met — TC-10-12 and unit tests\n  #5 met\n  #6 met — TC-10-15 and TC-10-16; no logging in the diff\n  #7 met — TC-10-17\n  #8 external — MANUAL TC-10-19 for the real model; the automated part (30 sentences, fake model, TC-10-18) is met, and DEC-221 defers the changing sentences to US-10-04\n"
+}

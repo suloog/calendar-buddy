@@ -1,0 +1,117 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 1,
+  "sha": "5508bce3464ce32f6a1e39cb3894dd32a76069b6",
+  "reviewer": "spec",
+  "ts": "2026-10-28T02:11:22Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-03",
+    "impact": "Described.meet changed from bool to Option<bool> and the prompt/schema changed: every description (US-10-02 adds, later US-10-04 changes) and the TC-10-18/19 test-set scoring depend on it; live guest accuracy dropped 97 % to 90 %. Editor gained `unresolved`, `pick` and `drop_unresolved`, and add_guest's Meet switch-on now meets description intent. sync.rs gained Job/Update::Named beside Suggest, and main.rs's reading flow now holds \"Reading…\" through a Google look-up and opens the editor from the update loop.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:638 — \"Lunch z Kasią jutro o 13 bez Meeta\" with two contacts named Kasia: picking Kasia Lis goes through add_guest (editor.rs:603 `meet |= no guests yet`) and turns Meet on, so Save creates the Meet call the description refused (MOD-10-F07, criterion #3, DEC-223) → record in the editor that the description set Meet (flag set by described::fill when meet.is_some()), skip the first-guest switch-on in pick when set, and add a core test for refused Meet + pick"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:35 — the new Meet rule costs live guest accuracy: every field right 97 % to 90 % on gemma4:e4b (\"Urodziny mamy…\" now gets guest \"mama\" and opens the full editor; \"Client call… no Meet\" gets \"client\"); still above 80 % but a regression, and TC-10-19 was not re-run though Ollama was available → tune the guest rule and record the live score"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described_tests.rs:201 — the test-set score treats refused and not mentioned as the same, so a real-model null-vs-false regression (criterion #3) is invisible → record silent and refused separately and compare Option<bool>"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_guests_tests.rs:352 — no app test saves with a name still unresolved (Zenek or \"mama\") to show nobody is invited; TC-10-22 removes it first → add a save with a name still listed"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/DECISIONS.md:2731 — DEC-226 defers greying out the Meet switch to the analyst but no QUESTIONS.md entry tracks it; the story edge case's literal \"off and unavailable\" is not built (accepted on its merits as the editor's current behaviour) → add the open question against MOD-06-F16/F17"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:180 — suggestions exclude guests invited by earlier names, so the outcome depends on the order of names ([\"Janek\",\"Jan\"] invites both automatically, [\"Jan\",\"Janek\"] leaves Jan waiting with the already-invited Janek still suggested) and lists are not refreshed after a pick → filter out invited people when drawing (crates/app/src/editor.rs:285) and resolve against the guests before filling"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2465 — the look-up result waits for no dialog to be open, so if the user opens another dialog during \"Reading…\", the described editor pops up when that dialog closes → drop the result, or keep it only while the box is still reading"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:272 — the unresolved name drawn in warn_fg_color comes out blue in the light preview and looks like a link; for the owner's manual look"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/modules/10-events-from-a-description/stories/US-10-03-guests-and-meet.md:6 — story and BACKLOG row left at in-progress, not review (constitution definition of done)"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "unmet",
+        "note": "\"bez Meeta\" does not keep Meet off once an uncertain name is picked: pick goes through add_guest's first-guest switch-on (B1); TC-10-23 only covers names resolved automatically"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "## US-10-03 spec-compliance review (diff `main...5508bce`)\n\nOne blocking problem: criterion #3 fails on one path. The other six criteria are met; gates green (re-run in an exported copy of 5508bce). Live TC-10-19 set on gemma4:e4b: new prompt dates 100 %, every field 90 % (main's prompt: 100 % / 97 %).\n\n```\nREVIEW: findings\nSTORY: US-10-03\nIMPACT: Described.meet changed from bool to Option<bool> and the prompt/schema changed: every description (US-10-02 adds, later US-10-04 changes) and the TC-10-18/19 test-set scoring depend on it; live guest accuracy dropped 97 % to 90 %. Editor gained `unresolved`, `pick` and `drop_unresolved`, and add_guest's Meet switch-on now meets description intent. sync.rs gained Job/Update::Named beside Suggest, and main.rs's reading flow now holds \"Reading…\" through a Google look-up and opens the editor from the update loop.\nFINDINGS:\n  B1 crates/core/src/editor.rs:638 — \"Lunch z Kasią jutro o 13 bez Meeta\" with two contacts named Kasia: picking Kasia Lis goes through add_guest (editor.rs:603 `meet |= no guests yet`) and turns Meet on, so Save creates the Meet call the description refused (MOD-10-F07, criterion #3, DEC-223) → record in the editor that the description set Meet (flag set by described::fill when meet.is_some()), skip the first-guest switch-on in pick when set, and add a core test for refused Meet + pick\n  N1 crates/core/src/described.rs:35 — the new Meet rule costs live guest accuracy: every field right 97 % to 90 % on gemma4:e4b (\"Urodziny mamy…\" now gets guest \"mama\" and opens the full editor; \"Client call… no Meet\" gets \"client\"); still above 80 % but a regression, and TC-10-19 was not re-run though Ollama was available → tune the guest rule and record the live score\n  N2 crates/core/src/described_tests.rs:201 — the test-set score treats refused and not mentioned as the same, so a real-model null-vs-false regression (criterion #3) is invisible → record silent and refused separately and compare Option<bool>\n  N3 crates/app/src/description_guests_tests.rs:352 — no app test saves with a name still unresolved (Zenek or \"mama\") to show nobody is invited; TC-10-22 removes it first → add a save with a name still listed\n  N4 docs/specs/DECISIONS.md:2731 — DEC-226 defers greying out the Meet switch to the analyst but no QUESTIONS.md entry tracks it; the story edge case's literal \"off and unavailable\" is not built (accepted on its merits as the editor's current behaviour) → add the open question against MOD-06-F16/F17\n  N5 crates/core/src/described.rs:180 — suggestions exclude guests invited by earlier names, so the outcome depends on the order of names ([\"Janek\",\"Jan\"] invites both automatically, [\"Jan\",\"Janek\"] leaves Jan waiting with the already-invited Janek still suggested) and lists are not refreshed after a pick → filter out invited people when drawing (crates/app/src/editor.rs:285) and resolve against the guests before filling\n  N6 crates/app/src/main.rs:2465 — the look-up result waits for no dialog to be open, so if the user opens another dialog during \"Reading…\", the described editor pops up when that dialog closes → drop the result, or keep it only while the box is still reading\n  N7 crates/app/src/editor.rs:272 — the unresolved name drawn in warn_fg_color comes out blue in the light preview and looks like a link; for the owner's manual look\n  N8 docs/specs/modules/10-events-from-a-description/stories/US-10-03-guests-and-meet.md:6 — story and BACKLOG row left at in-progress, not review (constitution definition of done)\nCRITERIA:\n  #1 met\n  #2 met\n  #3 unmet — \"bez Meeta\" does not keep Meet off once an uncertain name is picked: pick goes through add_guest's first-guest switch-on (B1); TC-10-23 only covers names resolved automatically\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n```\n"
+}

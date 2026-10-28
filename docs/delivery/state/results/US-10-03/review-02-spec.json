@@ -1,0 +1,96 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 2,
+  "sha": "76ee40b4168022b7d521562e85a0b57169ef1f93",
+  "reviewer": "spec",
+  "ts": "2026-10-28T02:20:35Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-03",
+    "impact": "Last round's B1 is fixed for clicking a person under a name (Editor::pick keeps the description's Meet; both new tests fail without the fix), and all gates are green.\n  But \"bez Meeta\" still breaks when the user invites a guest through the normal guest field: add_guest's first-guest rule ignores meet_described, so Save creates the refused Meet call.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:607 — \"Lunch z Zenkiem jutro o 13 bez Meeta\", Zenek fits nobody: typing zenek@… in the guest field + Enter (enter_guest→add_guest) turns Meet on and Save creates a Meet call; same when Kasia Lis is clicked from the guest field's own suggestions → in add_guest switch Meet on with the first guest only when !self.meet_described, make pick a plain add_guest again, add core (refused + enter_guest) and app (refused + typed guest + Save has no conferenceData) tests"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/DECISIONS.md:2715 — DEC-225 still says a pick turns Meet on with the first guest; the code now keeps a refused Meet off — append a decision recording that the description's Meet wins over MOD-06-F17, point editor.rs:94-96 to it"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/sync.rs:637 — dropping an untaken look-up result (76ee40b) has no test — add a sync test: look_up, result arrives, look_up again, take_named() is None"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "76ee40b commit message — says \"Review N7\" but the change is about the look-up; the preview-colour N7 is in neither the fixed nor the refused list — record what happened to it"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "test-runs/2026-10-28_031431/run.json — duration 0, start == finish, and the new B1/N3 regression tests were not run — include them or run without the tc_10_ filter"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "carried over, refused by the implementer: live guest accuracy 97→90%, test-set score treats refused and silent Meet alike, DEC-226 has no QUESTIONS.md entry, order-dependent name resolution, look-up waits for dialogs"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "unmet",
+        "note": "with \"bez Meeta\", a guest invited through the guest field (the only way to invite a name that fits nobody) turns Meet on by itself and Save creates the refused Meet call (add_guest ignores meet_described)"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "## US-10-03 review, round 2 (commits 5508bce..76ee40b)\n\nLast round's B1 is fixed for clicking a suggested person under a name, but criterion #3 still fails in a nearby case: with \"bez Meeta\", inviting someone through the normal guest field still turns Meet on. Gates green on 76ee40b in an exported copy; both new tests fail with the fix removed.\n\n```\nREVIEW: findings\nSTORY: US-10-03\nIMPACT: Last round's B1 is fixed for clicking a person under a name (Editor::pick keeps the description's Meet; both new tests fail without the fix), and all gates are green.\n  But \"bez Meeta\" still breaks when the user invites a guest through the normal guest field: add_guest's first-guest rule ignores meet_described, so Save creates the refused Meet call.\nFINDINGS:\n  B1 crates/core/src/editor.rs:607 — \"Lunch z Zenkiem jutro o 13 bez Meeta\", Zenek fits nobody: typing zenek@… in the guest field + Enter (enter_guest→add_guest) turns Meet on and Save creates a Meet call; same when Kasia Lis is clicked from the guest field's own suggestions → in add_guest switch Meet on with the first guest only when !self.meet_described, make pick a plain add_guest again, add core (refused + enter_guest) and app (refused + typed guest + Save has no conferenceData) tests\n  N1 docs/specs/DECISIONS.md:2715 — DEC-225 still says a pick turns Meet on with the first guest; the code now keeps a refused Meet off — append a decision recording that the description's Meet wins over MOD-06-F17, point editor.rs:94-96 to it\n  N2 crates/app/src/sync.rs:637 — dropping an untaken look-up result (76ee40b) has no test — add a sync test: look_up, result arrives, look_up again, take_named() is None\n  N3 76ee40b commit message — says \"Review N7\" but the change is about the look-up; the preview-colour N7 is in neither the fixed nor the refused list — record what happened to it\n  N4 test-runs/2026-10-28_031431/run.json — duration 0, start == finish, and the new B1/N3 regression tests were not run — include them or run without the tc_10_ filter\n  N5 carried over, refused by the implementer: live guest accuracy 97→90%, test-set score treats refused and silent Meet alike, DEC-226 has no QUESTIONS.md entry, order-dependent name resolution, look-up waits for dialogs\nCRITERIA:\n  #1 met\n  #2 met\n  #3 unmet — with \"bez Meeta\", a guest invited through the guest field (the only way to invite a name that fits nobody) turns Meet on by itself and Save creates the refused Meet call (add_guest ignores meet_described)\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n```\n"
+}

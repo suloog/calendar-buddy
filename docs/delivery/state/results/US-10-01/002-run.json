@@ -1,0 +1,7982 @@
+{
+  "schema": "og-run/1",
+  "run": {
+    "id": "2026-10-27_183141",
+    "started": "2026-10-27T18:31:46+01:00",
+    "finished": "2026-10-27T18:31:46+01:00",
+    "duration_ms": 0,
+    "environment": "local",
+    "scope": "US-10-01",
+    "targets": {},
+    "repo": {
+      "branch": "feature/US-10-01",
+      "commit": "2a3b65b897d39018124134e3478ef46217cf8d49",
+      "dirty": false,
+      "snapshot": true,
+      "changed_during_run": false,
+      "build": {
+        "environment": "local",
+        "source": "unknown",
+        "commit": null
+      }
+    },
+    "project": {
+      "name": "calendar-buddy",
+      "client": "",
+      "language": "en"
+    },
+    "tools": {
+      "node": "v24.22.1"
+    }
+  },
+  "totals": {
+    "pass": 4,
+    "fail": 0,
+    "blocked": 2,
+    "manual": 1,
+    "skipped": 0
+  },
+  "tests": [
+    {
+      "id": "TC-10-01",
+      "title": "The settings' \"Events from a description\" section starts on, at `http://localhost:11434` with `gemma4:e4b`, and keeps changes after a restart",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "happy-path",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#1"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-01-settings-defaults.md",
+      "status": "pass",
+      "projects": {
+        "desktop": "pass"
+      },
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Open the settings.",
+          "expected": "An \"Events from a description\" section shows a ticked on/off checkbox, the Ollama address `http://localhost:11434` and the model `gemma4:e4b`.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Change the address and the model to the values in Test data, untick the checkbox and close the settings.",
+          "expected": "The settings close without an error.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Quit and start the app again; open the settings.",
+          "expected": "The checkbox is unticked, the address is `http://127.0.0.1:11500` and the model `llama3.2:3b`.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-02",
+      "title": "Turned off, the description box, its `q` key and its shortcut entry are gone, and turned on they are back",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "happy-path",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#2"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-02-turn-off-hides-box.md",
+      "status": "pass",
+      "projects": {
+        "desktop": "pass"
+      },
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Look at the side panel; open the list of keyboard shortcuts.",
+          "expected": "The side panel has the field \"Describe an event…\" above \"Meet with…\"; the list of shortcuts includes `q`.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "In the settings, untick \"Events from a description\"; look at the side panel and the list of shortcuts; press `q` in the week view.",
+          "expected": "The field is gone from the side panel, `q` is gone from the list, and `q` changes nothing on screen.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Tick it again; look at the side panel and the list; press `q`.",
+          "expected": "The field is back above \"Meet with…\", `q` is in the list again, and `q` puts the cursor in the field.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-03",
+      "title": "An Ollama address off this computer shows a warning that descriptions will leave it; `localhost`, `127.0.0.1` and `::1` show none",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "happy-path",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#3"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-03-off-computer-warning.md",
+      "status": "pass",
+      "projects": {
+        "desktop": "pass"
+      },
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Open the \"Events from a description\" section; enter each local address in turn.",
+          "expected": "No warning is shown for any of them.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Enter `http://192.168.1.20:11434`.",
+          "expected": "The section warns that descriptions will leave this computer.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Enter `http://gpu-box.lan:11434`.",
+          "expected": "The warning is shown.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 4,
+          "action": "Enter `http://localhost:11434` again.",
+          "expected": "The warning is gone.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-04",
+      "title": "With the default address, a description reaches only this computer's Ollama, and Google receives nothing of it",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "nfr",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#4",
+        "MOD-10-NFR-02"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-04-nothing-leaves-computer.md",
+      "status": "blocked",
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Press `q`, type the description and press Enter.",
+          "expected": "The \"New event\" window opens for \"Kawa\", Tuesday 27 October 10:00–10:30.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Close the window without saving; read the record of the app's requests.",
+          "expected": "Every request went either to the fake Google or to `http://localhost:11434`; the fake Ollama's record holds the description.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Read the fake Google's record.",
+          "expected": "No request carries \"Kawa jutro o 10\" or any part of the model's answer.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-05",
+      "title": "The README tutorial installs Ollama and pulls `gemma4:e4b`, links ollama.com and says the app works without them",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "happy-path",
+      "automation": "manual-only",
+      "covers": [
+        "US-10-01#5"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-05-readme-tutorial.md",
+      "status": "manual",
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Read the README's section on events from a description from start to end.",
+          "expected": "It explains installing Ollama and pulling `gemma4:e4b`, links to ollama.com, and says the app works without them, only this function is missing.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Follow it step by step.",
+          "expected": "Ollama runs and lists `gemma4:e4b`.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Start the app and look at the side panel.",
+          "expected": "The description box is available.",
+          "status": "skipped",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-06",
+      "title": "The box is greyed out naming the reason — Ollama not answering, or the model not installed — with a link to the settings",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "negative",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#6",
+        "US-10-01#7"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-06-unavailable-reason.md",
+      "status": "pass",
+      "projects": {
+        "desktop": "pass"
+      },
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Case A: start the app and look at the side panel.",
+          "expected": "The description box is greyed out, cannot be typed in, and says \"Ollama is not available at http://localhost:11434\" with a link to the settings.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Click the link.",
+          "expected": "The settings open at the \"Events from a description\" section.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Case B: start the app and look at the side panel.",
+          "expected": "The box is greyed out and says \"The model gemma4:e4b is not installed\" with a link to the settings.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": null
+    },
+    {
+      "id": "TC-10-07",
+      "title": "Ollama stopping while the box is open makes it unavailable keeping the text, and Ollama starting again makes it available without a restart",
+      "module": "MOD-10",
+      "layer": "desktop",
+      "type": "edge",
+      "automation": "auto",
+      "covers": [
+        "US-10-01#8"
+      ],
+      "roles": [
+        "User"
+      ],
+      "spec": "docs/specs/modules/10-events-from-a-description/tests/TC-10-07-ollama-stops-and-starts.md",
+      "status": "blocked",
+      "projects": {
+        "desktop": "blocked"
+      },
+      "duration_ms": 0,
+      "description": "",
+      "analysis": "",
+      "steps": [
+        {
+          "n": 1,
+          "action": "Press `q` and type the description, without sending it.",
+          "expected": "The box is available and holds the text.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 2,
+          "action": "Stop the fake Ollama; press Enter.",
+          "expected": "No window opens; the box turns greyed out with \"Ollama is not available at http://localhost:11434\" and still holds \"Kino jutro o 20\".",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 3,
+          "action": "Start the fake Ollama again; click the box.",
+          "expected": "The box is available again, with the text, and the app was not restarted.",
+          "status": "pass",
+          "duration_ms": 0,
+          "observed": "",
+          "evidence": []
+        },
+        {
+          "n": 4,
+          "action": "Press Enter.",
+          "expected": "The \"New event\" window opens for \"Kino\", Tuesday 27 October 20:00.",
+          "status": "blocked",
+          "duration_ms": 0,
+          "observed": "not executed — the executable test has no step 4",
+          "evidence": []
+        }
+      ],
+      "logs": [],
+      "error": {
+        "at_step": 4,
+        "message": "incomplete in desktop — spec step(s) 4 never ran.",
+        "snippet": "not executed — the executable test has no step 4"
+      }
+    }
+  ],
+  "coverage": [
+    {
+      "criterion": "MOD-04-F01",
+      "text": "`US-04-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-F02",
+      "text": "`US-04-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-F03",
+      "text": "`US-04-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-F04",
+      "text": "`US-04-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U01",
+      "text": "`US-04-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U02",
+      "text": "`US-04-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U03",
+      "text": "`US-04-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U04",
+      "text": "`US-04-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U05",
+      "text": "`US-04-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-U06",
+      "text": "`US-04-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-04-NFR-01",
+      "text": "`US-04-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-04-01#1",
+      "text": "following the system",
+      "tests": [
+        "TC-04-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-04-01#2",
+      "text": "The settings offer System, Light and Dark.",
+      "tests": [
+        "TC-04-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-04-01#3",
+      "text": "Choosing Light or Dark overrides the desktop setting and is kept af…",
+      "tests": [
+        "TC-04-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-04-02#1",
+      "text": "At 100% scale, in a window 1080 pixels high, the week view shows 8:…",
+      "tests": [
+        "TC-04-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-04-02#2",
+      "text": "Event blocks in the day, 3-day and week views show only the title a…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "no test case (`DEC-65`); unit test `an_event_block_shows_only_its_title_and_time`"
+    },
+    {
+      "criterion": "US-04-02#3",
+      "text": "Text inside events of a very light and a very dark calendar colour…",
+      "tests": [
+        "TC-04-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-04-02#4",
+      "text": "All interface text has a contrast of at least 4.5:1 against its bac…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "no test case (`DEC-65`); unit tests `interface_text_reaches_4_5_to_1_on_its_backgrounds_in_both_themes` and the views' contrast tests; also looked over by the product owner"
+    },
+    {
+      "criterion": "US-04-03#1",
+      "text": "Apart from calendar and event colours, the interface uses only neut…",
+      "tests": [
+        "TC-04-05"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-04-03#2",
+      "text": "Changing views and periods happens without transition animations.",
+      "tests": [
+        "TC-04-05"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-04-03#3",
+      "text": "All interface texts are in English.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-10-F01",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F02",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F03",
+      "text": "`US-10-02`, `US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F04",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F05",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F06",
+      "text": "`US-10-02`, `US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F07",
+      "text": "`US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F08",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F09",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F10",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F11",
+      "text": "`US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F12",
+      "text": "`US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F13",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F14",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F15",
+      "text": "`US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F16",
+      "text": "`US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F17",
+      "text": "`US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F18",
+      "text": "`US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F19",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F20",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F21",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F22",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F23",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F24",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F25",
+      "text": "`US-10-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F26",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-F27",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U01",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U02",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U03",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U04",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U05",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U06",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U07",
+      "text": "`US-10-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-U08",
+      "text": "`US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-01",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-02",
+      "text": "`US-10-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-03",
+      "text": "`US-10-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-04",
+      "text": "`US-10-02`, `US-10-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-10-01#1",
+      "text": "The settings have an \"Events from a description\" section with an on/of…",
+      "tests": [
+        "TC-10-01"
+      ],
+      "automation": "auto",
+      "status": "pass",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#2",
+      "text": "With the checkbox unticked, the description box, its `q` key and its e…",
+      "tests": [
+        "TC-10-02"
+      ],
+      "automation": "auto",
+      "status": "pass",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#3",
+      "text": "An address that is not this computer (not `localhost`, `127.0.0.1` or…",
+      "tests": [
+        "TC-10-03"
+      ],
+      "automation": "auto",
+      "status": "pass",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#4",
+      "text": "With the default address, the app sends no request to anything but Go…",
+      "tests": [
+        "TC-10-04"
+      ],
+      "automation": "auto",
+      "status": "blocked",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#5",
+      "text": "The README has a section on installing Ollama and pulling `gemma4:e4b`…",
+      "tests": [
+        "TC-10-05"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#6",
+      "text": "Scenario: Ollama is not running — the box is greyed out and says \"Olla…",
+      "tests": [
+        "TC-10-06"
+      ],
+      "automation": "auto",
+      "status": "pass",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#7",
+      "text": "Scenario: the model is missing — the box is greyed out and says \"The m…",
+      "tests": [
+        "TC-10-06"
+      ],
+      "automation": "auto",
+      "status": "pass",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-01#8",
+      "text": "Scenario: Ollama starts later — the box is available without restarti…",
+      "tests": [
+        "TC-10-07"
+      ],
+      "automation": "auto",
+      "status": "blocked",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#1",
+      "text": "The side panel has a field \"Describe an event…\" above \"Meet with…\"; `q`…",
+      "tests": [
+        "TC-10-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#2",
+      "text": "Focusing the box has Ollama load the model; the model is freed 5 minut…",
+      "tests": [
+        "TC-10-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#3",
+      "text": "While the model reads, the box shows \"Reading…\" and the rest of the ap…",
+      "tests": [
+        "TC-10-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#4",
+      "text": "A length in the description is used; with none, the event gets the de…",
+      "tests": [
+        "TC-10-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#5",
+      "text": "Location, notes, repeating, reminders and colour stay as for any new e…",
+      "tests": [
+        "TC-10-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#6",
+      "text": "Descriptions and the model's answers appear in no log and no file; a d…",
+      "tests": [
+        "TC-10-15",
+        "TC-10-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#7",
+      "text": "Offline, only local calendars can take the event, as when adding by ha…",
+      "tests": [
+        "TC-10-17"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#8",
+      "text": "The fixed test set of adding sentences passes with the date right in a…",
+      "tests": [
+        "TC-10-18",
+        "TC-10-19"
+      ],
+      "automation": "auto + manual-only",
+      "status": "manual",
+      "note": "the fake model proves the set and the app; the real model only by hand (`TC-10-19`)"
+    },
+    {
+      "criterion": "US-10-02#9",
+      "text": "Scenario: a sentence with a part of the day — \"Trening wieczorem\" open…",
+      "tests": [
+        "TC-10-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#10",
+      "text": "Scenario: days and times worked out by the app",
+      "tests": [
+        "TC-10-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-02#11",
+      "text": "Scenario: not an event — no window opens; the box says so and keeps th…",
+      "tests": [
+        "TC-10-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#1",
+      "text": "Names are looked up as when typing a guest — contacts, directory, rece…",
+      "tests": [
+        "TC-10-21"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#2",
+      "text": "A description with guests or Meet opens the full editor filled in; one…",
+      "tests": [
+        "TC-10-20",
+        "TC-10-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#3",
+      "text": "Meet is on for \"z Meetem\", off for \"bez Meeta\", and as for any new eve…",
+      "tests": [
+        "TC-10-23"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#4",
+      "text": "For a local calendar, guests and Meet are left out and the editor open…",
+      "tests": [
+        "TC-10-24"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#5",
+      "text": "Offline, or with no Google account, guests are not looked up and the…",
+      "tests": [
+        "TC-10-25"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#6",
+      "text": "Scenario: two guests and Meet",
+      "tests": [
+        "TC-10-20"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-03#7",
+      "text": "Scenario: a name that is not certain",
+      "tests": [
+        "TC-10-22"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#1",
+      "text": "Adding and changing are told apart by the description; a sentence tha…",
+      "tests": [
+        "TC-10-27"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#2",
+      "text": "Only events from today to the end of the cache are matched by name; a…",
+      "tests": [
+        "TC-10-28"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#3",
+      "text": "Saving follows the usual rules: series scope, notifying guests, permis…",
+      "tests": [
+        "TC-10-30",
+        "TC-10-31"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#4",
+      "text": "The test set gains at least 10 change sentences; with them it still p…",
+      "tests": [
+        "TC-10-18",
+        "TC-10-19"
+      ],
+      "automation": "auto + manual-only",
+      "status": "manual",
+      "note": "as `US-10-02#8`"
+    },
+    {
+      "criterion": "US-10-04#5",
+      "text": "Scenario: the event whose details are open",
+      "tests": [
+        "TC-10-26"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#6",
+      "text": "Scenario: an event named in the description",
+      "tests": [
+        "TC-10-27"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#7",
+      "text": "Scenario: several events match",
+      "tests": [
+        "TC-10-29"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-04#8",
+      "text": "Scenario: nothing matches",
+      "tests": [
+        "TC-10-28"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-05#1",
+      "text": "A day or time given in the description is filled in as in `US-10-02`;…",
+      "tests": [
+        "TC-10-32",
+        "TC-10-33"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-05#2",
+      "text": "A calendar is matched by its name as shown in the side panel, ignorin…",
+      "tests": [
+        "TC-10-34"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-05#3",
+      "text": "Scenario: no time",
+      "tests": [
+        "TC-10-32"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-05#4",
+      "text": "Scenario: no date",
+      "tests": [
+        "TC-10-33"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-10-05#5",
+      "text": "Scenario: a named calendar",
+      "tests": [
+        "TC-10-34",
+        "TC-10-35"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "MOD-10-NFR-01",
+      "text": "`TC-10-15`",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-02",
+      "text": "`TC-10-04`",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-03",
+      "text": "`TC-10-10`",
+      "tests": [],
+      "automation": "no response-time target by the requirement itself",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-04",
+      "text": "`TC-10-18`, `TC-10-19`",
+      "tests": [],
+      "automation": "the thresholds are proven only by `TC-10-19`, by hand against a real Ollama",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F01",
+      "text": "`US-01-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F02",
+      "text": "`US-01-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F03",
+      "text": "`US-01-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F04",
+      "text": "`US-01-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F05",
+      "text": "`US-01-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F06",
+      "text": "`US-01-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F07",
+      "text": "`US-01-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F08",
+      "text": "`US-01-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F09",
+      "text": "`US-01-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F10",
+      "text": "`US-01-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F11",
+      "text": "`US-01-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-F13",
+      "text": "`US-01-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-U01",
+      "text": "`US-01-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-U02",
+      "text": "`US-01-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-01-NFR-01",
+      "text": "`US-01-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-01-01#1",
+      "text": "first run with network",
+      "tests": [
+        "TC-01-01"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#2",
+      "text": "~~Before the browser opens, the app explains that Google will show an…~~",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "withdrawn — `DEC-163`"
+    },
+    {
+      "criterion": "US-01-01#3",
+      "text": "After consenting in the browser, the account appears in the app wit…",
+      "tests": [
+        "TC-01-01"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#4",
+      "text": "Google's consent screen asks only for calendar, contacts and — on W…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#5",
+      "text": "first run without network",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#6",
+      "text": "no secret store",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#1",
+      "text": "From the settings, the user connects a second account (personal or…",
+      "tests": [
+        "TC-01-02"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#2",
+      "text": "The settings list every connected account by its e-mail address wit…",
+      "tests": [
+        "TC-01-02"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#3",
+      "text": "Five accounts can be connected at the same time.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#1",
+      "text": "After restarting the app, connected accounts work without opening t…",
+      "tests": [
+        "TC-01-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-01-03#2",
+      "text": "access revoked for one account",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#3",
+      "text": "\"Sign in again\" on that account restores it, with its calendars and…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#4",
+      "text": "A problem with an account is shown on the account, separately from…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#1",
+      "text": "\"Remove\" asks for confirmation and says that the account's calendar…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#2",
+      "text": "After removal, none of the account's calendars, events, credentials…",
+      "tests": [
+        "TC-01-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-01-04#3",
+      "text": "After removal, the app no longer appears in that Google account's l…",
+      "tests": [
+        "TC-01-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-01-04#4",
+      "text": "Without network, removal still deletes everything locally.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#5",
+      "text": "Removing the last connected account brings back the welcome screen.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#6",
+      "text": "After removal, the Google account still has all its calendars and e…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-05-F01",
+      "text": "`US-05-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F02",
+      "text": "`US-05-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F03",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F04",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F05",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F06",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F07",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F08",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F09",
+      "text": "`US-05-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F10",
+      "text": "`US-05-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F11",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F12",
+      "text": "`US-05-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F13",
+      "text": "`US-05-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F14",
+      "text": "`US-05-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F15",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F16",
+      "text": "`US-05-01`, `US-05-02`, `US-05-03`, `US-05-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F17",
+      "text": "`US-05-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F18",
+      "text": "`US-05-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F19",
+      "text": "`US-05-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F20",
+      "text": "`US-05-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F21",
+      "text": "`US-05-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F22",
+      "text": "`US-05-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F23",
+      "text": "`US-05-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F24",
+      "text": "`US-05-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F25",
+      "text": "`US-05-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F26",
+      "text": "`US-05-10`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F27",
+      "text": "`US-05-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F28",
+      "text": "`US-05-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F29",
+      "text": "`US-05-07`, `US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F30",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F31",
+      "text": "`US-05-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F32",
+      "text": "`US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F33",
+      "text": "`US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F34",
+      "text": "`US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-F35",
+      "text": "`US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-U01",
+      "text": "`US-05-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-U02",
+      "text": "`US-05-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-U03",
+      "text": "`US-05-01`, `US-05-02`, `US-05-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-U04",
+      "text": "`US-05-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-05-U05",
+      "text": "`US-05-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-05-01#1",
+      "text": "Selecting 10:00–11:30 in the week view opens a quick-entry box with…",
+      "tests": [
+        "TC-05-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-01#2",
+      "text": "Typing a title and pressing Enter creates the event, and it appears…",
+      "tests": [
+        "TC-05-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-01#3",
+      "text": "A single click on a time, or the `c` key, starts an event of the de…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-01#4",
+      "text": "The default calendar is chosen in the settings; until the user choo…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-01#5",
+      "text": "A new event is marked \"saving\" until Google confirms it.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#1",
+      "text": "\"More options\" in the quick-entry box opens the full editor with wh…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#2",
+      "text": "In the editor the user sets the title, description, start, end, tim…",
+      "tests": [
+        "TC-05-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-02#3",
+      "text": "An event can be made all-day, and can span several days.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#4",
+      "text": "The user can set the location, whether the event shows them as busy…",
+      "tests": [
+        "TC-05-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-02#5",
+      "text": "Any field of an event the user may edit can be changed later in the…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#6",
+      "text": "Choosing another calendar of the same account moves the event there.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#7",
+      "text": "Opening an event shows its location and description; a description…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#8",
+      "text": "In the editor such a description is shown formatted and saved uncha…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#1",
+      "text": "Dragging an event moves it in 15-minute steps, shows the new time w…",
+      "tests": [
+        "TC-05-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-03#2",
+      "text": "An event can be dragged to another day in the 3-day and week views.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#3",
+      "text": "Dragging the end of an event changes its length, in 15-minute steps.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#4",
+      "text": "After dropping, the new time appears in Google Calendar in the brow…",
+      "tests": [
+        "TC-05-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-04#1",
+      "text": "The user can delete an event they are allowed to delete, from its d…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-04#2",
+      "text": "An event without guests that is not part of a series is deleted wit…",
+      "tests": [
+        "TC-05-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-04#3",
+      "text": "After moving, resizing or editing an event, Ctrl+Z — or Undo in the…",
+      "tests": [
+        "TC-05-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-05#1",
+      "text": "Events of read-only calendars, and events the user is not allowed t…",
+      "tests": [
+        "TC-05-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-05#2",
+      "text": "When Google or the organizer refuses a change, a clear message is s…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "no test case (smoke depth, `DEC-65`); proven by `a_change_google_refuses_is_told_clearly_and_the_event_returns_to_how_it_was`"
+    },
+    {
+      "criterion": "US-05-06#1",
+      "text": "In the editor the user makes an event repeat daily, every weekday,…",
+      "tests": [
+        "TC-05-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-06#2",
+      "text": "The series ends on a chosen date, after a chosen number of occurren…",
+      "tests": [
+        "TC-05-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-06#3",
+      "text": "A series created in the app shows the same occurrences in Google Ca…",
+      "tests": [
+        "TC-05-12"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#1",
+      "text": "changing from the fifth occurrence on",
+      "tests": [
+        "TC-05-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-07#2",
+      "text": "Changing an occurrence — in the editor, by dragging or by resizing…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#3",
+      "text": "Deleting an occurrence asks the same three-way question, and the re…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#4",
+      "text": "A series created in Google with a rule the presets cannot express k…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-08#1",
+      "text": "Out-of-office events are hatched, focus-time events carry an icon,…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-08#2",
+      "text": "On the primary calendar of a Workspace account, the editor offers o…",
+      "tests": [
+        "TC-05-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-08#3",
+      "text": "On personal accounts and other calendars, these types are not offered.",
+      "tests": [
+        "TC-05-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-09#1",
+      "text": "An event that has its own colour in Google is shown in that colour.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-09#2",
+      "text": "Changing the event's colour in the editor shows in Google Calendar…",
+      "tests": [
+        "TC-05-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-10#1",
+      "text": "An event with attachments lists them in its details by name.",
+      "tests": [
+        "TC-05-11"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-10#2",
+      "text": "Choosing an attachment opens it in the browser.",
+      "tests": [
+        "TC-05-11"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-11#1",
+      "text": "For an event starting on Tuesday 17 November 2026, the repeat menu…",
+      "tests": [
+        "TC-05-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#2",
+      "text": "In \"Custom…\" the user sets \"every 2 weeks on Monday and Wednesday,…",
+      "tests": [
+        "TC-05-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#3",
+      "text": "For months the dialog offers \"Monthly on day 17\" and \"Monthly on t…",
+      "tests": [
+        "TC-05-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#4",
+      "text": "For weeks the dialog shows the weekdays with the start's weekday c…",
+      "tests": [
+        "TC-05-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#5",
+      "text": "A series created in Google as \"every 3 months on the second Monday…",
+      "tests": [
+        "TC-05-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#6",
+      "text": "Changing the rule of an occurrence asks \"This and following events…",
+      "tests": [
+        "TC-05-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#7",
+      "text": "A series from Google with a rule the dialog cannot express (e.g. \"…",
+      "tests": [
+        "TC-05-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-05-11#8",
+      "text": "A series set in \"Custom…\" shows the same occurrences in Google Cal…",
+      "tests": [
+        "TC-05-15"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-06-F01",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F02",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F03",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F04",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F05",
+      "text": "`US-06-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F06",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F07",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F08",
+      "text": "`US-06-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F09",
+      "text": "`US-06-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F10",
+      "text": "`US-06-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F11",
+      "text": "`US-06-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F12",
+      "text": "`US-06-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F13",
+      "text": "`US-06-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F14",
+      "text": "`US-06-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F22",
+      "text": "`US-06-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F15",
+      "text": "`US-06-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F21",
+      "text": "`US-06-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F16",
+      "text": "`US-06-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F17",
+      "text": "`US-06-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F18",
+      "text": "`US-06-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F19",
+      "text": "`US-06-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F20",
+      "text": "`US-06-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F23",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F24",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F25",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F26",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-F27",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U01",
+      "text": "`US-06-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U02",
+      "text": "`US-06-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U03",
+      "text": "`US-06-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U04",
+      "text": "`US-06-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U05",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-06-U06",
+      "text": "`US-06-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-06-01#1",
+      "text": "The user adds a guest by typing an e-mail address.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#2",
+      "text": "Typing part of a name or address suggests people from the account's…",
+      "tests": [
+        "TC-06-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-01#3",
+      "text": "On a Workspace account, the suggestions also include colleagues fro…",
+      "tests": [
+        "TC-06-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-01#4",
+      "text": "A guest can be marked as required or optional.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#5",
+      "text": "Guests can be added to and removed from an existing event.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#6",
+      "text": "Saving a new event with guests sends them invitations through Google.",
+      "tests": [
+        "TC-06-01",
+        "TC-06-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-02#1",
+      "text": "An event's details list each guest's name, address and answer, show…",
+      "tests": [
+        "TC-06-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-02#2",
+      "text": "When a guest answers, the icon changes after the next synchronization.",
+      "tests": [
+        "TC-06-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-02#3",
+      "text": "A guest list of more than 10 people is collapsed and can be expanded.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-03#1",
+      "text": "moving a meeting",
+      "tests": [
+        "TC-06-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-03#2",
+      "text": "The same question is asked when saving a change in the editor and w…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-04#1",
+      "text": "An invitation awaiting the user's answer has a dashed outline and a…",
+      "tests": [
+        "TC-06-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-04#2",
+      "text": "The side panel shows how many invitations await an answer; choosing…",
+      "tests": [
+        "TC-06-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-04#3",
+      "text": "Invitations in a calendar disabled in the settings are neither show…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-05#1",
+      "text": "An invitation's details open with Accept, Maybe and Decline at the…",
+      "tests": [
+        "TC-06-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-05#2",
+      "text": "An answer given in the app appears in Google Calendar in the browser.",
+      "tests": [
+        "TC-06-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-05#3",
+      "text": "Answering an occurrence of a recurring invitation asks whether the…",
+      "tests": [
+        "TC-06-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-05#4",
+      "text": "As a guest without edit rights, the user can answer but cannot chan…",
+      "tests": [
+        "TC-06-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-06#1",
+      "text": "A declined event stays in the views, struck through and faded.",
+      "tests": [
+        "TC-06-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-06#2",
+      "text": "One switch in the views hides and shows declined events; they are s…",
+      "tests": [
+        "TC-06-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-07#1",
+      "text": "The editor has an \"Add Google Meet\" switch; it turns on when the fi…",
+      "tests": [
+        "TC-06-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-07#2",
+      "text": "A saved event with the switch on has a Google Meet link, also in Go…",
+      "tests": [
+        "TC-06-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-07#3",
+      "text": "An event with a Meet link has a Join button in its details and in t…",
+      "tests": [
+        "TC-06-11"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#1",
+      "text": "Under the chosen time, the editor shows one strip per guest with th…",
+      "tests": [
+        "TC-06-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-08#2",
+      "text": "A guest busy at the chosen time is marked as a conflict.",
+      "tests": [
+        "TC-06-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-08#3",
+      "text": "A guest who does not share availability is shown as \"no data\".",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#4",
+      "text": "The preview shows up to the first 20 guests.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#5",
+      "text": "Without network, the preview is not shown.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-09#1",
+      "text": "Typing part of a colleague's name in the side panel's \"Meet with…\"…",
+      "tests": [
+        "TC-06-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#2",
+      "text": "In the week view, a chosen person's events appear among the user's,…",
+      "tests": [
+        "TC-06-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#3",
+      "text": "A person's event shows its title where their calendar shares detail…",
+      "tests": [
+        "TC-06-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#4",
+      "text": "In the day view, the user and each chosen person are columns side b…",
+      "tests": [
+        "TC-06-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#5",
+      "text": "**Create event** under the list opens the full editor with the chos…",
+      "tests": [
+        "TC-06-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#6",
+      "text": "Moving to another day or week shows the chosen people's events for it.",
+      "tests": [
+        "TC-06-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#7",
+      "text": "Removing a person takes their events out of the views; after the ap…",
+      "tests": [
+        "TC-06-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-06-09#8",
+      "text": "Without network the field is unavailable and says why, and the peop…",
+      "tests": [
+        "TC-06-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "MOD-09-F01",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F02",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F03",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F04",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F05",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F06",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F07",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F08",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F09",
+      "text": "`US-09-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F10",
+      "text": "`US-09-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F11",
+      "text": "`US-09-01`, `US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F12",
+      "text": "`US-09-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F13",
+      "text": "`US-09-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F14",
+      "text": "`US-09-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F15",
+      "text": "`US-09-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F16",
+      "text": "`US-09-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F17",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F18",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F20",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F21",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-F22",
+      "text": "`US-09-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U01",
+      "text": "`US-09-02`, `US-09-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U02",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U03",
+      "text": "`US-09-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U04",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U05",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-U06",
+      "text": "`US-09-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-09-NFR-01",
+      "text": "`US-09-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-09-01#1",
+      "text": "A first run with neither an account nor a local calendar shows the w…",
+      "tests": [
+        "TC-09-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#2",
+      "text": "\"Use without an account\" opens the week view; the side panel shows o…",
+      "tests": [
+        "TC-09-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#3",
+      "text": "Clicking a time, typing a title and pressing Enter shows the event a…",
+      "tests": [
+        "TC-09-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#4",
+      "text": "Opening the event shows its details; the full editor opened from the…",
+      "tests": [
+        "TC-09-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#5",
+      "text": "After the app is restarted the welcome screen is not shown and the e…",
+      "tests": [
+        "TC-09-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#6",
+      "text": "With no account connected, a new event without a range lasts 60 minu…",
+      "tests": [
+        "TC-09-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#7",
+      "text": "A Google account connected later from the settings is listed above \"…",
+      "tests": [
+        "TC-09-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#8",
+      "text": "When the local file cannot be read at start, the app says so, leaves…",
+      "tests": [
+        "TC-09-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-01#9",
+      "text": "When a change cannot be written to the local file, a bar filled with…",
+      "tests": [
+        "TC-09-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#1",
+      "text": "The settings have a \"Local calendars\" section listing each local cal…",
+      "tests": [
+        "TC-09-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#2",
+      "text": "Renaming a local calendar and choosing another colour from the palet…",
+      "tests": [
+        "TC-09-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#3",
+      "text": "A local calendar can be hidden with the side panel's toggle, disable…",
+      "tests": [
+        "TC-09-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#4",
+      "text": "A local calendar can be chosen as the default calendar in the settin…",
+      "tests": [
+        "TC-09-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#5",
+      "text": "Deleting a local calendar with events asks for confirmation, naming …",
+      "tests": [
+        "TC-09-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#6",
+      "text": "Deleting the default local calendar forgets the choice, and new even…",
+      "tests": [
+        "TC-09-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#7",
+      "text": "The last local calendar cannot be deleted: its **Delete** is unavail…",
+      "tests": [
+        "TC-09-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-02#8",
+      "text": "With a Google account connected and no local calendar (Google connec…",
+      "tests": [
+        "TC-09-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#1",
+      "text": "Every field of a local event the editor offers (title, description, …",
+      "tests": [
+        "TC-09-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#2",
+      "text": "A local event can be dragged to another time or day and its end drag…",
+      "tests": [
+        "TC-09-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#3",
+      "text": "Deleting a local event that is not part of a series deletes it witho…",
+      "tests": [
+        "TC-09-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#4",
+      "text": "A local event can be made repeating from the repeat menu and the cus…",
+      "tests": [
+        "TC-09-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#5",
+      "text": "The editor of a local event has no guests, Google Meet, attachments,…",
+      "tests": [
+        "TC-09-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#6",
+      "text": "The calendar picker of an existing local event lists only local cale…",
+      "tests": [
+        "TC-09-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-03#7",
+      "text": "Creating, changing and deleting local events sends nothing to Google…",
+      "tests": [
+        "TC-09-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-04#1",
+      "text": "A new local calendar has one default notification, 30 minutes before;…",
+      "tests": [
+        "TC-09-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-04#2",
+      "text": "A local event's notification can be snoozed for 5 or 10 minutes and …",
+      "tests": [
+        "TC-09-13"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-04#3",
+      "text": "In the \"Local calendars\" section a calendar's default notifications …",
+      "tests": [
+        "TC-09-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-04#4",
+      "text": "In the editor a local event's notifications can be added and removed…",
+      "tests": [
+        "TC-09-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-04#5",
+      "text": "A muted or disabled local calendar gives no notifications, nor does …",
+      "tests": [
+        "TC-09-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-05#1",
+      "text": "The settings' \"Local calendars\" section has a \"Show local calendars\" c…",
+      "tests": [
+        "TC-09-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-05#2",
+      "text": "Unticking it takes \"Local\" out of the side panel and the calendar pi…",
+      "tests": [
+        "TC-09-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-05#3",
+      "text": "Ticking it again brings everything back as it was, events included;…",
+      "tests": [
+        "TC-09-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-05#4",
+      "text": "With a local calendar as the default calendar, while the local calen…",
+      "tests": [
+        "TC-09-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-09-05#5",
+      "text": "With no Google account connected the checkbox is ticked and unavaila…",
+      "tests": [
+        "TC-09-17"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "MOD-03-F01",
+      "text": "`US-03-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F02",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F03",
+      "text": "`US-03-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F04",
+      "text": "`US-03-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F05",
+      "text": "`US-03-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F06",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F07",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F08",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F09",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F10",
+      "text": "`US-03-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F11",
+      "text": "`US-03-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F12",
+      "text": "`US-03-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F13",
+      "text": "`US-03-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F14",
+      "text": "`US-03-01`, `US-03-02`, `US-03-03`, `US-03-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F15",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F16",
+      "text": "`US-03-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F17",
+      "text": "`US-03-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F18",
+      "text": "`US-03-09`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F19",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F20",
+      "text": "`US-03-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F21",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F22",
+      "text": "`US-03-01`, `US-03-02`, `US-03-03`, `US-03-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F23",
+      "text": "`US-03-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F24",
+      "text": "`US-03-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F25",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F26",
+      "text": "`US-03-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F27",
+      "text": "`US-03-10`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F28",
+      "text": "`US-03-10`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F29",
+      "text": "`US-03-10`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-F30",
+      "text": "`US-03-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U01",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U02",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U03",
+      "text": "`US-03-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U04",
+      "text": "`US-03-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U05",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U06",
+      "text": "`US-03-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U07",
+      "text": "`US-03-08`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U08",
+      "text": "`US-03-10`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-U09",
+      "text": "`US-03-11`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-03-NFR-01",
+      "text": "`US-03-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-03-01#1",
+      "text": "A week grid shows seven days with their hours; all-day and multi-da…",
+      "tests": [
+        "TC-03-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-01#2",
+      "text": "Today is highlighted, a line marks the current time, and the view o…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#3",
+      "text": "Overlapping events are placed side by side, each one readable.",
+      "tests": [
+        "TC-03-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-01#4",
+      "text": "The layout adapts to the window size and to 100%, 150% and 200% scr…",
+      "tests": [
+        "TC-03-03"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#5",
+      "text": "On a profile of 5 accounts, 50 calendars and about 20,000 events, s…",
+      "tests": [
+        "TC-03-04"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#6",
+      "text": "The feasibility check of the interface technology — smooth scrollin…",
+      "tests": [
+        "TC-03-04"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-02#1",
+      "text": "A day view and a 3-day view are each available as a view the user p…",
+      "tests": [
+        "TC-03-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-02#2",
+      "text": "Both show the all-day strip, the current-time line and overlapping…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-02#3",
+      "text": "Today is highlighted, and calendars shared as free/busy only appear…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-03#1",
+      "text": "The month view shows each day of the month with its events.",
+      "tests": [
+        "TC-03-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-03#2",
+      "text": "A day with more events than fit shows how many more there are; choo…",
+      "tests": [
+        "TC-03-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-03#3",
+      "text": "Today is highlighted, and calendars shared as free/busy only appear…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-03#4",
+      "text": "An all-day or multi-day event is one bar across the days it covers…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-04#1",
+      "text": "The agenda lists events from now on, grouped by day, without empty…",
+      "tests": [
+        "TC-03-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-04#2",
+      "text": "More events load as the user scrolls down.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-04#3",
+      "text": "With nothing ahead, the agenda says there are no upcoming events.",
+      "tests": [
+        "TC-03-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-04#4",
+      "text": "Today is highlighted, and calendars shared as free/busy only appear…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#1",
+      "text": "Switching between views keeps the selected date in view.",
+      "tests": [
+        "TC-03-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-05#2",
+      "text": "Next and previous move by the period of the current view; \"Today\" b…",
+      "tests": [
+        "TC-03-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-05#3",
+      "text": "The mini calendar marks the period on screen and jumps to any date…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#4",
+      "text": "After a restart, the app opens in the view used last, on today's date.",
+      "tests": [
+        "TC-03-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-05#5",
+      "text": "In the mini calendar, every day with an event shown in the views (n…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#6",
+      "text": "A button in the top bar, beside next and previous, opens \"Go to dat…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#1",
+      "text": "The side panel lists each connected account and, under it, its cale…",
+      "tests": [
+        "TC-03-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-06#2",
+      "text": "A quick toggle next to a calendar hides or shows its events; the ca…",
+      "tests": [
+        "TC-03-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-06#3",
+      "text": "The panel can be collapsed and expanded, and the app remembers whic…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#4",
+      "text": "When the window becomes too narrow, the panel collapses on its own.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#5",
+      "text": "A calendar the account cannot change (read-only, subscribed or free/…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "not tested yet (added by `DEC-89`)"
+    },
+    {
+      "criterion": "US-03-07#1",
+      "text": "In the settings, the user can disable a calendar and enable it again.",
+      "tests": [
+        "TC-03-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-07#2",
+      "text": "A disabled calendar does not appear in the side panel, in the calen…",
+      "tests": [
+        "TC-03-10"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-08#1",
+      "text": "`d`, `x` (3 days), `w`, `m` and `a` switch to the day, 3-day, week,…",
+      "tests": [
+        "TC-03-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-08#2",
+      "text": "`j` or `n` moves to the next period, `k` or `p` to the previous one…",
+      "tests": [
+        "TC-03-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-08#3",
+      "text": "`c` starts a new event.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-08#4",
+      "text": "`?` shows the list of shortcuts.",
+      "tests": [
+        "TC-03-11"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-08#5",
+      "text": "Without a mouse, the user moves between the side panel, the calenda…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-08#6",
+      "text": "A help button (\"?\" in a circle) in the top bar, beside the settings…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-09#1",
+      "text": "With a system locale whose week starts on Sunday, the day, 3-day an…",
+      "tests": [
+        "TC-03-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-09#2",
+      "text": "After the system's time zone changes, events are shown at their new…",
+      "tests": [
+        "TC-03-12"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-09#3",
+      "text": "Opening an event stored in another time zone shows its time in that…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-10#1",
+      "text": "With the pointer over 14:00 in the week view, Ctrl + wheel up makes…",
+      "tests": [
+        "TC-03-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-10#2",
+      "text": "Ctrl + plus and Ctrl + minus change the height in steps of 25 %, ke…",
+      "tests": [
+        "TC-03-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-10#3",
+      "text": "The height stops at 50 % and at 300 %; at 50 % the whole day from 0…",
+      "tests": [
+        "TC-03-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-10#4",
+      "text": "Only the height of the hours changes: the width of the days, the al…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-10#5",
+      "text": "Events, the current-time line, clicking to create, dragging and res…",
+      "tests": [
+        "TC-03-13"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-10#6",
+      "text": "The settings' \"Appearance\" section shows the height as a slider wit…",
+      "tests": [
+        "TC-03-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-10#7",
+      "text": "The height chosen in the week view is the same in the day and 3-day…",
+      "tests": [
+        "TC-03-14"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-11#1",
+      "text": "The settings' Accounts section lists the accounts and \"Local calendars…",
+      "tests": [
+        "TC-03-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-11#2",
+      "text": "Moving a group changes at once the side panel, the calendar picker o…",
+      "tests": [
+        "TC-03-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-11#3",
+      "text": "The order is kept after a restart.",
+      "tests": [
+        "TC-03-15"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-11#4",
+      "text": "Until anything is moved, the accounts are in the order they were con…",
+      "tests": [
+        "TC-03-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-03-11#5",
+      "text": "The order does not change where new events go when no default calend…",
+      "tests": [
+        "TC-03-16"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "MOD-02-F01",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F02",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F03",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F04",
+      "text": "`US-02-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F05",
+      "text": "`US-02-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F06",
+      "text": "`US-02-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F07",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F08",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F09",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F10",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F11",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F12",
+      "text": "`US-02-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F13",
+      "text": "`US-02-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F14",
+      "text": "`US-02-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F15",
+      "text": "`US-02-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F16",
+      "text": "`US-02-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F17",
+      "text": "`US-02-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F18",
+      "text": "`US-02-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F19",
+      "text": "`US-02-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F20",
+      "text": "`US-02-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F21",
+      "text": "`US-02-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F22",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-F23",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-U01",
+      "text": "`US-02-02` (events), `US-03-06` (calendars, `DEC-89`)",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-U02",
+      "text": "`US-02-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-U03",
+      "text": "`US-02-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-U04",
+      "text": "`US-02-07`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-NFR-01",
+      "text": "`US-02-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-02-NFR-02",
+      "text": "`US-02-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-02-01#1",
+      "text": "With two accounts connected, every calendar of both accounts is fet…",
+      "tests": [
+        "TC-02-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-01#2",
+      "text": "Events of all these calendars are shown together in the calendar, e…",
+      "tests": [
+        "TC-02-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-01#3",
+      "text": "The cache holds events from one year back to two years ahead of today.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-01#4",
+      "text": "An event stored in another time zone, an event across a daylight-sa…",
+      "tests": [
+        "TC-02-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-01#5",
+      "text": "The first full synchronization of 5 accounts, 50 calendars and abou…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-02#1",
+      "text": "A subscribed holiday calendar and a colleague's read-only calendar…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-02#2",
+      "text": "Their events are visibly marked as not editable.",
+      "tests": [
+        "TC-02-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-02#3",
+      "text": "A calendar shared as free/busy only shows \"busy\" blocks, without ti…",
+      "tests": [
+        "TC-02-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-03#1",
+      "text": "With the window open, a change made on the phone to an editable cal…",
+      "tests": [
+        "TC-02-04",
+        "TC-02-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-03#2",
+      "text": "A change to a read-only or subscribed calendar appears within about…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#3",
+      "text": "With the window hidden in the tray, a change to an editable calenda…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#4",
+      "text": "Activating the app window synchronizes at once; so does opening an…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#5",
+      "text": "Right after waking from sleep and when the network returns, the app…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#6",
+      "text": "\"Refresh\" synchronizes at once.",
+      "tests": [
+        "TC-02-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-03#7",
+      "text": "After a calendar's first full synchronization only changes are fetc…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#8",
+      "text": "Background synchronization of 5 accounts and 50 enabled calendars c…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#1",
+      "text": "A calendar created in Google appears at the next synchronization; a…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#2",
+      "text": "a calendar is unshared",
+      "tests": [
+        "TC-02-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-04#3",
+      "text": "A calendar disabled in the settings stays on the list of known cale…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#4",
+      "text": "Enabling a disabled calendar starts its first synchronization, and…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-05#1",
+      "text": "On start, the cached calendars are shown at once, before synchroniz…",
+      "tests": [
+        "TC-02-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-05#2",
+      "text": "no network",
+      "tests": [
+        "TC-02-07"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-05#3",
+      "text": "Online, a period outside the cache window is fetched when browsed a…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-05#4",
+      "text": "Offline, a period outside the cache window is shown empty with a no…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-06#1",
+      "text": "The indicator shows whether the app is synchronizing, up to date, o…",
+      "tests": [
+        "TC-02-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-06#2",
+      "text": "The user can keep browsing and working while synchronization runs.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-06#3",
+      "text": "An error affecting one calendar is shown on that calendar, and the…",
+      "tests": [
+        "TC-02-08"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-06#4",
+      "text": "After a lost connection, a rate limit or a transient error, synchro…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-07#1",
+      "text": "From a calendar's menu in the side panel, the user picks a colour,…",
+      "tests": [
+        "TC-02-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-07#2",
+      "text": "The calendar's colour is unchanged in Google Calendar in the browser.",
+      "tests": [
+        "TC-02-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-02-07#3",
+      "text": "\"Reset\" brings back the calendar's Google colour.",
+      "tests": [
+        "TC-02-09"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "NFR-03",
+      "text": "`TC-NN-05`",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F01",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F02",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F03",
+      "text": "`US-07-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F04",
+      "text": "`US-07-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F05",
+      "text": "`US-07-04`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F06",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F07",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F19",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F20",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F08",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F09",
+      "text": "`US-07-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F10",
+      "text": "`US-07-02`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F11",
+      "text": "`US-07-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F12",
+      "text": "`US-07-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F13",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F14",
+      "text": "`US-07-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F15",
+      "text": "`US-07-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F16",
+      "text": "`US-07-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F17",
+      "text": "`US-07-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-F18",
+      "text": "`US-07-06`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-U01",
+      "text": "`US-07-01`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-U02",
+      "text": "`US-07-05`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "MOD-07-U03",
+      "text": "`US-07-03`",
+      "tests": [],
+      "automation": "",
+      "status": "not-covered",
+      "note": ""
+    },
+    {
+      "criterion": "US-07-01#1",
+      "text": "An event with a 10-minute notification reminder produces one deskto…",
+      "tests": [
+        "TC-07-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-01#2",
+      "text": "The notification is not repeated after several synchronizations.",
+      "tests": [
+        "TC-07-01"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-01#3",
+      "text": "Clicking the notification opens the event in the app.",
+      "tests": [
+        "TC-07-07"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-01#4",
+      "text": "E-mail reminders produce no desktop notification.",
+      "tests": [
+        "TC-07-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-01#5",
+      "text": "Declined events and events of calendars disabled in the settings pr…",
+      "tests": [
+        "TC-07-02"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-01#6",
+      "text": "Reminders whose time passed while the app was not running are not s…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-01#7",
+      "text": "Reminders that fell while the computer slept are shown on waking if…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-02#1",
+      "text": "A notification offers Dismiss, Snooze 5 minutes and Snooze 10 minutes.",
+      "tests": [
+        "TC-07-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-02#2",
+      "text": "A snoozed notification appears again after the chosen time; nothing…",
+      "tests": [
+        "TC-07-03"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-02#3",
+      "text": "A notification for an event with Google Meet has a Join button that…",
+      "tests": [
+        "TC-07-07"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-03#1",
+      "text": "A switch in the settings turns all notifications off and on again.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-03#2",
+      "text": "A calendar muted from its menu in the side panel still shows its ev…",
+      "tests": [
+        "TC-07-04"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-03#3",
+      "text": "Turning notifications off or muting a calendar leaves the reminders…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-04#1",
+      "text": "A new event gets its calendar's default reminders from Google.",
+      "tests": [
+        "TC-07-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-04#2",
+      "text": "In the editor the user adds and removes reminders — as a notificati…",
+      "tests": [
+        "TC-07-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-04#3",
+      "text": "A reminder changed in the app shows in Google Calendar in the browser.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-04#4",
+      "text": "\"Use calendar defaults\" brings the event back to its calendar's def…",
+      "tests": [
+        "TC-07-05"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-05#1",
+      "text": "Closing the window hides the app to the system tray, and reminders…",
+      "tests": [
+        "TC-07-08"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#2",
+      "text": "Clicking the tray icon shows or hides the window.",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#3",
+      "text": "The tray menu opens the window and quits the app completely; after…",
+      "tests": [
+        "TC-07-08"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#4",
+      "text": "\"Start at login\" in the settings is off by default; turned on, the…",
+      "tests": [
+        "TC-07-08"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#5",
+      "text": "Launching the app while it runs brings the existing window forward…",
+      "tests": [
+        "TC-07-06"
+      ],
+      "automation": "auto",
+      "status": "not-covered",
+      "note": "—"
+    },
+    {
+      "criterion": "US-07-06#1",
+      "text": "Clicking a `webcal:` link in another application opens Google Calen…",
+      "tests": [
+        "TC-07-09"
+      ],
+      "automation": "manual-only",
+      "status": "manual",
+      "note": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-06#2",
+      "text": "After the user adds the calendar there, it appears in the app at th…",
+      "tests": [],
+      "automation": "—",
+      "status": "not-covered",
+      "note": "smoke depth — not tested yet (`DEC-65`)"
+    }
+  ],
+  "not_covered": [
+    {
+      "criterion": "MOD-04-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-U06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-04-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-01#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-02#2",
+      "kind": "no-test",
+      "reason": "no test case (`DEC-65`); unit test `an_event_block_shows_only_its_title_and_time`"
+    },
+    {
+      "criterion": "US-04-02#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-04-02#4",
+      "kind": "no-test",
+      "reason": "no test case (`DEC-65`); unit tests `interface_text_reaches_4_5_to_1_on_its_backgrounds_in_both_themes` and the views' contrast tests; also looked over by the product owner"
+    },
+    {
+      "criterion": "US-04-03#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-04-03#2",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-04-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-10-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F23",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F24",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F25",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F26",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-F27",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-U08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-01#5",
+      "kind": "manual-only",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#8",
+      "kind": "manual-only",
+      "reason": "the fake model proves the set and the app; the real model only by hand (`TC-10-19`)"
+    },
+    {
+      "criterion": "US-10-02#9",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-02#11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-03#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#4",
+      "kind": "manual-only",
+      "reason": "as `US-10-02#8`"
+    },
+    {
+      "criterion": "US-10-04#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-04#8",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-05#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-05#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-05#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-10-05#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-10-NFR-04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-01-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-01-01#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#2",
+      "kind": "no-test",
+      "reason": "withdrawn — `DEC-163`"
+    },
+    {
+      "criterion": "US-01-01#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-01#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#2",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-02#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-01-03#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-03#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-01-04#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-01-04#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-01-04#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-05-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F23",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F24",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F25",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F26",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F27",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F28",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F29",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F30",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F31",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F32",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F33",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F34",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-F35",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-05-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-01#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-01#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-01#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-02#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-02#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#7",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-02#8",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-03#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-03#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-04#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-04#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-05#2",
+      "kind": "no-test",
+      "reason": "no test case (smoke depth, `DEC-65`); proven by `a_change_google_refuses_is_told_clearly_and_the_event_returns_to_how_it_was`"
+    },
+    {
+      "criterion": "US-05-06#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-06#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-06#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-07#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-07#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-08#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-08#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-08#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-09#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-09#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-10#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-10#2",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-05-11#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-05-11#8",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "MOD-06-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F23",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F24",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F25",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F26",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-F27",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-06-U06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-01#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-01#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-01#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-01#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-02#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-03#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-04#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-04#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-05#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-05#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-05#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-06#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-06#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-07#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-07#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-07#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-08#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-08#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-08#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-06-09#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-06-09#8",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-U06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-09-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#8",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-01#9",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-02#8",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-03#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-04#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-04#2",
+      "kind": "manual-only",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-04#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-04#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-04#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-05#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-05#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-05#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-09-05#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F23",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F24",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F25",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F26",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F27",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F28",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F29",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-F30",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-U09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-03-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-01#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-01#4",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#5",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-01#6",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-02#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-02#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-03#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-03#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-04#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-04#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-04#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-04#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-05#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-05#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-05#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-05#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-06#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-06#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-06#5",
+      "kind": "no-test",
+      "reason": "not tested yet (added by `DEC-89`)"
+    },
+    {
+      "criterion": "US-03-07#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-07#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-08#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-08#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-08#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-08#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-08#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-08#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-09#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-09#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-09#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-10#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-10#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-10#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-10#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-03-10#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-10#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-10#7",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-11#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-11#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-11#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-11#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-03-11#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F21",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F22",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-F23",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-U04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-NFR-01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-02-NFR-02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-01#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-01#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-01#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-02#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-02#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-03#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-03#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#5",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#6",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-03#7",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-03#8",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-04#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-04#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-05#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-05#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-05#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-05#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-06#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-06#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-06#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-06#4",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-02-07#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-07#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-02-07#3",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "NFR-03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F04",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F05",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F06",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F07",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F19",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F20",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F08",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F09",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F10",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F11",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F12",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F13",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F14",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F15",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F16",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F17",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-F18",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-U01",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-U02",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "MOD-07-U03",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-01#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-01#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-01#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-01#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-01#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-01#6",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-01#7",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-02#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-02#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-02#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-03#1",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-03#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-03#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-04#1",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-04#2",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-04#3",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-04#4",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-05#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#3",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#4",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-05#5",
+      "kind": "no-test",
+      "reason": ""
+    },
+    {
+      "criterion": "US-07-06#1",
+      "kind": "manual-only",
+      "reason": "manual — checked by the product owner (`DEC-65`)"
+    },
+    {
+      "criterion": "US-07-06#2",
+      "kind": "no-test",
+      "reason": "smoke depth — not tested yet (`DEC-65`)"
+    }
+  ],
+  "notes": []
+}

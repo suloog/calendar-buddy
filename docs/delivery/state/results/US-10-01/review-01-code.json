@@ -1,0 +1,116 @@
+{
+  "story": "US-10-01",
+  "attempt": 1,
+  "round": 1,
+  "sha": "94a466b891b9ef51bc941481cb7f0ffccfcfb698",
+  "reviewer": "code",
+  "ts": "2026-10-27T17:29:23Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-01",
+    "impact": "shortcuts::command/listed changed signature and SHORTCUTS gained `q` (DescribeEvent); the settings file gains descriptions/ollama_address/ollama_model; CalendarApp, the side panel, the settings dialog and the shortcut handler now depend on settings.ollama.on; calendar-core now links ureq+url and exposes a `fake` feature.\nThe new network path is the Ollama probe in ollama.rs, so a proxy from the environment would break the NFR-06 / MOD-10-NFR-02 promise, and old settings files with hand-edited values are not validated on load.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": true,
+        "tags": [
+          "security"
+        ],
+        "text": "crates/core/src/ollama.rs:101 — HTTP_PROXY/ALL_PROXY set (ureq 3.5 default try_from_env; localhost not exempt unless NO_PROXY): the default-address probe goes to the proxy (CONNECT seen in a probe), so traffic leaves the computer, breaking criterion #4 / MOD-10-NFR-02 → build the agent with .proxy(None) (and .max_redirects(0)); add a test with HTTP_PROXY pointing at a listener that must receive nothing"
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description.rs:(test ollama_is_asked_only_at_its_address_and_google_nothing) — name promises \"Google nothing\" but only checks the fake Ollama's own record plus a trivial is_local assert; stays green with B1 → rename or record all outbound connections"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:101 — ureq follows up to 10 redirects, so a 302 from the address contacts another host → .max_redirects(0)"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/settings.rs:87 — hand-edited empty/invalid ollama_address or empty ollama_model is loaded verbatim (box says \"available at \", spurious leaves-computer warning) → validate on load with ollama::address / non-empty, else default"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:138 — a 200 /api/tags body that is not JSON reports \"model not installed\" instead of \"not available\" → map parse failure to NotRunning"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/ollama.rs:56 — address() accepts userinfo (http://user:pw@host); creds stored in plain settings and shown in the unavailable message → reject or hide them"
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:(ollama_changed) — availability reset to Unknown makes the box look usable until the next answer after each settings change (DEC-217 trade-off)"
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:(go_to_box) — drops every Text event of the frame, not just `q` → remove only the q event"
+      },
+      {
+        "id": "N8",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/settings.rs — no unit test for the three new settings keys (only indirect via tc_10_01) → add a round-trip test"
+      },
+      {
+        "id": "N9",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "scripts/cargo_report.py — delivery-loop tooling, not traceable to US-10-01, untested"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "unmet",
+        "note": "B1: the proxy environment makes default-address probes leave the computer; the substitute test (N1) does not prove it. TC-10-04 itself is external — BLOCKED (DEC-215)"
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "README content present; the read-through is external — MANUAL TC-10-05"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Review of US-10-01 at 94a466b. I found one blocking defect: the Ollama check goes through an HTTP proxy when the proxy environment variables are set. The gates are green at that commit: fmt, clippy `-D warnings`, and `cargo test --workspace` (193 + 445 + 91 passed). I checked the `ureq` behaviour with a throwaway probe in /tmp, which I have deleted. The working tree is back on `main`.\n\nBLOCKING\n\nB1 [security] crates/core/src/ollama.rs:101-104 — `check()` builds its agent with `Agent::config_builder()` and never disables proxying.\n- ureq 3.5 defaults to `proxy: Proxy::try_from_env()`, which reads `ALL_PROXY`, `HTTPS_PROXY` and `HTTP_PROXY`.\n- `localhost` is exempt only if `NO_PROXY` lists it.\n- Probe: with `HTTP_PROXY=http://127.0.0.1:<port>` set, a `get(\"http://localhost:11434/api/version\")` made the probe's fake proxy see a `CONNECT` request.\n- Scenario: a user on a corporate or desktop proxy starts the app with the default address. The Ollama probe goes to the proxy, which may be a remote machine, so the app sends something to a host that is neither Google nor this computer.\n- This breaks criterion #4 (`MOD-10-NFR-02`, `NFR-06`). It also makes Ollama look \"not available\" behind a proxy that can't reach the user's localhost.\n- Fix: add `.proxy(None)` to the config builder. Optionally add `.max_redirects(0)` as well (see N2). Add a test that sets `HTTP_PROXY` to a listener and asserts that listener receives nothing while the fake Ollama answers.\n\nNON-BLOCKING\n\nN1 crates/app/src/description.rs (test `ollama_is_asked_only_at_its_address_and_google_nothing`) — the name promises \"Google nothing\", but it never looks at Google or any other destination.\n- It only checks that the fake Ollama's own record holds `GET /api/version` and `GET /api/tags`, plus a trivial `is_local(address)` assertion.\n- It would stay green with the B1 defect, so it doesn't prove criterion #4.\n- Fix: rename it, or have it record all outbound connections (for example a proxy-env listener, as in B1).\n\nN2 crates/core/src/ollama.rs:101 — `ureq` follows up to 10 redirects by default.\n- A service at the Ollama address that answers `/api/version` with a 302 to another host makes the app contact that host, which the settings warning never mentioned.\n- Fix: `.max_redirects(0)`.\n\nN3 crates/core/src/settings.rs:87-88 — `ollama_address` and `ollama_model` are loaded verbatim.\n- A hand-edited `ollama_address = ` (empty) or `ollama_address = foo` gives an address that `ollama::address()` would have refused.\n- The box then says \"Ollama is not available at \" and the settings warn that the address \"leaves this computer\". The same happens with an empty `ollama_model =`.\n- Fix: on load, validate with `ollama::address` and `trim().is_empty()`, and fall back to the defaults.\n\nN4 crates/core/src/ollama.rs:138-143 — `has_model` returns false when `/api/tags` answers 200 with a body that isn't JSON.\n- The box then says \"The model … is not installed\", which is wrong; something other than Ollama is answering.\n- Fix: map a parse failure to `NotRunning`.\n\nN5 crates/core/src/ollama.rs:56-59 — `address()` accepts userinfo (`http://user:pw@host`).\n- The credentials are stored in plain text in the settings file and printed in \"Ollama is not available at …\".\n- Fix: reject URLs with a username or password, or hide them in the message.\n\nN6 crates/app/src/main.rs (`ollama_changed`, `description.availability = Unknown`) — after any settings change the box reads as available until the next answer.\n- Typing into it in that window loses nothing, but it shows as usable even when the new address is down.\n- This is the documented DEC-217 trade-off, so it is only a nit.\n\nN7 crates/app/src/main.rs, `go_to_box` — it drops every `Event::Text` of the frame, not only the `q`.\n- Characters typed in the same frame as `q` are lost. This is a very small window.\n- Fix: remove only the first `q` event.\n\nN8 crates/core/src/settings.rs — there is no unit test for the new `descriptions`, `ollama_address` and `ollama_model` keys.\n- The round trip is only covered indirectly by `tc_10_01`.\n- Fix: add a short load/serialize test next to the existing settings tests.\n\nN9 scripts/cargo_report.py — it doesn't trace to US-10-01. It is delivery-loop infrastructure added inside a story diff, and it is untested. It's harmless but outside the story.\n\nN10 docs — `DECISIONS.md` DEC-216 says \"no new crate enters the lock file\". That holds: `Cargo.lock` only adds the `ureq` and `url` dependency edges on `calendar-core`. The decision does not mention the proxy behaviour (B1).\n\nCRITERIA\nScenario results are listed after the numbered criteria.\n\n#1 met — settings section, defaults and persistence (`tc_10_01`; `Settings` save/load).\n#2 met — box, `q` and the shortcut-list entry are gone when off and back when on (`tc_10_02`, plus the unit test in `shortcuts.rs`).\n#3 met — warning for a non-local address, none for `localhost`, `127.0.0.1` and `[::1]` (`tc_10_03`; `is_local` parses the URL, and I found no parser mismatch between `url` and `http::Uri` for backslash or `@` tricks).\n#4 unmet — default-address traffic can leave this computer via a proxy from the environment (B1). TC-10-04 BLOCKED (DEC-215) is external evidence, not a finding. The substitute test (N1) doesn't prove the criterion.\n#5 met on content — the README section covers the Ollama install, `ollama pull gemma4:e4b`, links to ollama.com and the library page, and says the app works without them. The read-through itself is external — MANUAL TC-10-05.\n\nScenarios and edge cases\n- Ollama not running: met (`tc_10_06` case A).\n- Model missing: met (`tc_10_06` case B).\n- Ollama starts later: met (`tc_10_07` step 3).\n- Ollama stops while the box is open: met via Enter or focus (`tc_10_07` steps 1-3). Step 4 is external — BLOCKED, DEC-215.\n- Invalid address keeps the previous one: met (unit test and the `form.wrong_address` warning). The UI path is only partly covered by `tc_10_03`.\n\nIMPACT: `shortcuts::command(key, descriptions)` and `shortcuts::listed(descriptions)` changed signature. `SHORTCUTS` grew to 14 entries with `q` bound to a new `Command::DescribeEvent`. The `Settings` file gains three keys, `descriptions`, `ollama_address` and `ollama_model`. `CalendarApp` gains five fields, and the side panel, the settings dialog and the shortcut handler all depend on `settings.ollama.on`. `calendar-core` now links `ureq` and `url` and exposes a `fake` feature used by the app's dev-dependencies. The main risk elsewhere is any code that assumes `q` is not a shortcut or reads the settings file strictly. The new network path is the Ollama probe in `ollama.rs`, which is why B1 matters for `NFR-06`.\n\n```\nREVIEW: findings\nSTORY: US-10-01\nIMPACT: shortcuts::command/listed changed signature and SHORTCUTS gained `q` (DescribeEvent); the settings file gains descriptions/ollama_address/ollama_model; CalendarApp, the side panel, the settings dialog and the shortcut handler now depend on settings.ollama.on; calendar-core now links ureq+url and exposes a `fake` feature.\nThe new network path is the Ollama probe in ollama.rs, so a proxy from the environment would break the NFR-06 / MOD-10-NFR-02 promise, and old settings files with hand-edited values are not validated on load.\nFINDINGS:\n  B1 [security] crates/core/src/ollama.rs:101 — HTTP_PROXY/ALL_PROXY set (ureq 3.5 default try_from_env; localhost not exempt unless NO_PROXY): the default-address probe goes to the proxy (CONNECT seen in a probe), so traffic leaves the computer, breaking criterion #4 / MOD-10-NFR-02 → build the agent with .proxy(None) (and .max_redirects(0)); add a test with HTTP_PROXY pointing at a listener that must receive nothing\n  N1 crates/app/src/description.rs:(test ollama_is_asked_only_at_its_address_and_google_nothing) — name promises \"Google nothing\" but only checks the fake Ollama's own record plus a trivial is_local assert; stays green with B1 → rename or record all outbound connections\n  N2 crates/core/src/ollama.rs:101 — ureq follows up to 10 redirects, so a 302 from the address contacts another host → .max_redirects(0)\n  N3 crates/core/src/settings.rs:87 — hand-edited empty/invalid ollama_address or empty ollama_model is loaded verbatim (box says \"available at \", spurious leaves-computer warning) → validate on load with ollama::address / non-empty, else default\n  N4 crates/core/src/ollama.rs:138 — a 200 /api/tags body that is not JSON reports \"model not installed\" instead of \"not available\" → map parse failure to NotRunning\n  N5 crates/core/src/ollama.rs:56 — address() accepts userinfo (http://user:pw@host); creds stored in plain settings and shown in the unavailable message → reject or hide them\n  N6 crates/app/src/main.rs:(ollama_changed) — availability reset to Unknown makes the box look usable until the next answer after each settings change (DEC-217 trade-off)\n  N7 crates/app/src/main.rs:(go_to_box) — drops every Text event of the frame, not just `q` → remove only the q event\n  N8 crates/core/src/settings.rs — no unit test for the three new settings keys (only indirect via tc_10_01) → add a round-trip test\n  N9 scripts/cargo_report.py — delivery-loop tooling, not traceable to US-10-01, untested\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 unmet — B1: the proxy environment makes default-address probes leave the computer; the substitute test (N1) does not prove it. TC-10-04 itself is external — BLOCKED (DEC-215)\n  #5 met — README content present; the read-through is external — MANUAL TC-10-05\n```\n"
+}

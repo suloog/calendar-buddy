@@ -1,0 +1,85 @@
+{
+  "n": 2,
+  "attempt": 1,
+  "ts": "2026-10-28T03:18:23Z",
+  "story": "US-10-04",
+  "mode": "fix",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-04",
+    "branch": "feature/US-10-04",
+    "commits": [
+      "5d08161 fix(descriptions): read an adding answer of \"same\" as today [US-10-04]",
+      "0202f3f fix(descriptions): move a described change in the user's time zone [US-10-04]",
+      "b58f11f fix(descriptions): change only the event the user still sees [US-10-04]"
+    ],
+    "decisions": [],
+    "evidence": [
+      "#1 adding and changing told apart; a change never creates an event — TC-10-27 tc_10_27_the_named_event_moves_to_friday_at_the_same_time_and_no_event_is_added, steps 1-2 pass; TC-10-18 pass",
+      "#2 names match only events from today on; an open event changes whatever its date — TC-10-28 tc_10_28_a_past_event_is_not_found_by_name_but_is_changed_when_its_details_are_open, steps 1-2 pass; core names_fit_events_from_today_on_in_any_grammatical_case_in_the_order_they_start pass; new an_event_of_a_hidden_calendar_is_not_found_by_name and a_change_sent_after_the_details_closed_is_not_of_the_event_they_showed pass",
+      "#3 saving follows the usual rules; a read-only or guest-locked event opens locked — TC-10-30 steps 1-4 pass; TC-10-31 steps 1-3 pass",
+      "#4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (44 sentences, recorded answers now include the live \"same\" adds); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on b58f11f: date 98 %, every field 93 %)",
+      "#5 scenario: the open \"Sprint planning\", \"przesuń na 15\" gives 15:00-16:00 and nothing is saved before Save — TC-10-26 steps 1-3 pass; core the_new_day_and_hour_are_the_users_for_an_event_of_another_zone pass (B2)",
+      "#6 scenario: a named event moves to Friday at the same time — TC-10-27 steps 1-2 pass",
+      "#7 scenario: three standups listed with title, day, time and calendar; arrows and Enter pick, Esc goes back — TC-10-29 steps 1-3 pass",
+      "#8 scenario: nothing matches, so the box says so and keeps the text — TC-10-28 step 1 pass"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_041635",
+      "pass": 7,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-19"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "the story's implementation in 646e392 (round 0); this round only fixes findings",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok (223+469+91 passed)"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "findings": [
+      "B1 fixed 5d08161 (an add of \"same\" reads as today, or as the day its value names",
+      "the recorded \"Trening wieczorem\" answer is the live \"same\" one, and the new case \"Kawa z Bartkiem o 15\" is added",
+      "TC-10-11 now uses the \"same\" answer)",
+      "B2 fixed 0202f3f (Change::apply takes the user's zone and builds the new start in it, then converts it to editor.zone",
+      "tested with a New York event)",
+      "N1(code) fixed b58f11f (at Send, the selected event is dropped unless its details are still the open dialog",
+      "tested)",
+      "N2(code) fixed b58f11f in part (the picked event is re-read with same_event, and one gone since gives \"no such event\"",
+      "the list is not cleared when a dialog opens, because that would hide a list just made while other details are open)",
+      "N3(code) refused: keys are already gated on no text field having focus, and gating on the list's own focus needs a focus model it does not have yet, so it is not cheap",
+      "N4(code+spec) fixed b58f11f (matching runs over side_panel::shown only",
+      "tested with a hidden calendar)",
+      "N5(code) refused: two-way word matching is DEC-229 as decided, and narrowing it is a design change, not a cheap fix",
+      "N6(code)/N4(spec) fixed b58f11f in part (a deleted picked event no longer opens an editor)",
+      "locked-with-details-open refused: the details already open say why (DEC-230)",
+      "N1(spec) refused: an add replacing open details is DEC-231 as decided and was reported in round 0, and holding back the answer means reworking the reader",
+      "N3(spec) refused: capping the list is a UX choice the story does not set",
+      "N5(spec) fixed 5d08161 (a change of \"same\" with a date value such as \"11-14\" now takes that date",
+      "tested)",
+      "N6(spec) fixed 5d08161 (the expected word is \"anią\")",
+      "N7(spec) refused: consuming Esc changes the order in which other Esc handlers see it, and it could not be verified cheaply",
+      "N7/N8 doc comment fixed 0202f3f (reflowed)"
+    ],
+    "notes": "The live gemma4:e4b run of TC-10-19 on b58f11f gave date 98 %, every field 93 %; \"Trening wieczorem\" and \"Kawa z Bartkiem o 15\" now both read correctly.\nEach new test (other-zone move, hidden calendar, closed details) was checked to fail with its fix taken out.\nRefused non-blocking: N3, N5 (code), N1, N3, N7 (spec), and the locked-with-details-open half of N6; the reasons are in FINDINGS.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (44 sentences, recorded answers now include the live \"same\" adds); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on b58f11f: date 98 %, every field 93 %)"
+      ],
+      "blocked": []
+    },
+    "critical_decisions": []
+  },
+  "raw": "I fixed both blocking findings in fix round 1 for US-10-04 and committed them on `feature/US-10-04`; the new head is b58f11f. Nothing was pushed (this is a local run), and the main checkout is back on `main`.\n\n- **B1:** live gemma4:e4b still answers \"Trening wieczorem\" and \"Kawa z Bartkiem o 15\" with an add of kind \"same\" (I reproduced it). Such an answer is now read as today, or as the day its value names.\n- **B2:** for an event stored in another zone, a described change now sets the day and hour in the user's own zone. The editor still shows the result in the event's zone, as before.\n- **Also fixed:** five of the cheap non-blocking findings (code N1, N2 in part, N4, and spec N5, N6), plus the doc-comment reflow.\n- **Run on the final head:** the story's acceptance suite ran on b58f11f with a clean tree: 7 pass, 0 fail, 1 manual (TC-10-19).\n- **Live model:** I also ran TC-10-19 by hand against gemma4:e4b: date right 98 %, every field right 93 %, and both B1 sentences now read correctly.\n\n```\nRESULT: ready\nSTORY: US-10-04\nBRANCH: feature/US-10-04\nCOMMITS: 5d08161 fix(descriptions): read an adding answer of \"same\" as today [US-10-04]; 0202f3f fix(descriptions): move a described change in the user's time zone [US-10-04]; b58f11f fix(descriptions): change only the event the user still sees [US-10-04]\nDECISIONS: none\nEVIDENCE:\n  #1 adding and changing told apart; a change never creates an event — TC-10-27 tc_10_27_the_named_event_moves_to_friday_at_the_same_time_and_no_event_is_added, steps 1-2 pass; TC-10-18 pass\n  #2 names match only events from today on; an open event changes whatever its date — TC-10-28 tc_10_28_a_past_event_is_not_found_by_name_but_is_changed_when_its_details_are_open, steps 1-2 pass; core names_fit_events_from_today_on_in_any_grammatical_case_in_the_order_they_start pass; new an_event_of_a_hidden_calendar_is_not_found_by_name and a_change_sent_after_the_details_closed_is_not_of_the_event_they_showed pass\n  #3 saving follows the usual rules; a read-only or guest-locked event opens locked — TC-10-30 steps 1-4 pass; TC-10-31 steps 1-3 pass\n  #4 test set gains at least 10 change sentences in pl and en and passes 95 % / 80 % — TC-10-18 tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model, steps 1-2 pass (44 sentences, recorded answers now include the live \"same\" adds); MANUAL: TC-10-19 is manual-only (run here by hand against gemma4:e4b on b58f11f: date 98 %, every field 93 %)\n  #5 scenario: the open \"Sprint planning\", \"przesuń na 15\" gives 15:00-16:00 and nothing is saved before Save — TC-10-26 steps 1-3 pass; core the_new_day_and_hour_are_the_users_for_an_event_of_another_zone pass (B2)\n  #6 scenario: a named event moves to Friday at the same time — TC-10-27 steps 1-2 pass\n  #7 scenario: three standups listed with title, day, time and calendar; arrows and Enter pick, Esc goes back — TC-10-29 steps 1-3 pass\n  #8 scenario: nothing matches, so the box says so and keeps the text — TC-10-28 step 1 pass\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-28_041635 pass=7 fail=0 blocked=0 manual=1 manual_tests=TC-10-19\nDERIVED_TESTS: none\nPREEXISTING: the story's implementation in 646e392 (round 0); this round only fixes findings\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok (223+469+91 passed)\nENV_KEYS: none\nMIGRATION: no\nFINDINGS: B1 fixed 5d08161 (an add of \"same\" reads as today, or as the day its value names; the recorded \"Trening wieczorem\" answer is the live \"same\" one, and the new case \"Kawa z Bartkiem o 15\" is added; TC-10-11 now uses the \"same\" answer); B2 fixed 0202f3f (Change::apply takes the user's zone and builds the new start in it, then converts it to editor.zone; tested with a New York event); N1(code) fixed b58f11f (at Send, the selected event is dropped unless its details are still the open dialog; tested); N2(code) fixed b58f11f in part (the picked event is re-read with same_event, and one gone since gives \"no such event\"; the list is not cleared when a dialog opens, because that would hide a list just made while other details are open); N3(code) refused: keys are already gated on no text field having focus, and gating on the list's own focus needs a focus model it does not have yet, so it is not cheap; N4(code+spec) fixed b58f11f (matching runs over side_panel::shown only; tested with a hidden calendar); N5(code) refused: two-way word matching is DEC-229 as decided, and narrowing it is a design change, not a cheap fix; N6(code)/N4(spec) fixed b58f11f in part (a deleted picked event no longer opens an editor); locked-with-details-open refused: the details already open say why (DEC-230); N1(spec) refused: an add replacing open details is DEC-231 as decided and was reported in round 0, and holding back the answer means reworking the reader; N3(spec) refused: capping the list is a UX choice the story does not set; N5(spec) fixed 5d08161 (a change of \"same\" with a date value such as \"11-14\" now takes that date; tested); N6(spec) fixed 5d08161 (the expected word is \"anią\"); N7(spec) refused: consuming Esc changes the order in which other Esc handlers see it, and it could not be verified cheaply; N7/N8 doc comment fixed 0202f3f (reflowed)\nNOTES: The live gemma4:e4b run of TC-10-19 on b58f11f gave date 98 %, every field 93 %; \"Trening wieczorem\" and \"Kawa z Bartkiem o 15\" now both read correctly.\nEach new test (other-zone move, hidden calendar, closed details) was checked to fail with its fix taken out.\nRefused non-blocking: N3, N5 (code), N1, N3, N7 (spec), and the locked-with-details-open half of N6; the reasons are in FINDINGS.\n```\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

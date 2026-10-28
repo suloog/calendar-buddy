@@ -1,0 +1,68 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 2,
+  "sha": "76ee40b4168022b7d521562e85a0b57169ef1f93",
+  "reviewer": "code",
+  "ts": "2026-10-28T02:20:35Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-03",
+    "impact": "Editor::pick is used only for names left unresolved from a description, so guest-field suggestions and add_guest behave as before; Editor::meet_described defaults to false in from_quick/from_event. Synchronization::look_up has one caller (main.rs description flow), so the &mut self signature change breaks nothing else. Fmt, clippy and the full workspace tests are green on 76ee40b.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/sync.rs:637 — the `self.named = None` clearing in look_up (N7) has no test, so reverting it fails nothing → add a sync test: look_up, leave the result untaken, look_up again, assert take_named() is None until the second result arrives"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:607 — with \"bez Meeta\" and no names in the description, a guest typed later in the guest field still turns Meet on (add_guest, outside pick); arguably intended as a user action per MOD-06-F17, outside the criteria → no change required, noted only"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Round 2 review of US-10-03. The B1 fix is correct and complete, and N3 and N7 are addressed. No blocking issues. fmt, clippy and cargo test --workspace green on 76ee40b (214 + 464 + 91).\n\n```\nREVIEW: findings\nSTORY: US-10-03\nIMPACT: Editor::pick is used only for names left unresolved from a description, so guest-field suggestions and add_guest behave as before; Editor::meet_described defaults to false in from_quick/from_event. Synchronization::look_up has one caller (main.rs description flow), so the &mut self signature change breaks nothing else. Fmt, clippy and the full workspace tests are green on 76ee40b.\nFINDINGS:\n  N1 crates/app/src/sync.rs:637 — the `self.named = None` clearing in look_up (N7) has no test, so reverting it fails nothing → add a sync test: look_up, leave the result untaken, look_up again, assert take_named() is None until the second result arrives\n  N2 crates/core/src/editor.rs:607 — with \"bez Meeta\" and no names in the description, a guest typed later in the guest field still turns Meet on (add_guest, outside pick); arguably intended as a user action per MOD-06-F17, outside the criteria → no change required, noted only\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n```\n"
+}

@@ -1,0 +1,93 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 1,
+  "sha": "98f0db88dded8880bafc3c17c53b6bfe0da38fe2",
+  "reviewer": "code",
+  "ts": "2026-10-28T04:02:46Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "The description path in main.rs (`read`, `times`) and the \"New event\" window and full editor (`QuickEntry`, `Editor::from_quick`, `follow_start`, `timing`) use the changed code, and `Editor.start` can now be `None` for a new event. The prompt and schema change (`calendar` field, `none` kind) alters live-model behaviour for US-10-02 to US-10-04. Repeat and Custom stay inert while the start is empty.",
+    "findings": [
+      {
+        "id": "B1",
+        "blocking": true,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:524 (`follow_start`) and :776 (`timing`) — a description with neither day nor time, opened in the full editor: type a day, tick All day → \"The end date can't be read.\" and Save stays unavailable, because `start` stays `None` and the end fields stay blank (reproduced). → Resolve the start (time midnight) in `follow_start` when all-day, or let `timing()` take an empty end date as the start date in all-day mode; add a test for it."
+      },
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:725 — empty End fields show no hint while the start is asked for → give them hints, or leave them until filled."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/texts.rs:466 — the new hint and empty-field constants are wedged between the *_UNREADABLE constants, with only `DAY_HINT` documented → group them."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs (`parse`) — the part-of-day-alone exception covers only a real-model quirk and has only a unit test; it is documented in DEC-232 → leave or simplify."
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:526 — `self.length.take()` runs on every call and only matters once; correct but subtle → comment or restructure."
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_asked_tests.rs — no app-level test for the offline named Google calendar or for duplicate names; the core test covers duplicates, disabled, hidden and read-only → optional."
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "docs/specs/DECISIONS.md DEC-232 — the \"96 % / 90 %\" live-model score cannot be verified from the diff → none needed."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "a given day or time is filled in as in US-10-02, only a missing one is asked for; TC-10-32 and TC-10-33"
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "name match ignoring case in side-panel order; core test plus TC-10-34"
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "no time: opens on Sat 31 Oct, time empty with the cursor in it, Save unavailable until a time or all-day; TC-10-32 passes"
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "no date: day empty with the cursor in it, Save unavailable until a day is chosen; TC-10-33 passes. The neither-day-nor-time all-day case is unmet, see B1."
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "named calendar chosen, or the default with the note; TC-10-34 and TC-10-35 pass; the light and dark theme look of the asked-for fields and the calendar note is external (MANUAL, story technical note, left for the owner)"
+      }
+    ],
+    "stray": []
+  },
+  "raw": "REVIEW: findings\nSTORY: US-10-05\nIMPACT: The description path in main.rs (`read`, `times`) and the \"New event\" window and full editor (`QuickEntry`, `Editor::from_quick`, `follow_start`, `timing`) use the changed code, and `Editor.start` can now be `None` for a new event. The prompt and schema change (`calendar` field, `none` kind) alters live-model behaviour for US-10-02 to US-10-04. Repeat and Custom stay inert while the start is empty.\nFINDINGS:\n  B1 crates/core/src/editor.rs:524 (`follow_start`) and :776 (`timing`) — a description with neither day nor time, opened in the full editor: type a day, tick All day → \"The end date can't be read.\" and Save stays unavailable, because `start` stays `None` and the end fields stay blank (reproduced). → Resolve the start (time midnight) in `follow_start` when all-day, or let `timing()` take an empty end date as the start date in all-day mode; add a test for it.\n  N1 crates/app/src/editor.rs:725 — empty End fields show no hint while the start is asked for → give them hints, or leave them until filled.\n  N2 crates/core/src/texts.rs:466 — the new hint and empty-field constants are wedged between the *_UNREADABLE constants, with only `DAY_HINT` documented → group them.\n  N3 crates/core/src/described.rs (`parse`) — the part-of-day-alone exception covers only a real-model quirk and has only a unit test; it is documented in DEC-232 → leave or simplify.\n  N4 crates/core/src/editor.rs:526 — `self.length.take()` runs on every call and only matters once; correct but subtle → comment or restructure.\n  N5 crates/app/src/description_asked_tests.rs — no app-level test for the offline named Google calendar or for duplicate names; the core test covers duplicates, disabled, hidden and read-only → optional.\n  N6 docs/specs/DECISIONS.md DEC-232 — the \"96 % / 90 %\" live-model score cannot be verified from the diff → none needed.\nCRITERIA:\n  #1 met — a given day or time is filled in as in US-10-02, only a missing one is asked for; TC-10-32 and TC-10-33\n  #2 met — name match ignoring case in side-panel order; core test plus TC-10-34\n  #3 met — no time: opens on Sat 31 Oct, time empty with the cursor in it, Save unavailable until a time or all-day; TC-10-32 passes\n  #4 met — no date: day empty with the cursor in it, Save unavailable until a day is chosen; TC-10-33 passes. The neither-day-nor-time all-day case is unmet, see B1.\n  #5 met — named calendar chosen, or the default with the note; TC-10-34 and TC-10-35 pass; the light and dark theme look of the asked-for fields and the calendar note is external (MANUAL, story technical note, left for the owner)\n"
+}

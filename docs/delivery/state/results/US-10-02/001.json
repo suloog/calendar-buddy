@@ -1,0 +1,73 @@
+{
+  "n": 1,
+  "attempt": 1,
+  "ts": "2026-10-27T19:46:55Z",
+  "story": "US-10-02",
+  "mode": "implement",
+  "parsed": {
+    "result": "ready",
+    "story": "US-10-02",
+    "branch": "feature/US-10-02",
+    "commits": [
+      "bbd62ab feat(descriptions): add an event from a description [US-10-02]"
+    ],
+    "decisions": [
+      "DEC-218 routine The model's answer says whether it is an event, and leaves the length empty when none is given",
+      "DEC-219 routine Until US-10-03 and US-10-05, guests, Meet and a missing time are read but not acted on",
+      "DEC-220 routine While the model reads, the keyboard goes back to the views",
+      "q returns to the box, Esc there cancels",
+      "DEC-221 routine The test set holds the 30 adding sentences",
+      "the changing ones come with US-10-04",
+      "DEC-222 critical TC-10-15: the saved event is also in the cache the views read",
+      "the description and the answer are nowhere"
+    ],
+    "evidence": [
+      "#1 Box above \"Meet with…\", grows, q opens a collapsed panel, Enter sends, Shift+Enter new line, Esc leaves, q listed — tc_10_08_the_box_its_keys_and_its_shortcut (steps 1–5)",
+      "#2 Focus loads the model, kept 5 minutes — tc_10_09_focusing_the_box_loads_the_model_for_5_minutes_and_nothing_at_start (load request with no messages, keep_alive 5m; the description request also has 5m)",
+      "#3 \"Reading…\", app usable, Esc cancels, late answer dropped — tc_10_10_reading_shows_and_does_not_block_and_esc_drops_the_late_answer",
+      "#4 Length used, default otherwise — tc_10_12_a_length_given_is_used_and_without_one_the_default_length (fake Google, account default 30 min)",
+      "#5 Location, notes, repeat, reminders, colour as for a new event — tc_10_11 step 2 (the editor equals one made by hand)",
+      "#6 No log or file holds the description; cut to 500 characters — tc_10_15 (child process, RUST_LOG=trace, output and directories searched; DEC-222) and tc_10_16_a_description_of_600_characters_is_taken_whole_and_cut_at_500",
+      "#7 Offline only local calendars; no account means My calendar — tc_10_17_offline_only_a_local_calendar_takes_it_and_without_an_account_my_calendar",
+      "#8 Test set at least 95 % dates and at least 80 % all fields — tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model (calendar-core: 100 % / 87 %); real-model part MANUAL: TC-10-19 is manual-only",
+      "#9 \"Trening wieczorem\" opens New event today 18:00–19:00 in My calendar, nothing saved before Save — tc_10_11_trening_wieczorem_opens_new_event_today_at_18_as_a_new_event",
+      "#10 Days and times worked out by the app (pl and en, plus yesterday) — tc_10_13_days_and_times_are_worked_out_by_the_app",
+      "#11 Not an event: no window, message, text kept — tc_10_14_no_event_opens_no_window_says_so_and_keeps_the_text"
+    ],
+    "tests": {
+      "run": "/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_204619",
+      "pass": 17,
+      "fail": 0,
+      "blocked": 0,
+      "manual": 1,
+      "manual_tests": [
+        "TC-10-19"
+      ]
+    },
+    "derived_tests": [],
+    "preexisting": "From US-10-01: the box (single-line), its availability, q, the shortcut entry and the fake Ollama for checks. This story extended them. TC-10-07 steps 1–3 already existed; step 4 is added here. The partial US-10-01#4 test was replaced by tc_10_04.",
+    "gates": [
+      "cargo fmt --all --check ok",
+      "cargo clippy --workspace --all-targets -- -D warnings ok",
+      "cargo test --workspace ok"
+    ],
+    "env_keys": "none",
+    "migration": false,
+    "notes": "The test set from ~/llm-bench is now in crates/core/src/described_cases.json. An #[ignore] live test (`cargo test -p calendar-core the_test_set_against_a_live_ollama -- --ignored --nocapture`) ran here against a real Ollama with gemma4:e4b: dates 100 %, every field 93 %. TC-10-19 stays the owner's manual check.\nDEC-222: TC-10-15 step 3 expects the saved event only in the local file, but the app also keeps a copy in cache.sqlite3 for the views. The test checks that the title is only in those two files and that the description and the answer are in no file and no output. The TC was not edited; whether it should name the cache is for the analyst.\nTC-10-15 runs the app in a child test process, which other tests do not do. TC-10-17 step 2 sets the window's calendar in the test instead of clicking the picker. TC-10-04 checks requests through the fake Google and fake Ollama records, not a network-wide capture.",
+    "evidence_gaps": {
+      "unevidenced": [],
+      "manual": [
+        "#8 Test set at least 95 % dates and at least 80 % all fields — tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model (calendar-core: 100 % / 87 %); real-model part MANUAL: TC-10-19 is manual-only"
+      ],
+      "blocked": []
+    },
+    "critical_decisions": [
+      "DEC-222 critical TC-10-15: the saved event is also in the cache the views read"
+    ]
+  },
+  "raw": "I implemented US-10-02 and committed it on feature/US-10-02. Everything is in one commit, bbd62ab. The gates pass: fmt, clippy with -D warnings, and the whole workspace test suite, which was run before the commit. The whole acceptance suite then ran on the clean head after the commit: pass 17, fail 0, manual 1 (TC-10-19). The spec-compliance review I started was still running when I had to hand back, so its findings have not been read.\n\nRESULT: ready\nSTORY: US-10-02\nBRANCH: feature/US-10-02\nCOMMITS: bbd62ab feat(descriptions): add an event from a description [US-10-02]\nDECISIONS: DEC-218 routine The model's answer says whether it is an event, and leaves the length empty when none is given; DEC-219 routine Until US-10-03 and US-10-05, guests, Meet and a missing time are read but not acted on; DEC-220 routine While the model reads, the keyboard goes back to the views; q returns to the box, Esc there cancels; DEC-221 routine The test set holds the 30 adding sentences; the changing ones come with US-10-04; DEC-222 critical TC-10-15: the saved event is also in the cache the views read; the description and the answer are nowhere\nEVIDENCE:\n  #1 Box above \"Meet with…\", grows, q opens a collapsed panel, Enter sends, Shift+Enter new line, Esc leaves, q listed — tc_10_08_the_box_its_keys_and_its_shortcut (steps 1–5)\n  #2 Focus loads the model, kept 5 minutes — tc_10_09_focusing_the_box_loads_the_model_for_5_minutes_and_nothing_at_start (load request with no messages, keep_alive 5m; the description request also has 5m)\n  #3 \"Reading…\", app usable, Esc cancels, late answer dropped — tc_10_10_reading_shows_and_does_not_block_and_esc_drops_the_late_answer\n  #4 Length used, default otherwise — tc_10_12_a_length_given_is_used_and_without_one_the_default_length (fake Google, account default 30 min)\n  #5 Location, notes, repeat, reminders, colour as for a new event — tc_10_11 step 2 (the editor equals one made by hand)\n  #6 No log or file holds the description; cut to 500 characters — tc_10_15 (child process, RUST_LOG=trace, output and directories searched; DEC-222) and tc_10_16_a_description_of_600_characters_is_taken_whole_and_cut_at_500\n  #7 Offline only local calendars; no account means My calendar — tc_10_17_offline_only_a_local_calendar_takes_it_and_without_an_account_my_calendar\n  #8 Test set at least 95 % dates and at least 80 % all fields — tc_10_18_the_test_set_passes_its_thresholds_against_the_fake_model (calendar-core: 100 % / 87 %); real-model part MANUAL: TC-10-19 is manual-only\n  #9 \"Trening wieczorem\" opens New event today 18:00–19:00 in My calendar, nothing saved before Save — tc_10_11_trening_wieczorem_opens_new_event_today_at_18_as_a_new_event\n  #10 Days and times worked out by the app (pl and en, plus yesterday) — tc_10_13_days_and_times_are_worked_out_by_the_app\n  #11 Not an event: no window, message, text kept — tc_10_14_no_event_opens_no_window_says_so_and_keeps_the_text\nTESTS: run=/home/sulo/workspace/private/calendar-buddy/test-runs/2026-10-27_204619 pass=17 fail=0 blocked=0 manual=1 manual_tests=TC-10-19\nDERIVED_TESTS: none\nPREEXISTING: From US-10-01: the box (single-line), its availability, q, the shortcut entry and the fake Ollama for checks. This story extended them. TC-10-07 steps 1–3 already existed; step 4 is added here. The partial US-10-01#4 test was replaced by tc_10_04.\nGATES: cargo fmt --all --check ok; cargo clippy --workspace --all-targets -- -D warnings ok; cargo test --workspace ok\nENV_KEYS: none\nMIGRATION: no\nNOTES: The test set from ~/llm-bench is now in crates/core/src/described_cases.json. An #[ignore] live test (`cargo test -p calendar-core the_test_set_against_a_live_ollama -- --ignored --nocapture`) ran here against a real Ollama with gemma4:e4b: dates 100 %, every field 93 %. TC-10-19 stays the owner's manual check.\nDEC-222: TC-10-15 step 3 expects the saved event only in the local file, but the app also keeps a copy in cache.sqlite3 for the views. The test checks that the title is only in those two files and that the description and the answer are in no file and no output. The TC was not edited; whether it should name the cache is for the analyst.\nTC-10-15 runs the app in a child test process, which other tests do not do. TC-10-17 step 2 sets the window's calendar in the test instead of clicking the picker. TC-10-04 checks requests through the fake Google and fake Ollama records, not a network-wide capture.\n",
+  "evidence": [
+    "run.json",
+    "repo-before.json"
+  ]
+}

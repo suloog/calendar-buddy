@@ -1,0 +1,55 @@
+{
+  "story": "US-10-05",
+  "attempt": 1,
+  "round": 3,
+  "sha": "116f8f62798293ee88e4c3ded52cc0a24117db72",
+  "reviewer": "code",
+  "ts": "2026-10-28T04:14:37Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-05",
+    "impact": "`Editor::follow_start` is used by the app editor's start fields and All day checkbox (`crates/app/src/editor.rs:731` and `:744`) and by `Change::apply` for changes made from a description (US-10-04). Only the case of All day on, start time unreadable and start day readable changes: the start now follows the day. Timed events, existing all-day events and series rules take the same paths as before, and the workspace gates are green.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:1096-1115 — the fix's day-change tests have a new-event series case only in the presets check (`repeat_choices`), not a weekly rule's day or an `Ends::On` last day after All day is ticked and the day changed. That is the `before.weekday()` and `Ends::On` branch the fix now reaches for an all-day start. A regression there would pass the tests → add a test that picks the weekly preset or a rule with an end date, ticks All day, changes the day and asserts `rule.days` and `ends` follow."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:525-529 — the closure parses the date before checking `self.all_day`, so the date is parsed twice for every start change when All day is off; the result is the same and the cost is trivial → write `self.all_day.then(...)` first or `self.all_day.then_some(())?`; optional."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/editor.rs:1131-1139 — the \"untick All day, time empty → START_TIME_EMPTY\" test (the round-2 suggestion) was added and is right. It passes on the old code too, so it guards against regression rather than proving the fix; no action needed."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "a day or time given is filled in as in US-10-02 and only the missing one is asked for; covered by the from_quick tests for no time, no day and neither, and by the app tests in `crates/app/src/description_asked_tests.rs`."
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "name matching and the `calendar_not_found` note are implemented and covered by app tests (`tc_10_35_*` in `crates/app/src/description_asked_tests.rs`); this diff does not touch them, and the workspace tests pass."
+      },
+      {
+        "n": 3,
+        "verdict": "external",
+        "note": "MANUAL: the asked-for fields and the calendar note in the light and dark themes, left to the owner per the story's technical notes."
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Round 3 review of the US-10-05 fix commit 116f8f6. The fix is correct and I found nothing blocking. fmt, clippy -D warnings and cargo test --workspace all green (227 + 475 + 91 passed). (Full prose in the reviewer's hand-back; block below.)\n\nREVIEW: findings\nSTORY: US-10-05\nIMPACT: `Editor::follow_start` is used by the app editor's start fields and All day checkbox (`crates/app/src/editor.rs:731` and `:744`) and by `Change::apply` for changes made from a description (US-10-04). Only the case of All day on, start time unreadable and start day readable changes: the start now follows the day. Timed events, existing all-day events and series rules take the same paths as before, and the workspace gates are green.\nFINDINGS:\n  N1 crates/core/src/editor.rs:1096-1115 — the fix's day-change tests have a new-event series case only in the presets check (`repeat_choices`), not a weekly rule's day or an `Ends::On` last day after All day is ticked and the day changed. That is the `before.weekday()` and `Ends::On` branch the fix now reaches for an all-day start. A regression there would pass the tests → add a test that picks the weekly preset or a rule with an end date, ticks All day, changes the day and asserts `rule.days` and `ends` follow.\n  N2 crates/core/src/editor.rs:525-529 — the closure parses the date before checking `self.all_day`, so the date is parsed twice for every start change when All day is off; the result is the same and the cost is trivial → write `self.all_day.then(...)` first or `self.all_day.then_some(())?`; optional.\n  N3 crates/core/src/editor.rs:1131-1139 — the \"untick All day, time empty → START_TIME_EMPTY\" test (the round-2 suggestion) was added and is right. It passes on the old code too, so it guards against regression rather than proving the fix; no action needed.\nCRITERIA:\n  #1 met — a day or time given is filled in as in US-10-02 and only the missing one is asked for; covered by the from_quick tests for no time, no day and neither, and by the app tests in `crates/app/src/description_asked_tests.rs`.\n  #2 met — name matching and the `calendar_not_found` note are implemented and covered by app tests (`tc_10_35_*` in `crates/app/src/description_asked_tests.rs`); this diff does not touch them, and the workspace tests pass.\n  #3 external — MANUAL: the asked-for fields and the calendar note in the light and dark themes, left to the owner per the story's technical notes.\n"
+}

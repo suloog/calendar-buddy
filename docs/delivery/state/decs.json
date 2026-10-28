@@ -1,0 +1,162 @@
+[
+  {
+    "dec": "DEC-215",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "Steps of TC-10-04 and TC-10-07 that send a description wait for US-10-02",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:54Z"
+  },
+  {
+    "dec": "DEC-216",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "The Ollama client in calendar-core uses ureq and url, already in the workspace",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:58Z"
+  },
+  {
+    "dec": "DEC-217",
+    "story": "US-10-01",
+    "attempt": 1,
+    "title": "When Ollama is checked, and the fake Ollama on a free local port",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T17:11:58Z"
+  },
+  {
+    "dec": "DEC-218",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "The model's answer says whether it is an event, and leaves the length empty when none is given",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-219",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "Until US-10-03 and US-10-05, guests, Meet and a missing time are read but not acted on",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-220",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "While the model reads, the keyboard goes back to the views; q returns to the box, Esc there cancels",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-221",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "The test set holds the 30 adding sentences; the changing ones come with US-10-04",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-222",
+    "story": "US-10-02",
+    "attempt": 1,
+    "title": "TC-10-15: the saved event is also in the cache the views read; the description and the answer are nowhere",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T19:44:32Z"
+  },
+  {
+    "dec": "DEC-223",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "The model's answer says Meet asked for, refused or not mentioned",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-224",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "Guests named in a description are looked up before the full editor opens",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-225",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "A name not certain waits under the guest field with its suggestions",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-27T20:08:31Z"
+  },
+  {
+    "dec": "DEC-226",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "A calendar that cannot add Meet behaves as in the editor today",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T01:59:52Z"
+  },
+  {
+    "dec": "DEC-227",
+    "story": "US-10-03",
+    "attempt": 1,
+    "title": "The description's Meet wins over the first-guest rule",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:20:59Z"
+  },
+  {
+    "dec": "DEC-228",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "A described change: the words naming the event, and only what changes",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:10Z"
+  },
+  {
+    "dec": "DEC-229",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "An event fits the words naming it word by word, Polish endings aside",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:10Z"
+  },
+  {
+    "dec": "DEC-230",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "A change of an event the editor is not offered for opens its details, as today",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:11Z"
+  },
+  {
+    "dec": "DEC-231",
+    "story": "US-10-04",
+    "attempt": 1,
+    "title": "The model's answer is taken in while an event's details are open",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T02:51:11Z"
+  },
+  {
+    "dec": "DEC-232",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "A day is asked for only when the description names neither a day nor a part of the day",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
+  },
+  {
+    "dec": "DEC-233",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "A named calendar is read by the model and matched among the calendars that can take the event",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
+  },
+  {
+    "dec": "DEC-234",
+    "story": "US-10-05",
+    "attempt": 1,
+    "title": "The \"New event\" window asks for a missing day or time in fields of its own",
+    "file": "docs/specs/DECISIONS.md",
+    "ts": "2026-10-28T03:42:16Z"
+  }
+]

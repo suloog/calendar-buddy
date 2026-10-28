@@ -1,0 +1,109 @@
+{
+  "story": "US-10-02",
+  "attempt": 1,
+  "round": 2,
+  "sha": "12eb518e5e3a73557e07b6c0e2ca42a89ac8195e",
+  "reviewer": "spec",
+  "ts": "2026-10-27T20:02:08Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-02",
+    "impact": "main.rs update() now takes the model's answer only with no Dialog open, and read() drops answers when the feature is off and sets no_event on a failed reading; description_panel clears no_event when Ollama turns unavailable (TC-10-07 still green). described::parse/time_of are used only by the description path (TC-10-13/18 green); the fake Ollama gained fail(), used only by tests. A held answer can now wait arbitrarily long behind a window, so the day is worked out against the answer-time clock (N2).",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2045 — the no-event focus fix (12eb518) has no test; a regression stealing the cursor from \"Meet with…\" would go unnoticed → add a test: hold the answer, type in \"Meet with…\", release a NoEvent answer, assert focus/text stay there (and the box takes focus when nothing is focused)"
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2032 — read() computes the date from the clock at answer-intake, the message carried send-time; with B1 an answer held behind a window across midnight (\"kawa jutro rano\" sent 23:58, editor closed 00:05) opens a day late → keep the `now` sent in Reader, return it with the answer, use it in described::read and event.times"
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2022 — turning the feature off does not cancel the reading; `reading` stays true, and turning it back on before the answer arrives shows a stale \"Reading…\" and accepts the old answer → in ollama_changed, when !on, reader.cancel() and description.reading = false (makes the :2022 guard redundant)"
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/description_reading_tests.rs:1029 — the turned-off test sets settings.ollama.on directly; the real path (answer waiting behind the Settings dialog, turned off there, dropped once it closes) is untested → drive the test through Settings"
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2028 — with Ollama stopped, \"found no event\" flashes until the checker greys the box (cleared at :1977, TC-10-07 green); cosmetic → acceptable, or set no_event only after the checker confirms availability"
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 8,
+        "verdict": "external",
+        "note": "MANUAL TC-10-19 (live gemma4:e4b); the fake-model half met by TC-10-18"
+      },
+      {
+        "n": 9,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 10,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 11,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Spec-compliance review, round 2: US-10-02 (fix range bbd62ab..12eb518). Verdict: COMPLIANT. Both round-1 blockers are fixed and tested, nothing is blocking, and all 11 criteria still hold at 12eb518. 5 non-blocking items.\n\nREVIEW: findings\nSTORY: US-10-02\nIMPACT: main.rs update() now takes the model's answer only with no Dialog open, and read() drops answers when the feature is off and sets no_event on a failed reading; description_panel clears no_event when Ollama turns unavailable (TC-10-07 still green). described::parse/time_of are used only by the description path (TC-10-13/18 green); the fake Ollama gained fail(), used only by tests. A held answer can now wait arbitrarily long behind a window, so the day is worked out against the answer-time clock (N2).\nFINDINGS:\n  N1 crates/app/src/main.rs:2045 — the no-event focus fix (12eb518) has no test; a regression stealing the cursor from \"Meet with…\" would go unnoticed → add a test: hold the answer, type in \"Meet with…\", release a NoEvent answer, assert focus/text stay there (and the box takes focus when nothing is focused)\n  N2 crates/app/src/main.rs:2032 — read() computes the date from the clock at answer-intake, the message carried send-time; with B1 an answer held behind a window across midnight (\"kawa jutro rano\" sent 23:58, editor closed 00:05) opens a day late → keep the `now` sent in Reader, return it with the answer, use it in described::read and event.times\n  N3 crates/app/src/main.rs:2022 — turning the feature off does not cancel the reading; `reading` stays true, and turning it back on before the answer arrives shows a stale \"Reading…\" and accepts the old answer → in ollama_changed, when !on, reader.cancel() and description.reading = false (makes the :2022 guard redundant)\n  N4 crates/app/src/description_reading_tests.rs:1029 — the turned-off test sets settings.ollama.on directly; the real path (answer waiting behind the Settings dialog, turned off there, dropped once it closes) is untested → drive the test through Settings\n  N5 crates/app/src/main.rs:2028 — with Ollama stopped, \"found no event\" flashes until the checker greys the box (cleared at :1977, TC-10-07 green); cosmetic → acceptable, or set no_event only after the checker confirms availability\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n  #8 external — MANUAL TC-10-19 (live gemma4:e4b); the fake-model half met by TC-10-18\n  #9 met\n  #10 met\n  #11 met\n"
+}

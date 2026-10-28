@@ -1,0 +1,93 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 1,
+  "sha": "5508bce3464ce32f6a1e39cb3894dd32a76069b6",
+  "reviewer": "code",
+  "ts": "2026-10-28T02:11:09Z",
+  "parsed": {
+    "review": "findings",
+    "story": "US-10-03",
+    "impact": "Described.meet is now Option<bool> and the model's schema and prompt make it nullable, which touches the US-10-02 reading path and tests and the TC-10-18/19 test set (a real model may now answer null where it said false). Editor gained `unresolved` (a new list in the guests section, ignored on save). The sync engine gained a separate Named lookup job, leaving the guest field's Suggest/people path untouched.",
+    "findings": [
+      {
+        "id": "N1",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/editor.rs:267 — MOD-10-F12, story scenario 2 and TC-10-22 say the guest field holds the uncertain names, with \"the usual suggestions\" for Zenek. The implementation lists them under the field and shows \"No one found\" for a name nobody fits (DEC-225, a loop decision). A reader of the spec expects different UI → the analyst confirms DEC-225 or amends F12 and TC-10-22."
+      },
+      {
+        "id": "N2",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2051 — Edge case \"account cannot add Meet → switch stays off and unavailable\" is not built (DEC-226, a loop decision). Described Meet=true on such an account turns the switch on, and the event is saved without a call and the user is told → the analyst accepts DEC-226, or the editor greys the switch in a later story."
+      },
+      {
+        "id": "N3",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/sync.rs:971 — When the account has no session, or Google errors or is unreachable while `online` is still true, `Named` returns an empty list per name (`unwrap_or_default`). Every name then shows \"not invited — pick who you mean / No one found\", indistinguishable from \"nobody fits\". The guest field behaves the same → acceptable; optionally treat a failed lookup like offline and leave the names out."
+      },
+      {
+        "id": "N4",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2463 — The Google answer for a lookup is taken even if events from a description were turned off in the settings meanwhile; `read()` drops answers in that case but this path does not. Scenario: send a description naming guests, open the settings (which waits for the answer), turn the feature off, close the settings → the editor still opens → check `self.settings.ollama.on` before `open_described`, or clear `named` when the feature is switched off."
+      },
+      {
+        "id": "N5",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/core/src/described.rs:182 — When a name matches only a person already invited or the user's own address, `suggestions` returns empty. The name is then listed as \"No one found\" even though the person is invited → drop such a name silently, or say it is already invited."
+      },
+      {
+        "id": "N6",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/main.rs:2091 — `open_described` clones the account's recent guests for every name and uses `account.unwrap_or_default()` inside the closure. Simpler: compute `recent` once outside the `map`. Harmless at this size."
+      },
+      {
+        "id": "N7",
+        "blocking": false,
+        "security": false,
+        "tags": [],
+        "text": "crates/app/src/sync.rs:757 — `Update::Named` overwrites `named` and nothing clears it on Esc or on a new `look_up`. Harmless today; clearing `sync.named` in `look_up` would make it airtight."
+      }
+    ],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": "names are searched through the same `session.people` as the guest field, plus recent guests; TC-10-21 covers the contacts, directory and recent sources. The real Google contacts and directory are the owner's manual check."
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": "`Described::full()` routes guests or Meet to the full editor, anything else to the \"New event\" window; TC-10-20 asserts it."
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": "TC-10-23 covers all four rows, checking both editor state and the switch's accessibility toggle state."
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": "TC-10-24 asserts a local editor with no guests, no switch and no guest field, and no Google traffic."
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": "TC-10-25 case A (offline) and case B (no account)."
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Review of US-10-03 (`main...5508bce`). I found no blocking issues. `cargo fmt --check` and `cargo clippy -D warnings` are clean, and `cargo test --workspace` passes (213 + 463 + 91).\n\n```\nREVIEW: findings\nSTORY: US-10-03\nIMPACT: Described.meet is now Option<bool> and the model's schema and prompt make it nullable, which touches the US-10-02 reading path and tests and the TC-10-18/19 test set (a real model may now answer null where it said false). Editor gained `unresolved` (a new list in the guests section, ignored on save). The sync engine gained a separate Named lookup job, leaving the guest field's Suggest/people path untouched.\nFINDINGS:\n  N1 crates/app/src/editor.rs:267 — MOD-10-F12, story scenario 2 and TC-10-22 say the guest field holds the uncertain names, with \"the usual suggestions\" for Zenek. The implementation lists them under the field and shows \"No one found\" for a name nobody fits (DEC-225, a loop decision). A reader of the spec expects different UI → the analyst confirms DEC-225 or amends F12 and TC-10-22.\n  N2 crates/app/src/main.rs:2051 — Edge case \"account cannot add Meet → switch stays off and unavailable\" is not built (DEC-226, a loop decision). Described Meet=true on such an account turns the switch on, and the event is saved without a call and the user is told → the analyst accepts DEC-226, or the editor greys the switch in a later story.\n  N3 crates/app/src/sync.rs:971 — When the account has no session, or Google errors or is unreachable while `online` is still true, `Named` returns an empty list per name (`unwrap_or_default`). Every name then shows \"not invited — pick who you mean / No one found\", indistinguishable from \"nobody fits\". The guest field behaves the same → acceptable; optionally treat a failed lookup like offline and leave the names out.\n  N4 crates/app/src/main.rs:2463 — The Google answer for a lookup is taken even if events from a description were turned off in the settings meanwhile; `read()` drops answers in that case but this path does not. Scenario: send a description naming guests, open the settings (which waits for the answer), turn the feature off, close the settings → the editor still opens → check `self.settings.ollama.on` before `open_described`, or clear `named` when the feature is switched off.\n  N5 crates/core/src/described.rs:182 — When a name matches only a person already invited or the user's own address, `suggestions` returns empty. The name is then listed as \"No one found\" even though the person is invited → drop such a name silently, or say it is already invited.\n  N6 crates/app/src/main.rs:2091 — `open_described` clones the account's recent guests for every name and uses `account.unwrap_or_default()` inside the closure. Simpler: compute `recent` once outside the `map`. Harmless at this size.\n  N7 crates/app/src/sync.rs:757 — `Update::Named` overwrites `named` and nothing clears it on Esc or on a new `look_up`. Harmless today; clearing `sync.named` in `look_up` would make it airtight.\nCRITERIA:\n  #1 met — names are searched through the same `session.people` as the guest field, plus recent guests; TC-10-21 covers the contacts, directory and recent sources. The real Google contacts and directory are the owner's manual check.\n  #2 met — `Described::full()` routes guests or Meet to the full editor, anything else to the \"New event\" window; TC-10-20 asserts it.\n  #3 met — TC-10-23 covers all four rows, checking both editor state and the switch's accessibility toggle state.\n  #4 met — TC-10-24 asserts a local editor with no guests, no switch and no guest field, and no Google traffic.\n  #5 met — TC-10-25 case A (offline) and case B (no account).\n```\n"
+}

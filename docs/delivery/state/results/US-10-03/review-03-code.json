@@ -1,0 +1,53 @@
+{
+  "story": "US-10-03",
+  "attempt": 1,
+  "round": 3,
+  "sha": "d69d1007f19b83b2d11b1ea8fed41dc0b9d96ab5",
+  "reviewer": "code",
+  "ts": "2026-10-28T02:37:53Z",
+  "parsed": {
+    "review": "clean",
+    "story": "US-10-03",
+    "impact": "A guest added to a described event after \"bez Meeta\" or \"z Meetem\" (picked for a waiting name, picked from the guest field's suggestions, or typed with Enter) no longer changes the Meet switch. MOD-06-F17 still applies to every editor not made from a description, and the described-silent case.",
+    "findings": [],
+    "criteria": [
+      {
+        "n": 1,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 2,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 3,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 4,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 5,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 6,
+        "verdict": "met",
+        "note": ""
+      },
+      {
+        "n": 7,
+        "verdict": "met",
+        "note": ""
+      }
+    ],
+    "stray": []
+  },
+  "raw": "Round 3 of US-10-03: the fix is correct and complete, and I found nothing new, so the verdict is clean. cargo test --workspace passed on d69d100 (215 / 464 / 91). The guard in add_guest covers every guest route (typed + Enter, field suggestion click, pick); meet_described is set only in fill; editors for existing and quick events keep MOD-06-F17. New core and app tests fail on revert; the sync test would fail without the clearing.\n\n```\nREVIEW: clean\nSTORY: US-10-03\nIMPACT: A guest added to a described event after \"bez Meeta\" or \"z Meetem\" (picked for a waiting name, picked from the guest field's suggestions, or typed with Enter) no longer changes the Meet switch. MOD-06-F17 still applies to every editor not made from a description, and the described-silent case.\nFINDINGS:\n  none\nCRITERIA:\n  #1 met\n  #2 met\n  #3 met\n  #4 met\n  #5 met\n  #6 met\n  #7 met\n```\n"
+}
