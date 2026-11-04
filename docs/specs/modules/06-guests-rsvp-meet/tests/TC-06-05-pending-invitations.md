@@ -1,7 +1,7 @@
 ---
 id: TC-06-05 # TC-NN-MM — NN is the parent module, MM a counter within it; never reused
 module: MOD-06
-covers: [US-06-04#1, US-06-04#2] # what this test proves — `#n` is the acceptance criterion's number in the story
+covers: [US-06-04#1, US-06-04#2, US-06-04#4] # what this test proves — `#n` is the acceptance criterion's number in the story
 layer: desktop # desktop — the project's own layer (`DEC-65`)
 type: happy-path # happy-path | edge | negative | nfr
 automation: auto # auto | manual-only — manual-only is never green in the report
@@ -10,12 +10,12 @@ status: ready # draft | ready
 depends_on: [] # test case IDs that must pass first
 ---
 
-# [TC-06-05] An invitation awaiting an answer is marked in the views and counted in the side panel, which opens the list
+# [TC-06-05] An invitation awaiting an answer is marked in the views and counted in the side panel, which opens the list and shows each on its day
 
 |  |  |
 | --- | --- |
 | **Layer** | desktop |
-| **Verifies** | `US-06-04#1`, `US-06-04#2` |
+| **Verifies** | `US-06-04#1`, `US-06-04#2`, `US-06-04#4` |
 | **Role** | User |
 | **Type** | happy-path |
 | **Automation** | auto |
@@ -25,7 +25,7 @@ depends_on: [] # test case IDs that must pass first
 
 - A fake Google API (calendar, contacts, directory, free/busy) that records what it receives, and a fixed clock (Thursday 2026-11-12 09:00, Europe/Warsaw), set up by the test.
 - Account A (personal) is connected; its contacts include "Adam Kowalski" (adam@example.com); "ewa@example.com" was invited to an earlier event.
-- Two invitations from others this week ("Board" and "Lunch") await the user's answer.
+- Two invitations from others this week await the user's answer: "Board" (Thursday 2026-11-12, 14:00–15:00) and "Lunch" (Friday 2026-11-13, 12:00–13:00).
 
 ## Steps
 
@@ -33,10 +33,11 @@ depends_on: [] # test case IDs that must pass first
 | - | ------ | --------------- | -------- |
 | 1 | Open the week view. | "Board" and "Lunch" are marked as awaiting an answer (dashed outline, light fill). | app state |
 | 2 | Read the side panel and choose the invitations counter. | It shows 2 and opens a list with "Board" and "Lunch". | app state |
+| 3 | Switch to the day view of Monday 2026-11-09, open the list and choose "Board". | The list closes; the day view shows Thursday 2026-11-12 with "Board" ringed (it has the keyboard focus); Enter opens its details. | app state |
 
 ## Pass criterion
 
-- Invitations awaiting an answer are marked, counted, and listed.
+- Invitations awaiting an answer are marked, counted, and listed; one picked in the list is shown ringed on its day.
 
 ## Cleanup
 

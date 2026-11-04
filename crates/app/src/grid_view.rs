@@ -208,6 +208,33 @@ pub fn awaiting(painter: &egui::Painter, rect: Rect, c: Rgb) -> Rgb {
     under
 }
 
+/// Where the event to reveal when next drawn is kept.
+fn revealed_id() -> egui::Id {
+    egui::Id::unique("revealed-event")
+}
+
+/// Where the revealed event's widget is kept, with when it was revealed, while it keeps the
+/// keyboard.
+fn ringed_id() -> egui::Id {
+    egui::Id::unique("ringed-event")
+}
+
+/// How long the ring of a revealed event pulses out at first, in seconds.
+const PULSE: f64 = 1.2;
+
+/// Has the event at `event` in the built view moved to as the view is drawn, kept in sight and
+/// ringed boldly until the keyboard leaves it, as an invitation picked in the list is
+/// (`DEC-215`).
+pub fn reveal(ctx: &egui::Context, event: usize) {
+    ctx.data_mut(|data| data.insert_temp(revealed_id(), event));
+}
+
+/// The view drawn: an event to reveal that was not drawn, such as one under "+N more", is not
+/// revealed later in another view.
+pub fn revealed(ctx: &egui::Context) {
+    ctx.data_mut(|data| data.remove::<usize>(revealed_id()));
+}
+
 /// An event drawn in `rect` that the keyboard can reach (`MOD-03-F24`): Tab moves to it, which
 /// keeps it in sight and rings it; Enter or a click opens it into `opened`.
 pub fn openable(
@@ -217,19 +244,60 @@ pub fn openable(
     event: usize,
     opened: &mut Option<usize>,
 ) {
+    let ctx = ui.ctx();
+    let now = ui.input(|input| input.time);
+    let revealed = ctx.data(|data| data.get_temp(revealed_id()));
+    if revealed == Some(event) {
+        ctx.data_mut(|data| {
+            data.remove::<usize>(revealed_id());
+            data.insert_temp(ringed_id(), (response.id, now));
+        });
+        response.request_focus();
+    }
     if response.gained_focus() {
         response.scroll_to_me(None);
     }
-    if response.has_focus() {
-        ui.painter().rect_stroke(
-            rect,
-            CornerRadius::same(EVENT_RADIUS),
-            ui.visuals().selection.stroke,
-            StrokeKind::Outside,
-        );
+    let ringed = ctx.data(|data| data.get_temp::<(egui::Id, f64)>(ringed_id()));
+    let since = ringed.and_then(|(id, at)| (id == response.id).then_some(now - at));
+    match (response.has_focus(), since) {
+        (true, Some(since)) => ring_boldly(ui, rect, since),
+        (true, None) => {
+            ui.painter().rect_stroke(
+                rect,
+                CornerRadius::same(EVENT_RADIUS),
+                ui.visuals().selection.stroke,
+                StrokeKind::Outside,
+            );
+        }
+        // The keyboard left it: from now on it is ringed as any other event.
+        (false, Some(_)) => ctx.data_mut(|data| data.remove::<(egui::Id, f64)>(ringed_id())),
+        (false, None) => {}
     }
     if response.clicked() {
         *opened = Some(event);
+    }
+}
+
+/// The ring of a revealed event, `since` seconds after it was revealed: thick, with a soft halo,
+/// and pulsing out at first so the eye finds it at once.
+fn ring_boldly(ui: &egui::Ui, rect: Rect, since: f64) {
+    let color = ui.visuals().selection.stroke.color;
+    let painter = ui.painter();
+    let ring = |expand: f32, width: f32, alpha: f32| {
+        painter.rect_stroke(
+            rect.expand(expand),
+            CornerRadius::same(EVENT_RADIUS + expand as u8),
+            Stroke::new(width, color.gamma_multiply(alpha)),
+            StrokeKind::Outside,
+        );
+    };
+    ring(5.0, 4.0, 0.15);
+    ring(2.5, 3.0, 0.3);
+    ring(0.0, 2.5, 1.0);
+    if since < PULSE {
+        let t = (since / PULSE) as f32;
+        ring(2.0 + 14.0 * t, 3.0, 1.0 - t);
+        ui.ctx().request_repaint();
     }
 }
 

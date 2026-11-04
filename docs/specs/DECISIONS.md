@@ -2593,3 +2593,27 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-215] An invitation picked in the list is shown on its day, ringed
+
+- **Date:** 2026-10-28
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation with the product owner, 2026-10-28
+- **Affects:** `MOD-06-F10`, `US-06-04`
+- **Decision:** Choosing an invitation's title in the list of invitations awaiting an answer closes the list and moves the view to the invitation's day (the agenda stays where it starts, as for a notification clicked), the invitation kept in sight and ringed as if the keyboard had reached it; Enter or a click opens its details. Before, the title opened the details over the view.
+- **Why:** As in Google Calendar: the user sees what the invitation sits next to on its day before answering it.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-216] A click outside a dialog closes it, but the editor's
+
+- **Date:** 2026-10-28
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation with the product owner, 2026-10-28
+- **Affects:** every dialog of the app (event details, questions, lists, settings)
+- **Decision:** A click outside an open dialog closes it as its close button does, and reaches nothing under it (it neither opens another event nor starts a new one). The editor of an event stays open on such a click, so nothing typed is lost to a stray click; it closes by its own buttons, its close button or Esc.
+- **Why:** As Google Calendar's pop-ups: a click beside one dismisses it. The editor is spared as it holds the user's typing.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

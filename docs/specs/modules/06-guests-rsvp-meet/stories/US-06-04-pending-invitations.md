@@ -29,6 +29,7 @@ Invitations the user has not answered yet: marked in every view and counted in t
 - [ ] An invitation awaiting the user's answer has a dashed outline and a light fill in every view.
 - [ ] The side panel shows how many invitations await an answer; choosing it opens a list of them.
 - [ ] Invitations in a calendar disabled in the settings are neither shown nor counted.
+- [ ] Choosing an invitation's title in the list closes it and shows the invitation's day, the invitation kept in sight and ringed; Enter or a click opens its details.
 
 ## Out of scope / what not to worry about
 
@@ -37,4 +38,4 @@ Invitations the user has not answered yet: marked in every view and counted in t
 ## Technical notes
 
 - "Awaiting" = the user's attendee entry has `needsAction` (`MOD-06` *Technical notes*).
-- Decisions: `DEC-41`, `DEC-61`, `DEC-63`.
+- Decisions: `DEC-41`, `DEC-61`, `DEC-63`, `DEC-215`.

@@ -545,13 +545,18 @@ impl CalendarApp {
             return;
         };
         // The agenda starts now whatever the date; the other views move to the event's day.
-        self.navigation.selected = match self.events[event].timing {
-            Timing::Timed { start, .. } => start.with_timezone(&self.zone).date_naive(),
-            Timing::AllDay { start, .. } => start,
-        };
+        self.navigation.selected = self.day_of(event);
         self.open(event, None);
         if let Some(Dialog::Event(.., snooze)) = &mut self.dialog {
             *snooze = opened.snooze.clone();
+        }
+    }
+
+    /// The day the event at `event` in `events` starts on.
+    fn day_of(&self, event: usize) -> NaiveDate {
+        match self.events[event].timing {
+            Timing::Timed { start, .. } => start.with_timezone(&self.zone).date_naive(),
+            Timing::AllDay { start, .. } => start,
         }
     }
 
@@ -1041,7 +1046,33 @@ impl CalendarApp {
         };
         // An event's details carry their own title and buttons, as in Google Calendar.
         let titled = !matches!(dialog, Dialog::Event(..));
-        egui::Window::new(title)
+        // At least as wide as its title and close button, so the title bar does not stick out.
+        let min_width = if titled {
+            let style = ctx.global_style();
+            let font = egui::TextStyle::Heading.resolve(&style);
+            let (text, button) = ctx.fonts_mut(|fonts| {
+                let galley =
+                    fonts.layout_no_wrap(title.into(), font.clone(), egui::Color32::PLACEHOLDER);
+                (galley.size().x, fonts.row_height(&font))
+            });
+            min_width.max(text + button + 3.0 * style.spacing.item_spacing.x)
+        } else {
+            min_width
+        };
+        // The editor stays open on a click outside it, so nothing typed is lost to a stray click;
+        // nor does a click closing a drop-down close the dialog.
+        let closes_outside = !matches!(dialog, Dialog::Editor(_)) && !egui::Popup::is_any_open(ctx);
+        // Over the calendar, under the dialog: takes the clicks outside the dialog, so they
+        // reach nothing under it.
+        let screen = ctx.content_rect();
+        let backdrop = egui::Area::new(egui::Id::unique("dialog-backdrop"))
+            .order(egui::Order::Middle)
+            .fixed_pos(screen.min)
+            .show(ctx, |ui| {
+                ui.allocate_rect(screen, egui::Sense::click_and_drag())
+            })
+            .inner;
+        let window = egui::Window::new(title)
             .open(&mut open)
             .title_bar(titled)
             .collapsible(false)
@@ -1424,10 +1455,22 @@ impl CalendarApp {
                                                     let icon = ui
                                                         .weak(answer.icon())
                                                         .on_hover_text(answer.label());
+                                                    // A long name or address, such as a
+                                                    // room's, cut short to the dialog's width,
+                                                    // whole on hover.
                                                     if !guest.name.is_empty() {
-                                                        ui.label(&guest.name);
+                                                        ui.add(
+                                                            egui::Label::new(&guest.name)
+                                                                .truncate(),
+                                                        );
                                                     }
-                                                    ui.weak(&guest.email);
+                                                    ui.add(
+                                                        egui::Label::new(
+                                                            egui::RichText::new(&guest.email)
+                                                                .weak(),
+                                                        )
+                                                        .truncate(),
+                                                    );
                                                     icon.rect
                                                 })
                                                 .inner;
@@ -1532,25 +1575,34 @@ impl CalendarApp {
                                 if self.invitations.is_empty() {
                                     ui.label(texts::NO_INVITATIONS);
                                 }
-                                // Each is answered here, or opens its details (`MOD-06-F10`).
+                                // Each is answered here, or shown on its day (`MOD-06-F10`,
+                                // `DEC-215`).
                                 for &i in &self.invitations {
                                     let event = &self.events[i];
                                     let details = event_details(event, self.zone);
                                     let enabled = refused.is_none() && !self.saving.holds(event);
-                                    ui.horizontal(|ui| {
-                                        if ui
-                                            .link(details.title.as_deref().unwrap_or(texts::BUSY))
-                                            .clicked()
-                                        {
-                                            invitation = Some(i);
-                                        }
-                                        ui.weak(details.when.describe(&self.regional));
-                                        if let Some(own) = invitations::own_answer(event)
-                                            && let Some(response) = answer_buttons(ui, own, enabled)
-                                        {
-                                            answered = Some((event.clone(), response));
-                                        }
-                                    });
+                                    // The answers at the row's end; the title and
+                                    // when above each other, cut short to the dialog's width.
+                                    egui::Sides::new().shrink_left().truncate().show(
+                                        ui,
+                                        |ui| {
+                                            ui.vertical(|ui| {
+                                                let title = details.title.as_deref();
+                                                if ui.link(title.unwrap_or(texts::BUSY)).clicked() {
+                                                    invitation = Some(i);
+                                                }
+                                                ui.weak(details.when.describe(&self.regional));
+                                            });
+                                        },
+                                        |ui| {
+                                            if let Some(own) = invitations::own_answer(event)
+                                                && let Some(response) =
+                                                    answer_buttons(ui, own, enabled)
+                                            {
+                                                answered = Some((event.clone(), response));
+                                            }
+                                        },
+                                    );
                                 }
                                 if let Some(reason) =
                                     refused.filter(|_| !self.invitations.is_empty())
@@ -1771,6 +1823,14 @@ impl CalendarApp {
                         }
                     })
             });
+        // The dialog stays over the backdrop; a click outside it closes it as its close button
+        // does (`DEC-216`).
+        if let Some(window) = &window {
+            ctx.move_to_top(window.response.layer_id);
+        }
+        if backdrop.clicked() && closes_outside {
+            open = false;
+        }
         if closed {
             open = false;
         }
@@ -1892,7 +1952,14 @@ impl CalendarApp {
             self.dialog = Some(Dialog::Editor(Box::new(editor)));
         }
         if let Some(event) = invitation {
-            self.open(event, None);
+            // The list closes on the invitation's day, the invitation ringed, so what it would be
+            // accepted next to is in sight (`DEC-215`).
+            self.navigation.selected = self.day_of(event);
+            self.mini_month = self.navigation.selected;
+            if let Ok(index) = self.places.binary_search(&event) {
+                grid_view::reveal(ctx, index);
+            }
+            open = false;
         }
         if let Some((event, response)) = answered {
             self.answer(&event, response);
@@ -2618,6 +2685,7 @@ impl eframe::App for CalendarApp {
                 }
             }
         });
+        grid_view::revealed(ui.ctx());
         // One height for the three views, kept across restarts (`MOD-03-F29`).
         if self.settings.hour_zoom != zoom {
             self.save_settings();

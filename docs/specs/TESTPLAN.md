@@ -48,11 +48,11 @@ that module. Numbers are never reused or renumbered.
 | `MOD-03` Views and navigation | 51 | 33 | 14 / 2 | written |
 | `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
-| `MOD-06` Guests, invitations, RSVP and Google Meet | 36 | 27 | 14 / 2 | written |
+| `MOD-06` Guests, invitations, RSVP and Google Meet | 37 | 28 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
-| **Total** | **288** | **205** | **109 / 17** | 9 / 9 modules written |
+| **Total** | **289** | **206** | **109 / 17** | 9 / 9 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -159,7 +159,7 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-06-02` | On a Workspace account, a colleague from the directory is suggested | `US-06-01#3` | desktop | happy-path | auto | ready |
 | `TC-06-03` | A guest's answer is shown as an icon and changes after the next synchronization | `US-06-02#1`, `US-06-02#2` | desktop | happy-path | auto | ready |
 | `TC-06-04` | Dragging an event with guests asks once whether to notify them, and "No" sends no update | `US-06-03#1` | desktop | happy-path | auto | ready |
-| `TC-06-05` | An invitation awaiting an answer is marked in the views and counted in the side panel, which opens the list | `US-06-04#1`, `US-06-04#2` | desktop | happy-path | auto | ready |
+| `TC-06-05` | An invitation awaiting an answer is marked in the views and counted in the side panel, which opens the list and shows each on its day | `US-06-04#1`, `US-06-04#2`, `US-06-04#4` | desktop | happy-path | auto | ready |
 | `TC-06-06` | Accepting an invitation from the list sends the answer to Google | `US-06-05#1`, `US-06-05#2` | desktop | happy-path | auto | ready |
 | `TC-06-07` | Declining one occurrence of a recurring invitation leaves the other occurrences unanswered | `US-06-05#3` | desktop | happy-path | auto | ready |
 | `TC-06-08` | As a guest without edit rights, the user cannot change the event's time | `US-06-05#4` | desktop | negative | auto | ready |

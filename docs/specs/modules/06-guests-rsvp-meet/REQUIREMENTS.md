@@ -71,7 +71,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ### Invitations and responses
 
 - [MOD-06-F09] Invitations awaiting the user's response are marked as such in every view. — *source: `DEC-61`*
-- [MOD-06-F10] The side panel shows how many invitations await a response; it opens a list of them to respond from. — *source: `DEC-61`*
+- [MOD-06-F10] The side panel shows how many invitations await a response; it opens a list of them to respond from, each shown on its day when picked. — *source: `DEC-61`, `DEC-215`*
 - [MOD-06-F11] The user can respond to an invitation with Accept, Decline or Maybe; the response is sent to Google.
 - [MOD-06-F12] When the user saves a change to an event with guests — also after dragging — or deletes one, the app asks once whether to send the guests an update. — *source: `DEC-40`*
 - [MOD-06-F13] Responding to an occurrence of a recurring invitation asks whether the answer applies to this event or to all events. — *source: `DEC-61`*

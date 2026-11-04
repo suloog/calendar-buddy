@@ -27,6 +27,7 @@ use chrono::{Datelike, Duration as Span, NaiveDate, TimeZone, Utc};
 use chrono_tz::{Europe::Warsaw, Tz};
 use eframe::egui;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 
 use crate::appearance::Desktop;
 use crate::checks::Checks;
@@ -150,6 +151,12 @@ fn rich(mut event: SyncedEvent) -> SyncedEvent {
         },
         guest("kate@client.com", "Kate Brown", Response::Declined),
         guest("piotr@example.com", "", Response::Awaiting),
+        // A room, with the long address Google gives rooms.
+        guest(
+            "c_1882f0oceev8sh4agsf3p1hj1ft5s@resource.calendar.google.com",
+            "Warsaw office — Room 4 (10)",
+            Response::Accepted,
+        ),
     ]);
     event.about.meet = Some("https://meet.google.com/abc-defg-hij".into());
     event.about.location = "Acme office, 20 Main Street, Warsaw".into();
@@ -618,6 +625,46 @@ fn preview() {
         Theme::Light,
         meeting,
     );
+    // The invitations awaiting an answer, one with a title too long for the list.
+    picture("invitations-light", week, Theme::Light, |app, _| {
+        let arch = titled(app, "Architecture sync");
+        app.events[arch].title =
+            "Architecture sync — synchronization engine, offline work and the cache's migrations"
+                .into();
+        // Not over yet, whatever the time of day.
+        if let Timing::Timed { start, end, .. } = &mut app.events[arch].timing {
+            *start += Span::days(1);
+            *end += Span::days(1);
+        }
+        app.rebuild();
+        app.dialog = Some(Dialog::Invitations);
+    });
+    // An invitation picked in the list: its day, the invitation ringed (`DEC-215`).
+    picture(
+        "invitation-revealed-light",
+        View::Grid(GridView::Day),
+        Theme::Light,
+        |app, ctx| {
+            let arch = titled(app, "Architecture sync");
+            let Timing::Timed { start, .. } = app.events[arch].timing else {
+                unreachable!("a timed event")
+            };
+            app.navigation.selected = start.with_timezone(&Warsaw).date_naive();
+            app.rebuild();
+            let index = app.places.binary_search(&arch).expect("shown");
+            crate::grid_view::reveal(ctx, index);
+        },
+    );
+    // Answering an occurrence of a series asks whether for this event or all events.
+    picture("respond-recurring-light", week, Theme::Light, |app, _| {
+        let mut event = app.events[titled(app, "Architecture sync")].clone();
+        event.recurring = true;
+        event.series = Some((
+            "arch".into(),
+            calendar_core::sync::Start::On(Utc::now().date_naive()),
+        ));
+        app.answer(&event, Response::Accepted);
+    });
     picture("welcome-light", week, Theme::Light, |app, _| {
         app.accounts = Accounts::default()
     });
@@ -693,4 +740,101 @@ fn meeting(app: &mut CalendarApp, _: &egui::Context) {
         ("robin@partner.example.org".to_string(), Shared::Nothing),
     ];
     app.sync.answered_their(asked, answer);
+}
+
+/// The app on the made-up data in `view`, run until the cached events came, for driving it as
+/// the user does.
+fn driven(view: View) -> Harness<'static, CalendarApp> {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_eframe(move |cc| CalendarApp::preview(&cc.egui_ctx, view, Theme::Light));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.state().events.is_empty() {
+        assert!(Instant::now() < deadline, "the cached events never came");
+        std::thread::sleep(Duration::from_millis(20));
+        harness.step();
+    }
+    harness
+}
+
+/// A click at `pos`, pressed and released.
+fn click_at(harness: &mut Harness<CalendarApp>, pos: egui::Pos2) {
+    harness.hover_at(pos);
+    harness.drag_at(pos);
+    harness.run_steps(1);
+    harness.drop_at(pos);
+    harness.run_steps(2);
+}
+
+#[test]
+fn a_click_outside_a_dialog_closes_it_and_reaches_nothing_under_it() {
+    let mut harness = driven(View::Grid(GridView::Week));
+    harness.state_mut().dialog = Some(Dialog::Shortcuts);
+    harness.run_steps(2);
+
+    // On the hours of the week, where a click would otherwise start a new event.
+    click_at(&mut harness, egui::pos2(1250.0, 780.0));
+
+    assert!(harness.state().dialog.is_none());
+}
+
+#[test]
+fn a_click_outside_the_editor_leaves_it_open() {
+    let mut harness = driven(View::Grid(GridView::Week));
+    let app = harness.state_mut();
+    let event = app.events[titled(app, "Sprint demo")].clone();
+    let calendar = (app.sync.calendars().iter())
+        .find(|c| c.account_id == event.account_id && c.id == event.calendar_id)
+        .cloned()
+        .expect("its calendar is in the made-up data");
+    let editor = calendar_core::editor::Editor::of(&event, calendar, &app.regional);
+    app.dialog = Some(Dialog::Editor(Box::new(editor)));
+    harness.run_steps(2);
+
+    click_at(&mut harness, egui::pos2(1275.0, 795.0));
+
+    assert!(matches!(harness.state().dialog, Some(Dialog::Editor(_))));
+}
+
+#[test]
+fn tc_06_05_an_invitation_picked_in_the_list_is_shown_ringed_on_its_day() {
+    let mut harness = driven(View::Grid(GridView::Day));
+    // "Architecture sync", awaiting an answer, three days from today whatever today is.
+    let app = harness.state_mut();
+    let today = app.navigation.selected;
+    let later = today + Span::days(3);
+    let arch = titled(app, "Architecture sync");
+    let start = Warsaw
+        .from_local_datetime(&later.and_hms_opt(10, 0, 0).unwrap())
+        .unwrap()
+        .with_timezone(&Utc);
+    app.events[arch].timing = Timing::Timed {
+        start,
+        end: start + Span::hours(1),
+        zone: Warsaw,
+    };
+    // A calendar hidden in the side panel whose events come first, so the views count the
+    // events otherwise than `events` does.
+    let first = &app.events[0];
+    assert_ne!(first.calendar_id, app.events[arch].calendar_id);
+    let hidden = (first.account_id.clone(), first.calendar_id.clone());
+    app.settings.hidden.insert(hidden);
+    app.rebuild();
+    app.dialog = Some(Dialog::Invitations);
+    harness.run_steps(2);
+
+    harness.get_by_label("Architecture sync").click();
+    harness.run_steps(4);
+
+    let app = harness.state();
+    assert!(app.dialog.is_none());
+    assert_eq!(app.navigation.selected, later);
+    assert_eq!(app.mini_month, later);
+    // The invitation is the one ringed: Enter opens its details.
+    harness.key_press(egui::Key::Enter);
+    harness.run_steps(2);
+    let Some(Dialog::Event(opened, ..)) = &harness.state().dialog else {
+        panic!("Enter opens the ringed event's details");
+    };
+    assert_eq!(opened.title, "Architecture sync");
 }

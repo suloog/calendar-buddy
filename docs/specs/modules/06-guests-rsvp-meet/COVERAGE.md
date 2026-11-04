@@ -87,6 +87,7 @@
 | `US-06-04#1` | An invitation awaiting the user's answer has a dashed outline and a… | `TC-06-05` | auto | — |
 | `US-06-04#2` | The side panel shows how many invitations await an answer; choosing… | `TC-06-05` | auto | — |
 | `US-06-04#3` | Invitations in a calendar disabled in the settings are neither show… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-06-04#4` | Choosing an invitation's title in the list closes it and shows the in… | `TC-06-05` | auto | — |
 | `US-06-05#1` | An invitation's details open with Accept, Maybe and Decline at the… | `TC-06-06` | auto | — |
 | `US-06-05#2` | An answer given in the app appears in Google Calendar in the browser. | `TC-06-06` | auto | — |
 | `US-06-05#3` | Answering an occurrence of a recurring invitation asks whether the… | `TC-06-07` | auto | — |
