@@ -96,6 +96,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Notifications go through `org.freedesktop.Notifications` over D-Bus with actions (Join, Snooze 5, Snooze 10, Dismiss); a delivered-reminder record (event, occurrence start, reminder offset) prevents repeats across sync cycles.
 - Tray: StatusNotifierItem (KDE); autostart: an XDG autostart `.desktop` entry; single instance: a well-known D-Bus name; `webcal:` handler registered as `x-scheme-handler/webcal`, opening `https://calendar.google.com/calendar/r?cid=…` in the browser. All behind the platform interface (constitution).
 - Sleep and wake signals come from systemd-logind (shared with `MOD-02`).
+- On macOS (`MOD-11`, `DEC-217`): notifications without buttons through AppleScript, autostart through a launch agent, single instance through Launch Services (`MOD-11-F06`, `F07`); not yet delivered there are the tray as a menu bar icon (`F14`, `F15`, `U02` → `MOD-11-F09`), notification buttons and clicks (`F08`, `F09`, `F10` → `MOD-11-F10`) and `webcal:` links (`F18` → `MOD-11-F12`).
 
 ## Out of scope / what not to worry about
 

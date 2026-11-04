@@ -78,7 +78,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - **Google OAuth 2.0** — authorization in the system browser and the token exchange; the app sends the authorization request, Google returns an authorization code to the app.
 - **Google token service** — refreshing access for each connected account; revoking access when an account is removed.
 - **Google user info** — the account's e-mail address and name, to identify and list the account.
-- **Platform secret store** — on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC); the app writes and deletes each account's credentials there.
+- **Platform secret store** — on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC); on macOS the login Keychain (`MOD-11-F03`, `DEC-217`); the app writes and deletes each account's credentials there.
 
 ## Technical notes
 

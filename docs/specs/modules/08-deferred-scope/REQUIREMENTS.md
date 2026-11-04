@@ -29,7 +29,7 @@ What came up and is deliberately not planned for delivery: the items parked duri
 | `SRC-01-116` Task management or AI scheduling assistant. | informal | not delivered — tasks, AI scheduling assistant (PRD §13); filling events from a description moved to delivery, `DEC-192` |
 | `SRC-01-117` Advanced theming and layout customization. | informal | not delivered — advanced theming and layout (PRD §13, `DEC-57`) |
 | `SRC-01-118` Calendar sharing and administrative management. | informal | not delivered — calendar management and sharing (`DEC-21`) |
-| `SRC-01-119` Production-quality macOS and Windows releases if Linux is prioritized first. | informal | not delivered — macOS and Windows releases (`DEC-02`) |
+| `SRC-01-119` Production-quality macOS and Windows releases if Linux is prioritized first. | informal | macOS moved to delivery — `MOD-11`, `DEC-217`; Windows not delivered (`DEC-02`) |
 | `SRC-02-27` Out of the MVP for accounts: providers other than Google; the user choosing permission… | informal | not delivered — non-Google sign-in, scopes chosen by hand |
 | `SRC-02-39` No search in the MVP. | informal | not delivered — event search (`DEC-30`) |
 | `SRC-03-01` Responding to an invitation with a comment and proposing another time are not needed —… | informal | not delivered — RSVP with a comment, proposing another time |
@@ -47,4 +47,4 @@ Also deferred, recorded in the delivery modules' *Out of scope* sections rather 
 - Interface translations — `DEC-31` (`MOD-04`).
 - `mailto:` links, update checking and automatic updates — `DEC-46` (`MOD-07`).
 
-Narrowed by a later decision: `SRC-01-118` (calendar management) and `SRC-02-27` (providers other than Google) stay deferred for Google calendars and other providers, but calendars kept only on the device — created, renamed and deleted in the app — are delivered by `MOD-09` (`DEC-178`).
+Narrowed by a later decision: `SRC-01-118` (calendar management) and `SRC-02-27` (providers other than Google) stay deferred for Google calendars and other providers, but calendars kept only on the device — created, renamed and deleted in the app — are delivered by `MOD-09` (`DEC-178`). `SRC-01-119` (other platforms) stays deferred for Windows, but macOS is delivered by `MOD-11` (`DEC-217`).

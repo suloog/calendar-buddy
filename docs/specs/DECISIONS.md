@@ -2617,3 +2617,15 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-217] The app also runs on macOS, installed as a bundle in ~/Applications
+
+- **Date:** 2026-11-04
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation 2026-11-04 (`SRC-12-01`…`SRC-12-04`, `SRC-12`)
+- **Affects:** `DEC-02`, `DEC-47`, `DEC-164`, `NFR-04`, `NFR-11`, `NFR-13`, `NFR-15`, `SRC-01-119` (`MOD-08`), `MOD-11`, technical notes of `MOD-01`, `MOD-02`, `MOD-04`, `MOD-07`, `PROJECT.md`
+- **Decision:** macOS is a second platform, next to Linux, delivered by a new module, `MOD-11`; the shared code stays the same and the platform code behind `calendar_core::platform` gets a macOS implementation. Install as on Linux: `cargo install --path crates/app --locked`, then start `~/.cargo/bin/calendar-buddy` once; it puts itself in `~/Applications` as "Calendar Buddy.app" (bundle `pl.ordergroup.CalendarBuddy`, its own copy of the program and the app's icon), kept current at every start of the installed program; a debug build is "Calendar Buddy (dev).app" (`pl.ordergroup.CalendarBuddyDev`, `DEC-164`). Tokens are kept in the login Keychain as generic passwords of the service `calendar-buddy` (`calendar-buddy-dev`) for each account (`DEC-47`). Start at login is a launch agent in `~/Library/LaunchAgents`. Notifications are shown by `osascript`, without buttons and without clicks coming back. The system's light or dark appearance is followed. The config and cache directories stay `~/.config/calendar-buddy` and `~/.cache/calendar-buddy` (`DEC-77`, `DEC-87`). Left for later on macOS: a menu bar icon and keeping the app running with its window closed (it quits when the window closes), notification buttons and clicks, watching sleep and the network, the `webcal:` handler.
+- **Why:** The product owner uses a Mac day to day. The interfaces of `NFR-13` let a second platform come without touching the shared code. The bundle is installed the same way as the Linux launcher entry, so the instructions are the same on both. The left-out parts need AppKit's event loop on the main thread while the window is closed, a larger change than installing.
+- **Scope effect:** extends scope — macOS moves from the non-goals into scope; Windows stays out
+- **Resolves:** —
+- **Status:** accepted

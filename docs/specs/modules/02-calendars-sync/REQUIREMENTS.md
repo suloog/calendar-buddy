@@ -109,7 +109,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Per calendar: a first full sync bounded by the window (`timeMin` one year back, `timeMax` two years ahead), then incremental sync with the stored `syncToken`; incremental answers are filtered to the window locally. HTTP 410 on a `syncToken` → full resync of that calendar.
 - Series are kept as master events plus exceptions (not pre-expanded by Google), so editing scopes in `MOD-05` work on the real series; expansion into occurrences uses a tested recurrence library, with times stored as UTC plus the IANA zone (constitution).
 - Adaptive polling per calendar by access role: `owner`/`writer` about every 60 s, `reader`/`freeBusyReader` about every 15 min; longer intervals while the window is hidden; an immediate round on window activation and before opening the editor. Each calendar of a round is asked for in its own request (`DEC-91`). No push channels (`events.watch` needs a public endpoint — `DEC-53`). Exponential back-off with jitter on 403 rate-limit and 429; per-calendar error state.
-- Network and sleep/wake signals from NetworkManager and systemd-logind over D-Bus, behind the platform interface.
+- Network and sleep/wake signals from NetworkManager and systemd-logind over D-Bus, behind the platform interface. On macOS they are not watched yet: the app counts as online and keeps its interval (`MOD-11-F11`, `DEC-217`).
 - Local calendar colours live in the app's settings, keyed by account ID and calendar ID (`DEC-99`), never sent to Google.
 - The window is re-evaluated daily; purged events leave no trace in the store.
 

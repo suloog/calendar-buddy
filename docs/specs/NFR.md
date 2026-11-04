@@ -30,14 +30,14 @@
 
 ## Compatibility
 
-- [NFR-11] The app installs from a .deb package and works on Ubuntu 26.10 with KDE Plasma, on Wayland and on X11. (`SRC-01-06`, `SRC-01-95`, `SRC-01-108`) — *source: `DEC-12`*
+- [NFR-11] The app installs from a .deb package and works on Ubuntu 26.10 with KDE Plasma, on Wayland and on X11. (`SRC-01-06`, `SRC-01-95`, `SRC-01-108`) — *source: `DEC-12`* It also installs on macOS, as a bundle in `~/Applications` (`MOD-11`). (`SRC-12-03`) — *source: `DEC-217`*
 - [NFR-12] The app behaves as a native desktop application: system notifications, the system theme, window resizing. (`SRC-01-09`)
 
 ## Maintainability
 
-- [NFR-13] Platform-specific functionality sits behind interfaces, so macOS and Windows remain possible from the same codebase. (`SRC-01-05`, `SRC-01-07`)
+- [NFR-13] Platform-specific functionality sits behind interfaces, so macOS and Windows remain possible from the same codebase. (`SRC-01-05`, `SRC-01-07`) Linux and macOS implement them (`MOD-11`); Windows remains possible. — *source: `DEC-217`*
 - [NFR-14] The calendar-provider integration is separate from the app's own model, and provider-specific features are optional. (`SRC-01-13`, `SRC-01-86`)
-- [NFR-15] A new version is delivered as a new .deb package installed by hand; there is no maintenance contract. — *source: `DEC-07`, `DEC-46`*
+- [NFR-15] A new version is delivered as a new .deb package installed by hand; there is no maintenance contract. — *source: `DEC-07`, `DEC-46`* On macOS a new version is installed with `cargo install` and one start of the installed program (`MOD-11-F02`). — *source: `DEC-217`*
 
 ## Availability and scalability
 

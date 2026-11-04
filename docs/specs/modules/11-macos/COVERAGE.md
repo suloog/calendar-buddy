@@ -1,0 +1,87 @@
+<!-- Copy to docs/specs/modules/NN-<slug>/COVERAGE.md. Content in the project language; headings fixed.
+     One file per module, two parts: requirement → user stories (written by /og:stories) and
+     acceptance criterion → tests (written by /og:tests). The `og:part` markers stay — og-status reads them. -->
+
+# Coverage — [MOD-11] macOS
+
+> The maps the other way round from a story's **Covers** field and a test case's **Verifies** field.
+> They stop a requirement quietly falling out when the module is sliced, and a criterion quietly
+> falling out when the tests are written.
+>
+> Fill it in the same run that writes the story or the test case. A row with an empty "Covered by"
+> is a requirement not yet sliced or a criterion with no test. The module is **sliced** when part 1
+> has no empty row; it is **covered** when every row of part 2 has a test **or** an explicit
+> justification in the "Note" column (e.g. "manual verification — email delivery").
+>
+> Source: `REQUIREMENTS.md`, `stories/`, `tests/` in this directory · Registers: `docs/specs/BACKLOG.md`,
+> `docs/specs/TESTPLAN.md`
+
+<!-- og:part stories -->
+
+## Part 1 — Requirements → user stories
+
+### Functional requirements
+
+| Requirement | Covered by |
+| ----------- | ---------- |
+| `MOD-11-F01` | `US-11-01` |
+| `MOD-11-F02` | `US-11-01` |
+| `MOD-11-F03` | `US-11-01` |
+| `MOD-11-F04` | `US-11-01` |
+| `MOD-11-F05` | `US-11-01` |
+| `MOD-11-F06` | `US-11-01` |
+| `MOD-11-F07` | `US-11-01` |
+| `MOD-11-F08` | `US-11-01` |
+| `MOD-11-F09` | `US-11-02` |
+| `MOD-11-F10` | `US-11-03` |
+| `MOD-11-F11` | `US-11-04` |
+| `MOD-11-F12` | `US-11-04` |
+
+### UI/UX requirements
+
+| Requirement | Covered by |
+| ----------- | ---------- |
+| `MOD-11-U01` | `US-11-01` |
+
+<!-- og:part tests -->
+
+## Part 2 — Acceptance criteria → tests
+
+### User story acceptance criteria
+
+`#n` is the criterion's position in the story file, counted from 1, with a Given/When/Then scenario counting as one.
+
+| Criterion | Text (short) | Covered by | Automation | Note |
+| --------- | ------------ | ---------- | ---------- | ---- |
+| `US-11-01#1` | After `cargo install` and one start, `~/Applications` holds "Calendar Bud… | `TC-11-02` | manual-only | — |
+| `US-11-01#2` | After a new version is installed and started once, the bundle holds the n… | `TC-11-01` | auto | — |
+| `US-11-01#3` | A Google account keeps its token in the login Keychain; after a restart i… | `TC-11-04` | manual-only | real Google account and Keychain |
+| `US-11-01#4` | Declining to let the app read its Keychain item shows that unlocking was… | `TC-11-04` | manual-only | real Keychain prompt |
+| `US-11-01#5` | Turning on "Start at login" adds the launch agent; at the next login the… | `TC-11-03`, `TC-11-05` | auto, manual-only | the login itself is manual |
+| `US-11-01#6` | A reminder shows a macOS notification with the event's title, start time… | `TC-11-05` | manual-only | Notification Center |
+| `US-11-01#7` | With the theme following the system, switching macOS between light and d… | `TC-11-05` | manual-only | system setting |
+| `US-11-01#8` | Closing the window quits the app; opening the app while it runs brings it… | `TC-11-02` | manual-only | Launch Services |
+| `US-11-02#1` | Closing the window leaves an icon in the menu bar, and reminders keep arr… | — | — | draft — tests after `/og:clarify` |
+| `US-11-02#2` | The icon's menu opens the window and quits the app; after quitting, no re… | — | — | draft — tests after `/og:clarify` |
+| `US-11-02#3` | Started at login, the app shows only its menu bar icon, without opening t… | — | — | draft — tests after `/og:clarify` |
+| `US-11-02#4` | Opening the app from Spotlight or the Dock while it is in the menu bar op… | — | — | draft — tests after `/og:clarify` |
+| `US-11-03#1` | A notification is shown in the app's name and icon, not Script Editor's. | — | — | draft — tests after `/og:clarify` |
+| `US-11-03#2` | Snooze 5 minutes shows it again 5 minutes later; Dismiss removes it for g… | — | — | draft — tests after `/og:clarify` |
+| `US-11-03#3` | Join opens the event's Meet call in the browser. | — | — | draft — tests after `/og:clarify` |
+| `US-11-03#4` | Clicking the notification opens its event in the app's window. | — | — | draft — tests after `/og:clarify` |
+| `US-11-04#1` | After the Mac wakes from sleep, the calendars are synchronized within sec… | — | — | draft — tests after `/og:clarify` |
+| `US-11-04#2` | Turning Wi-Fi off shows that the app is offline; turning it on synchroniz… | — | — | draft — tests after `/og:clarify` |
+| `US-11-04#3` | A `webcal:` link clicked in a browser or mail opens Google Calendar's "ad… | — | — | draft — tests after `/og:clarify` |
+
+### Module constraints and edge cases
+
+| Constraint | Covered by | Note |
+| ---------- | ---------- | ---- |
+| The home directory is not known → no bundle and no launch agent are writ… | — | smoke depth — not tested yet (`DEC-65`) |
+| The program runs from inside the bundle → it is its own copy; nothing is… | `TC-11-02` | — |
+| The bundle's program is replaced while it runs → the running copy keeps… | — | smoke depth — not tested yet (`DEC-65`); the copy is written to a new file renamed into place |
+| A new version was installed → macOS may ask once whether the app may rea… | `TC-11-04` | — |
+| Notifications are shown on behalf of Script Editor → when they are off fo… | — | the system decides; not tested |
+| "Start at login" turned on from a program outside the bundle → it starts… | `TC-11-03` | — |
+| Opening the app while it runs → macOS brings the running copy forward; n… | `TC-11-02` | — |
+| No network → until `MOD-11-F11` the app counts as online, and a failed s… | — | smoke depth — not tested yet (`DEC-65`) |

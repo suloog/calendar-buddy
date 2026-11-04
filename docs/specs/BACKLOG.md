@@ -40,7 +40,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 6 | sliced |
 | `MOD-09` Local calendars | 21 / 6 | 5 | 5 | sliced |
 | `MOD-10` Events from a description | 27 / 8 | 5 | 0 | sliced |
-| **Total** | **199 / 49** | **61** | **56** | 9 / 9 modules sliced |
+| `MOD-11` macOS | 12 / 1 | 4 | 0 | sliced |
+| **Total** | **211 / 50** | **65** | **56** | 10 / 10 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -167,3 +168,14 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-10-03` | As a User, I can name guests and ask for Meet in the description, so that a meeting with people is set up in one sentence | F03, F06, F07, F11, F12, F25 | must | ready | `US-10-02` | — |
 | `US-10-04` | As a User, I can change an event by describing the change, so that moving a meeting is as quick as adding one | F15, F16, F17, F18, U08, NFR-04 | must | ready | `US-10-02` | — |
 | `US-10-05` | As a User, I am asked for what my description left out and can name the calendar in it, so that a short sentence still gives the right event | F09, F10, F13, F14, U06, U07 | must | ready | `US-10-02` | — |
+
+## [MOD-11] macOS
+
+`docs/specs/modules/11-macos/REQUIREMENTS.md` · `docs/specs/modules/11-macos/stories/`
+
+| Story | Title | Covers | Prio | Status | Depends on | YouTrack |
+| ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
+| `US-11-01` | As a User on a Mac, I can install the app and use it like my other Mac apps, so that I don't need Linux to keep my calendar at hand | F01, F02, F03, F04, F05, F06, F07, F08, U01 | must | review | `US-01-01`, `US-01-04`, `US-04-01`, `US-07-01`, `US-07-05` | — |
+| `US-11-02` | As a User on a Mac, the app keeps reminding me from the menu bar when its window is closed, so that reminders don't depend on an open window | F09 | must | draft | `US-11-01` | — |
+| `US-11-03` | As a User on a Mac, I can snooze, dismiss or join from a notification and open its event by clicking it, so that I act on a reminder without opening the app | F10 | must | draft | `US-11-01`, `US-11-02` | — |
+| `US-11-04` | As a User on a Mac, the app catches up after sleep, knows when I am offline and opens calendar subscription links, so that it behaves as it does on Linux | F11, F12 | must | draft | `US-11-01`, `US-11-02` | — |

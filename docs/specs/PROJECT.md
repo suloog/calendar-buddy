@@ -14,14 +14,14 @@ analyst: Maciej
 
 ## Overview
 
-calendar-buddy is a lightweight, fast calendar application for Linux, connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache. It can also be used without a Google account, with local calendars kept only on the device (`DEC-178`).
+calendar-buddy is a lightweight, fast calendar application for Linux, also running on macOS (`DEC-217`), connected directly to Google Calendar. It replaces opening Google Calendar in the browser for everyday calendar work. It is built for the product owner's own use, with the option of sharing it with colleagues, and runs without a server of its own: the data stays in Google and in a local cache. It can also be used without a Google account, with local calendars kept only on the device (`DEC-178`).
 
 ## Sources
 
 The scope comes from the register in `SOURCES.md`.
 
 - Binding: none — the project is internal; the product owner's rulings in `DECISIONS.md` settle the scope
-- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items); `SRC-06` analyst notes, product owner's request 2026-10-26 (local calendars); `SRC-08` analyst notes, product owner's request 2026-10-27 (events from a description with a local model); `SRC-09` analyst notes, product owner's rulings 2026-10-27 (events from a description); `SRC-10` analyst notes, discovery session 2026-10-27 (events from a description); `SRC-11` analyst notes, requirements session 2026-10-27 (events from a description)
+- Informative: `SRC-01` Desktop Calendar — Product Requirements Document, v0.1 (129 items); `SRC-02` analyst notes, discovery session 2026-10-22 (49 items); `SRC-03` analyst notes, discovery session 2026-10-23 (13 items); `SRC-06` analyst notes, product owner's request 2026-10-26 (local calendars); `SRC-08` analyst notes, product owner's request 2026-10-27 (events from a description with a local model); `SRC-09` analyst notes, product owner's rulings 2026-10-27 (events from a description); `SRC-10` analyst notes, discovery session 2026-10-27 (events from a description); `SRC-11` analyst notes, requirements session 2026-10-27 (events from a description); `SRC-12` analyst notes, product owner's request 2026-11-04 (the app on macOS)
 
 ## Goals
 
@@ -29,12 +29,13 @@ The scope comes from the register in `SOURCES.md`.
 - G2: All ten acceptance criteria of the PRD (§14) hold in daily use. (`SRC-01-120`…`SRC-01-129`, `DEC-07`)
 - G3: Start-up, switching period or view, and scrolling the week view stay within the thresholds set after the first measurements, on a profile of 5 accounts, 50 calendars and about 20,000 cached events. (`SRC-01-96`, `DEC-14`)
 - G4: The app installs from a .deb package and works on Ubuntu 26.10 with KDE Plasma, on Wayland and on X11. (`SRC-01-108`, `DEC-12`)
+- G5: The app installs on macOS as a bundle in `~/Applications` and connects Google accounts with their tokens in the Keychain. (`SRC-12-01`, `SRC-12-03`, `DEC-217`)
 
 ## Actors
 
 | Actor | Who they are | How they sign in | Access, in short | Source |
 | ----- | ------------ | ---------------- | ---------------- | ------ |
-| User | A person using the app on their own Linux computer with one or more of their own Google accounts (personal or Workspace) — for now the product owner, later possibly colleagues | Google account through the system browser (OAuth); no password in the app — or no sign-in at all, with local calendars only (`DEC-179`) | Their own calendars and those shared with their accounts, within Google's permissions; on each event they act as organizer or guest | `SRC-01-18`, `SRC-01-79`, `SRC-02-01`, `DEC-01`, `DEC-10`, `DEC-48` |
+| User | A person using the app on their own Linux computer or Mac with one or more of their own Google accounts (personal or Workspace) — for now the product owner, later possibly colleagues | Google account through the system browser (OAuth); no password in the app — or no sign-in at all, with local calendars only (`DEC-179`) | Their own calendars and those shared with their accounts, within Google's permissions; on each event they act as organizer or guest | `SRC-01-18`, `SRC-01-79`, `SRC-02-01`, `DEC-01`, `DEC-10`, `DEC-48`, `DEC-217` |
 
 ## Glossary
 
@@ -77,11 +78,12 @@ The scope comes from the register in `SOURCES.md`.
 - Reminders and notifications — notifications from Google reminders, editing reminders, snooze, muting calendars, tray and autostart, single instance, `webcal:` links (`discovery/09-notifications.md` · `SRC-01-80`…`SRC-01-85`, `SRC-01-105`, `SRC-01-127`; `SRC-03-07`…`SRC-03-11`)
 - Local calendars — calendars and events kept only on the device, managed in the settings, grouped under "Local"; using the app without a Google account, with the welcome screen inviting to connect one (`SRC-06-01`…`SRC-06-16`, `DEC-178`, `DEC-179`)
 - Events from a description — a local model through Ollama, installed by the user, fills the new-event or edit window from a description in Polish or English; the user approves it by hand; nothing leaves the computer (`SRC-08`, `SRC-09`, `DEC-192`…`DEC-200`)
+- macOS — the app installed as a bundle in `~/Applications`, sign-ins in the Keychain, start at login, notifications and the system's appearance; later the menu bar icon, notification buttons, sleep and network signals and `webcal:` links (`SRC-12`, `SRC-01-119`, `DEC-217`)
 
 ### Out of scope (non-goals)
 
 - Providers other than Google — CalDAV, Microsoft 365 / Outlook; synchronizing local calendars anywhere. (`SRC-01-109`, `SRC-01-110`, `DEC-178`)
-- macOS and Windows releases; public distribution, Google verification and choosing a licence. (`DEC-02`, `DEC-08`, `DEC-10`)
+- Windows releases; on macOS a menu bar icon, notification buttons and the `webcal:` handler (for later); public distribution, Google verification and choosing a licence. (`DEC-02`, `DEC-08`, `DEC-10`, `DEC-217`)
 - Offline editing with a change queue and conflict resolution. (`SRC-01-111`, `DEC-25`)
 - Managing Google calendars — creating, renaming, deleting, sharing, administration; local calendars are managed in the app. (`SRC-01-118`, `DEC-21`, `DEC-178`)
 - Event search, basic or advanced. (`SRC-01-113`, `DEC-30`)
@@ -97,7 +99,7 @@ The scope comes from the register in `SOURCES.md`.
 
 ## Stack & integrations
 
-Rust. The interface is built with egui (eframe on wgpu), with Iced as the fallback; the choice is confirmed by a feasibility check in the first stories (`DEC-33`). Google Calendar API for calendars, events, reminders, special event types, Meet and guests' free/busy; Google People API for contacts and, on Workspace accounts, the organization's directory. Sign-in is OAuth 2.0 with PKCE through the system browser, as an External, unverified app in production status in the product owner's GCP project (`DEC-10`). Local data: an SQLite cache; tokens in the platform's standard secret store — on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC) (`DEC-47`); desktop notifications and a tray icon on KDE Plasma. There is no backend: Google is the system of record and all logic runs in the app. The GCP project belongs to the organization; Maciej owns access on both sides (`DEC-09`). Distribution as a .deb package (`DEC-12`).
+Rust. The interface is built with egui (eframe on wgpu), with Iced as the fallback; the choice is confirmed by a feasibility check in the first stories (`DEC-33`). Google Calendar API for calendars, events, reminders, special event types, Meet and guests' free/busy; Google People API for contacts and, on Workspace accounts, the organization's directory. Sign-in is OAuth 2.0 with PKCE through the system browser, as an External, unverified app in production status in the product owner's GCP project (`DEC-10`). Local data: an SQLite cache; tokens in the platform's standard secret store — on Linux the Secret Service API (KWallet, GNOME Keyring, KeePassXC) (`DEC-47`), on macOS the Keychain (`DEC-217`); desktop notifications and a tray icon on KDE Plasma. There is no backend: Google is the system of record and all logic runs in the app. The GCP project belongs to the organization; Maciej owns access on both sides (`DEC-09`). Distribution as a .deb package (`DEC-12`); on macOS a bundle the app installs itself from `cargo install` (`DEC-217`).
 
 ## Milestones
 

@@ -52,7 +52,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
-| **Total** | **289** | **206** | **109 / 17** | 9 / 9 modules written |
+| `MOD-11` macOS | 19 | 8 | 2 / 3 | written |
+| **Total** | **308** | **214** | **111 / 20** | 10 / 10 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -64,6 +65,7 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | ----------- | -------- | ---- |
 | `local` (cargo test) | `auto` test cases, before every PR | a fake Google API and a test secret store, set up by the tests |
 | `local` (product owner's desktop) | `manual-only` test cases, acceptance | the product owner's real Google accounts, Ubuntu 26.10 + KDE Plasma (`DEC-12`) |
+| `local` (product owner's Mac) | `manual-only` test cases of `MOD-11`, acceptance on macOS | the product owner's real Google accounts and login Keychain (`DEC-217`) |
 
 ## [MOD-01] Google accounts and sign-in
 
@@ -253,3 +255,15 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-10-33` | "Lunch o 13" opens at 13:00 with the day empty and the cursor in it, and Save waits for a day | `US-10-05#4`, `US-10-05#1` | desktop | edge | auto | ready |
 | `TC-10-34` | A calendar named in the description is chosen, matched by its name ignoring letter case | `US-10-05#5`, `US-10-05#2` | desktop | happy-path | auto | ready |
 | `TC-10-35` | A named calendar that does not exist or cannot take the event gives the default calendar with a note saying it was not found | `US-10-05#5` | desktop | negative | auto | ready |
+
+## [MOD-11] macOS
+
+`docs/specs/modules/11-macos/REQUIREMENTS.md` · `docs/specs/modules/11-macos/tests/`
+
+| TC | Title | Verifies | Layer | Type | Automation | Status |
+| -- | ----- | -------- | ----- | ---- | ---------- | ------ |
+| `TC-11-01` | The bundle is written with the program, its property list and its icon, and only what changed is written again | `US-11-01#2` | desktop | happy-path | auto | ready |
+| `TC-11-02` | On a Mac, the installed app is in ~/Applications, opens from Spotlight and Launchpad, runs once and quits with its window | `US-11-01#1`, `US-11-01#8` | desktop | happy-path | manual-only | ready |
+| `TC-11-03` | Start at login is off until turned on, writes a launch agent for the running program, and is removed when turned off | `US-11-01#5` | desktop | happy-path | auto | ready |
+| `TC-11-04` | On a Mac, a connected Google account is kept in the Keychain across restarts, declining access says so, and removing the account deletes the item | `US-11-01#3`, `US-11-01#4` | desktop | happy-path | manual-only | ready |
+| `TC-11-05` | On a Mac, the app starts at login, shows a reminder as a macOS notification and follows the system's dark mode | `US-11-01#5`, `US-11-01#6`, `US-11-01#7` | desktop | happy-path | manual-only | ready |

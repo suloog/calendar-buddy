@@ -66,7 +66,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Technical notes
 
 - Light and dark themes are custom egui visuals (neutral palette, one accent); with the Iced fallback (`DEC-33`), the same palette as an Iced theme.
-- The light/dark preference is read from the XDG desktop portal (`org.freedesktop.appearance`, `color-scheme`) and its change signal, behind the platform interface.
+- The light/dark preference is read from the XDG desktop portal (`org.freedesktop.appearance`, `color-scheme`) and its change signal, behind the platform interface. On macOS it is read from the `AppleInterfaceStyle` default every few seconds (`MOD-11-F08`, `DEC-217`).
 - Event text colour is picked per event from the relative luminance of its background, to keep 4.5:1.
 - Interface texts live in one table, so translations can be added later without touching the views (`DEC-31`).
 - There are no mock-ups (`DEC-32`): the look is reviewed by the product owner on the working app, story by story, starting with the week-view feasibility check of `MOD-03`.
