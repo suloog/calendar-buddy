@@ -62,8 +62,8 @@ use eframe::egui;
 use icons::Icon;
 use network::Online;
 use platform::{
-    SystemAppearance, SystemBrowser, SystemInstance, SystemNetwork, SystemTray, XdgAutostart,
-    XdgLauncher, XdgLinkHandler,
+    SystemAppearance, SystemAutostart, SystemBrowser, SystemInstance, SystemLauncher,
+    SystemLinkHandler, SystemNetwork, SystemTray,
 };
 use remove::Removal;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -436,7 +436,7 @@ impl CalendarApp {
             built_at,
             &overlay,
         );
-        let autostart = XdgAutostart::new();
+        let autostart = SystemAutostart::new();
         let start_at_login = autostart.is_on();
         let (autostart_writer, turned) = mpsc::channel::<bool>();
         std::thread::spawn(move || {
@@ -2796,9 +2796,9 @@ fn main() -> eframe::Result {
         }
     });
     // Off the UI thread, as the window opens.
-    std::thread::spawn(|| XdgLinkHandler::new().register());
+    std::thread::spawn(|| SystemLinkHandler::new().register());
     // Losing it only leaves the app without its icon in the desktop's menus and task bar.
-    std::thread::spawn(|| XdgLauncher::new().install());
+    std::thread::spawn(|| SystemLauncher::new().install());
     let tray = SystemTray::new();
     let tray_shown = tray.show(Box::new(signaled), background::at_login(&args));
     let mut shown = background::starts_shown(&args, tray_shown);

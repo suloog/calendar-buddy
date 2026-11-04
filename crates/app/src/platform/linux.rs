@@ -1,8 +1,8 @@
-//! The real platform behind `calendar_core::platform`: the Secret Service, the desktop's URL
-//! handler, the desktop's notifications, systemd-logind and NetworkManager on the system bus, the
-//! system tray, XDG autostart, the handler of `webcal:` links, the desktop's light or dark
-//! preference and the app's name on the session bus. Tests never use these; they use fakes, or a
-//! private bus and folder of their own.
+//! The real platform on Linux behind `calendar_core::platform`: the Secret Service, the
+//! desktop's URL handler, the desktop's notifications, systemd-logind and NetworkManager on the
+//! system bus, the system tray, XDG autostart, the handler of `webcal:` links, the desktop's
+//! light or dark preference and the app's name on the session bus. Tests never use these; they
+//! use fakes, or a private bus and folder of their own.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,6 +20,8 @@ use calendar_core::theme::{self, Scheme};
 use calendar_core::webcal;
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
+
+use super::{ICON, running_exe};
 
 /// The Secret Service (KWallet, GNOME Keyring, KeePassXC) on the session bus (`DEC-47`).
 pub struct SystemSecretStore;
@@ -511,15 +513,6 @@ impl Autostart for XdgAutostart {
     }
 }
 
-/// The program that runs; one replaced while it runs, as by an upgrade, is named "… (deleted)".
-fn running_exe() -> std::io::Result<PathBuf> {
-    let exe = std::env::current_exe()?;
-    let exe = exe.to_string_lossy();
-    Ok(PathBuf::from(
-        exe.strip_suffix(" (deleted)").unwrap_or(&exe),
-    ))
-}
-
 /// The app as the handler of `webcal:` links (MOD-07 *Technical notes*), through a desktop entry
 /// in `$XDG_DATA_HOME/applications`, or `~/.local/share/applications` when that is not set.
 pub struct XdgLinkHandler {
@@ -562,9 +555,6 @@ impl LinkHandler for XdgLinkHandler {
         std::fs::write(entry, wanted)
     }
 }
-
-/// The app's icon, as the window and the desktop's icon theme take it.
-pub const ICON: &[u8] = include_bytes!("../assets/icon/calendar-buddy.png");
 
 /// The app in the desktop's menus with its icon: the launcher's entry in
 /// `$XDG_DATA_HOME/applications` and the icon in the user's icon theme, the desktop taking the

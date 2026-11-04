@@ -42,8 +42,9 @@ editor and the dark theme](docs/screenshots/tour.gif)
 
 ## Getting started
 
-Calendar Buddy is built for Ubuntu with KDE Plasma, on Wayland and on X11. It keeps your sign-in
-in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the Secret Service API).
+Calendar Buddy is built for Ubuntu with KDE Plasma, on Wayland and on X11, and also runs on
+macOS. It keeps your sign-in in the system's secret store: on Linux KWallet, GNOME Keyring or
+KeePassXC, through the Secret Service API; on macOS the Keychain.
 
 1. Install a recent stable [Rust](https://rustup.rs) toolchain.
 2. Set up your own Google OAuth client and save its file to
@@ -60,6 +61,14 @@ in the system's secret store (KWallet, GNOME Keyring or KeePassXC, through the S
    `~/.local/share/applications`); from then on start it from there, or pin it to the task bar.
    The entry starts the program the app was last started from, so keep starting it from the
    installed one. To update, pull and run the same `cargo install` again.
+
+   On macOS the first start puts **Calendar Buddy** in `~/Applications`, with its own copy of
+   the program, so it shows in Launchpad and Spotlight and can be kept in the Dock. To update,
+   pull, run the same `cargo install` and start `~/.cargo/bin/calendar-buddy` once more: it
+   updates the copy. After an update macOS may ask once whether the app may use its Keychain
+   item; choose **Always Allow**. There is no menu bar icon yet, so the app quits when its window
+   closes, and its notifications have no buttons (they come from Script Editor, which you may
+   have to allow in *System Settings → Notifications*).
 
 4. Click **Connect Google account**. Sign-in happens in your browser; the app never sees your
    password. Google warns that the app is not verified: choose **Advanced**, then
