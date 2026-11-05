@@ -23,13 +23,13 @@ depends_on: [] # test case IDs that must pass first
 
 ## Preconditions
 
-- The installed app on a Mac with a connected account or a local calendar; the theme set to follow the system; notifications allowed for Script Editor.
+- The installed app on a Mac with a connected account or a local calendar; the theme set to follow the system; notifications allowed for Calendar Buddy.
 
 ## Steps
 
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
-| 1 | Turn on "Start at login" in the settings; log out and in. | `~/Library/LaunchAgents/pl.ordergroup.CalendarBuddy.plist` exists; after logging in the app's window opens by itself. | screenshot |
+| 1 | Turn on "Start at login" in the settings; log out and in. | `~/Library/LaunchAgents/pl.ordergroup.CalendarBuddy.plist` exists; after logging in the app's icon is in the menu bar, without its window (`US-11-02`). | screenshot |
 | 2 | Create an event with a location starting in 2 minutes with a 1-minute notification. | A macOS notification shows its title, start time and location. | screenshot |
 | 3 | Switch *System Settings → Appearance* from Light to Dark and back. | The app switches within a few seconds each time. | screenshot |
 | 4 | Turn "Start at login" off. | The launch agent file is gone. | terminal output |

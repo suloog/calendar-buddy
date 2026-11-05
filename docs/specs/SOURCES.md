@@ -27,6 +27,7 @@
 | `SRC-10` | Analyst notes — discovery session on events from a description, 2026-10-27 (6 items) | informal | analyst — Maciej (product owner), interview | 2026-10-27 | — | `sources/10-analyst-notes-2026-10-27-discovery.md` |
 | `SRC-11` | Analyst notes — requirements session on events from a description, 2026-10-27 (8 items) | informal | analyst — Maciej (product owner), interview | 2026-10-27 | — | `sources/11-analyst-notes-2026-10-27-requirements.md` |
 | `SRC-12` | Analyst notes — product owner's request 2026-11-04, the app on macOS (5 items) | informal | analyst — Maciej (product owner), conversation | 2026-11-04 | — | `sources/12-analyst-notes-2026-11-04-macos.md` |
+| `SRC-13` | Analyst notes — product owner's request 2026-11-05, the menu bar and notifications on macOS (3 items) | informal | analyst — Maciej (product owner), conversation | 2026-11-05 | — | `sources/13-analyst-notes-2026-11-05-macos-menu-bar.md` |
 
 ## Originals
 
@@ -42,3 +43,4 @@
 - `SRC-10` — written directly in this repo during `/og:discovery`; no separate original
 - `SRC-11` — written directly in this repo during `/og:requirements MOD-10`; no separate original
 - `SRC-12` — written directly in this repo from the conversation; no separate original
+- `SRC-13` — written directly in this repo from the conversation; no separate original

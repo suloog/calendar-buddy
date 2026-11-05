@@ -52,8 +52,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
-| `MOD-11` macOS | 19 | 8 | 2 / 3 | written |
-| **Total** | **308** | **214** | **111 / 20** | 10 / 10 modules written |
+| `MOD-11` macOS | 19 | 16 | 3 / 5 | written |
+| **Total** | **308** | **222** | **112 / 22** | 10 / 10 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -263,7 +263,10 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | TC | Title | Verifies | Layer | Type | Automation | Status |
 | -- | ----- | -------- | ----- | ---- | ---------- | ------ |
 | `TC-11-01` | The bundle is written with the program, its property list and its icon, and only what changed is written again | `US-11-01#2` | desktop | happy-path | auto | ready |
-| `TC-11-02` | On a Mac, the installed app is in ~/Applications, opens from Spotlight and Launchpad, runs once and quits with its window | `US-11-01#1`, `US-11-01#8` | desktop | happy-path | manual-only | ready |
+| `TC-11-02` | On a Mac, the installed app is in ~/Applications, opens from Spotlight and Launchpad and runs once | `US-11-01#1`, `US-11-01#8` | desktop | happy-path | manual-only | ready |
 | `TC-11-03` | Start at login is off until turned on, writes a launch agent for the running program, and is removed when turned off | `US-11-01#5` | desktop | happy-path | auto | ready |
 | `TC-11-04` | On a Mac, a connected Google account is kept in the Keychain across restarts, declining access says so, and removing the account deletes the item | `US-11-01#3`, `US-11-01#4` | desktop | happy-path | manual-only | ready |
 | `TC-11-05` | On a Mac, the app starts at login, shows a reminder as a macOS notification and follows the system's dark mode | `US-11-01#5`, `US-11-01#6`, `US-11-01#7` | desktop | happy-path | manual-only | ready |
+| `TC-11-06` | Each notification gets the buttons of its kind, and what the notification center answers maps back to the click or the button | `US-11-03#2`, `US-11-03#3`, `US-11-03#4` | desktop | happy-path | auto | ready |
+| `TC-11-07` | On a Mac, closing the window leaves the app in the menu bar, out of the Dock, still reminding, and its menu opens or quits it | `US-11-02#1`, `US-11-02#2`, `US-11-02#3`, `US-11-02#4` | desktop | happy-path | manual-only | ready |
+| `TC-11-08` | On a Mac, a notification comes in the app's name with Join, Snooze and Dismiss, and a click opens its event | `US-11-03#1`, `US-11-03#2`, `US-11-03#3`, `US-11-03#4` | desktop | happy-path | manual-only | ready |

@@ -30,8 +30,8 @@ depends_on: [] # test case IDs that must pass first
 
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
-| 1 | Install the bundle. | `Calendar Buddy (dev).app/Contents` holds `Info.plist` with the bundle ID and the program's name, `MacOS/calendar-buddy-dev` equal to the running program and executable, and `Resources/AppIcon.icns`. | file contents |
-| 2 | Change `Info.plist` by hand and install again. | `Info.plist` is written back; the icon is not rewritten (its modification time stays). | file contents, modification time |
+| 1 | Install the bundle. | `Calendar Buddy (dev).app/Contents` holds `Info.plist` with the bundle ID and the program's name, `MacOS/calendar-buddy-dev`, a copy of the running program, executable, `Resources/program` and `Resources/AppIcon.icns`; `codesign --verify --strict` passes on the bundle. | file contents, `codesign` |
+| 2 | Change `Info.plist` by hand and install again. | `Info.plist` is written back; the icon and the program are not rewritten (their modification times stay); the bundle is signed again and verifies. | file contents, modification time, `codesign` |
 | 3 | Read the icon file. | It starts with `icns`, its length fields match, and it holds the app's PNG as one `ic08` entry. | file contents |
 
 ## Pass criterion

@@ -40,8 +40,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 6 | sliced |
 | `MOD-09` Local calendars | 21 / 6 | 5 | 5 | sliced |
 | `MOD-10` Events from a description | 27 / 8 | 5 | 0 | sliced |
-| `MOD-11` macOS | 12 / 1 | 4 | 0 | sliced |
-| **Total** | **211 / 50** | **65** | **56** | 10 / 10 modules sliced |
+| `MOD-11` macOS | 12 / 2 | 4 | 0 | sliced |
+| **Total** | **211 / 51** | **65** | **56** | 10 / 10 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -176,6 +176,6 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-11-01` | As a User on a Mac, I can install the app and use it like my other Mac apps, so that I don't need Linux to keep my calendar at hand | F01, F02, F03, F04, F05, F06, F07, F08, U01 | must | review | `US-01-01`, `US-01-04`, `US-04-01`, `US-07-01`, `US-07-05` | — |
-| `US-11-02` | As a User on a Mac, the app keeps reminding me from the menu bar when its window is closed, so that reminders don't depend on an open window | F09 | must | draft | `US-11-01` | — |
-| `US-11-03` | As a User on a Mac, I can snooze, dismiss or join from a notification and open its event by clicking it, so that I act on a reminder without opening the app | F10 | must | draft | `US-11-01`, `US-11-02` | — |
+| `US-11-02` | As a User on a Mac, the app keeps reminding me from the menu bar when its window is closed, so that reminders don't depend on an open window | F09, U02 | must | review | `US-11-01` | — |
+| `US-11-03` | As a User on a Mac, I can snooze, dismiss or join from a notification and open its event by clicking it, so that I act on a reminder without opening the app | F10 | must | review | `US-11-01`, `US-11-02` | — |
 | `US-11-04` | As a User on a Mac, the app catches up after sleep, knows when I am offline and opens calendar subscription links, so that it behaves as it does on Linux | F11, F12 | must | draft | `US-11-01`, `US-11-02` | — |
