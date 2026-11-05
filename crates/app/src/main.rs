@@ -353,6 +353,10 @@ struct CalendarApp {
     quitting: bool,
     /// Whether the window closes to open again in front (`MOD-07-F17`).
     reopening: bool,
+    /// Whether the window is hidden while the app stays in the menu bar (macOS, `DEC-218`).
+    hidden: bool,
+    /// Whether the app was last put in the Dock or taken out of it (`DEC-218`).
+    docked: Option<bool>,
     /// The window's size and whether it is maximized, as last shown.
     placement: Placement,
     /// Whether the app starts at login (`MOD-07-F16`), as last set, and what turns it on or off
@@ -488,6 +492,8 @@ impl CalendarApp {
             tray,
             quitting: false,
             reopening: false,
+            hidden: false,
+            docked: None,
             placement: Placement::default(),
             start_at_login,
             autostart_writer,
@@ -2251,14 +2257,20 @@ impl CalendarApp {
         self.sync.set_window(window);
     }
 
-    /// Acts on what the user did to the tray icon or the launcher while the window is shown.
+    /// Acts on what the user did to the tray icon or the launcher while the window is shown, or
+    /// hidden in the menu bar (`DEC-218`).
     fn signaled(&mut self, ctx: &egui::Context) {
         for signal in self.signals.try_iter().flatten().collect::<Vec<_>>() {
-            match background::respond(signal, true, self.tray) {
+            match background::respond(signal, !self.hidden, self.tray) {
+                background::Response::Hide if platform::WINDOW_HIDES => self.hide(ctx),
                 background::Response::Hide => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                 background::Response::Quit => {
                     self.quitting = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                background::Response::Show if platform::WINDOW_HIDES => self.unhide(ctx),
+                background::Response::Raise if platform::WINDOW_HIDES => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 // Wayland lets no app bring its own window forward, so a window without the
                 // keyboard is closed and opened again, in front.
@@ -2270,6 +2282,48 @@ impl CalendarApp {
                 }
             }
         }
+    }
+
+    /// Hides the window, the app staying in the menu bar, out of the Dock (`DEC-218`).
+    fn hide(&mut self, ctx: &egui::Context) {
+        self.hidden = true;
+        self.sync.set_shown(false);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        ctx.request_repaint();
+    }
+
+    /// Shows the hidden window again, in front, with the app back in the Dock (`DEC-218`).
+    fn unhide(&mut self, ctx: &egui::Context) {
+        self.hidden = false;
+        self.dock(true);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        ctx.request_repaint();
+    }
+
+    /// Puts the app in the Dock or takes it out, when that changes.
+    fn dock(&mut self, shown: bool) {
+        if self.docked != Some(shown) {
+            self.docked = Some(shown);
+            platform::in_dock(shown);
+        }
+    }
+
+    /// What the app does on every pass of the window's event loop, also while the window is
+    /// hidden in the menu bar (`DEC-218`): there it keeps synchronizing, less often, and
+    /// reminding (`MOD-07-F14`), and a notification clicked brings the window back with its
+    /// event (`MOD-07-F08`). While the window is shown, `ui` does the same.
+    fn logic(&mut self, ctx: &egui::Context) {
+        self.dock(!self.hidden);
+        if !self.hidden {
+            return;
+        }
+        self.signaled(ctx);
+        self.background(ctx);
+        if self.hidden && self.notified.is_some() {
+            self.unhide(ctx);
+        }
+        ctx.request_repaint_after(IN_TRAY_CHECK);
     }
 }
 
@@ -2720,8 +2774,30 @@ impl eframe::App for CalendarApp {
 struct AppWindow<'a>(&'a mut CalendarApp);
 
 impl eframe::App for AppWindow<'_> {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.0.logic(ctx);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        self.0.ui(ui, frame);
+        let app = &mut *self.0;
+        // macOS shows the window after its first frame, also one started hidden at login.
+        if app.hidden {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            return;
+        }
+        // On macOS, closing the window hides it while the menu bar icon is there (`DEC-218`).
+        if platform::WINDOW_HIDES
+            && app.tray
+            && !app.quitting
+            && ui.ctx().input(|i| i.viewport().close_requested())
+        {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            app.hide(ui.ctx());
+            return;
+        }
+        app.ui(ui, frame);
     }
 }
 
@@ -2803,6 +2879,17 @@ fn main() -> eframe::Result {
     let tray_shown = tray.show(Box::new(signaled), background::at_login(&args));
     let mut shown = background::starts_shown(&args, tray_shown);
     let mut app = CalendarApp::new(ctx.clone(), signals, tray_shown);
+    // On macOS the window is hidden rather than closed, so the system's event loop keeps running
+    // for the menu bar icon and the notifications; the app ends when it is quit (`DEC-218`).
+    if platform::WINDOW_HIDES {
+        app.hidden = !shown;
+        return eframe::run_native_ext(
+            background::APP_ID,
+            window_options(&app.placement),
+            Some(ctx.clone()),
+            Box::new(|_| Ok(Box::new(AppWindow(&mut app)))),
+        );
+    }
     loop {
         if shown {
             eframe::run_native_ext(

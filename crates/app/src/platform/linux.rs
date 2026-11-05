@@ -14,14 +14,14 @@ use calendar_core::platform::{
     Appearance, Autostart, Browser, Instance, LinkHandler, Network, Notifier, SecretStore,
     SecretStoreError, Tray, Wakeups,
 };
-use calendar_core::reminders::{Action, Notification, SNOOZES};
+use calendar_core::reminders::{Action, Notification};
 use calendar_core::texts;
 use calendar_core::theme::{self, Scheme};
 use calendar_core::webcal;
 use secret_service::blocking::SecretService;
 use secret_service::{EncryptionType, Error};
 
-use super::{ICON, running_exe};
+use super::{ICON, action, key, running_exe};
 
 /// The Secret Service (KWallet, GNOME Keyring, KeePassXC) on the session bus (`DEC-47`).
 pub struct SystemSecretStore;
@@ -241,30 +241,6 @@ impl SystemNotifier {
             }
         });
         Ok(bus)
-    }
-}
-
-/// The key of the action on the bus; "default" is clicking the notification's body.
-fn key(action: Action) -> String {
-    match action {
-        Action::Open => "default".to_string(),
-        Action::Join => "join".to_string(),
-        Action::Snooze(minutes) => format!("snooze-{minutes}"),
-        Action::Dismiss => "dismiss".to_string(),
-    }
-}
-
-/// The action of the key on the bus; `None` for a key the app did not give.
-fn action(key: &str) -> Option<Action> {
-    match key {
-        "default" => Some(Action::Open),
-        "join" => Some(Action::Join),
-        "dismiss" => Some(Action::Dismiss),
-        _ => key
-            .strip_prefix("snooze-")
-            .and_then(|minutes| minutes.parse().ok())
-            .filter(|minutes| SNOOZES.contains(minutes))
-            .map(Action::Snooze),
     }
 }
 
@@ -685,24 +661,6 @@ impl Application {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn each_action_of_a_notification_comes_back_from_its_key_on_the_bus() {
-        let actions = [
-            Action::Open,
-            Action::Join,
-            Action::Snooze(5),
-            Action::Snooze(10),
-            Action::Dismiss,
-        ];
-        for chosen in actions {
-            assert_eq!(action(&key(chosen)), Some(chosen));
-        }
-        assert_eq!(key(Action::Open), "default");
-        assert_eq!(action("snooze-later"), None);
-        assert_eq!(action("snooze-7"), None);
-        assert_eq!(action("other"), None);
-    }
 
     #[test]
     fn only_full_connectivity_or_an_unknown_state_counts_as_online() {

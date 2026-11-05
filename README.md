@@ -66,9 +66,11 @@ KeePassXC, through the Secret Service API; on macOS the Keychain.
    the program, so it shows in Launchpad and Spotlight and can be kept in the Dock. To update,
    pull, run the same `cargo install` and start `~/.cargo/bin/calendar-buddy` once more: it
    updates the copy. After an update macOS may ask once whether the app may use its Keychain
-   item; choose **Always Allow**. There is no menu bar icon yet, so the app quits when its window
-   closes, and its notifications have no buttons (they come from Script Editor, which you may
-   have to allow in *System Settings → Notifications*).
+   item; choose **Always Allow**. Closing the window leaves the app in the menu bar (a calendar
+   icon), where it keeps reminding you; its menu opens the window or quits the app. On its first
+   start macOS asks whether Calendar Buddy may send notifications; allow it, and they come with
+   Join, Snooze and Dismiss. Started with `cargo run`, the app is not in its bundle, and its
+   notifications come from Script Editor, without buttons.
 
 4. Click **Connect Google account**. Sign-in happens in your browser; the app never sees your
    password. Google warns that the app is not verified: choose **Advanced**, then

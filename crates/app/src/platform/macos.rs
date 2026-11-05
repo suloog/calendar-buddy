@@ -1,25 +1,29 @@
 //! The real platform on macOS behind `calendar_core::platform` (`DEC-217`): tokens in the
-//! Keychain, the default browser and notifications through the system's tools, starting at login
-//! through a launch agent and the app as a bundle in `~/Applications`. There is no tray yet: the
-//! app ends when its window closes. Tests never use the Keychain; they use fakes, or a folder of
-//! their own.
+//! Keychain, the default browser through `open`, starting at login through a launch agent, the
+//! app as a bundle in `~/Applications`, and the menu bar icon and the notifications through
+//! AppKit (`DEC-218`). Tests never use the Keychain; they use fakes, or a folder of their own.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use calendar_core::accounts::Account;
-use calendar_core::background::{self, Signal};
+use calendar_core::background;
 use calendar_core::platform::{
-    Appearance, Autostart, Browser, Instance, LinkHandler, Network, Notifier, SecretStore,
-    SecretStoreError, Tray, Wakeups,
+    Appearance, Autostart, Browser, Instance, LinkHandler, Network, SecretStore, SecretStoreError,
+    Wakeups,
 };
-use calendar_core::reminders::{Action, Notification};
 use calendar_core::texts;
 use calendar_core::theme::Scheme;
 use security_framework::passwords;
 
 use super::{ICON, running_exe};
+
+mod menu_bar;
+mod notifications;
+
+pub use menu_bar::{SystemTray, in_dock};
+pub use notifications::SystemNotifier;
 
 /// The app's identifier on macOS: its bundle, launch agent and running copy; a debug build is
 /// another app, with an identifier of its own (`DEC-164`).
@@ -175,41 +179,6 @@ impl Appearance for SystemAppearance {
     }
 }
 
-/// The system's notifications, through AppleScript's `display notification`; they have no
-/// buttons and say nothing back when clicked.
-pub struct SystemNotifier;
-
-impl SystemNotifier {
-    pub fn new() -> Self {
-        SystemNotifier
-    }
-}
-
-impl Notifier for SystemNotifier {
-    fn show(&self, notification: &Notification, _chosen: Box<dyn Fn(Action) + Send + Sync>) {
-        // The texts go as the script's arguments, so nothing in them is read as AppleScript.
-        let shown = Command::new("osascript")
-            .args([
-                "-e",
-                "on run argv",
-                "-e",
-                "display notification (item 2 of argv) with title (item 1 of argv)",
-                "-e",
-                "end run",
-                notification.title.as_str(),
-                &notification.body(),
-            ])
-            .spawn();
-        if let Ok(mut child) = shown {
-            std::thread::spawn(move || child.wait());
-        }
-    }
-
-    fn buttons(&self) -> bool {
-        false
-    }
-}
-
 /// Waking from sleep and the network's return are not watched yet; synchronization keeps its
 /// interval.
 pub struct SystemWakeups;
@@ -224,21 +193,6 @@ pub struct SystemNetwork;
 
 impl Network for SystemNetwork {
     fn watch(&self, _changed: Box<dyn Fn(bool) + Send + Sync>) {}
-}
-
-/// No icon in the menu bar yet: the app ends when its window closes.
-pub struct SystemTray;
-
-impl SystemTray {
-    pub fn new() -> Self {
-        SystemTray
-    }
-}
-
-impl Tray for SystemTray {
-    fn show(&self, _chosen: Box<dyn Fn(Signal) + Send + Sync>, _at_login: bool) -> bool {
-        false
-    }
 }
 
 /// The one copy of the app is kept by the system: opening the app while it runs brings its
@@ -361,8 +315,18 @@ fn icns(png: &[u8]) -> Vec<u8> {
     icns
 }
 
+/// Runs `codesign` with `args` on the bundle; whether it succeeded.
+fn codesign(args: &[&str], bundle: &Path) -> std::io::Result<bool> {
+    let status = Command::new("codesign")
+        .args(args)
+        .arg(bundle)
+        .stderr(Stdio::null())
+        .status()?;
+    Ok(status.success())
+}
+
 /// The app in Launchpad, Spotlight and the Dock: a bundle in `~/Applications` holding a copy of
-/// the program that runs, with the app's icon.
+/// the program that runs, with the app's icon, signed ad hoc.
 pub struct SystemLauncher {
     /// The bundle; `None` when there is no home directory.
     bundle: Option<PathBuf>,
@@ -380,7 +344,9 @@ impl SystemLauncher {
     }
 
     /// Writes the bundle's files, each only when it changed; run from the bundle, the program is
-    /// already its own copy.
+    /// already its own copy. macOS lets only a signed bundle show notifications, and the linker
+    /// signs the program alone: the bundle is signed ad hoc whenever its signature does not
+    /// cover what it holds (`DEC-218`).
     pub fn install(&self) -> std::io::Result<()> {
         let Some(bundle) = &self.bundle else {
             return Err(std::io::ErrorKind::NotFound.into());
@@ -391,9 +357,23 @@ impl SystemLauncher {
         let exe = running_exe()?;
         let copy = contents.join("MacOS").join(background::APP_ID);
         if exe != copy {
-            write_if_changed(&copy, &std::fs::read(&exe)?, true)?;
+            // The copy is signed, so it never equals the program: the program's length and time,
+            // kept beside the copy, say whether it changed.
+            let source = contents.join("Resources/program");
+            let program = std::fs::metadata(&exe)?;
+            let stamp = format!("{} {:?}\n", program.len(), program.modified()?);
+            if std::fs::read_to_string(&source).ok() != Some(stamp.clone()) {
+                write_if_changed(&copy, &std::fs::read(&exe)?, true)?;
+                write_if_changed(&source, stamp.as_bytes(), false)?;
+            }
         }
-        Ok(())
+        if codesign(&["--verify", "--strict"], bundle)?
+            || codesign(&["--force", "--sign", "-"], bundle)?
+        {
+            Ok(())
+        } else {
+            Err(std::io::Error::other("the bundle could not be signed"))
+        }
     }
 }
 
@@ -444,20 +424,20 @@ mod tests {
             background::APP_ID
         )));
         let copy = contents.join("MacOS").join(background::APP_ID);
-        assert_eq!(
-            std::fs::read(&copy).unwrap(),
-            std::fs::read(running_exe().unwrap()).unwrap()
-        );
+        assert!(std::fs::read_to_string(contents.join("Resources/program")).is_ok());
         assert_eq!(
             std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777,
             0o755
         );
         let icon = contents.join("Resources/AppIcon.icns");
         assert_eq!(std::fs::read(&icon).unwrap(), icns(ICON));
+        let bundle = dir.join(format!("{}.app", texts::APP_NAME));
+        assert!(codesign(&["--verify", "--strict"], &bundle).unwrap());
 
         // A file that changed is put back; the others stay as they are.
         std::fs::write(contents.join("Info.plist"), "old").unwrap();
         let icon_written = std::fs::metadata(&icon).unwrap().modified().unwrap();
+        let copy_written = std::fs::metadata(&copy).unwrap().modified().unwrap();
         launcher.install().unwrap();
         assert_eq!(
             std::fs::read_to_string(contents.join("Info.plist")).unwrap(),
@@ -467,6 +447,12 @@ mod tests {
             std::fs::metadata(&icon).unwrap().modified().unwrap(),
             icon_written
         );
+        assert_eq!(
+            std::fs::metadata(&copy).unwrap().modified().unwrap(),
+            copy_written
+        );
+        // The bundle is signed again over what changed.
+        assert!(codesign(&["--verify", "--strict"], &bundle).unwrap());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -398,6 +398,8 @@ impl CalendarApp {
             tray: false,
             quitting: false,
             reopening: false,
+            hidden: false,
+            docked: None,
             placement: Placement::default(),
             start_at_login: false,
             autostart_writer,

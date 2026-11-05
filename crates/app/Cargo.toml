@@ -21,8 +21,15 @@ ksni = { version = "0.3.7", default-features = false, features = ["async-io", "b
 secret-service = { version = "5.2.0", features = ["rt-async-io-crypto-rust"] }
 zbus = "5.19.0"
 
-# Keychain on macOS, where the tokens are kept (`DEC-47`).
+# The system on macOS: the Keychain, where the tokens are kept (`DEC-47`), and through AppKit the
+# menu bar and the notifications (`DEC-218`).
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
+dispatch2 = "0.3.1"
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSButton", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "block2", "NSArray", "NSBundle", "NSData", "NSError", "NSGeometry", "NSNotification", "NSObject", "NSOperation", "NSSet", "NSString"] }
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "UNNotification", "UNNotificationAction", "UNNotificationCategory", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationSound", "UNNotificationTrigger", "UNUserNotificationCenter"] }
 security-framework = "3.7.0"
 
 [dev-dependencies]

@@ -75,6 +75,17 @@ impl Action {
             Action::Dismiss => texts::DISMISS.to_string(),
         }
     }
+
+    /// The buttons of a notification: Join for an event with Google Meet, then Snooze for 5 and
+    /// 10 minutes, and Dismiss.
+    pub fn buttons(meet: bool) -> Vec<Action> {
+        let join = meet.then_some(Action::Join);
+        let snoozes = SNOOZES.map(Action::Snooze);
+        (join.into_iter())
+            .chain(snoozes)
+            .chain([Action::Dismiss])
+            .collect()
+    }
 }
 
 impl Notification {
@@ -87,15 +98,9 @@ impl Notification {
         }
     }
 
-    /// Its buttons: Join for an event with Google Meet, then Snooze for 5 and 10 minutes, and
-    /// Dismiss.
+    /// Its buttons (`Action::buttons`).
     pub fn actions(&self) -> Vec<Action> {
-        let join = self.meet.as_ref().map(|_| Action::Join);
-        let snoozes = SNOOZES.map(Action::Snooze);
-        (join.into_iter())
-            .chain(snoozes)
-            .chain([Action::Dismiss])
-            .collect()
+        Action::buttons(self.meet.is_some())
     }
 }
 
