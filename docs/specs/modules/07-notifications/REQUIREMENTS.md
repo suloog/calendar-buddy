@@ -65,7 +65,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 ### Invitations
 
-- [MOD-07-F22] An invitation awaiting the user's answer (`MOD-06-F10`) produces one desktop notification with its title, start time and who invites; never again, across synchronizations and restarts, while it awaits the answer; one that came while the app was off is told at the next start. — *source: `DEC-222`, `SRC-14-03`, `SRC-14-06`*
+- [MOD-07-F22] An invitation awaiting the user's answer (`MOD-06-F10`) produces one desktop notification with its title, start time and, if any, location (`DEC-223`); never again, across synchronizations and restarts, while it awaits the answer; one that came while the app was off is told at the next start. — *source: `DEC-222`, `DEC-223`, `SRC-14-03`, `SRC-14-06`*
 - [MOD-07-F23] The notification of an invitation offers Accept, Maybe and Decline, which answer it and let the organizer know, an invitation to a series for all its events; clicking it opens the invitation in the app, on its day. — *source: `DEC-222`, `SRC-14-05`*
 - [MOD-07-F24] The first synchronization of a calendar — of a newly connected account, newly enabled, or the first time this version runs — produces no notifications of the invitations it brings; turning notifications off or muting the calendar silences them as it does reminders. — *source: `DEC-222`, `SRC-14-06`*
 

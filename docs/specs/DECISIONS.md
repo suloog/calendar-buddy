@@ -2689,3 +2689,15 @@
 - **Scope effect:** extends scope — notifications of invitations were not in `SRC-01`
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-223] The notification of an invitation does not name who invites
+
+- **Date:** 2026-11-10
+- **Decided by:** delivery (Claude), within `DEC-222`
+- **Source:** implementation `US-07-08`
+- **Affects:** `DEC-222`, `MOD-07-F22`, `US-07-08`, `TC-07-11`
+- **Decision:** The notification of an invitation says what a reminder's does — "Invitation: <title>", when it starts and, if any, where — and not who invites, which `DEC-222` named. Who organizes the event is in its details, among its guests.
+- **Why:** The app keeps only whether the user organizes an event (`organizer_only`, `DEC-110`), not who does; naming the organizer would take a new field on every event and a cache schema change that fetches every calendar again, for a line the details already show.
+- **Scope effect:** within scope — narrows `DEC-222`
+- **Resolves:** —
+- **Status:** accepted

@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod agenda;
+pub mod announce;
 pub mod availability;
 pub mod background;
 pub mod cache;

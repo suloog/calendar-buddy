@@ -570,6 +570,10 @@ pub const DISMISS: &str = "Dismiss";
 pub fn snooze(minutes: u32) -> String {
     format!("Snooze {minutes} minutes")
 }
+/// The title of a notification of an invitation (`MOD-07-F22`).
+pub fn invitation(title: &str) -> String {
+    format!("Invitation: {title}")
+}
 pub const OPEN_APP: &str = "Open Calendar Buddy";
 pub const QUIT: &str = "Quit";
 /// The settings' switch of all notifications (`MOD-07-F11`), as Google Calendar names it.

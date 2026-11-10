@@ -3,7 +3,7 @@ id: US-07-08 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-07
 covers: [MOD-07-F22, MOD-07-F23, MOD-07-F24] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: ready # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-07-01, US-06-04, US-06-05] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-07-01, US-06-04, US-06-05] # story IDs that must be done first
 | **Module** | `[MOD-07]` Reminders and notifications — `docs/specs/modules/07-notifications/REQUIREMENTS.md` |
 | **Covers** | `MOD-07-F22`, `F23`, `F24` |
 | **Priority** | must |
-| **Status** | ready |
+| **Status** | review |
 | **Depends on** | blocked by `US-07-01`, `US-06-04`, `US-06-05` |
 | **YouTrack** | — |
 | **Open questions** | — |
@@ -26,7 +26,7 @@ An invitation awaiting the user's answer, as the side panel counts them, is told
 
 ## Acceptance criteria
 
-- [ ] An invitation that comes in a synchronization produces one notification "Invitation: <title>" with when it starts and who invites, and the buttons Accept, Maybe and Decline; later synchronizations and a restart do not repeat it.
+- [ ] An invitation that comes in a synchronization produces one notification "Invitation: <title>" with when it starts and where, and the buttons Accept, Maybe and Decline; later synchronizations and a restart do not repeat it.
 - [ ] Accept, Maybe or Decline answers the invitation in Google and lets the organizer know; an invitation to a series is answered for all its events; the side panel no longer counts it.
 - [ ] Clicking the notification opens the invitation in the window, on its day, also while the window is closed to the tray or the menu bar.
 - [ ] An invitation that came while the app was off is told at the app's next start.
@@ -49,4 +49,4 @@ An invitation awaiting the user's answer, as the side panel counts them, is told
 - The notification carries what it is of: a reminder or an invitation; the invitation's buttons are new action keys on Linux and a new category on macOS (`MOD-11-F10`).
 - The engine tells invitations next to setting the alarms, from the events the views get; the cache keeps `announced` and `announced_calendars` (`DEC-222`).
 - An answer from a notification goes through the engine as the details' answer does (`invitations::answer`), a series for all events.
-- Decisions: `DEC-125`, `DEC-127`, `DEC-128`, `DEC-215`, `DEC-222`.
+- Decisions: `DEC-125`, `DEC-127`, `DEC-128`, `DEC-215`, `DEC-222`, `DEC-223`.
