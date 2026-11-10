@@ -105,9 +105,8 @@ fn set_up() {
     center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     // The notification center does not hold its delegate.
     std::mem::forget(delegate);
-    let categories: Vec<Retained<UNNotificationCategory>> = [false, true]
-        .map(|meet| {
-            let actions = Action::buttons(meet);
+    let categories: Vec<Retained<UNNotificationCategory>> = Action::button_sets()
+        .map(|actions| {
             let buttons: Vec<Retained<UNNotificationAction>> = actions
                 .iter()
                 .map(|action| {
@@ -218,6 +217,7 @@ mod tests {
             category(&Action::buttons(true)),
             "join+snooze-5+snooze-10+dismiss"
         );
+        assert_eq!(category(&Action::answers()), "accept+maybe+decline");
     }
 
     #[test]

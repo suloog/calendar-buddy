@@ -2,12 +2,13 @@
 //! SQLite. It is the read model of the views; only synchronization writes to it. Nothing in it is
 //! secret, and it can always be rebuilt from Google (`NFR-17`).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rusqlite::{Connection, ErrorCode, OptionalExtension, Transaction, params};
 
+use crate::announce::{CalendarKey, Told};
 use crate::colors::EventColor;
 use crate::guests::{Guest, Response};
 use crate::model::{
@@ -68,6 +69,17 @@ const SCHEMA: &str = "
     );
     CREATE TABLE IF NOT EXISTS last_synced (
         at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS announced_calendars (
+        account_id TEXT NOT NULL,
+        calendar_id TEXT NOT NULL,
+        PRIMARY KEY (account_id, calendar_id)
+    );
+    CREATE TABLE IF NOT EXISTS announced (
+        account_id TEXT NOT NULL,
+        calendar_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        PRIMARY KEY (account_id, calendar_id, id)
     );
 ";
 
@@ -260,6 +272,67 @@ impl Cache {
         .map_err(failed)
     }
 
+    /// The calendars synchronized in full at least once since they were last cleared, by
+    /// account ID and calendar ID.
+    pub fn synchronized(&self) -> Result<BTreeSet<CalendarKey>, SyncError> {
+        let mut select = (self.connection)
+            .prepare("SELECT account_id, calendar_id FROM sync_tokens")
+            .map_err(failed)?;
+        let rows = select
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(failed)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(failed)
+    }
+
+    /// The invitations told and the calendars looked at (`DEC-222`).
+    pub fn told(&self) -> Result<Told, SyncError> {
+        let mut calendars = (self.connection)
+            .prepare("SELECT account_id, calendar_id FROM announced_calendars")
+            .map_err(failed)?;
+        let calendars = calendars
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(failed)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(failed)?;
+        let mut invitations = (self.connection)
+            .prepare("SELECT account_id, calendar_id, id FROM announced")
+            .map_err(failed)?;
+        let invitations = invitations
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(failed)?
+            .collect::<rusqlite::Result<_>>()
+            .map_err(failed)?;
+        Ok(Told {
+            calendars,
+            invitations,
+        })
+    }
+
+    /// Keeps what was told in place of what was kept before.
+    pub fn set_told(&mut self, told: &Told) -> Result<(), SyncError> {
+        let transaction = self.connection.transaction().map_err(failed)?;
+        transaction
+            .execute_batch("DELETE FROM announced_calendars; DELETE FROM announced;")
+            .map_err(failed)?;
+        for (account, calendar) in &told.calendars {
+            transaction
+                .execute(
+                    "INSERT INTO announced_calendars VALUES (?1, ?2)",
+                    params![account, calendar],
+                )
+                .map_err(failed)?;
+        }
+        for (account, calendar, id) in &told.invitations {
+            transaction
+                .execute(
+                    "INSERT INTO announced VALUES (?1, ?2, ?3)",
+                    params![account, calendar, id],
+                )
+                .map_err(failed)?;
+        }
+        transaction.commit().map_err(failed)
+    }
+
     /// When a synchronization last got through (`MOD-02-U03`); `None` before the first.
     pub fn last_synced(&self) -> Result<Option<DateTime<Utc>>, SyncError> {
         let at: Option<String> = self
@@ -287,7 +360,13 @@ impl Cache {
     /// Deletes everything kept for an account (`MOD-01-F08`, `DEC-85`).
     pub fn forget_account(&mut self, account_id: &str) -> Result<(), SyncError> {
         let transaction = self.connection.transaction().map_err(failed)?;
-        for table in ["calendars", "events", "sync_tokens"] {
+        for table in [
+            "calendars",
+            "events",
+            "sync_tokens",
+            "announced_calendars",
+            "announced",
+        ] {
             transaction
                 .execute(
                     &format!("DELETE FROM {table} WHERE account_id = ?1"),
@@ -979,6 +1058,31 @@ mod tests {
             .query_row("SELECT count(*) FROM events", [], |row| row.get(0))
             .unwrap();
         assert_eq!(left, 3);
+    }
+
+    #[test]
+    fn what_was_told_of_invitations_is_kept_until_the_account_is_forgotten() {
+        let mut cache = Cache::in_memory();
+        let work = calendar("1", "work");
+        cache
+            .set_calendars("1", std::slice::from_ref(&work))
+            .unwrap();
+        assert_eq!(cache.told().unwrap(), Told::default());
+        assert!(cache.synchronized().unwrap().is_empty());
+        cache
+            .set_sync_token(&work, Some("t"), Window::around(d(2026, 11, 12), Warsaw))
+            .unwrap();
+        let key = ("1".to_string(), "work".to_string());
+        assert_eq!(cache.synchronized().unwrap(), BTreeSet::from([key.clone()]));
+
+        let told = Told {
+            calendars: BTreeSet::from([key]),
+            invitations: BTreeSet::from([("1".into(), "work".into(), "board".into())]),
+        };
+        cache.set_told(&told).unwrap();
+        assert_eq!(cache.told().unwrap(), told);
+        cache.forget_account("1").unwrap();
+        assert_eq!(cache.told().unwrap(), Told::default());
     }
 
     #[test]

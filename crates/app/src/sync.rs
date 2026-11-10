@@ -20,7 +20,8 @@
 //! with every synchronization round (`US-06-09`). The reminders of the events the cache holds are shown as desktop notifications
 //! when due, and a click on one opens its event (`US-07-01`). Join on a notification opens the
 //! event's Google Meet call in the browser, and Snooze shows it again 5 or 10 minutes later,
-//! without telling Google (`US-07-02`). The local calendars' file is one more provider, the
+//! without telling Google (`US-07-02`). A new invitation is told as a notification once, and
+//! answered from its buttons (`US-07-08`). The local calendars' file is one more provider, the
 //! "Local" pseudo-account: its calendars are synchronized into the cache as an account's are, and
 //! new events in them are written there, never to Google (`US-09-01`).
 
@@ -32,20 +33,22 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use calendar_core::accounts::Check;
+use calendar_core::accounts::{Check, Entry};
+use calendar_core::announce;
 use calendar_core::availability::{Asked, Availability, Span};
 use calendar_core::cache::{self, Cache};
 use calendar_core::create::{DEFAULT_LENGTH, NewEvent};
 use calendar_core::editor::{Edit, Patch};
-use calendar_core::guests::{Person, Reach};
+use calendar_core::guests::{Person, Reach, Response};
+use calendar_core::invitations;
 use calendar_core::local::{self, LocalStore};
 use calendar_core::meet_with::{self, Shared};
 use calendar_core::model::{Calendar, Event};
 use calendar_core::platform::{Browser, Notifier, SecretStore, Wakeups};
 use calendar_core::regional::Regional;
-use calendar_core::reminders::{Action, Alarms, EventId, ReminderId, Silenced};
+use calendar_core::reminders::{Action, Alarms, EventId, Notification, ReminderId, Silenced};
 use calendar_core::schedule::Schedule;
-use calendar_core::series::{self, Plan, Scope, Split};
+use calendar_core::series::{self, Plan, Question, Scope, Split};
 use calendar_core::status::{Problem, Status};
 use calendar_core::sync::{
     Provider, SyncError, SyncedEvent, Window, fetch_events, shown_events, sync_calendar_list,
@@ -106,6 +109,8 @@ enum Job {
     /// A reminder shown is to be shown again in so many minutes from when Snooze was chosen
     /// (`MOD-07-F10`).
     Snooze(ReminderId, u32, DateTime<Utc>),
+    /// The invitation of a notification is to be answered (`MOD-07-F23`).
+    Answer(EventId, Response),
     /// The local calendars' file is to be opened and its calendars synchronized; `None` keeps
     /// them in memory (`MOD-09-F01`).
     Local(Option<PathBuf>),
@@ -131,7 +136,12 @@ enum Chosen {
     Join(String),
     /// The reminder is to be shown again in so many minutes (`MOD-07-F10`).
     Snooze(ReminderId, u32),
+    /// The invitation is to be answered so (`MOD-07-F23`).
+    Answer(EventId, Response),
 }
+
+/// The number the views know an answer from a notification by: none, as they did not send it.
+const FROM_NOTIFICATION: u64 = 0;
 
 /// Does what the user chose on a notification.
 type Acts = Arc<dyn Fn(Chosen) + Send + Sync>;
@@ -236,6 +246,9 @@ pub struct Synchronization {
     opened: Receiver<Opened>,
     /// The notifications not shown, shared with the worker so a change holds at once.
     silenced: Arc<Mutex<Silenced>>,
+    /// The connected accounts, shared with the worker, whose addresses tell the user's own
+    /// invitations (`DEC-127`).
+    accounts: Arc<Mutex<Vec<Entry>>>,
     /// Whether the local calendars' file was read, or why not; `None` until the worker tried.
     local: Option<Result<(), String>>,
     /// Why the last change to the local calendars' file was not written, until one is.
@@ -307,6 +320,8 @@ impl Synchronization {
         let (opens, opened) = mpsc::channel();
         let silenced = Arc::new(Mutex::new(Silenced::default()));
         let shared = silenced.clone();
+        let accounts: Arc<Mutex<Vec<Entry>>> = Arc::default();
+        let shared_accounts = accounts.clone();
         let ctx = ctx.clone();
         std::thread::spawn(move || {
             let send = |update| {
@@ -315,6 +330,7 @@ impl Synchronization {
             };
             let mut engine = Engine::new(open(), sign_in, window, disabled);
             engine.silenced = shared;
+            engine.accounts = shared_accounts;
             let _ = engine.cache.retain_accounts(&account_ids);
             engine.clear_disabled();
             send(engine.shown());
@@ -383,6 +399,7 @@ impl Synchronization {
             opens,
             opened,
             silenced,
+            accounts,
             local: None,
             unsaved: None,
             kept_local: false,
@@ -464,6 +481,9 @@ impl Synchronization {
             Chosen::Snooze(reminder, minutes) => {
                 let _ = jobs.send(Job::Snooze(reminder, minutes, Utc::now()));
             }
+            Chosen::Answer(event, response) => {
+                let _ = jobs.send(Job::Answer(event, response));
+            }
         });
         let _ = self.jobs.send(Job::Remind(notifier, regional, act));
     }
@@ -482,6 +502,14 @@ impl Synchronization {
     /// (`MOD-07-F11`, `F12`).
     pub fn set_silenced(&self, silenced: Silenced) {
         *self.silenced.lock().unwrap() = silenced;
+    }
+
+    /// The connected accounts, whose own invitations are told (`MOD-07-F22`).
+    pub fn set_accounts(&self, accounts: &[Entry]) {
+        let mut shared = self.accounts.lock().unwrap();
+        if shared.as_slice() != accounts {
+            *shared = accounts.to_vec();
+        }
     }
 
     /// Synchronizes everything at once after waking from sleep and when the network returns.
@@ -791,6 +819,8 @@ struct Engine {
     reminding: Option<Reminding>,
     /// The notifications not shown when their reminders come, as the app last set them.
     silenced: Arc<Mutex<Silenced>>,
+    /// The connected accounts, as the app last set them.
+    accounts: Arc<Mutex<Vec<Entry>>>,
     /// The people's calendars "Meet with…" asks for, fetched again with every round.
     meeting: Option<meet_with::Asked>,
     /// The local calendars' file, once read; its calendars are also those of the "Local"
@@ -805,6 +835,7 @@ struct Reminding {
     alarms: Alarms,
     notifier: Box<dyn Notifier>,
     act: Acts,
+    regional: Regional,
 }
 
 /// The longest wait for a reminder, so a changed system clock is followed.
@@ -827,6 +858,7 @@ impl Engine {
             clock: Box::new(Utc::now),
             reminding: None,
             silenced: Arc::default(),
+            accounts: Arc::default(),
             meeting: None,
             local: None,
             unsaved: None,
@@ -856,7 +888,79 @@ impl Engine {
                 }
             }
         }
+        for update in &updates {
+            if let Update::Events(_, events) = update {
+                self.announce(events);
+            }
+        }
         updates
+    }
+
+    /// Tells of the new invitations among the events the views are given, each once
+    /// (`MOD-07-F22`, `F24`); those of the days browsed outside the cache are not looked at.
+    fn announce(&mut self, events: &[Event]) {
+        let Some(reminding) = &self.reminding else {
+            return;
+        };
+        let accounts = self.accounts.lock().unwrap().clone();
+        // Until the app says whose they are, no invitation is anyone's.
+        if accounts.is_empty() {
+            return;
+        }
+        let (Ok(told), Ok(synchronized)) = (self.cache.told(), self.cache.synchronized()) else {
+            return;
+        };
+        let outside: HashSet<(&str, &str)> = (self.outside.iter())
+            .map(|event| (event.calendar_id.as_str(), event.id.as_str()))
+            .collect();
+        let cached: Vec<Event> = (events.iter())
+            .filter(|event| !outside.contains(&(event.calendar_id.as_str(), event.id.as_str())))
+            .cloned()
+            .collect();
+        let (now, zone) = ((self.clock)(), self.window.zone);
+        let (told_now, new) = announce::tell(
+            &told,
+            &synchronized,
+            &cached,
+            &accounts,
+            &self.disabled,
+            zone,
+            now,
+        );
+        if told_now != told {
+            // Told again if not kept, which is better than never told.
+            let _ = self.cache.set_told(&told_now);
+        }
+        let silenced = self.silenced.lock().unwrap().clone();
+        for i in new {
+            let notification = Notification::invitation(&cached[i], now, zone, &reminding.regional);
+            if !silenced.silences(&notification) {
+                show(reminding, notification);
+            }
+        }
+    }
+
+    /// Answers the invitation of a notification (`MOD-07-F23`): an invitation to a series for
+    /// all its events, letting the organizer know as an answer from its details does
+    /// (`DEC-128`, `DEC-222`). Nothing when it is no longer cached.
+    fn answer(&mut self, id: &EventId, response: Response, now: Instant) -> Vec<Update> {
+        let cached = self.cache.calendars().unwrap_or_default();
+        let Some(calendar) = cached.into_iter().find(|cached| {
+            cached.calendar.account_id == id.account_id && cached.calendar.id == id.calendar_id
+        }) else {
+            return Vec::new();
+        };
+        let events = shown_events(std::slice::from_ref(&calendar), self.window);
+        let Some(event) = events.iter().find(|event| event.id == id.id) else {
+            return Vec::new();
+        };
+        match invitations::answer(event, calendar.calendar, response) {
+            Ok(edit) => self.change(FROM_NOTIFICATION, &edit, now),
+            Err(Question::Respond(edit)) => {
+                self.change_series(FROM_NOTIFICATION, &edit, Scope::All, now)
+            }
+            Err(_) => Vec::new(),
+        }
     }
 
     fn handle_job(&mut self, job: Option<Job>, now: Instant) -> Vec<Update> {
@@ -961,9 +1065,11 @@ impl Engine {
                     alarms,
                     notifier,
                     act,
+                    regional,
                 });
                 return vec![self.shown()];
             }
+            Some(Job::Answer(event, response)) => return self.answer(&event, response, now),
             Some(Job::Snooze(reminder, minutes, chosen)) => {
                 if let Some(reminding) = &mut self.reminding {
                     (reminding.alarms).snooze(&reminder, minutes, chosen);
@@ -1598,22 +1704,7 @@ impl Engine {
         let due = reminding.alarms.due((self.clock)());
         let silenced = self.silenced.lock().unwrap().clone();
         for notification in due.into_iter().filter(|n| !silenced.silences(n)) {
-            let buttons = reminding.notifier.buttons();
-            let (act, shown) = (reminding.act.clone(), notification.clone());
-            let chosen = Box::new(move |action| match action {
-                Action::Open => act(Chosen::Open(Opened {
-                    event: shown.reminder.event.clone(),
-                    snooze: (!buttons).then(|| shown.reminder.clone()),
-                })),
-                Action::Join => {
-                    if let Some(link) = &shown.meet {
-                        act(Chosen::Join(link.clone()));
-                    }
-                }
-                Action::Snooze(minutes) => act(Chosen::Snooze(shown.reminder.clone(), minutes)),
-                Action::Dismiss => {}
-            });
-            reminding.notifier.show(&notification, chosen);
+            show(reminding, notification);
         }
     }
 
@@ -1623,6 +1714,31 @@ impl Engine {
         let wait = (at - (self.clock)()).to_std().unwrap_or_default();
         Some(now + wait.min(REMINDER_WAIT))
     }
+}
+
+/// Shows the notification; what the user chooses on it is done (`MOD-07-F08`–`F10`, `F23`).
+fn show(reminding: &Reminding, notification: Notification) {
+    let buttons = reminding.notifier.buttons();
+    let (act, shown) = (reminding.act.clone(), notification.clone());
+    let chosen = Box::new(move |action| match action {
+        Action::Open => act(Chosen::Open(Opened {
+            event: shown.event().clone(),
+            snooze: shown.reminder().filter(|_| !buttons).cloned(),
+        })),
+        Action::Join => {
+            if let Some(link) = &shown.meet {
+                act(Chosen::Join(link.clone()));
+            }
+        }
+        Action::Snooze(minutes) => {
+            if let Some(reminder) = shown.reminder() {
+                act(Chosen::Snooze(reminder.clone(), minutes));
+            }
+        }
+        Action::Answer(response) => act(Chosen::Answer(shown.event().clone(), response)),
+        Action::Dismiss => {}
+    });
+    reminding.notifier.show(&notification, chosen);
 }
 
 /// Why Google did not take a change; one made to an event changed elsewhere meanwhile is shown as
@@ -6423,6 +6539,113 @@ mod tests {
     }
 
     #[test]
+    fn tc_07_11_a_new_invitation_is_told_once_answered_from_its_button_never_on_a_first_look() {
+        let google = Google::start("tc-07-11");
+        personal(&google);
+        let friday = |id: &str, title: &str| {
+            invitation(
+                id,
+                title,
+                "2026-11-13T10:00:00+01:00",
+                "2026-11-13T11:00:00+01:00",
+            )
+        };
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("old", "Old"));
+        let dir =
+            std::env::temp_dir().join(format!("calendar-buddy-tc-07-11-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("cache.sqlite3");
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        // The app started on the cache file, with the account's first synchronization done.
+        let started = || {
+            let cache = Cache::open(&path).unwrap();
+            let mut engine = Engine::new(cache, google.sign_in(), window(), Disabled::new());
+            let time = clock.clone();
+            engine.clock = Box::new(move || *time.lock().unwrap());
+            *engine.accounts.lock().unwrap() = connected();
+            let (acts, chosen) = mpsc::channel();
+            let act: Acts = Arc::new(move |choice| acts.send(choice).unwrap());
+            let regional = Regional::from_env(|var| (var == "LANG").then(|| "en_GB.UTF-8".into()));
+            let job = Job::Remind(Box::new(notifier.clone()), regional, act);
+            engine.handle(Some(job), start);
+            let updates = engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+            assert!(told(updates).is_some());
+            (engine, chosen)
+        };
+        let titles = || -> Vec<String> { notifier.shown().into_iter().map(|n| n.0).collect() };
+
+        // 1. The first synchronization tells nothing of "Old".
+        let (mut engine, _) = started();
+        assert_eq!(titles(), Vec::<String>::new());
+
+        // 2. "Planning" comes: one notification, with its start and the three answers.
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("planning", "Planning"));
+        engine.handle(Some(Job::Refresh), start);
+        assert_eq!(
+            notifier.shown(),
+            [(
+                "Invitation: Planning".to_string(),
+                "Friday 13 November, 10:00".to_string(),
+                String::new()
+            )]
+        );
+        assert_eq!(notifier.actions(0), Action::answers());
+
+        // 3. Again, and after a restart on the same cache: nothing more.
+        engine.handle(Some(Job::Refresh), start);
+        drop(engine);
+        let (engine, _) = started();
+        assert_eq!(titles(), ["Invitation: Planning"]);
+
+        // 4. "Retro" comes while the app is off: told at the next start.
+        drop(engine);
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("retro", "Retro"));
+        let (mut engine, chosen) = started();
+        assert_eq!(titles(), ["Invitation: Planning", "Invitation: Retro"]);
+
+        // 5. Accept on "Retro" answers it at Google, and the organizer is let know.
+        notifier.choose(1, Action::Answer(guests::Response::Accepted));
+        let Ok(Chosen::Answer(event, response)) = chosen.try_recv() else {
+            panic!("nothing was answered");
+        };
+        engine.handle(Some(Job::Answer(event, response)), start);
+        let retro = google.fake.event(ACCOUNT_ID, EMAIL, "retro").unwrap();
+        assert_eq!(own_status(&retro), "accepted");
+        let events = now_shown(&engine);
+        assert_eq!(awaiting(&events), ["Old", "Planning"]);
+
+        // 6. A muted calendar, then notifications off: nothing is told.
+        let muted = BTreeSet::from([(ACCOUNT_ID.to_string(), EMAIL.to_string())]);
+        *engine.silenced.lock().unwrap() = Silenced {
+            muted,
+            ..Silenced::default()
+        };
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("muted", "Muted"));
+        engine.handle(Some(Job::Refresh), start);
+        *engine.silenced.lock().unwrap() = Silenced {
+            all: true,
+            ..Silenced::default()
+        };
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("off", "Off"));
+        engine.handle(Some(Job::Refresh), start);
+        assert_eq!(titles().len(), 2);
+        drop(engine);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn tc_07_01_a_10_minute_reminder_gives_exactly_one_notification_across_synchronizations() {
         let google = Google::start("tc-07-01");
         work_calendar(&google, "work", "Work");
@@ -6940,8 +7163,8 @@ mod tests {
             panic!("the event was not opened");
         };
         assert_eq!(opened.event.id, "review");
-        let shown = notifier.shown.lock().unwrap()[0].0.reminder.clone();
-        assert_eq!(opened.snooze, Some(shown));
+        let shown = notifier.shown.lock().unwrap()[0].0.reminder().cloned();
+        assert_eq!(opened.snooze, shown);
     }
 
     #[test]

@@ -145,7 +145,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-07-05` | As a User, the app keeps reminding me from the tray when its window is closed and can start with my session, so that reminders don't depend on an open window | F14, F15, F16, F17, U02 | must | done | `US-07-01` | — |
 | `US-07-06` | As a User, I can open calendar subscription links from anywhere on my system, so that subscribing to a calendar works like in the browser | F18 | must | done | `US-01-01` | — |
 | `US-07-07` | As a User invited to someone else's event, I can change my own reminders of it, so that I am reminded as I like even when I cannot edit the event | F21 | must | review | `US-07-04`, `US-06-05` | — |
-| `US-07-08` | As a User, I am notified of a new invitation and can answer it from the notification, so that I don't miss invitations while I am in other apps | F22, F23, F24 | must | ready | `US-07-01`, `US-06-04`, `US-06-05` | — |
+| `US-07-08` | As a User, I am notified of a new invitation and can answer it from the notification, so that I don't miss invitations while I am in other apps | F22, F23, F24 | must | review | `US-07-01`, `US-06-04`, `US-06-05` | — |
 
 ## [MOD-09] Local calendars
 
