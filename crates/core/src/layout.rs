@@ -1,7 +1,7 @@
 //! Placing the events of the shown days: timed events into day columns (side by side where they
 //! overlap), all-day and multi-day events into lanes of the strip above the hours.
 
-use chrono::{Duration, NaiveDate};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Tz;
 
 use crate::model::{Event, Timing};
@@ -111,6 +111,17 @@ fn pack_columns(placements: &mut [TimedPlacement]) {
             p.columns = column_ends.len() as u32;
         }
         group_start = group_end;
+    }
+}
+
+/// Whether `event` is over by `now`: a timed event has ended, an all-day event's last day has
+/// passed (`MOD-04-U07`).
+pub(crate) fn ended(event: &Event, tz: Tz, now: DateTime<Utc>) -> bool {
+    match event.timing {
+        Timing::Timed { end, .. } => end <= now,
+        Timing::AllDay { end_exclusive, .. } => {
+            end_exclusive <= now.with_timezone(&tz).date_naive()
+        }
     }
 }
 

@@ -4,7 +4,7 @@
 use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc, Weekday};
 use chrono_tz::Tz;
 
-use crate::layout::{all_day_bars, is_strip_event, strip_dates};
+use crate::layout::{all_day_bars, ended, is_strip_event, strip_dates};
 use crate::model::{Event, Rgb, Timing};
 use crate::view_model::shown_title;
 use crate::week::Week;
@@ -25,6 +25,8 @@ pub struct MonthItem {
     pub awaiting: bool,
     /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
     pub declined: bool,
+    /// An event that is over, drawn faded (`MOD-04-U07`).
+    pub past: bool,
     /// Start of a timed event; `None` for all-day and multi-day events.
     pub start: Option<DateTime<Utc>>,
     /// The row of an all-day or multi-day event in its week, where its bar runs on through the
@@ -189,6 +191,7 @@ pub fn month_view(
             saving: event.marked_saving(),
             awaiting: event.about.awaiting(),
             declined: event.about.declined(),
+            past: ended(event, zone, now),
             start: timed_start(event),
             lane,
         }
@@ -280,6 +283,28 @@ mod tests {
             .iter()
             .map(|i| i.title.as_deref().unwrap_or("Busy"))
             .collect()
+    }
+
+    /// `TC-04-06`: on 11 November at 10:00, the events of the days before and the all-day event
+    /// of yesterday are past; today's later event and today's all-day event are not.
+    #[test]
+    fn events_that_are_over_are_past_in_the_month() {
+        let events = [
+            timed("Dentist", d(2026, 11, 3), (8, 0), (9, 0)),
+            all_day("Yesterday", d(2026, 11, 10), 1),
+            all_day("Today", d(2026, 11, 11), 1),
+            timed("Review", d(2026, 11, 11), (14, 0), (15, 0)),
+        ];
+        let vm = month_view(&events, d(2026, 11, 11), Warsaw, clock(), Weekday::Mon);
+        let past = |date| {
+            let day = vm.day(date).unwrap();
+            (day.items.iter())
+                .map(|i| (i.title.as_deref().unwrap(), i.past))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(past(d(2026, 11, 3)), [("Dentist", true)]);
+        assert_eq!(past(d(2026, 11, 10)), [("Yesterday", true)]);
+        assert_eq!(past(d(2026, 11, 11)), [("Today", false), ("Review", false)]);
     }
 
     #[test]

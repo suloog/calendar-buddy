@@ -56,9 +56,17 @@ fn paint_item(
     };
     if item.start.is_none() {
         let on = if item.awaiting {
+            if item.past {
+                fade(painter, rect);
+            }
             ink
         } else {
-            text_on(filled(painter, rect, item.color, item.declined))
+            text_on(filled(
+                painter,
+                rect,
+                item.color,
+                item.declined || item.past,
+            ))
         };
         event_text(
             &clipped,
@@ -76,8 +84,9 @@ fn paint_item(
             3.5,
             color(item.color),
         );
-        // A declined event, struck through and faded (`MOD-06-F14`).
-        if item.declined {
+        // A declined event, struck through and faded (`MOD-06-F14`), or one that is over, faded
+        // (`MOD-04-U07`).
+        if item.declined || item.past {
             fade(painter, rect);
         }
         event_text(
@@ -307,10 +316,10 @@ mod tests {
     fn text_of_invitations_and_declined_events_reads_at_4_5_in_both_themes() {
         let at = |title: &str, day| timed(title, d(2026, 11, day), (9, 0), (10, 0));
         let events = [
-            answered(at("Invited light", 9), VERY_LIGHT, Response::Awaiting),
-            answered(at("Invited dark", 10), VERY_DARK, Response::Awaiting),
-            answered(at("Declined light", 11), VERY_LIGHT, Response::Declined),
-            answered(at("Declined dark", 12), VERY_DARK, Response::Declined),
+            answered(at("Invited light", 12), VERY_LIGHT, Response::Awaiting),
+            answered(at("Invited dark", 13), VERY_DARK, Response::Awaiting),
+            answered(at("Declined light", 14), VERY_LIGHT, Response::Declined),
+            answered(at("Declined dark", 15), VERY_DARK, Response::Declined),
             answered(
                 all_day("All day light", d(2026, 11, 17), 1),
                 VERY_LIGHT,
@@ -324,6 +333,44 @@ mod tests {
         ];
         let now = Utc.with_ymd_and_hms(2026, 11, 11, 12, 0, 0).unwrap();
         let view = month_view(&events, d(2026, 11, 11), Warsaw, now, Weekday::Mon);
+        let regional = Regional::from_env(|_| None);
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = screen::drawn(Vec2::new(1600.0, 900.0), 1.0, scheme, None, |ui| {
+                show(ui, &view, &regional, &mut State::default(), &mut None);
+            });
+            for event in &events {
+                let ratio = contrast_of(&shapes, &event.title);
+                assert!(ratio >= AA, "{scheme:?}, {}: {ratio}", event.title);
+            }
+        }
+    }
+
+    /// `TC-04-06`: events over by 11 November at 13:00, faded, keep their text at 4.5:1.
+    #[test]
+    fn tc_04_06_text_of_events_that_are_over_reads_at_4_5_in_both_themes() {
+        let at = |title: &str, day| timed(title, d(2026, 11, day), (9, 0), (10, 0));
+        let colored = |mut event: calendar_core::model::Event, color| {
+            event.color = color;
+            event
+        };
+        let events = [
+            colored(at("Past light", 2), VERY_LIGHT),
+            colored(at("Past dark", 3), VERY_DARK),
+            answered(at("Past invited", 4), VERY_LIGHT, Response::Awaiting),
+            answered(at("Past declined", 5), VERY_DARK, Response::Declined),
+            colored(all_day("All day light", d(2026, 11, 6), 1), VERY_LIGHT),
+            colored(all_day("All day dark", d(2026, 11, 10), 1), VERY_DARK),
+        ];
+        let now = Utc.with_ymd_and_hms(2026, 11, 11, 12, 0, 0).unwrap();
+        let view = month_view(&events, d(2026, 11, 11), Warsaw, now, Weekday::Mon);
+        assert!(
+            view.weeks
+                .iter()
+                .flatten()
+                .flat_map(|day| &day.items)
+                .all(|i| i.past)
+        );
         let regional = Regional::from_env(|_| None);
 
         for scheme in [Scheme::Light, Scheme::Dark] {

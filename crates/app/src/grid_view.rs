@@ -86,10 +86,11 @@ pub fn grid_line(visuals: &egui::Visuals) -> Stroke {
     Stroke::new(line.width, line.color.gamma_multiply(0.6))
 }
 
-/// How much of the view's background veils a declined event.
+/// How much of the view's background veils a declined event, or one that is over.
 const VEIL: f32 = 0.5;
 
-/// Fades a declined event drawn in `rect` (`MOD-06-F14`) under a veil of the view's background;
+/// Fades a declined event (`MOD-06-F14`), or one that is over (`MOD-04-U07`), drawn in `rect`
+/// under a veil of the view's background;
 /// drawn under its text, which stays readable (`MOD-04-NFR-01`).
 pub fn fade(painter: &egui::Painter, rect: Rect) {
     painter.rect_filled(
@@ -100,13 +101,13 @@ pub fn fade(painter: &egui::Painter, rect: Rect) {
 }
 
 /// An event of colour `c` in `rect`: a tint of its colour with a strip of the colour itself along
-/// its left edge, faded when it is declined; gives the colour its text is on, to pick the text's
-/// colour from (`MOD-04-U04`).
-pub fn filled(painter: &egui::Painter, rect: Rect, c: Rgb, declined: bool) -> Rgb {
+/// its left edge, faded when it is declined or over; gives the colour its text is on, to pick the
+/// text's colour from (`MOD-04-U04`).
+pub fn filled(painter: &egui::Painter, rect: Rect, c: Rgb, faded: bool) -> Rgb {
     let under = tint(painter, c);
     painter.rect_filled(rect, CornerRadius::same(EVENT_RADIUS), color(under));
     strip(painter, rect, c);
-    if !declined {
+    if !faded {
         return under;
     }
     fade(painter, rect);
@@ -590,12 +591,19 @@ pub fn show(
                 outline,
                 StrokeKind::Inside,
             );
+            if bar.past {
+                fade(&painter, rect);
+            }
             (visuals.text_color(), background(&painter))
         } else {
             let under = if bar.awaiting {
-                awaiting(&painter, rect, bar.color)
+                let under = awaiting(&painter, rect, bar.color);
+                if bar.past {
+                    fade(&painter, rect);
+                }
+                under
             } else {
-                filled(&painter, rect, bar.color, bar.declined)
+                filled(&painter, rect, bar.color, bar.declined || bar.past)
             };
             (text_on(under), under)
         };
@@ -866,9 +874,13 @@ pub fn show(
                 _ => {}
             }
             let under = if block.awaiting {
-                awaiting(&painter, rect, block.color)
+                let under = awaiting(&painter, rect, block.color);
+                if block.past {
+                    fade(&painter, rect);
+                }
+                under
             } else {
-                filled(&painter, rect, block.color, block.declined)
+                filled(&painter, rect, block.color, block.declined || block.past)
             };
             let ink = text_on(under);
             let clipped = painter.with_clip_rect(rect.shrink(1.0));
@@ -1010,7 +1022,7 @@ mod tests {
     use super::*;
     use crate::screen::{self, VERY_DARK, VERY_LIGHT, answered, contrast_of, texts};
     use calendar_core::contrast::AA;
-    use calendar_core::fixtures::{d, tc_03_01_week, timed};
+    use calendar_core::fixtures::{all_day, d, tc_03_01_week, timed};
     use calendar_core::guests::Response;
     use calendar_core::model::{Event, Kind};
     use calendar_core::theme::Scheme;
@@ -1494,9 +1506,10 @@ mod tests {
 
     #[test]
     fn tc_04_04_text_on_a_very_light_and_a_very_dark_calendar_reads_at_4_5_in_both_themes() {
-        let mut light = timed("Light", d(2026, 11, 10), (9, 0), (10, 0));
+        // Days still to come, so not faded as past (`MOD-04-U07`).
+        let mut light = timed("Light", d(2026, 11, 12), (9, 0), (10, 0));
         light.color = VERY_LIGHT;
-        let mut dark = timed("Dark", d(2026, 11, 11), (9, 0), (10, 0));
+        let mut dark = timed("Dark", d(2026, 11, 13), (9, 0), (10, 0));
         dark.color = VERY_DARK;
 
         for scheme in [Scheme::Light, Scheme::Dark] {
@@ -1512,12 +1525,49 @@ mod tests {
     fn text_of_invitations_and_declined_events_reads_at_4_5_in_both_themes() {
         let at = |title: &str, day| timed(title, d(2026, 11, day), (9, 0), (10, 0));
         let events = [
-            answered(at("Invited light", 9), VERY_LIGHT, Response::Awaiting),
-            answered(at("Invited dark", 10), VERY_DARK, Response::Awaiting),
-            answered(at("Declined light", 11), VERY_LIGHT, Response::Declined),
-            answered(at("Declined dark", 12), VERY_DARK, Response::Declined),
+            answered(at("Invited light", 12), VERY_LIGHT, Response::Awaiting),
+            answered(at("Invited dark", 13), VERY_DARK, Response::Awaiting),
+            answered(at("Declined light", 14), VERY_LIGHT, Response::Declined),
+            answered(at("Declined dark", 15), VERY_DARK, Response::Declined),
         ];
         assert!(events[0].about.awaiting() && events[2].about.declined());
+
+        for scheme in [Scheme::Light, Scheme::Dark] {
+            let shapes = drawn(&events, FULL_HD, 1.0, scheme);
+            for event in &events {
+                let ratio = contrast_of(&shapes, &event.title);
+                assert!(ratio >= AA, "{scheme:?}, {}: {ratio}", event.title);
+            }
+        }
+    }
+
+    /// `TC-04-06`: events over by Wednesday 11 at 13:00, faded, keep their text at 4.5:1.
+    #[test]
+    fn tc_04_06_text_of_events_that_are_over_reads_at_4_5_in_both_themes() {
+        let at = |title: &str, day, hours: (u32, u32)| {
+            timed(title, d(2026, 11, day), hours, (hours.0 + 1, hours.1))
+        };
+        let colored = |mut event: Event, color| {
+            event.color = color;
+            event
+        };
+        let events = [
+            colored(at("Past light", 9, (9, 0)), VERY_LIGHT),
+            colored(at("Past dark", 10, (9, 0)), VERY_DARK),
+            colored(at("Ended this morning", 11, (9, 0)), VERY_DARK),
+            answered(
+                at("Past invited", 9, (11, 0)),
+                VERY_LIGHT,
+                Response::Awaiting,
+            ),
+            answered(
+                at("Past declined", 10, (11, 0)),
+                VERY_DARK,
+                Response::Declined,
+            ),
+            colored(all_day("Yesterday light", d(2026, 11, 10), 1), VERY_LIGHT),
+            colored(all_day("Monday dark", d(2026, 11, 9), 1), VERY_DARK),
+        ];
 
         for scheme in [Scheme::Light, Scheme::Dark] {
             let shapes = drawn(&events, FULL_HD, 1.0, scheme);

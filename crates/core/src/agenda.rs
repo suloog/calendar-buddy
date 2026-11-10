@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use chrono_tz::Tz;
 
-use crate::layout::{is_strip_event, strip_dates};
+use crate::layout::{ended, is_strip_event, strip_dates};
 use crate::model::{Event, Rgb, Timing};
 use crate::view_model::shown_title;
 
@@ -72,11 +72,7 @@ pub fn agenda_view(
         let (from, to) = strip_dates(event, zone);
         // A zero-length event still sits on its day.
         let to = to.max(from);
-        let ended = match event.timing {
-            Timing::Timed { end, .. } => end <= now,
-            Timing::AllDay { .. } => to < today,
-        };
-        if ended {
+        if ended(event, zone, now) {
             continue;
         }
         has_more |= to > last;

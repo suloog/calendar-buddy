@@ -3,7 +3,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 
-use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, timed_placements};
+use crate::layout::{AllDayBar, TimedPlacement, all_day_bars, ended, timed_placements};
 use crate::local;
 use crate::model::{Event, Kind, Rgb, Timing};
 use crate::week::wall_minute;
@@ -53,6 +53,8 @@ pub struct Block {
     pub awaiting: bool,
     /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
     pub declined: bool,
+    /// An event that is over, drawn faded (`MOD-04-U07`).
+    pub past: bool,
     /// An out-of-office event, drawn hatched (`MOD-05-U01`).
     pub hatched: bool,
     pub start: DateTime<Utc>,
@@ -73,6 +75,8 @@ pub struct Bar {
     pub awaiting: bool,
     /// An event the user declined, drawn struck through and faded (`MOD-06-F14`).
     pub declined: bool,
+    /// An event that is over, drawn faded (`MOD-04-U07`).
+    pub past: bool,
     /// An all-day event, not a timed one lasting a day or longer.
     pub all_day: bool,
     /// An out-of-office event, drawn hatched (`MOD-05-U01`).
@@ -147,6 +151,7 @@ pub fn grid_view(
                 saving: event.marked_saving(),
                 awaiting: event.about.awaiting(),
                 declined: event.about.declined(),
+                past: ended(event, zone, now),
                 movable: movable(event),
                 local: event.account_id == local::ACCOUNT_ID,
                 hatched: event.about.kind == Kind::OutOfOffice,
@@ -168,6 +173,7 @@ pub fn grid_view(
                 saving: event.marked_saving(),
                 awaiting: event.about.awaiting(),
                 declined: event.about.declined(),
+                past: ended(event, zone, now),
                 movable: movable(event),
                 local: event.account_id == local::ACCOUNT_ID,
                 all_day: matches!(event.timing, Timing::AllDay { .. }),
@@ -198,7 +204,7 @@ pub fn grid_view(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fixtures::{d, tc_03_01_week, timed};
+    use crate::fixtures::{all_day, d, tc_03_01_week, timed};
     use crate::model::Protected;
     use crate::week::{GridView, Week};
     use chrono::{TimeZone, Weekday};
@@ -236,6 +242,35 @@ mod tests {
             (standup.placement.start_min, standup.placement.end_min),
             (540, 600)
         );
+    }
+
+    /// `TC-04-06`: at 10:00 on Wednesday 11, what has ended is past; what is under way, or still
+    /// covers today, is not.
+    #[test]
+    fn events_that_are_over_are_past_and_those_under_way_are_not() {
+        let events = [
+            timed("Earlier", d(2026, 11, 11), (8, 0), (9, 0)),
+            timed("Ending now", d(2026, 11, 11), (9, 0), (10, 0)),
+            timed("Under way", d(2026, 11, 11), (9, 30), (10, 30)),
+            timed("Later", d(2026, 11, 11), (11, 0), (12, 0)),
+            timed("Monday", d(2026, 11, 9), (13, 0), (14, 0)),
+            all_day("Yesterday", d(2026, 11, 10), 1),
+            all_day("Today", d(2026, 11, 11), 1),
+            all_day("Since yesterday", d(2026, 11, 10), 2),
+        ];
+        let vm = grid_view(
+            &events,
+            &Week::containing(d(2026, 11, 11), Weekday::Mon).days(),
+            Warsaw,
+            clock(),
+        );
+        let mut past: Vec<&str> = (vm.blocks.iter().map(|b| (&b.title, b.past)))
+            .chain(vm.bars.iter().map(|b| (&b.title, b.past)))
+            .filter(|(_, past)| *past)
+            .map(|(title, _)| title.as_deref().unwrap())
+            .collect();
+        past.sort();
+        assert_eq!(past, ["Earlier", "Ending now", "Monday", "Yesterday"]);
     }
 
     #[test]
