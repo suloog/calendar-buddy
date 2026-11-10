@@ -3,7 +3,7 @@ id: US-11-05 # US-NN-MM — NN is the parent module, MM a counter inside it; nev
 module: MOD-11
 covers: [MOD-11-U03] # every requirement this story delivers
 ticket: # optional YouTrack ID — filled by /og:sync-youtrack
-status: in-progress # draft | ready | in-progress | review | done | blocked
+status: review # draft | ready | in-progress | review | done | blocked
 priority: must # must | should | nice-to-have — inherited from the requirement
 depends_on: [US-11-02] # story IDs that must be done first
 ---
@@ -15,7 +15,7 @@ depends_on: [US-11-02] # story IDs that must be done first
 | **Module** | `[MOD-11]` macOS — `docs/specs/modules/11-macos/REQUIREMENTS.md` |
 | **Covers** | `MOD-11-U03` |
 | **Priority** | must |
-| **Status** | in-progress |
+| **Status** | review |
 | **Depends on** | blocked by `US-11-02` |
 | **YouTrack** | — |
 | **Open questions** | — |
