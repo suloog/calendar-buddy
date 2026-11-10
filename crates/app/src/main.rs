@@ -1429,9 +1429,18 @@ impl CalendarApp {
                                 // change, saved on their own (`MOD-07-F21`, `DEC-221`).
                                 let shown = calendar.and_then(|calendar| {
                                     let opened = GuestReminders::of(event, calendar)?;
-                                    // Changed for the event as it is now; as it is otherwise.
+                                    // The changes are kept on the event's newest version while
+                                    // its reminders stay as they were changed from.
                                     Some(match own_reminders.take() {
-                                        Some(changed) if changed.event == opened.event => *changed,
+                                        Some(changed)
+                                            if changed.event.about.reminders
+                                                == opened.event.about.reminders =>
+                                        {
+                                            GuestReminders {
+                                                reminders: changed.reminders,
+                                                ..opened
+                                            }
+                                        }
                                         _ => opened,
                                     })
                                 });

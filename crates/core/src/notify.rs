@@ -30,10 +30,17 @@ impl Pending {
 
     /// The question saving it asks first, when the event has guests other than the account
     /// itself, before or after the change; `None` when it is saved at once, as an answer always
-    /// is, and a change of the reminders alone, which Google tells no one of (`DEC-221`).
+    /// is, and a change of the reminders alone, which Google tells no one of (`DEC-221`) — unless
+    /// it also moves the event to another calendar or splits its series, which the guests get.
     pub fn asks(&self) -> Option<&'static str> {
         match self {
-            Pending::Change(edit, _) if reminders_only(&edit.patch) => None,
+            Pending::Change(edit, scope)
+                if edit.to.is_none()
+                    && *scope != Scope::Following
+                    && reminders_only(&edit.patch) =>
+            {
+                None
+            }
             Pending::Change(edit, _) => (invites(&edit.event.about.guests)
                 || edit.patch.guests.as_deref().is_some_and(invites))
             .then_some(SEND_UPDATE),
@@ -164,8 +171,25 @@ mod tests {
             ..drag::edit(&event, calendar(), event.timing)
         };
         assert_eq!(
-            Pending::Change(Box::new(reminders), Scope::All).asks(),
+            Pending::Change(Box::new(reminders.clone()), Scope::All).asks(),
             None
+        );
+
+        // Moved to another calendar, or splitting the series, the guests are told after all.
+        let moved = Edit {
+            to: Some(Calendar {
+                id: "work".to_string(),
+                ..calendar()
+            }),
+            ..reminders.clone()
+        };
+        assert_eq!(
+            Pending::Change(Box::new(moved), Scope::This).asks(),
+            Some(SEND_UPDATE)
+        );
+        assert_eq!(
+            Pending::Change(Box::new(reminders), Scope::Following).asks(),
+            Some(SEND_UPDATE)
         );
     }
 
