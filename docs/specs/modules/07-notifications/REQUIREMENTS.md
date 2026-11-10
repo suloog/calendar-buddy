@@ -4,7 +4,7 @@ title: Reminders and notifications
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-02] # other module IDs
-sources: [SRC-01, SRC-02, SRC-03] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-01, SRC-02, SRC-03, SRC-14] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -14,7 +14,7 @@ sources: [SRC-01, SRC-02, SRC-03] # SRC-NN documents this module draws on, e.g. 
 
 ## Context
 
-Being reminded: desktop notifications driven by the reminders set in Google, editing an event's reminders, snooze and dismiss, muting a calendar, running from the system tray with optional autostart, a single instance, and handling `webcal:` links. Answers for the scope area "Reminders and notifications"; comes from `DSC-09` (`discovery/09-notifications.md`), drawing on `SRC-01`, `SRC-02` and `SRC-03`. The Join button in notifications comes from `MOD-06`.
+Being reminded: desktop notifications driven by the reminders set in Google, editing an event's reminders, snooze and dismiss, muting a calendar, running from the system tray with optional autostart, a single instance, and handling `webcal:` links. Answers for the scope area "Reminders and notifications"; comes from `DSC-09` (`discovery/09-notifications.md`), drawing on `SRC-01`, `SRC-02` and `SRC-03`. The Join button in notifications comes from `MOD-06`. Changing the user's own reminders on an invitation they cannot otherwise change, and notifications of new invitations, came on 2026-11-10 (`SRC-14`, `DEC-221`, `DEC-222`).
 
 ## Scope coverage
 
@@ -33,6 +33,8 @@ Being reminded: desktop notifications driven by the reminders set in Google, edi
 | `SRC-03-08` Changing an event's reminders in the app is synchronized with Google; both forms — noti… | informal | `MOD-07-F04`, `MOD-07-F05`, `MOD-07-F06` |
 | `SRC-03-09` Closing the window hides the app to the system tray, where it keeps syncing and remindi… | informal | `MOD-07-F14`, `MOD-07-F15`, `MOD-07-F16` |
 | `SRC-03-10` Notifications have Dismiss and Snooze (5 / 10 min); notifications are switched globally… | informal | `MOD-07-F10`, `MOD-07-F11`, `MOD-07-F12` |
+| `SRC-14-02` On events the user cannot change, they can still change their own reminders. | informal | `MOD-07-F21` |
+| `SRC-14-03` A notification when an invitation comes. | informal | `MOD-07-F22`, `MOD-07-F23`, `MOD-07-F24` |
 | `SRC-03-11` Single instance: yes. `webcal:` links: fine. `mailto:` links: probably not. No update c… | informal | `MOD-07-F17`, `MOD-07-F18`; no `mailto:`, no update checking (`DEC-46`) |
 
 ## Functional requirements
@@ -50,6 +52,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-07-F07] Each reminder produces one notification; synchronization never repeats it.
 - [MOD-07-F19] Events the user declined produce no notifications. — *source: `DEC-64`*
 - [MOD-07-F20] Reminders whose time passed while the app was not running are not shown afterwards; reminders that fell while the computer slept are shown on waking if their event has not started yet. — *source: `DEC-64`*
+- [MOD-07-F21] On an invitation only its organizer may change (`MOD-06-F15`), the user changes their own reminders in its details, as in the editor (`F04`, `F05`), and saves them to Google; the event otherwise stays unchangeable, and an event of a calendar the account may only read offers no reminders to change. — *source: `DEC-221`, `SRC-14-02`*
 
 ### Notifications
 
@@ -59,6 +62,12 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-07-F11] In the settings the user turns all notifications on or off. — *source: `DEC-45`*
 - [MOD-07-F12] The user can mute a calendar's notifications without hiding the calendar. — *source: `DEC-45`*
 - [MOD-07-F13] Calendars disabled in the settings produce no notifications. — *source: `DEC-28`*
+
+### Invitations
+
+- [MOD-07-F22] An invitation awaiting the user's answer (`MOD-06-F10`) produces one desktop notification with its title, start time and who invites; never again, across synchronizations and restarts, while it awaits the answer; one that came while the app was off is told at the next start. — *source: `DEC-222`, `SRC-14-03`, `SRC-14-06`*
+- [MOD-07-F23] The notification of an invitation offers Accept, Maybe and Decline, which answer it and let the organizer know, an invitation to a series for all its events; clicking it opens the invitation in the app, on its day. — *source: `DEC-222`, `SRC-14-05`*
+- [MOD-07-F24] The first synchronization of a calendar — of a newly connected account, newly enabled, or the first time this version runs — produces no notifications of the invitations it brings; turning notifications off or muting the calendar silences them as it does reminders. — *source: `DEC-222`, `SRC-14-06`*
 
 ### Running in the background
 
@@ -71,7 +80,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## UI/UX requirements
 
 - [MOD-07-U01] A notification shows the event's title, start time and, if any, location. — *source: `DEC-64`*
-- [MOD-07-U02] Clicking the tray icon shows or hides the window. — *source: `DEC-64`*
+- [MOD-07-U02] Clicking the tray icon shows or hides the window; on macOS it opens the window and the menu comes on a right click (`MOD-11-U03`, `DEC-220`). — *source: `DEC-64`*
 - [MOD-07-U03] A calendar's notifications are muted from the calendar's menu in the side panel. — *source: `DEC-64`*
 
 ## Constraints and edge cases
@@ -92,11 +101,12 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 ## Technical notes
 
+- Invitations are told from the events the views get, as the side panel counts them (`invitations::awaiting`); those told, and the calendars looked at once, are kept in the cache's `announced` and `announced_calendars` tables (`DEC-222`).
 - Reminders are scheduled from the local store (`MOD-02`), so they work offline for cached events; overrides on the event win over the calendar's `defaultReminders` when `useDefault` is false.
 - Notifications go through `org.freedesktop.Notifications` over D-Bus with actions (Join, Snooze 5, Snooze 10, Dismiss); a delivered-reminder record (event, occurrence start, reminder offset) prevents repeats across sync cycles.
 - Tray: StatusNotifierItem (KDE); autostart: an XDG autostart `.desktop` entry; single instance: a well-known D-Bus name; `webcal:` handler registered as `x-scheme-handler/webcal`, opening `https://calendar.google.com/calendar/r?cid=…` in the browser. All behind the platform interface (constitution).
 - Sleep and wake signals come from systemd-logind (shared with `MOD-02`).
-- On macOS (`MOD-11`, `DEC-217`, `DEC-218`): notifications through the notification center, with buttons and clicks (`F08`, `F09`, `F10` → `MOD-11-F10`), or without them through AppleScript outside the bundle; the tray as a menu bar icon, with the window hidden rather than closed (`F14`, `F15` → `MOD-11-F09`), where the icon has a menu but no click of its own (`U02`); autostart through a launch agent, single instance through Launch Services (`MOD-11-F06`, `F07`); not yet delivered there are `webcal:` links (`F18` → `MOD-11-F12`).
+- On macOS (`MOD-11`, `DEC-217`, `DEC-218`): notifications through the notification center, with buttons and clicks (`F08`, `F09`, `F10` → `MOD-11-F10`), or without them through AppleScript outside the bundle; the tray as a menu bar icon, with the window hidden rather than closed (`F14`, `F15` → `MOD-11-F09`), where a click on the icon opens the window and a right click its menu (`U02` → `MOD-11-U03`, `DEC-220`); autostart through a launch agent, single instance through Launch Services (`MOD-11-F06`, `F07`); not yet delivered there are `webcal:` links (`F18` → `MOD-11-F12`).
 
 ## Out of scope / what not to worry about
 

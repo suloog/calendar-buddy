@@ -43,6 +43,7 @@
 | ----------- | ---------- |
 | `MOD-11-U01` | `US-11-01` |
 | `MOD-11-U02` | `US-11-02` |
+| `MOD-11-U03` | `US-11-05` |
 
 <!-- og:part tests -->
 
@@ -73,6 +74,9 @@
 | `US-11-04#1` | After the Mac wakes from sleep, the calendars are synchronized within sec… | — | — | draft — tests after `/og:clarify` |
 | `US-11-04#2` | Turning Wi-Fi off shows that the app is offline; turning it on synchroniz… | — | — | draft — tests after `/og:clarify` |
 | `US-11-04#3` | A `webcal:` link clicked in a browser or mail opens Google Calendar's "ad… | — | — | draft — tests after `/og:clarify` |
+| `US-11-05#1` | With the window closed, a click on the menu bar icon opens it in front, … | `TC-11-09` | manual-only | menu bar, Dock |
+| `US-11-05#2` | With the window shown behind other apps, a click on the icon brings it t… | `TC-11-09` | manual-only | menu bar |
+| `US-11-05#3` | A right click, or a click with Control held, shows the menu with "Open C… | `TC-11-09` | manual-only | menu bar |
 
 ### Module constraints and edge cases
 

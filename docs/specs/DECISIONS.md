@@ -2653,3 +2653,39 @@
 - **Scope effect:** within scope
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-220] On macOS a click on the menu bar icon opens the window; its menu comes on a right click
+
+- **Date:** 2026-11-10
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation 2026-11-10 (`SRC-14-01`, `SRC-14`)
+- **Affects:** `DEC-218`, `MOD-07-U02` (on macOS), `MOD-11-F09`, new `MOD-11-U03`, `US-11-02`, new `US-11-05`, new `TC-11-09`, technical notes of `MOD-07` and `MOD-11`
+- **Decision:** A left click on the menu bar icon does what "Open" in its menu does: it opens the hidden window, with the app back in the Dock, or brings the shown window to the front; it never hides the window. A right click, or a click with Control held, shows the menu — "Open Calendar Buddy" and "Quit" — as before. On Linux nothing changes: a click on the tray icon shows or hides the window (`MOD-07-U02`) and its menu comes on a right click.
+- **Why:** The product owner goes to the app from the icon far more often than they quit it, so the click should take them there at once; a right click for the menu is how menu bar apps that open a window on a click behave. Bringing the window forward rather than hiding it matches what the user meant ("go to the app"); closing the window stays the way to hide it.
+- **Scope effect:** within scope — changes the click of `DEC-218`
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-221] On an invitation only its organizer may change, the user changes their own reminders in its details
+
+- **Date:** 2026-11-10
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation 2026-11-10 (`SRC-14-02`, `SRC-14-04`, `SRC-14`)
+- **Affects:** `DEC-110`, `DEC-43`, `MOD-05-F17`, `MOD-06-F15`, new `MOD-07-F21`, new `US-07-07`, new `TC-07-10`, the fake Google
+- **Decision:** On a guest's copy of someone else's event that only its organizer may change (`DEC-110`), the user's own reminders can still be changed: its details show a "Notifications" row with the editor's reminder rows (`MOD-07-F04`, `F05`) — notification or e-mail, so many minutes, hours or days before, up to Google's limit, or the calendar's defaults — and a **Save** that is offered once they differ from the event's. Saving sends Google a change of the reminders alone, which Google takes from a guest, and changes them only for the user; an occurrence of a series asks first whether it applies to this event or to all events, as an answer does (`MOD-06-F13`). A change of the reminders alone never asks whether to e-mail the guests, in the editor too, as Google tells no one of it. The event stays otherwise protected: no **Edit**, no **Delete**, no drag. An event of a calendar the account may only read (`DEC-22`) offers no reminders to change, as Google refuses any change there.
+- **Why:** Reminders are each guest's own in Google: Google Calendar lets a guest change them on an invitation they cannot otherwise edit, and the change reaches no one else. The details are where the user already answers such an invitation (`MOD-06-F15`), so the reminders go beside the answer rather than into an editor whose every other field would be locked. On a read-only calendar Google answers any change with "You need to have writer access to this calendar".
+- **Scope effect:** within scope — narrows `DEC-110`: a guest's copy is no longer wholly unchangeable
+- **Resolves:** —
+- **Status:** accepted
+
+## [DEC-222] A new invitation comes as a desktop notification, answered from its buttons
+
+- **Date:** 2026-11-10
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation 2026-11-10 (`SRC-14-03`, `SRC-14-05`, `SRC-14-06`, `SRC-14`)
+- **Affects:** `DEC-45`, `DEC-125`, `DEC-127`, `DEC-128`, `DEC-215`, `DEC-218`, new `MOD-07-F22`…`F24`, new `US-07-08`, new `TC-07-11`, `MOD-11-F10`, the SQLite cache, the notification center's categories on macOS
+- **Decision:** An invitation awaiting the user's answer — as the side panel counts them (`DEC-125`, `DEC-127`): their own, not over, of a calendar not disabled, a series once — is told once, as a desktop notification titled "Invitation: <title>", with when it starts and who invites, and the buttons **Accept**, **Maybe** and **Decline**. A button answers it as the details do and lets the organizer know (`DEC-128`); an invitation to a series is answered for all its events. Clicking the notification opens the invitation in the window, on its day (`DEC-215`). The invitations told are kept in the cache, so a restart does not tell them again, and those that came while the app was off are told at its next start. A calendar the app has never told about — that of a newly connected account, one newly enabled, or every calendar the first time this version runs — has its invitations kept as told without a notification, so a first synchronization brings none. An invitation answered, over or gone is forgotten, so if it awaits an answer again it is told again. Notifications turned off in the settings or a muted calendar silence these as they do reminders (`MOD-07-F11`, `F12`); a silenced invitation is still kept as told. Without buttons on the desktop (`DEC-64`) the click opens the invitation, where it is answered. **SQLite schema change:** two tables, `announced` (account, calendar, invitation) and `announced_calendars` (account, calendar), created when missing; the schema version stays, so nothing is fetched again.
+- **Why:** The product owner wants to know of an invitation when it comes, not when they next look at the side panel; answering from the notification saves opening the app for the common case, as Google Calendar's mails do. Remembering what was told keeps the promise of one notification each (`MOD-07-F07`) across restarts and catches what came while the app was off; telling a whole backlog after connecting an account would be noise, so a first look only remembers. Answering a series as a whole is what an invitation to a series asks; one occurrence can still be answered from its details. New tables created when missing leave the cache and its synchronization states as they are.
+- **Scope effect:** extends scope — notifications of invitations were not in `SRC-01`
+- **Resolves:** —
+- **Status:** accepted
