@@ -2269,7 +2269,10 @@ impl CalendarApp {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 background::Response::Show if platform::WINDOW_HIDES => self.unhide(ctx),
+                // A minimized window, or the app hidden with Cmd+H, is brought back too.
                 background::Response::Raise if platform::WINDOW_HIDES => {
+                    platform::in_dock(true);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 // Wayland lets no app bring its own window forward, so a window without the

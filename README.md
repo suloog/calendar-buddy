@@ -67,7 +67,8 @@ KeePassXC, through the Secret Service API; on macOS the Keychain.
    pull, run the same `cargo install` and start `~/.cargo/bin/calendar-buddy` once more: it
    updates the copy. After an update macOS may ask once whether the app may use its Keychain
    item; choose **Always Allow**. Closing the window leaves the app in the menu bar (a calendar
-   icon), where it keeps reminding you; its menu opens the window or quits the app. On its first
+   icon), where it keeps reminding you; a click on the icon opens the window, and a right click
+   shows its menu, which opens the window or quits the app. On its first
    start macOS asks whether Calendar Buddy may send notifications; allow it, and they come with
    Join, Snooze and Dismiss. Started with `cargo run`, the app is not in its bundle, and its
    notifications come from Script Editor, without buttons.

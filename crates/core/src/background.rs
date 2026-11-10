@@ -12,7 +12,8 @@ pub enum Signal {
     Closed,
     /// The tray icon was clicked (`MOD-07-U02`).
     TrayClicked,
-    /// "Open" was chosen in the tray menu (`MOD-07-F15`).
+    /// "Open" was chosen in the tray menu (`MOD-07-F15`), or the menu bar icon was clicked on a
+    /// Mac (`MOD-11-U03`).
     Open,
     /// "Quit" was chosen in the tray menu (`MOD-07-F15`).
     Quit,

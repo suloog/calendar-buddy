@@ -32,9 +32,11 @@ depends_on: [TC-11-07] # test case IDs that must pass first
 | 1 | Close the window, then click the menu bar icon. | The window opens in front; the app is back in the Dock; no menu shows. | screenshot |
 | 2 | Bring another app to the front over the window, then click the icon. | The window comes to the front; it stays shown. | screenshot |
 | 3 | Click the icon again while the window is in front. | The window stays shown and in front. | screenshot |
-| 4 | Right-click the icon. | The menu shows "Open Calendar Buddy" and "Quit". | screenshot |
-| 5 | Close the window, Control-click the icon and choose "Open Calendar Buddy". | The menu shows; the window opens in front. | screenshot |
-| 6 | Right-click the icon and choose "Quit". | The icon is gone and `pgrep -fl calendar-buddy` lists nothing. | terminal output |
+| 4 | Minimize the window (Cmd+M), then click the icon. | The window comes back from the Dock, in front. | screenshot |
+| 5 | Hide the app (Cmd+H), then click the icon. | The window comes back, in front. | screenshot |
+| 6 | Right-click the icon. | The menu shows "Open Calendar Buddy" and "Quit". | screenshot |
+| 7 | Close the window, Control-click the icon and choose "Open Calendar Buddy". | The menu shows; the window opens in front. | screenshot |
+| 8 | Right-click the icon and choose "Quit". | The icon is gone and `pgrep -fl calendar-buddy` lists nothing. | terminal output |
 
 ## Pass criterion
 
