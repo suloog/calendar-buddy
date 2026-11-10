@@ -3,7 +3,6 @@
 //! While the window is hidden the app is not in the Dock, and opening it again from Spotlight,
 //! Launchpad or Finder brings the window back.
 
-use std::cell::OnceCell;
 use std::ptr::NonNull;
 use std::sync::Arc;
 
@@ -32,8 +31,8 @@ type Chosen = Arc<dyn Fn(Signal) + Send + Sync>;
 /// What the icon and its menu call, with the icon and the menu it pops up.
 struct Targets {
     chosen: Chosen,
-    item: OnceCell<Retained<NSStatusItem>>,
-    menu: OnceCell<Retained<NSMenu>>,
+    item: Retained<NSStatusItem>,
+    menu: Retained<NSMenu>,
 }
 
 define_class!(
@@ -50,18 +49,17 @@ define_class!(
         fn clicked(&self, _sender: Option<&AnyObject>) {
             let mtm = self.mtm();
             let event = NSApplication::sharedApplication(mtm).currentEvent();
-            let menu = event.is_some_and(|event| {
+            let wants_menu = event.is_some_and(|event| {
                 event.r#type() == NSEventType::RightMouseUp
                     || event.modifierFlags().contains(NSEventModifierFlags::Control)
             });
             let targets = self.ivars();
-            match (menu, targets.item.get(), targets.menu.get()) {
-                (true, Some(item), Some(menu)) => {
-                    // The menu set on the icon would open on every click.
-                    #[allow(deprecated)]
-                    item.popUpStatusItemMenu(menu);
-                }
-                _ => (targets.chosen)(Signal::Open),
+            if wants_menu {
+                // The menu set on the icon would open on every click.
+                #[allow(deprecated)]
+                targets.item.popUpStatusItemMenu(&targets.menu);
+            } else {
+                (targets.chosen)(Signal::Open);
             }
         }
 
@@ -78,12 +76,8 @@ define_class!(
 );
 
 impl MenuTarget {
-    fn new(mtm: MainThreadMarker, chosen: Chosen) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(Targets {
-            chosen,
-            item: OnceCell::new(),
-            menu: OnceCell::new(),
-        });
+    fn new(mtm: MainThreadMarker, targets: Targets) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(targets);
         unsafe { msg_send![super(this), init] }
     }
 }
@@ -106,7 +100,15 @@ fn icon() -> Option<Retained<NSImage>> {
 /// window, a right or Control click shows the menu (`DEC-220`).
 fn status_item(mtm: MainThreadMarker, chosen: Chosen) {
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
-    let target = MenuTarget::new(mtm, chosen);
+    let menu = NSMenu::new(mtm);
+    let target = MenuTarget::new(
+        mtm,
+        Targets {
+            chosen,
+            item: item.clone(),
+            menu: menu.clone(),
+        },
+    );
     if let Some(button) = item.button(mtm) {
         button.setImage(icon().as_deref());
         unsafe {
@@ -115,7 +117,6 @@ fn status_item(mtm: MainThreadMarker, chosen: Chosen) {
         }
         button.sendActionOn(NSEventMask::LeftMouseUp | NSEventMask::RightMouseUp);
     }
-    let menu = NSMenu::new(mtm);
     let entry = |title: &str, action| {
         let entry = unsafe {
             NSMenuItem::initWithTitle_action_keyEquivalent(
@@ -131,9 +132,8 @@ fn status_item(mtm: MainThreadMarker, chosen: Chosen) {
     menu.addItem(&entry(texts::OPEN_APP, sel!(open:)));
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     menu.addItem(&entry(texts::QUIT, sel!(quit:)));
-    let _ = target.ivars().menu.set(menu);
-    let _ = target.ivars().item.set(item);
-    // The status bar and the icon's button hold the target for good only through this.
+    // Neither the status bar nor the icon's button retains the target: leaking it keeps it, the
+    // icon and the menu for as long as the app runs.
     std::mem::forget(target);
 }
 
