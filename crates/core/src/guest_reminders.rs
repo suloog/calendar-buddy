@@ -43,9 +43,14 @@ impl GuestReminders {
         }
     }
 
-    /// Whether they differ from the event's, so there is something to save.
+    /// Whether they differ from the event's, so there is something to save: reminders that cannot
+    /// be saved count as changed, to show why.
     pub fn changed(&self) -> bool {
-        self.reminders != own_fields(&self.event.about.reminders)
+        let reminders = match &self.reminders {
+            Some(own) => checked(own).map(Reminders::Own),
+            None => Ok(Reminders::Default),
+        };
+        reminders.as_ref() != Ok(&self.event.about.reminders)
     }
 
     /// The change of the reminders alone, which e-mails no one; for an occurrence of a series,
@@ -151,6 +156,30 @@ mod tests {
             panic!("saved at once");
         };
         assert_eq!(edit.patch.reminders, Some(Reminders::Default));
+    }
+
+    #[test]
+    fn the_same_reminder_written_in_other_units_is_no_change() {
+        let hour = Event {
+            about: crate::model::About {
+                reminders: Reminders::Own(vec![Reminder {
+                    method: Method::Notification,
+                    minutes: 60,
+                }]),
+                ..review().about
+            },
+            ..review()
+        };
+        let mut reminders = GuestReminders::of(&hour, &work()).expect("offered");
+        reminders.reminders = Some(vec![ReminderField {
+            amount: 60,
+            ..half_hour()
+        }]);
+        assert!(!reminders.changed());
+
+        // One that cannot be saved shows Save, with why.
+        reminders.reminders = Some(vec![half_hour(); MOST_REMINDERS + 1]);
+        assert!(reminders.changed());
     }
 
     #[test]

@@ -73,7 +73,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-06-F09] Invitations awaiting the user's response are marked as such in every view. — *source: `DEC-61`*
 - [MOD-06-F10] The side panel shows how many invitations await a response; it opens a list of them to respond from, each shown on its day when picked. — *source: `DEC-61`, `DEC-215`*
 - [MOD-06-F11] The user can respond to an invitation with Accept, Decline or Maybe; the response is sent to Google.
-- [MOD-06-F12] When the user saves a change to an event with guests — also after dragging — or deletes one, the app asks once whether to send the guests an update. — *source: `DEC-40`*
+- [MOD-06-F12] When the user saves a change to an event with guests — also after dragging — or deletes one, the app asks once whether to send the guests an update; a change of the reminders alone, which Google tells no one of, asks nothing, unless it also moves the event to another calendar or applies to this and the following events (`DEC-221`). — *source: `DEC-40`*
 - [MOD-06-F13] Responding to an occurrence of a recurring invitation asks whether the answer applies to this event or to all events. — *source: `DEC-61`*
 - [MOD-06-F14] Events the user declined stay in the views, struck through and faded. — *source: `DEC-61`*
 - [MOD-06-F22] One easy switch in the views shows or hides declined events; they are shown by default. — *source: `DEC-62`*

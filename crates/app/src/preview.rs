@@ -858,3 +858,32 @@ fn tc_06_05_an_invitation_picked_in_the_list_is_shown_ringed_on_its_day() {
     };
     assert_eq!(opened.title, "Architecture sync");
 }
+
+#[test]
+fn tc_07_10_a_guest_adds_a_notification_in_the_details_and_saves_it() {
+    let mut harness = driven(View::Grid(GridView::Week));
+    let app = harness.state_mut();
+    app.open(titled(app, "Architecture sync"), None);
+    harness.run_steps(2);
+    assert!(harness.query_by_label(calendar_core::texts::SAVE).is_none());
+
+    harness
+        .get_by_label(calendar_core::texts::ADD_NOTIFICATION)
+        .click();
+    harness.run_steps(4);
+    // The change is kept from frame to frame, with Save for it.
+    let Some(Dialog::Event(_, _, _, Some(changing), _)) = &harness.state().dialog else {
+        panic!("the details hold the reminders being changed");
+    };
+    assert!(changing.changed());
+
+    harness.get_by_label(calendar_core::texts::SAVE).click();
+    // Saved by the engine, which fails as Google is not reached in previews.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.state().not_saved.is_empty() {
+        assert!(Instant::now() < deadline, "the change never reached Google");
+        std::thread::sleep(Duration::from_millis(20));
+        harness.step();
+    }
+    assert!(matches!(harness.state().dialog, Some(Dialog::Event(..))));
+}
