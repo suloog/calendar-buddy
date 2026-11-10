@@ -887,3 +887,26 @@ fn tc_07_10_a_guest_adds_a_notification_in_the_details_and_saves_it() {
     }
     assert!(matches!(harness.state().dialog, Some(Dialog::Event(..))));
 }
+
+/// Behind other windows, minimized, or with the app hidden by Cmd+H, eframe draws nothing and
+/// runs only the app's logic: a click on the menu bar icon still brings the window back, in front.
+#[cfg(target_os = "macos")]
+#[test]
+fn tc_11_09_a_click_on_the_icon_brings_a_window_not_drawn_to_the_front() {
+    let mut harness = driven(View::Grid(GridView::Week));
+    let (signal, signals) = mpsc::channel();
+    harness.state_mut().signals = signals;
+    signal
+        .send(Some(calendar_core::background::Signal::Open))
+        .unwrap();
+
+    let ctx = harness.ctx.clone();
+    let mut frame = eframe::Frame::_new_kittest();
+    let output = ctx.run_logic(&egui::RawInput::default(), |ctx| {
+        eframe::App::logic(harness.state_mut(), ctx, &mut frame);
+    });
+
+    let commands = &output.viewport_commands[&egui::ViewportId::ROOT];
+    assert!(commands.contains(&egui::ViewportCommand::Minimized(false)));
+    assert!(commands.contains(&egui::ViewportCommand::Focus));
+}

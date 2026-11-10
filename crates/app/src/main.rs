@@ -2386,30 +2386,34 @@ impl CalendarApp {
             platform::in_dock(shown);
         }
     }
-
-    /// What the app does on every pass of the window's event loop, also while the window is
-    /// hidden in the menu bar (`DEC-218`): there it keeps synchronizing, less often, and
-    /// reminding (`MOD-07-F14`), and a notification clicked brings the window back with its
-    /// event (`MOD-07-F08`). While the window is shown, `ui` does the same.
-    fn logic(&mut self, ctx: &egui::Context) {
-        self.dock(!self.hidden);
-        if !self.hidden {
-            return;
-        }
-        self.signaled(ctx);
-        self.background(ctx);
-        if self.hidden && self.notified.is_some() {
-            self.unhide(ctx);
-        }
-        ctx.request_repaint_after(IN_TRAY_CHECK);
-    }
 }
 
 impl eframe::App for CalendarApp {
+    /// What the app does on every pass of the window's event loop, before `ui`, and alone while
+    /// the window is not drawn: hidden in the menu bar (`DEC-218`), minimized, or behind other
+    /// windows. It keeps synchronizing and reminding (`MOD-07-F14`, less often while hidden),
+    /// and the menu bar icon, a launch or a notification clicked brings the window to the front
+    /// (`MOD-11-U03`, `MOD-07-F17`, `MOD-07-F08`).
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.dock(!self.hidden);
+        self.signaled(ctx);
+        self.background(ctx);
+        if self.notified.is_some() {
+            if self.hidden {
+                self.unhide(ctx);
+            } else {
+                // Drawn again, `ui` opens the event.
+                ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
+        }
+        if self.hidden {
+            ctx.request_repaint_after(IN_TRAY_CHECK);
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         appearance::apply(ui.ctx(), self.settings.theme, &self.desktop);
-        self.signaled(ui.ctx());
-        self.background(ui.ctx());
         // Looking at the app brings it up to date; a minimized window is polled less often.
         let (focused, minimized) = ui
             .ctx()
@@ -2852,8 +2856,8 @@ impl eframe::App for CalendarApp {
 struct AppWindow<'a>(&'a mut CalendarApp);
 
 impl eframe::App for AppWindow<'_> {
-    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.0.logic(ctx);
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        eframe::App::logic(self.0, ctx, frame);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
