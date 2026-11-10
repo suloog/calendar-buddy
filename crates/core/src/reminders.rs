@@ -165,7 +165,8 @@ impl Notification {
             title: texts::invitation(&event.title),
             when: when(&event.timing, now, zone, regional),
             location: event.about.location.clone(),
-            meet: event.about.meet.clone(),
+            // Answered, not joined, from its buttons.
+            meet: None,
             of: Of::Invitation(EventId::of(event)),
         }
     }

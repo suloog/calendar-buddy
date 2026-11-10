@@ -1,6 +1,7 @@
 //! The notifications on macOS (`MOD-11-F10`, `DEC-218`): from the app's bundle, through the
-//! system's notification center in the app's own name, with Join, Snooze and Dismiss and a click
-//! that opens the event. A program run outside the bundle, as `cargo run` makes, has no name
+//! system's notification center in the app's own name, with Join, Snooze and Dismiss on a
+//! reminder, Accept, Maybe and Decline on an invitation (`MOD-07-F23`), and a click that opens the
+//! event. A program run outside the bundle, as `cargo run` makes, has no name
 //! the notification center knows: its notifications go through AppleScript's `display
 //! notification`, without buttons and saying nothing back (`DEC-64`).
 
@@ -97,7 +98,7 @@ impl Delegate {
     }
 }
 
-/// Hands the notification center its delegate and the buttons of both kinds of notification,
+/// Hands the notification center its delegate and the buttons of each kind of notification,
 /// and asks the user, the first time, to let the app show notifications.
 fn set_up() {
     let center = UNUserNotificationCenter::currentNotificationCenter();

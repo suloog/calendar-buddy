@@ -32,7 +32,8 @@ pub struct Told {
 /// What is told of the invitations among `events`, those of the `synchronized` calendars, as
 /// `told` before: what to keep as told now, and the places in `events` of the invitations to
 /// tell, the earliest first. `accounts` give each account's own address, and calendars
-/// `disabled` in the settings are not looked at (`MOD-06-F21`).
+/// `disabled` in the settings are not looked at (`MOD-06-F21`); what was told of an account not
+/// among them is kept as it was, as its invitations cannot be told apart yet.
 pub fn tell(
     told: &Told,
     synchronized: &BTreeSet<CalendarKey>,
@@ -46,7 +47,11 @@ pub fn tell(
         disabled: disabled.clone(),
         ..Settings::default()
     };
-    let calendars: BTreeSet<CalendarKey> = synchronized.difference(disabled).cloned().collect();
+    let named = |account: &str| accounts.iter().any(|entry| entry.account.id == account);
+    let calendars: BTreeSet<CalendarKey> = (synchronized.difference(disabled))
+        .filter(|(account, _)| named(account))
+        .cloned()
+        .collect();
     let awaiting: Vec<(usize, (String, String, String))> =
         invitations::awaiting(events, accounts, &settings, zone, now)
             .into_iter()
@@ -62,9 +67,19 @@ pub fn tell(
         .filter(|(_, key)| !told.invitations.contains(key))
         .map(|(i, _)| *i)
         .collect();
+    let unnamed = |account: &str| !named(account);
     let now_told = Told {
-        calendars,
-        invitations: awaiting.into_iter().map(|(_, key)| key).collect(),
+        calendars: (calendars.into_iter())
+            .chain(told.calendars.iter().filter(|(a, _)| unnamed(a)).cloned())
+            .collect(),
+        invitations: (awaiting.into_iter().map(|(_, key)| key))
+            .chain(
+                told.invitations
+                    .iter()
+                    .filter(|(a, _, _)| unnamed(a))
+                    .cloned(),
+            )
+            .collect(),
     };
     (now_told, new)
 }
@@ -208,6 +223,38 @@ mod tests {
             clock(),
         );
         assert!(places.is_empty());
+    }
+
+    #[test]
+    fn tc_07_11_a_calendar_of_an_account_not_yet_known_is_looked_at_only_once_it_is() {
+        let events = [invitation("Old")];
+        // Synchronized before the app says whose account it is: nothing is looked at.
+        let (told, places) = tell(
+            &Told::default(),
+            &work(),
+            &events,
+            &[],
+            &BTreeSet::new(),
+            Warsaw,
+            clock(),
+        );
+        assert!(places.is_empty());
+        assert_eq!(told, Told::default());
+        // Then the first look, which tells nothing.
+        let (told, titles) = told_now(&told, &events);
+        assert!(titles.is_empty());
+        // What was told of it stays while the account is not known again.
+        let (kept, places) = tell(
+            &told,
+            &work(),
+            &events,
+            &[],
+            &BTreeSet::new(),
+            Warsaw,
+            clock(),
+        );
+        assert!(places.is_empty());
+        assert_eq!(kept, told);
     }
 
     #[test]
