@@ -1726,6 +1726,7 @@ mod tests {
     use calendar_core::drag::{self, Target};
     use calendar_core::editor::{Editor, ReminderField, Save, Unit};
     use calendar_core::fixtures::d;
+    use calendar_core::guest_reminders::GuestReminders;
     use calendar_core::guests::{self, Person};
     use calendar_core::invitations;
     use calendar_core::meet_with::{MeetWith, Overlay};
@@ -5940,6 +5941,56 @@ mod tests {
         assert_eq!(own_status(&kept), "tentative");
         assert_eq!(kept["summary"], "Board");
         assert_eq!(kept["start"]["dateTime"], "2026-11-12T14:00:00+01:00");
+    }
+
+    #[test]
+    fn tc_07_10_as_a_guest_the_user_changes_their_own_reminders_of_board_and_nothing_else() {
+        let (google, mut engine, start) = board("tc-07-10");
+        let board = (now_shown(&engine).into_iter())
+            .find(|event| event.title == "Board")
+            .unwrap();
+        let calendar = engine.cache.calendar_list().unwrap().remove(0);
+
+        // Its details offer its reminders, though not its time, details or guests.
+        let mut reminders = GuestReminders::of(&board, &calendar).expect("offered");
+        reminders.reminders = Some(vec![ReminderField {
+            method: Method::Notification,
+            amount: 30,
+            unit: Unit::Minutes,
+        }]);
+        let Ok(Ok(edit)) = reminders.save() else {
+            panic!("a single event is saved at once");
+        };
+        let pending = Pending::Change(Box::new(edit), Scope::This);
+        assert_eq!(pending.asks(), None, "no one is e-mailed");
+        let Pending::Change(edit, _) = pending else {
+            unreachable!();
+        };
+        let updates = engine.handle(Some(Job::Change(1, edit)), start);
+
+        // Google takes the reminders alone: the event stays as the organizer made it.
+        assert!(matches!(
+            saved_changes(&updates).as_slice(),
+            [Saved::Changed(1, _)]
+        ));
+        let [(_, sent)] = google.fake.patched().try_into().unwrap();
+        assert_eq!(
+            sent,
+            json!({"reminders": {"useDefault": false,
+                "overrides": [{"method": "popup", "minutes": 30}]}})
+        );
+        let kept = google.fake.event(ACCOUNT_ID, EMAIL, "board").unwrap();
+        assert_eq!(kept["summary"], "Board");
+        let board = (now_shown(&engine).into_iter())
+            .find(|event| event.title == "Board")
+            .unwrap();
+        assert_eq!(
+            board.about.reminders,
+            Reminders::Own(vec![Reminder {
+                method: Method::Notification,
+                minutes: 30,
+            }])
+        );
     }
 
     #[test]

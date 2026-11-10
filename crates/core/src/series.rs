@@ -51,8 +51,11 @@ pub fn scopes(edit: &Edit) -> Vec<(Scope, Option<&'static str>)> {
     let other_calendar = edit.to.is_some();
     let new_rule = edit.patch.recurrence.is_some();
     let other_days = new_rule && falls_elsewhere(&edit.event, &edit.patch);
+    // A guest's copy cannot be split: its series is the organizer's (`DEC-221`).
+    let guest = edit.event.organizer_only;
     (Scope::EACH.into_iter())
         .filter(|scope| !(new_rule && *scope == Scope::This))
+        .filter(|scope| !(guest && *scope == Scope::Following))
         .map(|scope| {
             let why = match scope {
                 Scope::This => other_calendar.then_some(OTHER_CALENDAR),

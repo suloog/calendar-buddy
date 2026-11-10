@@ -1082,11 +1082,11 @@ fn patch_event(
         return refusal;
     }
     // A guest's copy of an event whose organizer does not let guests change it: only the guest's
-    // own answer may change.
+    // own answer and reminders may change.
     if event["organizer"].is_object()
         && event["organizer"]["self"] != true
         && event["guestsCanModify"] != true
-        && !answers_only(&event, &patch)
+        && !guests_own_only(&event, &patch)
     {
         return (
             "403 Forbidden",
@@ -1153,9 +1153,9 @@ fn delete_event(
     ("204 No Content", String::new())
 }
 
-/// Whether the patch changes nothing of the event but the answer of the guest whose calendar the
-/// copy is in (`self`).
-fn answers_only(event: &Value, patch: &Value) -> bool {
+/// Whether the patch changes nothing of the event but what is the guest's own whose calendar the
+/// copy is in (`self`): their answer and their reminders.
+fn guests_own_only(event: &Value, patch: &Value) -> bool {
     let without_own_answer = |attendees: &Value| -> Vec<Value> {
         (attendees.as_array().into_iter().flatten())
             .map(|attendee| {
@@ -1168,9 +1168,12 @@ fn answers_only(event: &Value, patch: &Value) -> bool {
             .collect()
     };
     patch.as_object().is_some_and(|fields| {
-        fields.len() == 1
-            && fields.contains_key("attendees")
-            && without_own_answer(&patch["attendees"]) == without_own_answer(&event["attendees"])
+        fields
+            .keys()
+            .all(|key| key == "attendees" || key == "reminders")
+            && (!fields.contains_key("attendees")
+                || without_own_answer(&patch["attendees"])
+                    == without_own_answer(&event["attendees"]))
     })
 }
 

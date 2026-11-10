@@ -3,7 +3,7 @@
 //! once whether the guests get an update (`MOD-06-F12`). The answer goes to Google with every
 //! request the change makes; an event without guests asks nothing.
 
-use crate::editor::Edit;
+use crate::editor::{Edit, Patch};
 use crate::guests::Guest;
 use crate::model::{Calendar, Event};
 use crate::series::{Question, Scope};
@@ -30,9 +30,10 @@ impl Pending {
 
     /// The question saving it asks first, when the event has guests other than the account
     /// itself, before or after the change; `None` when it is saved at once, as an answer always
-    /// is.
+    /// is, and a change of the reminders alone, which Google tells no one of (`DEC-221`).
     pub fn asks(&self) -> Option<&'static str> {
         match self {
+            Pending::Change(edit, _) if reminders_only(&edit.patch) => None,
             Pending::Change(edit, _) => (invites(&edit.event.about.guests)
                 || edit.patch.guests.as_deref().is_some_and(invites))
             .then_some(SEND_UPDATE),
@@ -42,6 +43,16 @@ impl Pending {
             Pending::Respond(..) => None,
         }
     }
+}
+
+/// Whether the patch changes the event's reminders and nothing else.
+fn reminders_only(patch: &Patch) -> bool {
+    patch.reminders.is_some()
+        && *patch
+            == Patch {
+                reminders: patch.reminders.clone(),
+                ..Patch::default()
+            }
 }
 
 /// Whether anyone but the account itself is invited.
@@ -140,6 +151,22 @@ mod tests {
             let pending = Pending::Change(Box::new(edit), Scope::This);
             assert_eq!(pending.asks(), Some(SEND_UPDATE));
         }
+    }
+
+    #[test]
+    fn tc_07_10_a_change_of_the_reminders_alone_asks_nothing() {
+        let event = sync(vec![own(), guest("adam@example.com")]);
+        let reminders = Edit {
+            patch: Patch {
+                reminders: Some(crate::model::Reminders::Default),
+                ..Patch::default()
+            },
+            ..drag::edit(&event, calendar(), event.timing)
+        };
+        assert_eq!(
+            Pending::Change(Box::new(reminders), Scope::All).asks(),
+            None
+        );
     }
 
     #[test]
