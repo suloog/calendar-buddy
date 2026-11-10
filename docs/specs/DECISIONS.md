@@ -2701,3 +2701,15 @@
 - **Scope effect:** within scope — narrows `DEC-222`
 - **Resolves:** —
 - **Status:** accepted
+
+## [DEC-224] On macOS the app runs as its bundle's copy, signed with the user's own certificate, and reads each token once
+
+- **Date:** 2026-11-10
+- **Decided by:** client (product owner — Maciej) asked for a stable signature and one read of each token; delivery (Claude) added running as the bundle's copy, so a start from the terminal is the same app
+- **Source:** conversation 2026-11-10, during the manual tests of `US-11-05`, `US-07-07`, `US-07-08`: started from the terminal, the app asked several times for the Keychain's password
+- **Affects:** `DEC-47`, `DEC-217`, `DEC-218`, `MOD-11-F02`, `F03`, `F07`, the constraints and edge cases of `MOD-11`, `README.md`
+- **Decision:** A program started from outside its bundle — the one `cargo install` or `cargo run` made — brings the bundle up to date and then runs as the bundle's copy, with the same arguments and terminal; only when the bundle cannot be made does it run as it is. The bundle is signed with a code signing certificate named "Calendar Buddy" when the user made one in Keychain Access (self-signed, once, for both builds), and ad hoc otherwise; it is signed again whenever its signature does not cover what it holds or is not by that certificate. Within a run each account's token is read from the Keychain once, the sign-in checks and the synchronization sharing that read; a read the user declined is tried again next time. This replaces `DEC-218`'s "a program run outside the bundle keeps `osascript`'s notifications without buttons": a development build, too, runs as its own bundle, "Calendar Buddy (dev)", with the notification center's buttons.
+- **Why:** The Keychain asks about each item each program reads, and knows a program by its signature: one signed ad hoc by its contents alone, so every build is a new app and an earlier "Always Allow" no longer holds, and the program in `~/.cargo/bin` and its copy in the bundle are two apps. With one account read by the checks and by the synchronization side by side, from both programs, after every build, the user was asked many times. A certificate of the user's own keeps the app the same across builds, at no cost and without an Apple developer account; running as the bundle's copy makes the terminal's start that same app; one read per run leaves one question per account.
+- **Scope effect:** within scope — how macOS provides `MOD-11`'s Keychain and bundle
+- **Resolves:** —
+- **Status:** accepted

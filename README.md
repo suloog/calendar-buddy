@@ -63,15 +63,22 @@ KeePassXC, through the Secret Service API; on macOS the Keychain.
    installed one. To update, pull and run the same `cargo install` again.
 
    On macOS the first start puts **Calendar Buddy** in `~/Applications`, with its own copy of
-   the program, so it shows in Launchpad and Spotlight and can be kept in the Dock. To update,
-   pull, run the same `cargo install` and start `~/.cargo/bin/calendar-buddy` once more: it
-   updates the copy. After an update macOS may ask once whether the app may use its Keychain
-   item; choose **Always Allow**. Closing the window leaves the app in the menu bar (a calendar
-   icon), where it keeps reminding you; a click on the icon opens the window, and a right click
-   shows its menu, which opens the window or quits the app. On its first
-   start macOS asks whether Calendar Buddy may send notifications; allow it, and they come with
-   Join, Snooze and Dismiss. Started with `cargo run`, the app is not in its bundle, and its
-   notifications come from Script Editor, without buttons.
+   the program, so it shows in Launchpad and Spotlight and can be kept in the Dock; started from
+   the terminal, the program updates that copy and runs as it. To update, pull, run the same
+   `cargo install` and start `~/.cargo/bin/calendar-buddy` once more.
+
+   macOS asks whether the app may read each account's sign-in from the Keychain; choose
+   **Always Allow**. To be asked only once, not after every update, make the app a certificate
+   of its own, once: in *Keychain Access* choose *Keychain Access → Certificate Assistant →
+   Create a Certificate…*, name it `Calendar Buddy`, with *Identity Type* "Self Signed Root" and
+   *Certificate Type* "Code Signing". The next start signs the app with it (macOS asks once
+   whether `codesign` may use the key; choose **Always Allow**), and the Keychain then knows it
+   as the same app across updates.
+
+   Closing the window leaves the app in the menu bar (a calendar icon), where it keeps reminding
+   you; a click on the icon opens the window, and a right click shows its menu, which opens the
+   window or quits the app. On its first start macOS asks whether Calendar Buddy may send
+   notifications; allow it, and they come with Join, Snooze and Dismiss.
 
 4. Click **Connect Google account**. Sign-in happens in your browser; the app never sees your
    password. Google warns that the app is not verified: choose **Advanced**, then
@@ -129,6 +136,9 @@ next to your installed app and never touches it:
 ```sh
 cargo run -p calendar-buddy
 ```
+
+On macOS it runs as `~/Applications/Calendar Buddy (dev).app`, which it updates first, in the
+same terminal.
 
 | | Installed app (release build) | Development build (debug build) |
 | --- | --- | --- |

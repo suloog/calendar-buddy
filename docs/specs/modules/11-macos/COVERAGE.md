@@ -87,7 +87,7 @@
 | The bundle's program is replaced while it runs → the running copy keeps… | — | smoke depth — not tested yet (`DEC-65`); the copy is written to a new file renamed into place |
 | A new version was installed → macOS may ask once whether the app may rea… | `TC-11-04` | — |
 | Notifications not allowed for the app in *System Settings → Notifications… | — | the system decides; not tested |
-| A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → its not… | — | smoke depth — not tested yet (`DEC-65`) |
+| A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → it runs… | — | smoke depth — not tested yet (`DEC-65`) |
 | "Quit" in the app's menu or Cmd+Q while the window is shown → the app en… | — | smoke depth — not tested yet (`DEC-65`) |
 | "Start at login" turned on from a program outside the bundle → it starts… | `TC-11-03` | — |
 | Opening the app while it runs → macOS brings the running copy forward; n… | `TC-11-02` | — |

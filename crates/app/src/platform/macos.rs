@@ -3,9 +3,12 @@
 //! app as a bundle in `~/Applications`, and the menu bar icon and the notifications through
 //! AppKit (`DEC-218`). Tests never use the Keychain; they use fakes, or a folder of their own.
 
+use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, PoisonError};
 
 use calendar_core::accounts::Account;
 use calendar_core::background;
@@ -97,6 +100,38 @@ const AUTH_FAILED: i32 = -25293;
 /// (`DEC-47`). The Keychain is always there.
 pub struct SystemSecretStore;
 
+/// The tokens read or kept in this run, by account ID. The Keychain asks the user about each
+/// item a program reads, so the sign-in checks and the synchronization, which read the same
+/// tokens side by side, share one read of each (`DEC-224`).
+static TOKENS: Mutex<BTreeMap<String, Option<String>>> = Mutex::new(BTreeMap::new());
+
+/// The token of the account, as `read` the first time in this run; held while it reads, so a
+/// read beside it waits and takes the same token. One that failed is read again next time.
+fn read_once(
+    tokens: &Mutex<BTreeMap<String, Option<String>>>,
+    account_id: &str,
+    read: impl FnOnce(&str) -> Result<Option<String>, SecretStoreError>,
+) -> Result<Option<String>, SecretStoreError> {
+    let mut tokens = tokens.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(token) = tokens.get(account_id) {
+        return Ok(token.clone());
+    }
+    let token = read(account_id)?;
+    tokens.insert(account_id.to_string(), token.clone());
+    Ok(token)
+}
+
+/// The token of the account as the Keychain holds it; `None` when it holds none.
+fn read(account_id: &str) -> Result<Option<String>, SecretStoreError> {
+    match passwords::get_generic_password(background::APP_ID, account_id) {
+        Ok(secret) => String::from_utf8(secret)
+            .map(Some)
+            .map_err(|_| SecretStoreError::Failed(texts::SECRET_NOT_READ.into())),
+        Err(error) if error.code() == ITEM_NOT_FOUND => Ok(None),
+        Err(error) => Err(failed(error)),
+    }
+}
+
 fn failed(error: security_framework::base::Error) -> SecretStoreError {
     SecretStoreError::Failed(match error.code() {
         USER_CANCELED | AUTH_FAILED => texts::UNLOCKING_DECLINED.to_string(),
@@ -110,24 +145,23 @@ impl SecretStore for SystemSecretStore {
     }
 
     fn save(&self, account: &Account, refresh_token: &str) -> Result<(), SecretStoreError> {
+        let mut tokens = TOKENS.lock().unwrap_or_else(PoisonError::into_inner);
         passwords::set_generic_password(background::APP_ID, &account.id, refresh_token.as_bytes())
-            .map_err(failed)
+            .map_err(failed)?;
+        tokens.insert(account.id.clone(), Some(refresh_token.to_string()));
+        Ok(())
     }
 
     fn load(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
-        match passwords::get_generic_password(background::APP_ID, account_id) {
-            Ok(secret) => String::from_utf8(secret)
-                .map(Some)
-                .map_err(|_| SecretStoreError::Failed(texts::SECRET_NOT_READ.into())),
-            Err(error) if error.code() == ITEM_NOT_FOUND => Ok(None),
-            Err(error) => Err(failed(error)),
-        }
+        read_once(&TOKENS, account_id, read)
     }
 
     fn take(&self, account_id: &str) -> Result<Option<String>, SecretStoreError> {
-        let refresh_token = passwords::get_generic_password(background::APP_ID, account_id)
-            .ok()
-            .and_then(|secret| String::from_utf8(secret).ok());
+        let mut tokens = TOKENS.lock().unwrap_or_else(PoisonError::into_inner);
+        let refresh_token = match tokens.remove(account_id) {
+            Some(token) => token,
+            None => read(account_id).ok().flatten(),
+        };
         match passwords::delete_generic_password(background::APP_ID, account_id) {
             Err(error) if error.code() != ITEM_NOT_FOUND => Err(failed(error)),
             _ => Ok(refresh_token),
@@ -325,28 +359,82 @@ fn codesign(args: &[&str], bundle: &Path) -> std::io::Result<bool> {
     Ok(status.success())
 }
 
+/// The name of the code signing certificate the user may make in Keychain Access, once, for the
+/// app (`DEC-224`). The Keychain knows a program signed with it as the same app across updates,
+/// so its "Always Allow" holds; a program signed ad hoc is known by its contents alone, a new
+/// app after every build.
+const SIGNING_IDENTITY: &str = "Calendar Buddy";
+
+/// The certificate to sign the bundle with, when the user made it; `None` otherwise. Listing
+/// the certificates reads no key, so the Keychain asks nothing.
+fn signing_identity() -> Option<String> {
+    let listed = Command::new("security")
+        .args(["find-identity", "-p", "codesigning"])
+        .output()
+        .ok()?;
+    let named = format!("\"{SIGNING_IDENTITY}\"");
+    (String::from_utf8_lossy(&listed.stdout).contains(&named)).then(|| SIGNING_IDENTITY.into())
+}
+
+/// Who signed the bundle: the certificate's name, or `None` for a signature made ad hoc.
+fn signer(bundle: &Path) -> std::io::Result<Option<String>> {
+    let described = Command::new("codesign")
+        .args(["--display", "--verbose=2"])
+        .arg(bundle)
+        .output()?;
+    Ok(String::from_utf8_lossy(&described.stderr)
+        .lines()
+        .find_map(|line| line.strip_prefix("Authority="))
+        .map(str::to_string))
+}
+
 /// The app in Launchpad, Spotlight and the Dock: a bundle in `~/Applications` holding a copy of
-/// the program that runs, with the app's icon, signed ad hoc.
+/// the program that runs, with the app's icon, signed with the user's certificate for the app
+/// or else ad hoc.
 pub struct SystemLauncher {
     /// The bundle; `None` when there is no home directory.
     bundle: Option<PathBuf>,
+    /// The certificate it is signed with; `None` to sign it ad hoc.
+    identity: Option<String>,
 }
 
 impl SystemLauncher {
     pub fn new() -> Self {
-        SystemLauncher::at(home().map(|home| home.join("Applications")))
+        SystemLauncher {
+            identity: signing_identity(),
+            ..SystemLauncher::at(home().map(|home| home.join("Applications")))
+        }
     }
 
     fn at(applications: Option<PathBuf>) -> Self {
         SystemLauncher {
             bundle: applications.map(|dir| dir.join(format!("{}.app", texts::APP_NAME))),
+            identity: None,
         }
+    }
+
+    /// Run from outside the bundle — the program `cargo install` or `cargo run` made — the app
+    /// brings the bundle up to date and goes on as its copy there, with the same arguments and
+    /// terminal, so the Keychain and the notification center always meet the same, signed app
+    /// (`DEC-224`). Returns only when it stays the program it is: run from the bundle already,
+    /// or the bundle could not be made.
+    pub fn run_from_bundle(&self) {
+        let (Some(bundle), Ok(exe)) = (&self.bundle, running_exe()) else {
+            return;
+        };
+        let copy = bundle.join("Contents/MacOS").join(background::APP_ID);
+        if exe == copy || self.install().is_err() {
+            return;
+        }
+        let args = std::env::args_os().skip(1);
+        // `exec` comes back only when it failed; the app then runs as it is.
+        let _ = Command::new(&copy).args(args).exec();
     }
 
     /// Writes the bundle's files, each only when it changed; run from the bundle, the program is
     /// already its own copy. macOS lets only a signed bundle show notifications, and the linker
-    /// signs the program alone: the bundle is signed ad hoc whenever its signature does not
-    /// cover what it holds (`DEC-218`).
+    /// signs the program alone: the bundle is signed whenever its signature does not cover what
+    /// it holds or is not the one wanted (`DEC-218`, `DEC-224`).
     pub fn install(&self) -> std::io::Result<()> {
         let Some(bundle) = &self.bundle else {
             return Err(std::io::ErrorKind::NotFound.into());
@@ -367,9 +455,13 @@ impl SystemLauncher {
                 write_if_changed(&source, stamp.as_bytes(), false)?;
             }
         }
-        if codesign(&["--verify", "--strict"], bundle)?
-            || codesign(&["--force", "--sign", "-"], bundle)?
-        {
+        let identity = self.identity.as_deref();
+        if codesign(&["--verify", "--strict"], bundle)? && signer(bundle)?.as_deref() == identity {
+            return Ok(());
+        }
+        // Signing with the certificate may be declined in the Keychain; ad hoc it still runs.
+        let signed = |identity| codesign(&["--force", "--sign", identity], bundle);
+        if identity.is_some_and(|identity| signed(identity).unwrap_or(false)) || signed("-")? {
             Ok(())
         } else {
             Err(std::io::Error::other("the bundle could not be signed"))
@@ -451,9 +543,39 @@ mod tests {
             std::fs::metadata(&copy).unwrap().modified().unwrap(),
             copy_written
         );
-        // The bundle is signed again over what changed.
+        // The bundle is signed again over what changed, ad hoc without a certificate.
         assert!(codesign(&["--verify", "--strict"], &bundle).unwrap());
+        assert_eq!(signer(&bundle).unwrap(), None);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_checks_and_the_synchronization_reading_a_token_side_by_side_read_the_keychain_once() {
+        let tokens = Mutex::new(BTreeMap::new());
+        let reads = std::sync::atomic::AtomicUsize::new(0);
+        let read = |_: &str| {
+            reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            Ok(Some("token".to_string()))
+        };
+        std::thread::scope(|scope| {
+            let readers: Vec<_> = (0..2)
+                .map(|_| scope.spawn(|| read_once(&tokens, "1", read)))
+                .collect();
+            for reader in readers {
+                assert_eq!(reader.join().unwrap().unwrap().as_deref(), Some("token"));
+            }
+        });
+        assert_eq!(reads.into_inner(), 1);
+
+        // A read the user declined is tried again.
+        let declined = |_: &str| Err(SecretStoreError::Failed(texts::UNLOCKING_DECLINED.into()));
+        assert!(read_once(&tokens, "2", declined).is_err());
+        assert_eq!(
+            read_once(&tokens, "2", |_| Ok(None)).unwrap(),
+            None,
+            "read again"
+        );
     }
 
     #[test]

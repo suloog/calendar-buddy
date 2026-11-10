@@ -38,18 +38,18 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ### Installing
 
 - [MOD-11-F01] Started once from where `cargo install` put it, the app puts itself in `~/Applications` as "Calendar Buddy.app", with its icon and its own copy of the program, so that it is found in Launchpad and Spotlight and can be kept in the Dock; a debug build is "Calendar Buddy (dev).app", beside it (`DEC-164`). — *source: `DEC-217`*
-- [MOD-11-F02] Each start of the program from outside the bundle brings the bundle up to date: a file that changed is replaced, one that did not is left as it is, and a copy that runs keeps running; the bundle is signed ad hoc again whenever its signature does not cover what it holds. — *source: `DEC-217`, `DEC-218`*
+- [MOD-11-F02] Each start of the program from outside the bundle brings the bundle up to date — a file that changed is replaced, one that did not is left as it is, and a copy that runs keeps running — and then runs as the bundle's copy, with the same arguments and terminal. The bundle is signed with the user's "Calendar Buddy" code signing certificate when there is one, ad hoc otherwise, whenever its signature does not cover what it holds or is not by that certificate. — *source: `DEC-217`, `DEC-218`, `DEC-224`*
 
 ### Signing in
 
-- [MOD-11-F03] Each account's refresh token is kept in the user's login Keychain, as an item of the app's own service (`calendar-buddy`, or `calendar-buddy-dev` for a debug build) named by the account; after a restart the account stays connected; removing the account deletes its item (`MOD-01-F04`, `MOD-01-F07`, `NFR-04`). — *source: `DEC-47`, `DEC-217`*
+- [MOD-11-F03] Each account's refresh token is kept in the user's login Keychain, as an item of the app's own service (`calendar-buddy`, or `calendar-buddy-dev` for a debug build) named by the account; after a restart the account stays connected; removing the account deletes its item (`MOD-01-F04`, `MOD-01-F07`, `NFR-04`); within a run each item is read once. — *source: `DEC-47`, `DEC-217`, `DEC-224`*
 - [MOD-11-F04] When the user declines to unlock the Keychain or to let the app read its item, the app says that unlocking was declined, as when the secret store on Linux stays locked. — *source: `DEC-217`*
 - [MOD-11-F05] Sign-in, Join and other links open in the system's default browser. — *source: `DEC-217`*
 
 ### The system
 
 - [MOD-11-F06] "Start at login" (`MOD-07-F16`) adds a launch agent that starts the program it was turned on from when the user logs in, in the menu bar without opening its window (`MOD-11-F09`); it is off until turned on, and turning it off removes the agent. — *source: `DEC-217`, `DEC-218`*
-- [MOD-11-F07] A reminder (`MOD-07-F01`) shows a macOS notification with the event's title, start time and, if any, location (`MOD-07-U01`); from the installed app it has the buttons of `MOD-11-F10`, from a program run outside the bundle it has none (`DEC-64`). — *source: `DEC-217`, `DEC-218`*
+- [MOD-11-F07] A reminder (`MOD-07-F01`) shows a macOS notification with the event's title, start time and, if any, location (`MOD-07-U01`); run as the bundle's copy it has the buttons of `MOD-11-F10`; when the bundle could not be made it has none (`DEC-64`). — *source: `DEC-217`, `DEC-218`, `DEC-224`*
 - [MOD-11-F08] The app follows the system's light or dark appearance (`MOD-04-F02`), within a few seconds of a change. — *source: `DEC-217`*
 
 ### Second stage
@@ -70,9 +70,9 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - The home directory is not known → no bundle and no launch agent are written; the app runs as it was started.
 - The program runs from inside the bundle → it is its own copy; nothing is copied.
 - The bundle's program is replaced while it runs → the running copy keeps running; the new one is used from the next start.
-- A new version was installed → macOS may ask once whether the app may read its Keychain item; "Always Allow" keeps it from asking again; declining is `MOD-11-F04`.
+- A new version was installed → signed with the user's certificate, the app is the same for the Keychain and nothing is asked; signed ad hoc, macOS asks once for each account's item whether the app may read it, and "Always Allow" keeps it from asking again until the next version; declining is `MOD-11-F04`.
 - Notifications not allowed for the app in *System Settings → Notifications*, or declined when macOS asks the first time → none are shown; the system decides, as "do not disturb" does (`MOD-07`).
-- A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → its notifications are shown on behalf of Script Editor, without buttons; a click opens nothing (`DEC-64`).
+- A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → it runs as the bundle's copy (`MOD-11-F02`); only when the bundle cannot be made are its notifications shown on behalf of Script Editor, without buttons, a click opening nothing (`DEC-64`).
 - "Quit" in the app's menu or Cmd+Q while the window is shown → the app ends, as "Quit" in the menu bar icon's menu does.
 - "Start at login" turned on from a program outside the bundle → it starts that program; it is turned on in the installed app.
 - Opening the app while it runs → macOS brings the running copy forward; no second copy runs (`MOD-07-F17`).

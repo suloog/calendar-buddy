@@ -2929,6 +2929,10 @@ fn main() -> eframe::Result {
         let _ = SystemBrowser.open(&calendar_google::subscribe_page(link));
         return Ok(());
     }
+    // On macOS the app runs as its bundle's signed copy, also when started from the terminal, so
+    // the Keychain asks about its tokens once, not after every build (`DEC-224`).
+    #[cfg(target_os = "macos")]
+    SystemLauncher::new().run_from_bundle();
     // One context for every time the window opens, so what the app's threads ask of it reaches
     // the window shown.
     let ctx = egui::Context::default();
