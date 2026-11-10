@@ -369,10 +369,7 @@ impl Editor {
             meet: event.about.meet.is_some(),
             repeat: by_rule(event, calendar.zone)
                 .and_then(|first| repeat::parse(&event.recurrence, &first)),
-            reminders: match &event.about.reminders {
-                Reminders::Default => None,
-                Reminders::Own(own) => Some(own.iter().copied().map(ReminderField::of).collect()),
-            },
+            reminders: own_fields(&event.about.reminders),
             opened: Some((event.clone(), calendar.clone())),
             ..Editor::with(regional, times, zone, Some(calendar))
         }
@@ -649,17 +646,7 @@ impl Editor {
     fn own_reminders(&self) -> Result<Reminders, String> {
         match &self.reminders {
             Some(own) if self.opened.is_some() || !self.kind.timed_only() => {
-                let own: Vec<Reminder> = own.iter().map(|field| field.reminder()).collect();
-                if own
-                    .iter()
-                    .any(|reminder| reminder.minutes > LONGEST_REMINDER)
-                {
-                    return Err(REMINDER_TOO_EARLY.to_string());
-                }
-                if own.len() > MOST_REMINDERS {
-                    return Err(TOO_MANY_REMINDERS.to_string());
-                }
-                Ok(Reminders::Own(own))
+                Ok(Reminders::Own(checked(own)?))
             }
             _ => Ok(Reminders::Default),
         }
@@ -819,6 +806,30 @@ impl Editor {
             to: moved.then_some(calendar),
             notify: false,
         })))
+    }
+}
+
+/// The reminders the fields say, within Google's limits: no earlier than four weeks before, and
+/// at most five (`MOD-07-F04`); why they cannot be saved otherwise.
+pub(crate) fn checked(fields: &[ReminderField]) -> Result<Vec<Reminder>, String> {
+    let own: Vec<Reminder> = fields.iter().map(|field| field.reminder()).collect();
+    if own
+        .iter()
+        .any(|reminder| reminder.minutes > LONGEST_REMINDER)
+    {
+        return Err(REMINDER_TOO_EARLY.to_string());
+    }
+    if own.len() > MOST_REMINDERS {
+        return Err(TOO_MANY_REMINDERS.to_string());
+    }
+    Ok(own)
+}
+
+/// The fields of an event's own reminders; `None` while it uses its calendar's defaults.
+pub(crate) fn own_fields(reminders: &Reminders) -> Option<Vec<ReminderField>> {
+    match reminders {
+        Reminders::Default => None,
+        Reminders::Own(own) => Some(own.iter().copied().map(ReminderField::of).collect()),
     }
 }
 

@@ -30,6 +30,7 @@ use calendar_core::create::{self, QuickEntry, Saving};
 use calendar_core::details::event_details;
 use calendar_core::drag::{self, Target};
 use calendar_core::editor::{Edit, Editor, Save};
+use calendar_core::guest_reminders::GuestReminders;
 use calendar_core::guests::{self, Person, Reach, Response};
 use calendar_core::invitations;
 use calendar_core::local;
@@ -116,9 +117,17 @@ enum Dialog {
     /// The full editor of a new or an existing event (`MOD-05-F04`).
     Editor(Box<Editor>),
     /// The event whose details are open, what had the keyboard when it opened, whether its
-    /// guest list is expanded (`DEC-63`), and the reminder of the notification it was opened
-    /// from, to snooze there when the desktop's notifications have no buttons (`DEC-64`).
-    Event(Box<Event>, Option<egui::Id>, bool, Option<ReminderId>),
+    /// guest list is expanded (`DEC-63`), its reminders as changed there when it is an
+    /// invitation only its organizer may change (`MOD-07-F21`), and the reminder of the
+    /// notification it was opened from, to snooze there when the desktop's notifications have no
+    /// buttons (`DEC-64`).
+    Event(
+        Box<Event>,
+        Option<egui::Id>,
+        bool,
+        Option<Box<GuestReminders>>,
+        Option<ReminderId>,
+    ),
     /// The settings, where accounts are managed (`MOD-01-U01`).
     Settings,
     /// Which events of a series a change or deletion of one of its occurrences applies to
@@ -526,7 +535,7 @@ impl CalendarApp {
         // The event is brought up to date first, as the editor opens from its details.
         self.sync.opening(&self.events[event].calendar_id);
         let opened = Box::new(self.events[event].clone());
-        self.dialog = Some(Dialog::Event(opened, focused, false, None));
+        self.dialog = Some(Dialog::Event(opened, focused, false, None, None));
     }
 
     /// Opens the event of a notification clicked on its day, bringing the window forward
@@ -808,7 +817,7 @@ impl CalendarApp {
             None => {
                 if let Some(theirs) = self.in_view(index) {
                     let opened = Box::new(theirs.clone());
-                    self.dialog = Some(Dialog::Event(opened, focused, false, None));
+                    self.dialog = Some(Dialog::Event(opened, focused, false, None, None));
                 }
             }
         }
@@ -1026,6 +1035,7 @@ impl CalendarApp {
         let mut busy = None;
         let mut invitation = None;
         let mut answered = None;
+        let mut reminders_saved = None;
         let title = match dialog {
             Dialog::Shortcuts => texts::KEYBOARD_SHORTCUTS,
             Dialog::GoToDate(..) => texts::GO_TO_DATE,
@@ -1294,7 +1304,7 @@ impl CalendarApp {
                                 busy = availability::asked(editor, regional, online)
                                     .map(|(asked, _)| asked);
                             }
-                            Dialog::Event(event, _, expanded, snooze) => {
+                            Dialog::Event(event, _, expanded, own_reminders, snooze) => {
                                 // Its buttons outlined, as the editor's are.
                                 widgets::outlined_controls(ui);
                                 // The event as last synchronized, which may have come since it was opened.
@@ -1414,6 +1424,45 @@ impl CalendarApp {
                                             join = Some(link.clone());
                                         }
                                     });
+                                }
+                                // The user's own reminders of an invitation only its organizer may
+                                // change, saved on their own (`MOD-07-F21`, `DEC-221`).
+                                let shown = calendar.and_then(|calendar| {
+                                    let opened = GuestReminders::of(event, calendar)?;
+                                    // Changed for the event as it is now; as it is otherwise.
+                                    Some(match own_reminders.take() {
+                                        Some(changed) if changed.event == opened.event => *changed,
+                                        _ => opened,
+                                    })
+                                });
+                                if let Some(mut changing) = shown {
+                                    widgets::detail_row(ui, "⏰", |ui| {
+                                        ui.label(
+                                            egui::RichText::new(texts::NOTIFICATIONS).strong(),
+                                        );
+                                        let fields = changing.fields();
+                                        editor::reminders(
+                                            ui,
+                                            fields,
+                                            &mut changing.reminders,
+                                            GuestReminders::METHODS,
+                                        );
+                                        let saving = changing.save();
+                                        if let Err(why) = &saving {
+                                            ui.weak(why);
+                                        }
+                                        // Save comes once they differ from the event's.
+                                        if changing.changed() {
+                                            let save = widgets::primary(ui, texts::SAVE);
+                                            let enabled = can_edit && saving.is_ok();
+                                            if ui.add_enabled(enabled, save).clicked() {
+                                                reminders_saved = saving.ok();
+                                            }
+                                        }
+                                    });
+                                    if reminders_saved.is_none() {
+                                        *own_reminders = Some(Box::new(changing));
+                                    }
                                 }
                                 // The Snooze of a notification without buttons (`DEC-64`).
                                 if let Some(reminder) = snooze {
@@ -1969,6 +2018,16 @@ impl CalendarApp {
         }
         if let Some((event, response)) = answered {
             self.answer(&event, response);
+        }
+        match reminders_saved {
+            // The details stay open, showing the reminders as saved.
+            Some(Ok(edit)) => {
+                if let Some(asked) = self.save(Pending::Change(Box::new(edit), Scope::This), None) {
+                    self.dialog = Some(asked);
+                }
+            }
+            Some(Err(question)) => self.dialog = Some(Dialog::Scope(question, None)),
+            None => {}
         }
         if let Some((event, calendar)) = delete {
             self.dialog = match Question::deleting(calendar, event) {

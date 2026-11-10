@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use calendar_core::accounts::{Account, Accounts};
 use calendar_core::availability::Availability;
 use calendar_core::cache::Cache;
+use calendar_core::guest_reminders::GuestReminders;
 use calendar_core::guests::{Guest, Response};
 use calendar_core::meet_with::{MeetWith, Overlay, Shared};
 use calendar_core::model::{About, Access, Attachment, Calendar, Kind, Rgb, Timing};
@@ -240,10 +241,14 @@ fn cache(today: NaiveDate) -> Cache {
             (15, 0),
         )),
         timed("review", "Design review", day(1), (14, 30), (15, 30)),
-        with_guests(
-            timed("arch", "Architecture sync", day(2), (10, 0), (11, 0)),
-            Response::Awaiting,
-        ),
+        // An invitation only its organizer may change: its reminders are the user's own.
+        SyncedEvent {
+            organizer_only: true,
+            ..with_guests(
+                timed("arch", "Architecture sync", day(2), (10, 0), (11, 0)),
+                Response::Awaiting,
+            )
+        },
         kind(
             timed("focus2", "Focus time", day(2), (13, 0), (16, 0)),
             Kind::FocusTime,
@@ -526,6 +531,19 @@ fn preview() {
     );
     picture("details-light", week, Theme::Light, |app, _| {
         app.open(titled(app, "Architecture sync"), None)
+    });
+    // An invitation's own reminders being changed, Save offered.
+    picture("details-reminders-light", week, Theme::Light, |app, _| {
+        app.open(titled(app, "Architecture sync"), None);
+        let event = app.events[titled(app, "Architecture sync")].clone();
+        let calendar = (app.sync.calendars().iter())
+            .find(|c| c.account_id == event.account_id && c.id == event.calendar_id)
+            .expect("its calendar is in the made-up data");
+        let mut changing = GuestReminders::of(&event, calendar).expect("an invitation");
+        changing.reminders = Some(vec![calendar_core::editor::ReminderField::NEW]);
+        if let Some(Dialog::Event(_, _, _, reminders, _)) = &mut app.dialog {
+            *reminders = Some(Box::new(changing));
+        }
     });
     picture("details-dark", week, Theme::Dark, |app, _| {
         app.open(titled(app, "Client call — Calendar Buddy"), None)

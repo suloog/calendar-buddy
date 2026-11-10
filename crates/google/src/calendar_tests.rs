@@ -1230,6 +1230,16 @@ fn a_guests_copy_the_organizer_does_not_let_guests_change_is_for_the_organizer_o
         ..Patch::default()
     };
     let refused = session.update(&work, "theirs", &theirs.etag, &patch, false);
+    // The guest's own reminders are theirs to change (`DEC-221`).
+    let own_reminders = Reminders::Own(vec![Reminder {
+        method: Method::Notification,
+        minutes: 30,
+    }]);
+    let reminders = Patch {
+        reminders: Some(own_reminders),
+        ..Patch::default()
+    };
+    let kept_mine = session.update(&work, "theirs", &theirs.etag, &reminders, false);
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert_eq!(synced, Ok(()));
@@ -1245,6 +1255,11 @@ fn a_guests_copy_the_organizer_does_not_let_guests_change_is_for_the_organizer_o
     assert!(error.0.contains("organizer"), "{}", error.0);
     let kept = google.event(ACCOUNT_ID, "work", "theirs").unwrap();
     assert_eq!(kept["summary"], "Their meeting");
+    assert!(kept_mine.is_ok(), "{kept_mine:?}");
+    assert_eq!(
+        kept["reminders"],
+        json!({"useDefault": false, "overrides": [{"method": "popup", "minutes": 30}]})
+    );
 }
 
 #[test]

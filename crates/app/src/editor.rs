@@ -347,24 +347,29 @@ fn person(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32, fil
     }
 }
 
-/// The event's reminders, each a notification or an e-mail so many minutes, hours or days before,
-/// and removable; "Add notification" up to Google's limit, and "Use calendar defaults" for an
-/// event with reminders of its own (`MOD-07-F04`, `F05`). Changing the calendar's defaults shown
-/// makes them the event's own, as in Google Calendar.
-fn reminders(ui: &mut egui::Ui, editor: &mut Editor) {
-    let shown = editor.reminder_fields();
+/// The event's reminders `shown`, each a notification or an e-mail so many minutes, hours or days
+/// before, among `methods`, and removable; "Add notification" up to Google's limit, and "Use
+/// calendar defaults" for an event with reminders of its own (`MOD-07-F04`, `F05`); `own` is
+/// what they are changed to, `None` for the calendar's defaults. Changing the calendar's defaults
+/// shown makes them the event's own, as in Google Calendar. Also an invitation's in its details
+/// (`MOD-07-F21`).
+pub fn reminders(
+    ui: &mut egui::Ui,
+    shown: Vec<ReminderField>,
+    own: &mut Option<Vec<ReminderField>>,
+    methods: &[Method],
+) {
     let mut fields = shown.clone();
-    let methods = editor.reminder_methods();
     ui.vertical(|ui| {
         reminder_rows(ui, &mut fields, methods);
         ui.horizontal(|ui| {
             if fields.len() < MOST_REMINDERS && ui.button(texts::ADD_NOTIFICATION).clicked() {
                 fields.push(ReminderField::NEW);
             }
-            if editor.reminders.is_some() && ui.button(texts::USE_CALENDAR_DEFAULTS).clicked() {
-                editor.reminders = None;
+            if own.is_some() && ui.button(texts::USE_CALENDAR_DEFAULTS).clicked() {
+                *own = None;
             } else if fields != shown {
-                editor.reminders = Some(fields);
+                *own = Some(fields);
             }
         });
     });
@@ -681,7 +686,11 @@ pub fn show(
                 ui.checkbox(&mut editor.meet, texts::ADD_GOOGLE_MEET)
             });
         }
-        form_row(ui, texts::NOTIFICATIONS, |ui| reminders(ui, editor));
+        form_row(ui, texts::NOTIFICATIONS, |ui| {
+            let shown = editor.reminder_fields();
+            let methods = editor.reminder_methods();
+            reminders(ui, shown, &mut editor.reminders, methods);
+        });
     }
     form_row(ui, texts::DESCRIPTION, |ui| description(ui, editor));
     section(ui);
