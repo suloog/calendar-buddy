@@ -38,7 +38,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ### Installing
 
 - [MOD-11-F01] Started once from where `cargo install` put it, the app puts itself in `~/Applications` as "Calendar Buddy.app", with its icon and its own copy of the program, so that it is found in Launchpad and Spotlight and can be kept in the Dock; a debug build is "Calendar Buddy (dev).app", beside it (`DEC-164`). — *source: `DEC-217`*
-- [MOD-11-F02] Each start of the program from outside the bundle brings the bundle up to date — a file that changed is replaced, one that did not is left as it is, and a copy that runs keeps running — and then runs as the bundle's copy, with the same arguments and terminal. The bundle is signed with the user's "Calendar Buddy" code signing certificate when there is one, ad hoc otherwise, whenever its signature does not cover what it holds or is not by that certificate. — *source: `DEC-217`, `DEC-218`, `DEC-224`*
+- [MOD-11-F02] Each start of the program from outside the bundle brings the bundle up to date — a file that changed is replaced, one that did not is left as it is, and a copy that runs keeps running — and then runs as the bundle's copy, with the same arguments and terminal. The bundle is signed whenever its signature does not cover what it holds, as after an update: with the user's "Calendar Buddy" code signing certificate when there is one, ad hoc otherwise; a certificate made since is taken at the next update. — *source: `DEC-217`, `DEC-218`, `DEC-224`*
 
 ### Signing in
 
@@ -74,13 +74,14 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - Notifications not allowed for the app in *System Settings → Notifications*, or declined when macOS asks the first time → none are shown; the system decides, as "do not disturb" does (`MOD-07`).
 - A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → it runs as the bundle's copy (`MOD-11-F02`); only when the bundle cannot be made are its notifications shown on behalf of Script Editor, without buttons, a click opening nothing (`DEC-64`).
 - "Quit" in the app's menu or Cmd+Q while the window is shown → the app ends, as "Quit" in the menu bar icon's menu does.
-- "Start at login" turned on from a program outside the bundle → it starts that program; it is turned on in the installed app.
+- "Start at login" turned on → it starts the bundle's copy, which the app runs as (`MOD-11-F02`); only when the bundle could not be made does it start the program outside it.
 - Opening the app while it runs → macOS brings the running copy forward; no second copy runs (`MOD-07-F17`).
 - No network → until `MOD-11-F11` the app counts as online, and a failed synchronization says so as it does.
 
 ## Integrations
 
 - **Keychain** (read and write): each account's refresh token, through the Security framework.
+- **Keychain** (read, through `security find-identity` and `codesign`): the user's "Calendar Buddy" code signing certificate, when there is one, to sign the bundle (`DEC-224`).
 - **Launch Services and launchd** (write): the bundle in `~/Applications`, the launch agent in `~/Library/LaunchAgents`.
 - **Notification Center** (write, and answers back): notifications through the UserNotifications framework from the bundle, with a category of buttons; through AppleScript's `display notification` outside it.
 - **Menu bar** (write): the app's status item, through AppKit.
@@ -88,7 +89,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Technical notes
 
 - The platform code is split by target: `crates/app/src/platform/linux.rs` and `crates/app/src/platform/macos.rs` (with `macos/menu_bar.rs` and `macos/notifications.rs`), each implementing `calendar_core::platform`; the Linux crates (`secret-service`, `zbus`, `ksni`) are Linux-only dependencies, `security-framework` and the `objc2` crates macOS-only.
-- The bundle: `Contents/Info.plist` (`CFBundleIdentifier` `pl.ordergroup.CalendarBuddy`, `…Dev` for a debug build), `Contents/MacOS/<app ID>` — a copy of the running program, written to a new file renamed into place — `Contents/Resources/AppIcon.icns`, the app's 256×256 PNG in an `ic08` entry, and `Contents/Resources/program`, the length and time of the program copied. The bundle is signed ad hoc (`codesign --force --sign -`) when `codesign --verify --strict` fails: notifications need a signed bundle (`DEC-218`).
+- The bundle: `Contents/Info.plist` (`CFBundleIdentifier` `pl.ordergroup.CalendarBuddy`, `…Dev` for a debug build), `Contents/MacOS/<app ID>` — a copy of the running program, written to a new file renamed into place — `Contents/Resources/AppIcon.icns`, the app's 256×256 PNG in an `ic08` entry, and `Contents/Resources/program`, the length and time of the program copied. The bundle is signed when `codesign --verify --strict` fails: with `codesign --force --sign "Calendar Buddy"` when `security find-identity -p codesigning` lists that certificate, ad hoc (`--sign -`) otherwise or when it cannot sign; notifications need a signed bundle (`DEC-218`), and the Keychain knows a certificate's signature across updates (`DEC-224`). Started outside the bundle, the program `exec`s the bundle's copy (`SystemLauncher::run_from_bundle`); the tokens read in a run are kept in memory, one read each (`TOKENS`).
 - The launch agent: `~/Library/LaunchAgents/<bundle ID>.plist` with `RunAtLoad`, the program and `--in-tray`; with the menu bar icon the window starts hidden (`background::starts_shown`).
 - The window hides instead of closing (`platform::WINDOW_HIDES`): eframe runs once, its loop never stops while the app runs, and `App::logic` keeps synchronizing and reminding while the window is hidden; the Dock follows through the activation policy (Regular ↔ Accessory). The status item is made from the main dispatch queue, which runs once winit has made AppKit's application. Becoming active (`NSApplicationDidBecomeActiveNotification`) counts as a second launch. The status item's button has no menu of its own: it sends its action on a left and a right mouse-up, and the action pops the menu up for a right or Control click and opens the window for any other (`DEC-220`).
 - Notifications: one category for each set of buttons (`Action::buttons`), each button keyed as on Linux; the notification center's delegate calls back with the notification's identifier; `UNNotificationDefaultActionIdentifier` is the click. Whether the program runs from the bundle is read from `NSBundle.mainBundle.bundleIdentifier`.
@@ -100,7 +101,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 ## Out of scope / what not to worry about
 
 - Windows — still deferred (`DEC-02`, `MOD-08`).
-- An app signed with a developer identity and notarized, a `.dmg` or the App Store — the app is built on the Mac it runs on and signed ad hoc there (`DEC-217`, `DEC-218`).
+- An app signed with a developer identity and notarized, a `.dmg` or the App Store — the app is built on the Mac it runs on and signed there, ad hoc or with the user's own self-signed certificate (`DEC-217`, `DEC-218`, `DEC-224`).
 - Moving the config and cache to `~/Library` — `DEC-217`.
 - Delivering reminders while the app is completely closed — as on Linux (`MOD-07`).
 
@@ -109,4 +110,5 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] After `cargo install` and one start, "Calendar Buddy.app" is in `~/Applications` with its icon and opens from Spotlight.
 - [ ] A Google account connected on the Mac stays connected after a restart, with its token in the Keychain; removing it deletes the item.
 - [ ] "Start at login" starts the app at the next login; a reminder shows a macOS notification; switching the system to dark switches the app.
+- [ ] Started from the terminal, the app runs as its bundle's copy; with the user's certificate, a new version asks the Keychain nothing, and a run asks about each item at most once.
 - [ ] (Second stage) Closing the window leaves the app in the menu bar, reminders keep arriving, and Snooze and Join work from the notification.

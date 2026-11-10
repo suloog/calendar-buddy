@@ -31,7 +31,7 @@ depends_on: [] # test case IDs that must pass first
 | - | ------ | --------------- | -------- |
 | 1 | Connect the Google account; finish signing in in the browser. | The account's calendars appear; Keychain Access lists an item of the service `calendar-buddy` named by the account. | screenshot |
 | 2 | Quit the app and open it again. | The account is still connected; no browser opens. | observation |
-| 3 | In Keychain Access, remove the app from the item's access list; open the app and choose **Deny** when asked. | The app says that unlocking was declined; the account stays listed. | screenshot |
+| 3 | Quit the app; in Keychain Access, remove the app from the item's access list; open the app and choose **Deny** when asked. | The app says that unlocking was declined; the account stays listed. | screenshot |
 | 4 | Open the app again and choose **Always Allow**; then remove the account in the settings. | The account is gone, and Keychain Access no longer lists its item. | screenshot |
 
 ## Pass criterion

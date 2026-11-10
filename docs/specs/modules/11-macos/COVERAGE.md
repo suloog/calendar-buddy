@@ -25,12 +25,12 @@
 | Requirement | Covered by |
 | ----------- | ---------- |
 | `MOD-11-F01` | `US-11-01` |
-| `MOD-11-F02` | `US-11-01` |
-| `MOD-11-F03` | `US-11-01` |
+| `MOD-11-F02` | `US-11-01`, `US-11-06` |
+| `MOD-11-F03` | `US-11-01`, `US-11-06` |
 | `MOD-11-F04` | `US-11-01` |
 | `MOD-11-F05` | `US-11-01` |
 | `MOD-11-F06` | `US-11-01` |
-| `MOD-11-F07` | `US-11-01` |
+| `MOD-11-F07` | `US-11-01`, `US-11-06` |
 | `MOD-11-F08` | `US-11-01` |
 | `MOD-11-F09` | `US-11-02` |
 | `MOD-11-F10` | `US-11-03` |
@@ -77,6 +77,9 @@
 | `US-11-05#1` | With the window closed, a click on the menu bar icon opens it in front, … | `TC-11-09` | manual-only | menu bar, Dock |
 | `US-11-05#2` | With the window shown behind other apps, a click on the icon brings it t… | `TC-11-09` | manual-only | menu bar |
 | `US-11-05#3` | A right click, or a click with Control held, shows the menu with "Open C… | `TC-11-09` | manual-only | menu bar |
+| `US-11-06#1` | Started from `~/.cargo/bin` or with `cargo run`, the app brings its bundl… | `TC-11-10` | manual-only | terminal, Notification Center |
+| `US-11-06#2` | With a "Calendar Buddy" code signing certificate, the next new version's… | `TC-11-10` | manual-only | real Keychain and certificate |
+| `US-11-06#3` | Within a run the app asks about each account's Keychain item at most onc… | `TC-11-10` | manual-only | real Keychain prompt; one read per run unit-tested (`read_once`) |
 
 ### Module constraints and edge cases
 
@@ -85,10 +88,10 @@
 | The home directory is not known → no bundle and no launch agent are writ… | — | smoke depth — not tested yet (`DEC-65`) |
 | The program runs from inside the bundle → it is its own copy; nothing is… | `TC-11-02` | — |
 | The bundle's program is replaced while it runs → the running copy keeps… | — | smoke depth — not tested yet (`DEC-65`); the copy is written to a new file renamed into place |
-| A new version was installed → macOS may ask once whether the app may rea… | `TC-11-04` | — |
+| A new version was installed → signed with the user's certificate, nothin… | `TC-11-10` | — |
 | Notifications not allowed for the app in *System Settings → Notifications… | — | the system decides; not tested |
-| A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → it runs… | — | smoke depth — not tested yet (`DEC-65`) |
+| A program run outside the bundle (`cargo run`, `~/.cargo/bin`) → it runs… | `TC-11-10` | — |
 | "Quit" in the app's menu or Cmd+Q while the window is shown → the app en… | — | smoke depth — not tested yet (`DEC-65`) |
-| "Start at login" turned on from a program outside the bundle → it starts… | `TC-11-03` | — |
+| "Start at login" turned on → it starts the bundle's copy, which the app r… | `TC-11-03` | — |
 | Opening the app while it runs → macOS brings the running copy forward; n… | `TC-11-02` | — |
 | No network → until `MOD-11-F11` the app counts as online, and a failed s… | — | smoke depth — not tested yet (`DEC-65`) |

@@ -40,8 +40,8 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-07` Reminders and notifications | 24 / 3 | 8 | 6 | sliced |
 | `MOD-09` Local calendars | 21 / 6 | 5 | 5 | sliced |
 | `MOD-10` Events from a description | 27 / 8 | 5 | 0 | sliced |
-| `MOD-11` macOS | 12 / 3 | 5 | 0 | sliced |
-| **Total** | **215 / 53** | **68** | **56** | 10 / 10 modules sliced |
+| `MOD-11` macOS | 12 / 3 | 6 | 0 | sliced |
+| **Total** | **215 / 53** | **69** | **56** | 10 / 10 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -182,3 +182,4 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | `US-11-03` | As a User on a Mac, I can snooze, dismiss or join from a notification and open its event by clicking it, so that I act on a reminder without opening the app | F10 | must | review | `US-11-01`, `US-11-02` | — |
 | `US-11-04` | As a User on a Mac, the app catches up after sleep, knows when I am offline and opens calendar subscription links, so that it behaves as it does on Linux | F11, F12 | must | draft | `US-11-01`, `US-11-02` | — |
 | `US-11-05` | As a User on a Mac, a click on the menu bar icon takes me to the app, and a right click shows its menu, so that I get back to my calendar in one click | U03 | must | review | `US-11-02` | — |
+| `US-11-06` | As a User on a Mac, the Keychain asks me about the app's sign-ins once, not after every update or start from the terminal, so that installing a new version doesn't bury me in password prompts | F02, F03, F07 | must | review | `US-11-01`, `US-11-03` | — |

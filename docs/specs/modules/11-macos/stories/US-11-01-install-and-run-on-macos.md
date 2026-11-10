@@ -27,7 +27,7 @@ The same `cargo install` as on Linux, and one start of the installed program, pu
 ## Acceptance criteria
 
 - [ ] After `cargo install --path crates/app --locked` and one start of `~/.cargo/bin/calendar-buddy`, `~/Applications` holds "Calendar Buddy.app" with the app's icon; it opens from Spotlight and Launchpad, and a debug build makes "Calendar Buddy (dev).app" beside it.
-- [ ] After a new version is installed and started once from `~/.cargo/bin`, the bundle holds the new program, signed ad hoc (`DEC-218`); its files that did not change are not rewritten, and a copy running from the bundle keeps running.
+- [ ] After a new version is installed and started once from `~/.cargo/bin`, the bundle holds the new program, signed ad hoc, or with the user's own certificate (`DEC-218`, `DEC-224`); its files that did not change are not rewritten, and a copy running from the bundle keeps running.
 - [ ] A Google account connected on the Mac keeps its token in the login Keychain under the service `calendar-buddy`; after the app is restarted the account is still connected without signing in again, and removing the account deletes the item.
 - [ ] Declining to let the app read its Keychain item shows that unlocking was declined, and the account is not lost.
 - [ ] Turning on "Start at login" adds `~/Library/LaunchAgents/pl.ordergroup.CalendarBuddy.plist`; at the next login the app starts (in the menu bar since `US-11-02`); turning it off removes the file.
@@ -38,7 +38,7 @@ The same `cargo install` as on Linux, and one start of the installed program, pu
 ## Out of scope / what not to worry about
 
 - The menu bar icon, notification buttons and clicks, sleep and network signals, `webcal:` links — `US-11-02`…`US-11-04`.
-- A signed, notarized or packaged app — `DEC-217`.
+- An app signed with an Apple developer identity, notarized or packaged — `DEC-217`; signing with the user's own certificate is `US-11-06`.
 
 ## Technical notes
 

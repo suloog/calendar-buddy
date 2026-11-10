@@ -2352,8 +2352,9 @@ impl CalendarApp {
                 }
                 // Wayland lets no app bring its own window forward, so a window without the
                 // keyboard is closed and opened again, in front.
+                // The window's focus as it is now, also in a pass that draws nothing.
                 background::Response::Show | background::Response::Raise => {
-                    if !ctx.input(|i| i.focused) {
+                    if !ctx.input(|i| i.raw.focused) {
                         self.reopening = true;
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
@@ -2397,12 +2398,15 @@ impl eframe::App for CalendarApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.dock(!self.hidden);
         self.signaled(ctx);
+        let waiting = self.notified.is_some();
         self.background(ctx);
-        if self.notified.is_some() {
+        // A notification just clicked brings the window back, once; drawn again, `ui` opens its
+        // event.
+        if self.notified.is_some() && !waiting {
             if self.hidden {
                 self.unhide(ctx);
             } else {
-                // Drawn again, `ui` opens the event.
+                platform::in_dock(true);
                 ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
@@ -2931,7 +2935,6 @@ fn main() -> eframe::Result {
     }
     // On macOS the app runs as its bundle's signed copy, also when started from the terminal, so
     // the Keychain asks about its tokens once, not after every build (`DEC-224`).
-    #[cfg(target_os = "macos")]
     SystemLauncher::new().run_from_bundle();
     // One context for every time the window opens, so what the app's threads ask of it reaches
     // the window shown.

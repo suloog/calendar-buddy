@@ -34,11 +34,11 @@ As on Linux (`US-07-01`, `US-07-02`): a notification shown in the app's own name
 ## Out of scope / what not to worry about
 
 - What macOS shows in "do not disturb" — the system decides (`MOD-07`).
-- A program run outside the bundle (`cargo run`) — its notifications stay without buttons (`DEC-218`).
+- A program run outside the bundle (`cargo run`) — its notifications stay without buttons (`DEC-218`); since `DEC-224` it runs as the bundle's copy, with them (`US-11-06`).
 
 ## Technical notes
 
 - `platform/macos/notifications.rs`: `UNUserNotificationCenter` with one category for each set of buttons (`Action::buttons`); its delegate answers on the main thread, so it depends on the event loop of `US-11-02`.
-- The bundle is signed ad hoc by `SystemLauncher::install`; unsigned, macOS refuses notifications without asking (`DEC-218`).
+- The bundle is signed by `SystemLauncher::install`, ad hoc or with the user's certificate (`DEC-224`); unsigned, macOS refuses notifications without asking (`DEC-218`).
 - `Notifier::buttons` answers true from the bundle, and `DEC-64`'s fallback is used on macOS only outside it.
 - Decisions: `DEC-38`, `DEC-45`, `DEC-64`, `DEC-217`, `DEC-218`.

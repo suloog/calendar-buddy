@@ -541,6 +541,10 @@ pub struct XdgLauncher {
 }
 
 impl XdgLauncher {
+    /// On Linux the program runs as it was started; only macOS runs it from its bundle
+    /// (`DEC-224`).
+    pub fn run_from_bundle(&self) {}
+
     pub fn new() -> Self {
         let data = std::env::var_os("XDG_DATA_HOME")
             .filter(|dir| !dir.is_empty())

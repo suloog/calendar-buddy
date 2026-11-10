@@ -376,32 +376,21 @@ fn signing_identity() -> Option<String> {
     (String::from_utf8_lossy(&listed.stdout).contains(&named)).then(|| SIGNING_IDENTITY.into())
 }
 
-/// Who signed the bundle: the certificate's name, or `None` for a signature made ad hoc.
-fn signer(bundle: &Path) -> std::io::Result<Option<String>> {
-    let described = Command::new("codesign")
-        .args(["--display", "--verbose=2"])
-        .arg(bundle)
-        .output()?;
-    Ok(String::from_utf8_lossy(&described.stderr)
-        .lines()
-        .find_map(|line| line.strip_prefix("Authority="))
-        .map(str::to_string))
-}
-
 /// The app in Launchpad, Spotlight and the Dock: a bundle in `~/Applications` holding a copy of
 /// the program that runs, with the app's icon, signed with the user's certificate for the app
 /// or else ad hoc.
 pub struct SystemLauncher {
     /// The bundle; `None` when there is no home directory.
     bundle: Option<PathBuf>,
-    /// The certificate it is signed with; `None` to sign it ad hoc.
-    identity: Option<String>,
+    /// The certificate to sign it with, looked up only when it is signed; `None` to sign it ad
+    /// hoc.
+    identity: fn() -> Option<String>,
 }
 
 impl SystemLauncher {
     pub fn new() -> Self {
         SystemLauncher {
-            identity: signing_identity(),
+            identity: signing_identity,
             ..SystemLauncher::at(home().map(|home| home.join("Applications")))
         }
     }
@@ -409,7 +398,7 @@ impl SystemLauncher {
     fn at(applications: Option<PathBuf>) -> Self {
         SystemLauncher {
             bundle: applications.map(|dir| dir.join(format!("{}.app", texts::APP_NAME))),
-            identity: None,
+            identity: || None,
         }
     }
 
@@ -434,7 +423,9 @@ impl SystemLauncher {
     /// Writes the bundle's files, each only when it changed; run from the bundle, the program is
     /// already its own copy. macOS lets only a signed bundle show notifications, and the linker
     /// signs the program alone: the bundle is signed whenever its signature does not cover what
-    /// it holds or is not the one wanted (`DEC-218`, `DEC-224`).
+    /// it holds, as after an update — with the user's certificate when there is one, so a
+    /// certificate made since is taken at the next update, and one that cannot sign, as when
+    /// the user declines its key, is not tried again until then (`DEC-218`, `DEC-224`).
     pub fn install(&self) -> std::io::Result<()> {
         let Some(bundle) = &self.bundle else {
             return Err(std::io::ErrorKind::NotFound.into());
@@ -455,13 +446,13 @@ impl SystemLauncher {
                 write_if_changed(&source, stamp.as_bytes(), false)?;
             }
         }
-        let identity = self.identity.as_deref();
-        if codesign(&["--verify", "--strict"], bundle)? && signer(bundle)?.as_deref() == identity {
+        if codesign(&["--verify", "--strict"], bundle)? {
             return Ok(());
         }
         // Signing with the certificate may be declined in the Keychain; ad hoc it still runs.
-        let signed = |identity| codesign(&["--force", "--sign", identity], bundle);
-        if identity.is_some_and(|identity| signed(identity).unwrap_or(false)) || signed("-")? {
+        let signed = |identity: &str| codesign(&["--force", "--sign", identity], bundle);
+        let identity = (self.identity)();
+        if identity.is_some_and(|identity| signed(&identity).unwrap_or(false)) || signed("-")? {
             Ok(())
         } else {
             Err(std::io::Error::other("the bundle could not be signed"))
@@ -545,7 +536,6 @@ mod tests {
         );
         // The bundle is signed again over what changed, ad hoc without a certificate.
         assert!(codesign(&["--verify", "--strict"], &bundle).unwrap());
-        assert_eq!(signer(&bundle).unwrap(), None);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

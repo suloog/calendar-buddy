@@ -52,8 +52,8 @@ that module. Numbers are never reused or renumbered.
 | `MOD-07` Reminders and notifications | 34 | 27 | 8 / 4 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
-| `MOD-11` macOS | 22 | 19 | 3 / 6 | written |
-| **Total** | **322** | **236** | **115 / 25** | 10 / 10 modules written |
+| `MOD-11` macOS | 25 | 22 | 3 / 7 | written |
+| **Total** | **325** | **239** | **115 / 26** | 10 / 10 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -275,3 +275,4 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-11-07` | On a Mac, closing the window leaves the app in the menu bar, out of the Dock, still reminding, and its menu opens or quits it | `US-11-02#1`, `US-11-02#2`, `US-11-02#3`, `US-11-02#4` | desktop | happy-path | manual-only | ready |
 | `TC-11-08` | On a Mac, a notification comes in the app's name with Join, Snooze and Dismiss, and a click opens its event | `US-11-03#1`, `US-11-03#2`, `US-11-03#3`, `US-11-03#4` | desktop | happy-path | manual-only | ready |
 | `TC-11-09` | On a Mac, a click on the menu bar icon opens or raises the window, and a right click shows the menu | `US-11-05#1`, `US-11-05#2`, `US-11-05#3` | desktop | happy-path | manual-only | ready |
+| `TC-11-10` | On a Mac, the app runs as its bundle's copy and the Keychain asks about each sign-in once, across updates | `US-11-06#1`, `US-11-06#2`, `US-11-06#3` | desktop | happy-path | manual-only | ready |

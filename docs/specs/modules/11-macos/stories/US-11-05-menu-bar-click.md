@@ -37,4 +37,5 @@ Until now any click on the menu bar icon opened its menu (`DEC-218`). Now a clic
 ## Technical notes
 
 - `platform/macos/menu_bar.rs`: the status item gets no menu; its button sends its action on left and right mouse-up, and the action reads `NSApplication.currentEvent` to pop the menu up or send `Signal::Open`, which `background::respond` turns into Show or Raise.
+- A window not drawn — behind other windows, minimized, or the app hidden with Cmd+H — gets no `App::ui` from eframe 0.37, only `App::logic`: the signals are taken in there (`tc_11_09_a_click_on_the_icon_brings_a_window_not_drawn_to_the_front`).
 - Decisions: `DEC-218`, `DEC-220`.

@@ -64,14 +64,15 @@ KeePassXC, through the Secret Service API; on macOS the Keychain.
 
    On macOS the first start puts **Calendar Buddy** in `~/Applications`, with its own copy of
    the program, so it shows in Launchpad and Spotlight and can be kept in the Dock; started from
-   the terminal, the program updates that copy and runs as it. To update, pull, run the same
-   `cargo install` and start `~/.cargo/bin/calendar-buddy` once more.
+   the terminal, the program updates that copy and runs as it. To update, quit the app (from
+   its menu bar icon), pull, run the same `cargo install` and start `~/.cargo/bin/calendar-buddy`
+   once more.
 
    macOS asks whether the app may read each account's sign-in from the Keychain; choose
    **Always Allow**. To be asked only once, not after every update, make the app a certificate
    of its own, once: in *Keychain Access* choose *Keychain Access → Certificate Assistant →
    Create a Certificate…*, name it `Calendar Buddy`, with *Identity Type* "Self Signed Root" and
-   *Certificate Type* "Code Signing". The next start signs the app with it (macOS asks once
+   *Certificate Type* "Code Signing". The next update signs the app with it (macOS asks once
    whether `codesign` may use the key; choose **Always Allow**), and the Keychain then knows it
    as the same app across updates.
 
