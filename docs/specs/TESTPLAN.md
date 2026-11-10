@@ -49,11 +49,11 @@ that module. Numbers are never reused or renumbered.
 | `MOD-04` Appearance and themes | 11 | 8 | 5 / 1 | written |
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 37 | 28 | 14 / 2 | written |
-| `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
+| `MOD-07` Reminders and notifications | 34 | 27 | 8 / 4 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
-| `MOD-11` macOS | 19 | 16 | 3 / 5 | written |
-| **Total** | **309** | **223** | **113 / 22** | 10 / 10 modules written |
+| `MOD-11` macOS | 22 | 19 | 3 / 6 | written |
+| **Total** | **322** | **236** | **115 / 25** | 10 / 10 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -190,6 +190,9 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-07-07` | On KDE, clicking a notification opens its event and Join opens the Meet meeting | `US-07-01#3`, `US-07-02#3` | desktop | happy-path | manual-only | ready |
 | `TC-07-08` | With the window closed to the tray reminders keep arriving, quitting stops them, and "Start at login" starts the app in the tray | `US-07-05#1`, `US-07-05#3`, `US-07-05#4` | desktop | happy-path | manual-only | ready |
 | `TC-07-09` | A `webcal:` link opened in another app opens Google Calendar's "add calendar from URL" page | `US-07-06#1` | desktop | happy-path | manual-only | ready |
+| `TC-07-10` | On an invitation only its organizer may change, the user changes their own reminders, and nothing else; a read-only calendar offers none | `US-07-07#1`, `US-07-07#2`, `US-07-07#4` | desktop | happy-path | auto | ready |
+| `TC-07-11` | A new invitation is told once with Accept, Maybe and Decline, answered from its button, and not told on a first synchronization or again after a restart | `US-07-08#1`, `US-07-08#2`, `US-07-08#4`, `US-07-08#5`, `US-07-08#6` | desktop | happy-path | auto | ready |
+| `TC-07-12` | With a real Google account, an invitation's notification answers it and opens it, and its reminders change from its details | `US-07-07#3`, `US-07-08#2`, `US-07-08#3` | desktop | happy-path | manual-only | ready |
 
 ## [MOD-09] Local calendars
 
@@ -271,3 +274,4 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-11-06` | Each notification gets the buttons of its kind, and what the notification center answers maps back to the click or the button | `US-11-03#2`, `US-11-03#3`, `US-11-03#4` | desktop | happy-path | auto | ready |
 | `TC-11-07` | On a Mac, closing the window leaves the app in the menu bar, out of the Dock, still reminding, and its menu opens or quits it | `US-11-02#1`, `US-11-02#2`, `US-11-02#3`, `US-11-02#4` | desktop | happy-path | manual-only | ready |
 | `TC-11-08` | On a Mac, a notification comes in the app's name with Join, Snooze and Dismiss, and a click opens its event | `US-11-03#1`, `US-11-03#2`, `US-11-03#3`, `US-11-03#4` | desktop | happy-path | manual-only | ready |
+| `TC-11-09` | On a Mac, a click on the menu bar icon opens or raises the window, and a right click shows the menu | `US-11-05#1`, `US-11-05#2`, `US-11-05#3` | desktop | happy-path | manual-only | ready |

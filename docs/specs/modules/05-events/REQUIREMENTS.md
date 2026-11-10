@@ -71,7 +71,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-05-F14] The user can drag the end of an event to change its length.
 - [MOD-05-F15] The user can move an event to another calendar of the same account, where Google allows it.
 - [MOD-05-F16] Every change and deletion is saved to Google.
-- [MOD-05-F17] Events the user is not allowed to change cannot be dragged, resized, edited or deleted, and the app says why when the user tries. — *source: `DEC-22`*
+- [MOD-05-F17] Events the user is not allowed to change cannot be dragged, resized, edited or deleted, and the app says why when the user tries; on an invitation only its organizer may change, the user's own reminders can still be changed (`MOD-07-F21`, `DEC-221`). — *source: `DEC-22`*
 
 ### Recurring events
 

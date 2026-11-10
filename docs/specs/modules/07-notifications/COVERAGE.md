@@ -44,6 +44,10 @@
 | `MOD-07-F16` | `US-07-05` |
 | `MOD-07-F17` | `US-07-05` |
 | `MOD-07-F18` | `US-07-06` |
+| `MOD-07-F21` | `US-07-07` |
+| `MOD-07-F22` | `US-07-08` |
+| `MOD-07-F23` | `US-07-08` |
+| `MOD-07-F24` | `US-07-08` |
 
 ### UI/UX requirements
 
@@ -87,6 +91,16 @@
 | `US-07-05#5` | Launching the app while it runs brings the existing window forward… | `TC-07-06` | auto | — |
 | `US-07-06#1` | Clicking a `webcal:` link in another application opens Google Calen… | `TC-07-09` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-07-06#2` | After the user adds the calendar there, it appears in the app at th… | — | — | smoke depth — not tested yet (`DEC-65`) |
+| `US-07-07#1` | The details of an invitation only its organizer may change show its… | `TC-07-10` | auto | — |
+| `US-07-07#2` | The user adds, removes or changes a reminder there, or goes back to… | `TC-07-10` | auto | — |
+| `US-07-07#3` | For an occurrence of a series, saving asks first whether the change… | `TC-07-12` | manual-only | the scope question reuses `MOD-06-F13`'s |
+| `US-07-07#4` | The details of an event of a calendar the account may only read off… | `TC-07-10` | auto | — |
+| `US-07-08#1` | An invitation that comes in a synchronization produces one notifica… | `TC-07-11` | auto | — |
+| `US-07-08#2` | Accept, Maybe or Decline answers the invitation in Google and lets… | `TC-07-11`, `TC-07-12` | auto, manual-only | the buttons themselves are manual |
+| `US-07-08#3` | Clicking the notification opens the invitation in the window, on it… | `TC-07-12` | manual-only | the click itself is manual |
+| `US-07-08#4` | An invitation that came while the app was off is told at the app's… | `TC-07-11` | auto | — |
+| `US-07-08#5` | The first synchronization of a newly connected account produces no… | `TC-07-11` | auto | — |
+| `US-07-08#6` | Notifications turned off, a muted calendar or a disabled calendar p… | `TC-07-11` | auto | — |
 
 ### Module constraints and edge cases
 

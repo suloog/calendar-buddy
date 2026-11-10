@@ -4,7 +4,7 @@ title: macOS
 ticket: # optional YouTrack ID, filled by /og:sync-youtrack
 status: ready # draft | ready | in-progress | done
 depends_on: [MOD-01, MOD-02, MOD-04, MOD-07] # other module IDs
-sources: [SRC-12, SRC-13, SRC-01] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
+sources: [SRC-12, SRC-13, SRC-14, SRC-01] # SRC-NN documents this module draws on, e.g. [SRC-01, SRC-03]
 ---
 
 <!-- Copy to docs/specs/modules/NN-<slug>/REQUIREMENTS.md. Content in the project language; headings
@@ -14,7 +14,7 @@ sources: [SRC-12, SRC-13, SRC-01] # SRC-NN documents this module draws on, e.g. 
 
 ## Context
 
-The app on macOS, as a second platform next to Linux: installing it as a Mac app, keeping sign-ins in the Keychain, starting at login, notifications and the system's appearance. Comes from the product owner's request of 2026-11-04 (`SRC-12`), settled by `DEC-217`, which moves macOS out of the deferred scope (`SRC-01-119`, `MOD-08`). Everything the app does is the same on both platforms; this module names only how macOS provides what the other modules ask of the system, behind the platform interface (`NFR-13`), and what macOS does not have yet. A first stage makes the app installable and usable (`MOD-11-F01`…`F08`); a second brings the menu bar icon, notification buttons, sleep and network signals and `webcal:` links (`MOD-11-F09`…`F12`). The menu bar icon and the notifications' buttons were asked for first, on 2026-11-05 (`SRC-13`), and are settled by `DEC-218`.
+The app on macOS, as a second platform next to Linux: installing it as a Mac app, keeping sign-ins in the Keychain, starting at login, notifications and the system's appearance. Comes from the product owner's request of 2026-11-04 (`SRC-12`), settled by `DEC-217`, which moves macOS out of the deferred scope (`SRC-01-119`, `MOD-08`). Everything the app does is the same on both platforms; this module names only how macOS provides what the other modules ask of the system, behind the platform interface (`NFR-13`), and what macOS does not have yet. A first stage makes the app installable and usable (`MOD-11-F01`…`F08`); a second brings the menu bar icon, notification buttons, sleep and network signals and `webcal:` links (`MOD-11-F09`…`F12`). The menu bar icon and the notifications' buttons were asked for first, on 2026-11-05 (`SRC-13`), and are settled by `DEC-218`; a click on the icon that opens the window came on 2026-11-10 (`SRC-14-01`, `DEC-220`).
 
 ## Scope coverage
 
@@ -29,6 +29,7 @@ The app on macOS, as a second platform next to Linux: installing it as a Mac app
 | `SRC-13-01` Closing the window leaves an icon in the menu bar; notifications get their buttons and can be clicked. | informal | `MOD-11-F09`, `MOD-11-F10` |
 | `SRC-13-02` While the window is closed the app leaves the Dock. | informal | `MOD-11-U02` |
 | `SRC-13-03` A monochrome menu bar icon. | informal | `MOD-11-U02` |
+| `SRC-14-01` A click on the menu bar icon opens the app; a right click shows the menu. | informal | `MOD-11-U03` |
 
 ## Functional requirements
 
@@ -53,7 +54,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 ### Second stage
 
-- [MOD-11-F09] Closing the window hides it and keeps the app running with an icon in the menu bar, where it keeps synchronizing and notifying; the icon's menu opens the window and quits the app (`MOD-07-F14`, `F15`); opening the app again from Spotlight, Launchpad or Finder brings the window back (`MOD-07-F17`). — *source: `DEC-217`, `DEC-218`, `SRC-13-01`*
+- [MOD-11-F09] Closing the window hides it and keeps the app running with an icon in the menu bar, where it keeps synchronizing and notifying; the icon's menu opens the window and quits the app (`MOD-07-F14`, `F15`), and a click on the icon opens the window (`MOD-11-U03`); opening the app again from Spotlight, Launchpad or Finder brings the window back (`MOD-07-F17`). — *source: `DEC-217`, `DEC-218`, `SRC-13-01`*
 - [MOD-11-F10] A notification of the installed app is shown in the app's own name and icon and offers Join (for an event with Google Meet), Snooze for 5 or 10 minutes and Dismiss, and clicking it opens its event in the window, also while the window is hidden (`MOD-07-F08`, `F09`, `F10`). — *source: `DEC-217`, `DEC-218`, `SRC-13-01`*
 - [MOD-11-F11] The app synchronizes right after the Mac wakes from sleep and after the network returns, and shows that it is offline as the system says (`MOD-02-F08`, `MOD-02-F14`). — *source: `DEC-217`*
 - [MOD-11-F12] A `webcal:` link opened anywhere on the Mac opens Google Calendar in the browser, ready to add that subscription (`MOD-07-F18`). — *source: `DEC-217`*
@@ -62,6 +63,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 
 - [MOD-11-U01] Until the menu bar icon comes (`MOD-11-F09`), closing the window quits the app, and reminders arrive only while it runs. Met by the first stage; since `MOD-11-F09` closing the window hides it. — *source: `DEC-217`*
 - [MOD-11-U02] While the window is hidden the app is neither in the Dock nor in Cmd+Tab, only in the menu bar; it is back in both while the window is shown. The menu bar icon is the system's monochrome calendar symbol, drawn in the menu bar's colours like the system's own icons. — *source: `DEC-218`, `SRC-13-02`, `SRC-13-03`*
+- [MOD-11-U03] A click on the menu bar icon opens the window — back in the Dock if it was hidden, to the front if it was shown — as "Open" in its menu does; a right click, or a click with Control held, shows the menu. — *source: `DEC-220`, `SRC-14-01`*
 
 ## Constraints and edge cases
 
@@ -88,7 +90,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - The platform code is split by target: `crates/app/src/platform/linux.rs` and `crates/app/src/platform/macos.rs` (with `macos/menu_bar.rs` and `macos/notifications.rs`), each implementing `calendar_core::platform`; the Linux crates (`secret-service`, `zbus`, `ksni`) are Linux-only dependencies, `security-framework` and the `objc2` crates macOS-only.
 - The bundle: `Contents/Info.plist` (`CFBundleIdentifier` `pl.ordergroup.CalendarBuddy`, `…Dev` for a debug build), `Contents/MacOS/<app ID>` — a copy of the running program, written to a new file renamed into place — `Contents/Resources/AppIcon.icns`, the app's 256×256 PNG in an `ic08` entry, and `Contents/Resources/program`, the length and time of the program copied. The bundle is signed ad hoc (`codesign --force --sign -`) when `codesign --verify --strict` fails: notifications need a signed bundle (`DEC-218`).
 - The launch agent: `~/Library/LaunchAgents/<bundle ID>.plist` with `RunAtLoad`, the program and `--in-tray`; with the menu bar icon the window starts hidden (`background::starts_shown`).
-- The window hides instead of closing (`platform::WINDOW_HIDES`): eframe runs once, its loop never stops while the app runs, and `App::logic` keeps synchronizing and reminding while the window is hidden; the Dock follows through the activation policy (Regular ↔ Accessory). The status item is made from the main dispatch queue, which runs once winit has made AppKit's application. Becoming active (`NSApplicationDidBecomeActiveNotification`) counts as a second launch.
+- The window hides instead of closing (`platform::WINDOW_HIDES`): eframe runs once, its loop never stops while the app runs, and `App::logic` keeps synchronizing and reminding while the window is hidden; the Dock follows through the activation policy (Regular ↔ Accessory). The status item is made from the main dispatch queue, which runs once winit has made AppKit's application. Becoming active (`NSApplicationDidBecomeActiveNotification`) counts as a second launch. The status item's button has no menu of its own: it sends its action on a left and a right mouse-up, and the action pops the menu up for a right or Control click and opens the window for any other (`DEC-220`).
 - Notifications: one category for each set of buttons (`Action::buttons`), each button keyed as on Linux; the notification center's delegate calls back with the notification's identifier; `UNNotificationDefaultActionIdentifier` is the click. Whether the program runs from the bundle is read from `NSBundle.mainBundle.bundleIdentifier`.
 - The appearance is read from the global `AppleInterfaceStyle` default every 5 seconds.
 - Single instance comes from Launch Services; the app claims nothing itself.
