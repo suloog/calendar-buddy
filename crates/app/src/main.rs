@@ -2263,6 +2263,9 @@ impl CalendarApp {
                     self.save_accounts();
                 }
                 let window = self.window();
+                // Whose invitations they are is known before a new account's first
+                // synchronization, which only looks at them (`MOD-07-F24`).
+                self.sync.set_accounts(self.accounts.list());
                 self.sync.checked(&checked, window);
             }
             Some(Err(problem)) => self.problem = Some(problem),

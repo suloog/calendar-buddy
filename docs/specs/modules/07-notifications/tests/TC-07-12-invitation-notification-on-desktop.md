@@ -30,7 +30,7 @@ depends_on: [TC-07-11] # test case IDs that must pass first
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
 | 1 | From the second account, invite the first to a weekly event, guests not allowed to modify it; close the app's window. | Within a synchronization a notification "Invitation: …" with Accept, Maybe and Decline. | screenshot |
-| 2 | Click the notification. | The window opens on the invitation's day, the invitation picked. | screenshot |
+| 2 | Click the notification. | The window opens on the invitation's day, with its details open, where it is answered. | screenshot |
 | 3 | In the invitation's details, add a notification 1 hour before to one occurrence, choose "This event" and save. | Google Calendar in the browser shows the reminder on that occurrence only; the organizer sees no change. | screenshot |
 | 4 | From the second account send another invitation; choose Decline on its notification. | The organizer gets the answer; the side panel no longer counts it. | screenshot |
 

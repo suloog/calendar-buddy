@@ -1856,7 +1856,7 @@ mod tests {
     use calendar_core::offline;
     use calendar_core::platform::Network;
     use calendar_core::regional::Regional;
-    use calendar_core::reminders::Notification;
+    use calendar_core::reminders::{EventId, Notification};
     use calendar_core::series::{Question, Scope};
     use calendar_core::settings::Settings;
     use calendar_core::side_panel;
@@ -6641,8 +6641,76 @@ mod tests {
             .add_event(ACCOUNT_ID, EMAIL, friday("off", "Off"));
         engine.handle(Some(Job::Refresh), start);
         assert_eq!(titles().len(), 2);
+
+        // 7. Notifications on again, with "Work" disabled in the settings: nothing is told.
+        *engine.silenced.lock().unwrap() = Silenced::default();
+        let work = BTreeSet::from([(ACCOUNT_ID.to_string(), EMAIL.to_string())]);
+        engine.handle(Some(Job::Disabled(work)), start);
+        google
+            .fake
+            .add_event(ACCOUNT_ID, EMAIL, friday("hidden", "Hidden"));
+        engine.handle(Some(Job::Refresh), start);
+        assert_eq!(titles().len(), 2);
         drop(engine);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn tc_07_11_accept_on_the_notification_of_a_series_answers_all_its_events() {
+        use guests::Response::Accepted;
+        let (google, mut engine, start) = team_call("tc-07-11-series");
+        let call = (now_shown(&engine).into_iter())
+            .find(|e| e.title == "Team call")
+            .unwrap();
+
+        let updates = engine.handle(Some(Job::Answer(EventId::of(&call), Accepted)), start);
+
+        let answers = team_call_answers(&shown(&updates).unwrap());
+        assert_eq!(answers.len(), 4);
+        assert!(answers.iter().all(|(_, answer)| *answer == Accepted));
+        let [patched] = writes(&google).try_into().unwrap();
+        assert!(
+            patched.ends_with("/events/teamcall?sendUpdates=all"),
+            "{patched}"
+        );
+    }
+
+    #[test]
+    fn tc_07_11_an_account_connected_beside_another_tells_none_of_its_invitations() {
+        let google = Google::start("tc-07-11-second");
+        personal(&google);
+        google.fake.add_event(
+            ACCOUNT_ID,
+            EMAIL,
+            invitation(
+                "old",
+                "Old",
+                "2026-11-13T10:00:00+01:00",
+                "2026-11-13T11:00:00+01:00",
+            ),
+        );
+        let clock = Arc::new(Mutex::new(thursday(9, 0)));
+        let notifier = FakeNotifier::default();
+        let start = Instant::now();
+        let (mut engine, _) = reminding(&google, &clock, &notifier, Disabled::new(), start);
+        // The app knew only another account when this one synchronized first.
+        let other = calendar_core::accounts::Entry {
+            account: calendar_core::accounts::Account {
+                id: "other".to_string(),
+                ..connected()[0].account.clone()
+            },
+            ..connected()[0].clone()
+        };
+        *engine.accounts.lock().unwrap() = vec![other.clone()];
+        engine.handle(Some(Job::Sync(ACCOUNT_ID.into(), window())), start);
+
+        // Once the app says whose it is, its invitation is kept as told, not told, as the next
+        // round brings a change.
+        *engine.accounts.lock().unwrap() = [vec![other], connected()].concat();
+        let lunch = at_ten("lunch", "Lunch", json!([]));
+        google.fake.add_event(ACCOUNT_ID, EMAIL, lunch);
+        engine.handle(Some(Job::Refresh), start);
+        assert_eq!(notifier.shown(), []);
     }
 
     #[test]

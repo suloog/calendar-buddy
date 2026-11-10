@@ -36,6 +36,9 @@ depends_on: [] # test case IDs that must pass first
 | 4 | Stop the engine, add an invitation "Retro" in the fake Google, start the engine again. | One notification "Invitation: Retro". | notifications recorded |
 | 5 | Choose Accept on "Retro". | The fake Google got the answer "accepted" for "Retro"; it no longer awaits the answer. | app state |
 | 6 | Mute "Work", add an invitation "Muted", synchronize; turn notifications off, add "Off", synchronize. | No notification is shown for either. | notifications recorded |
+| 7 | Turn notifications on, disable "Work" in the settings, add "Hidden", synchronize. | No notification is shown. | notifications recorded |
+| 8 | Connect account B, which holds an invitation, while the engine knows only account A, then synchronize again once it knows B. | No notification is shown. | notifications recorded |
+| 9 | Choose Accept on the notification of an invitation to a weekly series. | Google holds "accepted" for the series as a whole, the organizer let know. | app state |
 
 ## Pass criterion
 
