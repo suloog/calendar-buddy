@@ -47,6 +47,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [MOD-04-U04] Events are drawn in their calendar's colour, with text that stays readable on that colour in both themes.
 - [MOD-04-U05] Changing views and periods happens without transition animations. — *source: `DEC-58`*
 - [MOD-04-U06] Notices of what happened (an account connected, a change not saved or not allowed, calendars gone, the Undo) appear in the bottom corner of the window over the view, which does not move; each but the Undo has a close cross and goes on its own after 10 seconds. — *source: `DEC-159`*
+- [MOD-04-U07] An event that is over is drawn faded in the day, 3-day, week and month views, as a declined event is but not struck through, its text still readable (`MOD-04-NFR-01`): a timed event once its end has come, an all-day event once its last day has passed; an event under way is not faded. — *source: `DEC-219`*
 
 ## Non-functional requirements
 
@@ -58,6 +59,7 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - The system changes between light and dark while the app runs → the app follows at once, unless the user chose Light or Dark.
 - The desktop does not report a light or dark preference → the app uses the light theme. — *source: `DEC-58`*
 - The screen scale is 150% or 200% → the compact grid scales with it and keeps its proportions (`MOD-03-U02`).
+- An event ends while the view is open → it fades within a minute, when the view is rebuilt for the current time (`MOD-04-U07`).
 
 ## Integrations
 
@@ -87,3 +89,4 @@ Every requirement in this module is priority **must** unless marked otherwise.
 - [ ] In a 1080-pixel-high window at 100% scale, the week view shows 8:00–18:00 without scrolling.
 - [ ] Text inside events of very light and very dark calendar colours is readable in both themes, with at least 4.5:1 contrast.
 - [ ] Apart from calendar colours, only neutral tones and one accent colour appear in the interface.
+- [ ] Events that are over are faded in the day, 3-day, week and month views, with their text still at 4.5:1; an event under way and today's all-day event are not.

@@ -2641,3 +2641,15 @@
 - **Scope effect:** none — delivers `MOD-11-F09` and `F10`, planned by `DEC-217`
 - **Resolves:** open questions of `US-11-02` (the Dock) and `US-11-03` (the signature)
 - **Status:** accepted
+
+## [DEC-219] Events that are over are drawn faded, as declined ones are
+
+- **Date:** 2026-11-09
+- **Decided by:** client (product owner — Maciej)
+- **Source:** conversation with the product owner, 2026-11-09
+- **Affects:** `MOD-04` (new `MOD-04-U07`), `US-04-02`, `TC-04-04`, new `TC-04-06`
+- **Decision:** An event that is over is drawn faded in the day, 3-day, week and month views, under the same veil of the view's background as a declined event (`MOD-06-F14`), but not struck through; its text keeps 4.5:1 against what it is on (`MOD-04-NFR-01`). A timed event is over once its end has come; one under way is not faded. An all-day event is over once its last day has passed, so it is not faded on its last day. Invitations awaiting an answer and labels (working locations, birthdays) fade the same way. The view fades an event within a minute of its end, as it rebuilds every minute for the current time's line. The agenda is unchanged: it lists only events that have not ended.
+- **Why:** As in Google Calendar: what is already behind the user steps back, so the rest of the day stands out. The declined events' veil is reused, so the two read alike and the text stays readable; the product owner chose this over Google's greyed text, which would fall below 4.5:1.
+- **Scope effect:** within scope
+- **Resolves:** —
+- **Status:** accepted

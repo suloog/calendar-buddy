@@ -39,6 +39,7 @@
 | `MOD-04-U04` | `US-04-02` |
 | `MOD-04-U05` | `US-04-03` |
 | `MOD-04-U06` | `US-04-03` |
+| `MOD-04-U07` | `US-04-02` |
 
 ### Non-functional requirements
 
@@ -65,6 +66,7 @@ Module NFRs only; project-wide `NFR-nn` are delivered across modules and are not
 | `US-04-02#2` | Event blocks in the day, 3-day and week views show only the title a… | — | — | no test case (`DEC-65`); unit test `an_event_block_shows_only_its_title_and_time` |
 | `US-04-02#3` | Text inside events of a very light and a very dark calendar colour… | `TC-04-04` | auto | — |
 | `US-04-02#4` | All interface text has a contrast of at least 4.5:1 against its bac… | — | — | no test case (`DEC-65`); unit tests `interface_text_reaches_4_5_to_1_on_its_backgrounds_in_both_themes` and the views' contrast tests; also looked over by the product owner |
+| `US-04-02#5` | Events that are over are faded in the day, 3-day, week and month views… | `TC-04-06` | auto | — |
 | `US-04-03#1` | Apart from calendar and event colours, the interface uses only neut… | `TC-04-05` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-04-03#2` | Changing views and periods happens without transition animations. | `TC-04-05` | manual-only | manual — checked by the product owner (`DEC-65`) |
 | `US-04-03#3` | All interface texts are in English. | — | — | smoke depth — not tested yet (`DEC-65`) |

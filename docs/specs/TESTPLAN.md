@@ -46,14 +46,14 @@ that module. Numbers are never reused or renumbered.
 | `MOD-01` Google accounts and sign-in | 19 | 7 | 2 / 2 | written |
 | `MOD-02` Calendars, synchronisation and offline cache | 31 | 15 | 8 / 1 | written |
 | `MOD-03` Views and navigation | 51 | 33 | 14 / 2 | written |
-| `MOD-04` Appearance and themes | 10 | 7 | 4 / 1 | written |
+| `MOD-04` Appearance and themes | 11 | 8 | 5 / 1 | written |
 | `MOD-05` Creating and editing events | 44 | 26 | 12 / 3 | written |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 37 | 28 | 14 / 2 | written |
 | `MOD-07` Reminders and notifications | 24 | 17 | 6 / 3 | written |
 | `MOD-09` Local calendars | 34 | 34 | 16 / 1 | written |
 | `MOD-10` Events from a description | 39 | 39 | 33 / 2 | written |
 | `MOD-11` macOS | 19 | 16 | 3 / 5 | written |
-| **Total** | **308** | **222** | **112 / 22** | 10 / 10 modules written |
+| **Total** | **309** | **223** | **113 / 22** | 10 / 10 modules written |
 
 A module counts as **written** when part 2 of its `COVERAGE.md` has no row without either a test or a note. Depth so far: smoke (`DEC-65`) — criteria without a test carry the note "smoke depth — not tested yet".
 
@@ -128,6 +128,7 @@ Desktop app, no `.claude/og-test-targets.json` and no `/og:run-tests` (`DEC-65`)
 | `TC-04-03` | At 100% scale in a 1080-pixel-high window the week view shows 8:00–18:00 without scrolling | `US-04-02#1` | desktop | happy-path | auto | ready |
 | `TC-04-04` | Event text on very light and very dark calendar colours reaches 4.5:1 contrast in both themes | `US-04-02#3` | desktop | nfr | auto | ready |
 | `TC-04-05` | Apart from calendar colours the interface uses neutral tones and one accent, and changing views has no transition animation | `US-04-03#1`, `US-04-03#2` | desktop | happy-path | manual-only | ready |
+| `TC-04-06` | Events that are over are faded, their text still at 4.5:1 in both themes; an event under way is not | `US-04-02#5` | desktop | happy-path | auto | ready |
 
 ## [MOD-05] Creating and editing events
 

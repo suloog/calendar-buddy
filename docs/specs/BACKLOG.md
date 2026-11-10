@@ -34,14 +34,14 @@ the other way round (requirement → stories) lives in the module's `COVERAGE.md
 | `MOD-01` Google accounts and sign-in | 12 / 2 | 4 | 4 | sliced |
 | `MOD-02` Calendars, synchronisation and offline cache | 23 / 4 | 7 | 7 | sliced |
 | `MOD-03` Views and navigation | 30 / 9 | 11 | 11 | sliced |
-| `MOD-04` Appearance and themes | 4 / 6 | 3 | 3 | sliced |
+| `MOD-04` Appearance and themes | 4 / 7 | 3 | 3 | sliced |
 | `MOD-05` Creating and editing events | 35 / 5 | 11 | 11 | sliced |
 | `MOD-06` Guests, invitations, RSVP and Google Meet | 27 / 6 | 9 | 9 | sliced |
 | `MOD-07` Reminders and notifications | 20 / 3 | 6 | 6 | sliced |
 | `MOD-09` Local calendars | 21 / 6 | 5 | 5 | sliced |
 | `MOD-10` Events from a description | 27 / 8 | 5 | 0 | sliced |
 | `MOD-11` macOS | 12 / 2 | 4 | 0 | sliced |
-| **Total** | **211 / 51** | **65** | **56** | 10 / 10 modules sliced |
+| **Total** | **211 / 52** | **65** | **56** | 10 / 10 modules sliced |
 
 A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows. `MOD-08` (deferred scope) holds no requirements and is not listed.
 
@@ -95,7 +95,7 @@ A module counts as **sliced** once part 1 of its `COVERAGE.md` has no empty rows
 | Story | Title | Covers | Prio | Status | Depends on | YouTrack |
 | ----- | ----- | ------ | ---- | ------ | ---------- | -------- |
 | `US-04-01` | As a User, I can use the app in a light or dark theme that follows my system, so that it fits my desktop day and night | F01, F02, F03 | must | done | — | — |
-| `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, NFR-01 | must | done | `US-04-01`, `US-03-01` | — |
+| `US-04-02` | As a User, I see a compact, readable calendar grid, so that my whole working day fits on screen | U01, U02, U04, U07, NFR-01 | must | done | `US-04-01`, `US-03-01` | — |
 | `US-04-03` | As a User, I work in a calm, restrained English interface, so that my calendar colours are what stands out | F04, U03, U05, U06 | must | done | `US-04-01`, `US-03-01` | — |
 
 ## [MOD-05] Creating and editing events

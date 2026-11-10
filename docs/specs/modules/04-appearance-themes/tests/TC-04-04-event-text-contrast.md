@@ -23,7 +23,7 @@ depends_on: [] # test case IDs that must pass first
 
 ## Preconditions
 
-- Two calendars with one event each this week.
+- Two calendars with one event each this week, both still to come (an event that is over is faded, `TC-04-06`).
 
 ## Test data
 
