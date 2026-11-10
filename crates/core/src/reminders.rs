@@ -8,13 +8,16 @@
 //! offers Join for an event with Google Meet, Snooze for 5 or 10 minutes, and Dismiss
 //! (`US-07-02`, `MOD-07-F09`, `F10`); a snooze is the app's own, Google is not told. All
 //! notifications can be turned off in the settings, and a calendar's muted from the side panel
-//! (`US-07-03`, `MOD-07-F11`, `F12`); neither changes the reminders in Google.
+//! (`US-07-03`, `MOD-07-F11`, `F12`); neither changes the reminders in Google. A new invitation
+//! is a notification too, with Accept, Maybe and Decline (`US-07-08`, `MOD-07-F22`, `F23`).
 
 use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 
+use crate::guests::Response;
+use crate::invitations::ANSWERS;
 use crate::local;
 use crate::model::{Calendar, Event, Method, Reminders, Timing};
 use crate::regional::Regional;
@@ -35,7 +38,7 @@ pub struct EventId {
     pub id: String,
 }
 
-/// A desktop notification of a reminder (`MOD-07-U01`).
+/// A desktop notification of a reminder (`MOD-07-U01`) or of an invitation (`MOD-07-F22`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Notification {
     pub title: String,
@@ -45,8 +48,17 @@ pub struct Notification {
     pub location: String,
     /// The web page of the event's Google Meet call, which Join opens (`MOD-07-F09`).
     pub meet: Option<String>,
-    /// The reminder it is of, which Snooze shows again.
-    pub reminder: ReminderId,
+    /// What it is of.
+    pub of: Of,
+}
+
+/// What a notification is of.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Of {
+    /// A reminder, which Snooze shows again.
+    Reminder(ReminderId),
+    /// An invitation awaiting the user's answer, which its buttons answer (`MOD-07-F23`).
+    Invitation(EventId),
 }
 
 /// What the user chooses on a notification.
@@ -60,6 +72,8 @@ pub enum Action {
     Snooze(u32),
     /// Closes it.
     Dismiss,
+    /// Answers its invitation, letting the organizer know (`MOD-07-F23`).
+    Answer(Response),
 }
 
 /// The minutes a notification can be snoozed for (`MOD-07-F10`).
@@ -73,6 +87,12 @@ impl Action {
             Action::Join => texts::JOIN.to_string(),
             Action::Snooze(minutes) => texts::snooze(minutes),
             Action::Dismiss => texts::DISMISS.to_string(),
+            Action::Answer(response) => (ANSWERS.iter())
+                .find(|(answer, _)| *answer == response)
+                .map_or_else(
+                    || response.label().to_string(),
+                    |(_, says)| says.to_string(),
+                ),
         }
     }
 
@@ -86,6 +106,22 @@ impl Action {
             .chain([Action::Dismiss])
             .collect()
     }
+
+    /// The buttons of a notification of an invitation: its answers (`MOD-07-F23`).
+    pub fn answers() -> Vec<Action> {
+        ANSWERS
+            .map(|(response, _)| Action::Answer(response))
+            .to_vec()
+    }
+
+    /// Every set of buttons a notification can have.
+    pub fn button_sets() -> [Vec<Action>; 3] {
+        [
+            Action::buttons(false),
+            Action::buttons(true),
+            Action::answers(),
+        ]
+    }
 }
 
 impl Notification {
@@ -98,9 +134,50 @@ impl Notification {
         }
     }
 
-    /// Its buttons (`Action::buttons`).
+    /// Its buttons (`Action::buttons`, `Action::answers`).
     pub fn actions(&self) -> Vec<Action> {
-        Action::buttons(self.meet.is_some())
+        match self.of {
+            Of::Reminder(_) => Action::buttons(self.meet.is_some()),
+            Of::Invitation(_) => Action::answers(),
+        }
+    }
+
+    /// The event it is of, which clicking it opens (`MOD-07-F08`).
+    pub fn event(&self) -> &EventId {
+        match &self.of {
+            Of::Reminder(reminder) => &reminder.event,
+            Of::Invitation(event) => event,
+        }
+    }
+
+    /// The reminder it is of, if any.
+    pub fn reminder(&self) -> Option<&ReminderId> {
+        match &self.of {
+            Of::Reminder(reminder) => Some(reminder),
+            Of::Invitation(_) => None,
+        }
+    }
+
+    /// The notification of the invitation `event`, as of `now`: "Invitation: <title>", when and
+    /// where it is (`MOD-07-F22`).
+    pub fn invitation(event: &Event, now: DateTime<Utc>, zone: Tz, regional: &Regional) -> Self {
+        Notification {
+            title: texts::invitation(&event.title),
+            when: when(&event.timing, now, zone, regional),
+            location: event.about.location.clone(),
+            meet: event.about.meet.clone(),
+            of: Of::Invitation(EventId::of(event)),
+        }
+    }
+}
+
+impl EventId {
+    pub fn of(event: &Event) -> Self {
+        EventId {
+            account_id: event.account_id.clone(),
+            calendar_id: event.calendar_id.clone(),
+            id: event.id.clone(),
+        }
     }
 }
 
@@ -127,7 +204,7 @@ impl Silenced {
 
     /// Whether the notification is not to be shown.
     pub fn silences(&self, notification: &Notification) -> bool {
-        let event = &notification.reminder.event;
+        let event = notification.event();
         self.all
             || (self.local && event.account_id == local::ACCOUNT_ID)
             || (self.muted).contains(&(event.account_id.clone(), event.calendar_id.clone()))
@@ -267,7 +344,7 @@ impl Alarms {
                 title: alarm.title,
                 location: alarm.location,
                 meet: alarm.meet,
-                reminder: alarm.key,
+                of: Of::Reminder(alarm.key),
             })
             .collect()
     }
@@ -291,11 +368,7 @@ fn alarms(calendars: &[Calendar], event: &Event, zone: Tz) -> Vec<Alarm> {
         Timing::Timed { start, .. } => start,
         Timing::AllDay { start, .. } => day_start(start, zone),
     };
-    let event_id = EventId {
-        account_id: event.account_id.clone(),
-        calendar_id: event.calendar_id.clone(),
-        id: event.id.clone(),
-    };
+    let event_id = EventId::of(event);
     (reminders.iter())
         .filter(|reminder| reminder.method == Method::Notification)
         .map(|reminder| Alarm {
@@ -408,7 +481,7 @@ mod tests {
                 when: "10:00".to_string(),
                 location: "Room 2".to_string(),
                 meet: None,
-                reminder: ReminderId {
+                of: Of::Reminder(ReminderId {
                     event: EventId {
                         account_id: "1".to_string(),
                         calendar_id: "work".to_string(),
@@ -416,7 +489,7 @@ mod tests {
                     },
                     start: at(10, 0),
                     minutes: 10,
-                },
+                }),
             }]
         );
 
@@ -441,7 +514,7 @@ mod tests {
             when: "10:00".to_string(),
             location: "Room 2".to_string(),
             meet: None,
-            reminder: ReminderId {
+            of: Of::Reminder(ReminderId {
                 event: EventId {
                     account_id: "1".to_string(),
                     calendar_id: "work".to_string(),
@@ -449,7 +522,7 @@ mod tests {
                 },
                 start: at(10, 0),
                 minutes: 10,
-            },
+            }),
         }
     }
 
@@ -518,7 +591,7 @@ mod tests {
         let shown = alarms.due(at(9, 50));
         assert_eq!(titles(&shown), ["Review"]);
 
-        alarms.snooze(&shown[0].reminder, 5, at(9, 50));
+        alarms.snooze(shown[0].reminder().unwrap(), 5, at(9, 50));
 
         assert_eq!(alarms.next(), Some(at(9, 55)));
         assert_eq!(alarms.due(at(9, 54)), []);
@@ -535,7 +608,7 @@ mod tests {
         let mut alarms = started(std::slice::from_ref(&call));
         let shown = alarms.due(at(10, 0));
 
-        alarms.snooze(&shown[0].reminder, 10, at(10, 0));
+        alarms.snooze(shown[0].reminder().unwrap(), 10, at(10, 0));
         // Synchronization brings the call renamed after it started.
         let mut renamed = event("Call with Ann", (10, 0), (10, 30), reminders);
         renamed.id = call.id.clone();
@@ -544,7 +617,7 @@ mod tests {
         // Shown again after the event started, as it was snoozed past its start.
         let again = alarms.due(at(10, 10));
         assert_eq!(titles(&again), ["Call with Ann"]);
-        alarms.snooze(&again[0].reminder, 5, at(10, 11));
+        alarms.snooze(again[0].reminder().unwrap(), 5, at(10, 11));
         assert_eq!(titles(&alarms.due(at(10, 16))), ["Call with Ann"]);
     }
 
@@ -556,7 +629,7 @@ mod tests {
         let mut alarms = started(&[review, standup]);
         let shown = alarms.due(at(9, 50));
         for notification in &shown {
-            alarms.snooze(&notification.reminder, 5, at(9, 50));
+            alarms.snooze(notification.reminder().unwrap(), 5, at(9, 50));
         }
 
         // Synchronization brings Review moved to 11:00 and Standup deleted.
@@ -703,7 +776,7 @@ mod tests {
 
         assert_eq!(titles(&alarms.due(at(9, 50))), ["Standup"]);
         let next = alarms.due(at(9, 50) + Duration::days(1));
-        assert_eq!(next[0].reminder.event.id, "standup_20261113T090000Z");
+        assert_eq!(next[0].event().id, "standup_20261113T090000Z");
         assert_eq!(next[0].when, "10:00");
     }
 

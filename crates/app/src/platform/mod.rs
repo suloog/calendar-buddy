@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use calendar_core::guests::Response;
 use calendar_core::reminders::{Action, SNOOZES};
 
 #[cfg(target_os = "linux")]
@@ -53,6 +54,10 @@ fn key(action: Action) -> String {
         Action::Join => "join".to_string(),
         Action::Snooze(minutes) => format!("snooze-{minutes}"),
         Action::Dismiss => "dismiss".to_string(),
+        Action::Answer(Response::Accepted) => "accept".to_string(),
+        Action::Answer(Response::Maybe) => "maybe".to_string(),
+        Action::Answer(Response::Declined) => "decline".to_string(),
+        Action::Answer(Response::Awaiting) => "awaiting".to_string(),
     }
 }
 
@@ -62,6 +67,9 @@ fn action(key: &str) -> Option<Action> {
         "default" => Some(Action::Open),
         "join" => Some(Action::Join),
         "dismiss" => Some(Action::Dismiss),
+        "accept" => Some(Action::Answer(Response::Accepted)),
+        "maybe" => Some(Action::Answer(Response::Maybe)),
+        "decline" => Some(Action::Answer(Response::Declined)),
         _ => key
             .strip_prefix("snooze-")
             .and_then(|minutes| minutes.parse().ok())
@@ -82,6 +90,9 @@ mod tests {
             Action::Snooze(5),
             Action::Snooze(10),
             Action::Dismiss,
+            Action::Answer(Response::Accepted),
+            Action::Answer(Response::Maybe),
+            Action::Answer(Response::Declined),
         ];
         for chosen in actions {
             assert_eq!(action(&key(chosen)), Some(chosen));

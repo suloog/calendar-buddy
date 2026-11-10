@@ -31,7 +31,7 @@ depends_on: [] # test case IDs that must pass first
 | # | Action | Expected result | Evidence |
 | - | ------ | --------------- | -------- |
 | 1 | Synchronize for the first time. | No notification is shown. | notifications recorded |
-| 2 | Add an invitation "Planning" awaiting the answer to "Work" in the fake Google, and synchronize. | One notification "Invitation: Planning" with its start and organizer, and the buttons Accept, Maybe and Decline. | notifications recorded |
+| 2 | Add an invitation "Planning" awaiting the answer to "Work" in the fake Google, and synchronize. | One notification "Invitation: Planning" with its start, and the buttons Accept, Maybe and Decline. | notifications recorded |
 | 3 | Synchronize again; then start the engine again on the same cache. | No further notification. | notifications recorded |
 | 4 | Stop the engine, add an invitation "Retro" in the fake Google, start the engine again. | One notification "Invitation: Retro". | notifications recorded |
 | 5 | Choose Accept on "Retro". | The fake Google got the answer "accepted" for "Retro"; it no longer awaits the answer. | app state |

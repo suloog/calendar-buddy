@@ -426,6 +426,8 @@ impl CalendarApp {
             .map(|entry| (entry.account.id.clone(), Check::SignInNeeded))
             .collect();
         sync.checked(&turned_away, Window::around(today, zone));
+        // Whose invitations are told, also with the window closed (`MOD-07-F22`).
+        sync.set_accounts(accounts.list());
         let accounts_writer = accounts_path.map(|path| {
             let (sender, receiver) = mpsc::channel::<Accounts>();
             std::thread::spawn(move || {
@@ -520,6 +522,8 @@ impl CalendarApp {
             self.built_at,
             &self.overlay,
         );
+        // An account connected or removed changes whose invitations are told (`MOD-07-F22`).
+        self.sync.set_accounts(self.accounts.list());
         self.invitations = invitations::awaiting(
             &self.events,
             self.accounts.list(),
